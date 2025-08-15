@@ -1,0 +1,11 @@
+make,model,generation,year,body_style,length_m,width_m,height_m,wheelbase_m,weight_kg,engine_cc,fuel_type,powertrain_type,country_of_manufacture,weight_type,width_basis,verified_at,verified_by,wmi_hint
+Audi,Q7,4L,2007,SUV,5.086,1.983,1.737,3.002,2320,2967,diesel,ICE,Germany,curb,without_mirrors,2025-08-15,Manufacturer Technical Sheet,WAU
+Nissan,Navara,D40,2008,Pickup DC,5.22,1.85,1.785,3.2,2100,2488,diesel,ICE,Thailand,curb,without_mirrors,2025-08-15,Manufacturer Technical Sheet,MNT
+Toyota,Land Cruiser,J200,2015,SUV,4.95,1.97,1.865,2.85,2580,4461,diesel,ICE,Japan,curb,without_mirrors,2025-08-15,Manufacturer Technical Sheet,JTM
+BMW,X5,E70,2010,SUV,4.854,1.933,1.766,2.933,2175,2993,diesel,ICE,United States,curb,without_mirrors,2025-08-15,Manufacturer Technical Sheet,5UX
+Mercedes-Benz,GLE 400e,V167,2024,SUV,4.924,2.015,1.797,2.995,2480,1991,hybrid,PHEV,United States,curb,without_mirrors,2025-08-15,Manufacturer Technical Sheet,4JG
+Volkswagen,Golf,Mk7,2017,Hatchback,4.258,1.799,1.492,2.636,1290,1395,petrol,ICE,Germany,curb,without_mirrors,2025-08-15,Manufacturer Technical Sheet,WVW
+Tesla,Model 3,1st Gen,2021,Sedan,4.694,1.849,1.443,2.875,1760,0,electric,BEV,United States,curb,without_mirrors,2025-08-15,Manufacturer Technical Sheet,5YJ
+Ford,F-150,13th Gen,2018,Pickup SC,5.316,2.029,1.961,3.683,2200,3496,petrol,ICE,United States,curb,without_mirrors,2025-08-15,Manufacturer Technical Sheet,1FT
+Volvo,XC90,SPA,2025,SUV,4.953,1.923,1.776,2.984,2180,1969,hybrid,PHEV,Sweden,curb,without_mirrors,2025-08-15,Manufacturer Technical Sheet,YV1
+Honda,Civic,FK,2018,Hatchback,4.518,1.799,1.434,2.7,1316,1498,petrol,ICE,United Kingdom,curb,without_mirrors,2025-08-15,Manufacturer Technical Sheet,SHH
