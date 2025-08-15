@@ -123,4 +123,14 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Document Processing Configuration
+    |--------------------------------------------------------------------------
+    */
+
+    'max_file_size_mb' => env('MAX_FILE_SIZE_MB', 50),
+    'max_processing_time_seconds' => env('MAX_PROCESSING_TIME_SECONDS', 300),
+    'max_retry_attempts' => env('MAX_RETRY_ATTEMPTS', 3),
+
 ];
