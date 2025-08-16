@@ -72,4 +72,11 @@ return [
         'max_retry_attempts' => env('MAX_RETRY_ATTEMPTS', 3),
     ],
 
+    'robaws' => [
+        'base_url' => env('ROBAWS_BASE_URL', 'https://api.robaws.com'),
+        'api_key' => env('ROBAWS_API_KEY', ''),
+        'sandbox' => env('ROBAWS_SANDBOX', true),
+        'timeout' => env('ROBAWS_TIMEOUT', 30),
+    ],
+
 ];
