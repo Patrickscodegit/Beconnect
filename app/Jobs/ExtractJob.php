@@ -40,34 +40,18 @@ class ExtractJob implements ShouldQueue
         try {
             $intake->update(['status' => 'extracting']);
 
-            // Collect cleaned text (respect page limits/chunking inside PdfService)
-            $payload = $pdfService->collectTextForExtraction($intake);
+            // Collect documents in the new array format for LLM processing
+            $payload = $pdfService->collectDocumentsForExtraction($intake);
             
-            if (empty(trim($payload))) {
-                throw new Exception('No text content available for extraction');
+            if (empty($payload['documents'])) {
+                throw new Exception('No documents available for extraction');
             }
 
-            Log::info('Text collection completed for LLM extraction', [
+            Log::info('Document collection completed for LLM extraction', [
                 'intake_id' => $this->intakeId,
-                'payload_length' => strlen($payload),
-                'estimated_tokens' => strlen($payload) / 4
+                'document_count' => count($payload['documents']),
+                'estimated_tokens' => $this->estimateTokens($payload)
             ]);
-
-            // Validate payload size
-            $maxTokens = config('services.openai.max_tokens_input', 120000);
-            $estimatedTokens = strlen($payload) / 4;
-            
-            if ($estimatedTokens > $maxTokens) {
-                Log::warning('Payload size exceeds token limit, truncating', [
-                    'intake_id' => $this->intakeId,
-                    'estimated_tokens' => $estimatedTokens,
-                    'max_tokens' => $maxTokens
-                ]);
-                
-                // Truncate payload to fit within token limits
-                $maxChars = $maxTokens * 4;
-                $payload = substr($payload, 0, $maxChars);
-            }
 
             // Perform LLM extraction with retry logic
             $result = $this->performLlmExtraction($llmExtractor, $payload);
@@ -113,7 +97,7 @@ class ExtractJob implements ShouldQueue
         }
     }
 
-    private function performLlmExtraction(LlmExtractor $llmExtractor, string $payload): array
+    private function performLlmExtraction(LlmExtractor $llmExtractor, array $payload): array
     {
         $maxRetries = 3;
         $retryDelay = [5, 15, 30]; // seconds
@@ -197,5 +181,14 @@ class ExtractJob implements ShouldQueue
                 ]
             );
         }
+    }
+
+    private function estimateTokens(array $payload): int
+    {
+        $totalChars = 0;
+        foreach ($payload['documents'] ?? [] as $doc) {
+            $totalChars += strlen($doc['text'] ?? '');
+        }
+        return (int) ceil($totalChars / 4); // Rough estimate: 4 chars per token
     }
 }

@@ -373,6 +373,91 @@ class PdfService
         return $combinedText ?: "No text content available for extraction.";
     }
 
+    public function collectDocumentsForExtraction(Intake $intake): array
+    {
+        Log::info('Collecting documents for LLM extraction', [
+            'intake_id' => $intake->id,
+            'document_count' => $intake->documents->count()
+        ]);
+
+        $documents = [];
+        $maxTokens = config('services.openai.max_tokens_input', 120000);
+        $currentLength = 0;
+        
+        foreach ($intake->documents as $document) {
+            try {
+                $documentText = '';
+
+                if ($document->mime_type === 'application/pdf') {
+                    // Extract PDF text
+                    $fileContent = Storage::disk('s3')->get($document->storage_path);
+                    $tempPath = storage_path('app/temp/extract_' . $document->id . '_' . basename($document->storage_path));
+                    
+                    if (!file_exists(dirname($tempPath))) {
+                        mkdir(dirname($tempPath), 0755, true);
+                    }
+                    
+                    file_put_contents($tempPath, $fileContent);
+                    $documentText = $this->extractText($tempPath);
+                    
+                    if (file_exists($tempPath)) {
+                        unlink($tempPath);
+                    }
+                } else {
+                    // For non-PDF documents, include OCR results if available
+                    $ocrPath = "ocr-results/{$document->intake_id}/{$document->id}.txt";
+                    if (Storage::disk('s3')->exists($ocrPath)) {
+                        $documentText = Storage::disk('s3')->get($ocrPath);
+                    } else {
+                        $documentText = "[OCR processing required for this document type]";
+                    }
+                }
+
+                // Check token limit (rough estimate: 4 characters per token)
+                $estimatedTokens = strlen($documentText) / 4;
+                if ($currentLength + $estimatedTokens > $maxTokens) {
+                    Log::warning('Document collection truncated due to token limit', [
+                        'intake_id' => $intake->id,
+                        'current_tokens' => $currentLength / 4,
+                        'max_tokens' => $maxTokens
+                    ]);
+                    break;
+                }
+
+                $documents[] = [
+                    'name' => $document->original_filename ?? $document->filename,
+                    'mime' => $document->mime_type,
+                    'text' => $documentText
+                ];
+
+                $currentLength += $estimatedTokens;
+
+            } catch (Exception $e) {
+                Log::error('Failed to collect text from document', [
+                    'document_id' => $document->id,
+                    'error' => $e->getMessage()
+                ]);
+
+                $documents[] = [
+                    'name' => $document->original_filename ?? $document->filename,
+                    'mime' => $document->mime_type,
+                    'text' => "[Error extracting text from this document: {$e->getMessage()}]"
+                ];
+            }
+        }
+        
+        Log::info('Document collection completed', [
+            'intake_id' => $intake->id,
+            'document_count' => count($documents),
+            'estimated_tokens' => $currentLength
+        ]);
+
+        return [
+            'intake_id' => $intake->id,
+            'documents' => $documents
+        ];
+    }
+
     private function cleanPdfText(string $text): string
     {
         // Remove excessive whitespace
