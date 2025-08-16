@@ -147,8 +147,9 @@ class DocumentService
         
         return Cache::remember($cacheKey, 3600, function () use ($document, $text) {
             try {
-                // Use LLM for intelligent classification
-                $classification = $this->llmExtractor->classifyDocument($text, $document->filename);
+                // Use keyword-based classification for now
+                // Future: implement dedicated classification method in LlmExtractor
+                $classification = $this->keywordBasedClassification($text, $document->filename);
                 
                 Log::info('Document classified', [
                     'document_id' => $document->id,
