@@ -27,98 +27,43 @@ class OcrJob implements ShouldQueue
         $this->onQueue('default'); 
     }
 
-    public function handle(OcrService $ocrService): void
+    public function handle(OcrService $ocr): void
     {
-        $intake = Intake::findOrFail($this->intakeId);
-        
-        Log::info('Starting OCR processing', [
-            'intake_id' => $this->intakeId,
-            'document_count' => $intake->documents->count()
-        ]);
+        $intake = Intake::with('documents')->find($this->intakeId);
+        if (!$intake) { 
+            Log::warning('OcrJob: intake not found', ['intakeId' => $this->intakeId]); 
+            return; 
+        }
 
-        try {
-            $intake->update(['status' => 'ocr_processing']);
-            $processedCount = 0;
-            $skippedCount = 0;
-            $errorCount = 0;
+        Log::info('OcrJob: starting', ['intake_id' => $intake->id]);
 
-            foreach ($intake->documents as $document) {
+        foreach ($intake->documents as $doc) {
+            if (!$doc->has_text_layer && str_starts_with($doc->mime_type, 'application/pdf')) {
                 try {
-                    // Skip if document already has text layer or OCR already processed
-                    if ($document->has_text_layer) {
-                        Log::info('Skipping OCR - document already has text layer', [
-                            'document_id' => $document->id,
-                            'filename' => $document->original_filename
-                        ]);
-                        $skippedCount++;
-                        continue;
-                    }
-
-                    // Skip non-supported file types
-                    if (!in_array($document->mime_type, ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff'])) {
-                        Log::info('Skipping OCR - unsupported file type', [
-                            'document_id' => $document->id,
-                            'mime_type' => $document->mime_type
-                        ]);
-                        $skippedCount++;
-                        continue;
-                    }
-
-                    $ocrService->run($document);
-                    $processedCount++;
-
-                } catch (Exception $e) {
-                    Log::error('OCR processing failed for individual document', [
-                        'document_id' => $document->id,
-                        'filename' => $document->original_filename,
+                    Log::info('OcrJob: processing document', [
+                        'intake_id' => $intake->id,
+                        'document_id' => $doc->id,
+                        'filename' => $doc->filename
+                    ]);
+                    
+                    // Use existing OcrService - it's already idempotent
+                    $ocr->run($doc);
+                    
+                } catch (\Throwable $e) {
+                    Log::error('OcrJob: document processing failed', [
+                        'intake_id' => $intake->id,
+                        'document_id' => $doc->id,
                         'error' => $e->getMessage()
                     ]);
-                    $errorCount++;
-
-                    // Update document status to indicate OCR failure
-                    $document->update([
-                        'status' => 'ocr_failed',
-                        'error_message' => $e->getMessage()
-                    ]);
+                    // Continue with other documents rather than failing the entire job
                 }
             }
-
-            // Update intake status based on results
-            if ($errorCount === 0) {
-                $intake->update(['status' => 'ocr_done']);
-            } elseif ($processedCount > 0) {
-                $intake->update(['status' => 'ocr_partial']);
-            } else {
-                $intake->update(['status' => 'ocr_failed']);
-                throw new Exception("OCR processing failed for all documents in intake {$this->intakeId}");
-            }
-
-            Log::info('OCR processing completed', [
-                'intake_id' => $this->intakeId,
-                'processed' => $processedCount,
-                'skipped' => $skippedCount,
-                'errors' => $errorCount
-            ]);
-
-            // Dispatch next job in pipeline
-            if ($processedCount > 0 || $skippedCount > 0) {
-                ClassifyJob::dispatch($this->intakeId)->onQueue('default');
-            }
-
-        } catch (Exception $e) {
-            Log::error('OCR job failed completely', [
-                'intake_id' => $this->intakeId,
-                'error' => $e->getMessage(),
-                'attempt' => $this->attempts()
-            ]);
-
-            $intake->update([
-                'status' => 'ocr_failed',
-                'error_message' => $e->getMessage()
-            ]);
-
-            throw $e;
         }
+
+        $intake->update(['status' => 'ocr_done']);
+        
+        Log::info('OcrJob: dispatching classify', ['intake_id' => $intake->id]);
+        dispatch(new ClassifyJob($intake->id))->onQueue('default');
     }
 
     public function failed(Exception $exception): void
