@@ -36,8 +36,9 @@ return [
     ],
 
     'openai' => [
-        'api_key' => env('OPENAI_API_KEY'),
+        'key' => env('OPENAI_API_KEY'),
         'model' => env('OPENAI_MODEL', 'gpt-4-turbo-preview'),
+        'timeout' => (int) env('OPENAI_TIMEOUT', 45),
         'rate_limit_per_minute' => env('RATE_LIMIT_OPENAI_REQUESTS_PER_MINUTE', 50),
         'max_tokens_input' => env('OPENAI_MAX_TOKENS_INPUT', 120000),
     ],
