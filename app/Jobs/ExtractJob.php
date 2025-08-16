@@ -39,15 +39,19 @@ class ExtractJob implements ShouldQueue
 
         try {
             $intake->update(['status' => 'extracting']);
-
-            // Collect documents in the new array format for LLM processing
-            $payload = $pdfService->collectDocumentsForExtraction($intake);
+            // Step 2.5: collect canonical payload for LLM
+            if (method_exists($pdfService, 'collectPayloadForLlm')) {
+                $payload = $pdfService->collectPayloadForLlm($intake);
+            } else {
+                // Fallback to previous method name (should not happen after Step 2.5)
+                $payload = $pdfService->collectDocumentsForExtraction($intake);
+            }
             
             if (empty($payload['documents'])) {
                 throw new Exception('No documents available for extraction');
             }
 
-            Log::info('Document collection completed for LLM extraction', [
+            Log::info('Payload collection completed for LLM extraction', [
                 'intake_id' => $this->intakeId,
                 'document_count' => count($payload['documents']),
                 'estimated_tokens' => $this->estimateTokens($payload)

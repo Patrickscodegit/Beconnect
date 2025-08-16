@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Process;
 use Smalot\PdfParser\Parser;
 use Exception;
+use Symfony\Component\Process\Process as SymfonyProcess;
 
 class PdfService
 {
@@ -456,6 +457,119 @@ class PdfService
             'intake_id' => $intake->id,
             'documents' => $documents
         ];
+    }
+
+    /**
+     * Step 2.5: Build canonical array payload for LlmExtractor.
+     * Strategy per spec:
+     *  1) If OCR final text exists at intakes/{intake_id}/ocr/{docId}/final.txt -> use it.
+     *  2) Else if PDF & has_text_layer = true -> run pdftotext on-the-fly (no persistence).
+     *  3) Else empty string (OCR job expected to populate later / earlier stage).
+     * Output shape:
+     *  [ 'intake_id' => int, 'documents' => [ ['name'=>string,'mime'=>string,'text'=>string], ... ] ]
+     */
+    public function collectPayloadForLlm(Intake $intake): array
+    {
+        Log::info('Collecting canonical LLM payload', [
+            'intake_id' => $intake->id,
+            'document_count' => $intake->documents()->count(),
+        ]);
+
+        $payload = [
+            'intake_id' => $intake->id,
+            'documents' => [],
+        ];
+
+        $s3 = Storage::disk('s3');
+
+        $documents = $intake->documents()->orderBy('id')->get();
+        foreach ($documents as $doc) {
+            $ocrTxtPath = "intakes/{$intake->id}/ocr/{$doc->id}/final.txt";
+            $text = '';
+
+            try {
+                if ($s3->exists($ocrTxtPath)) {
+                    // Preferred: OCR pipeline final text
+                    $text = (string) $s3->get($ocrTxtPath);
+                } elseif (($doc->mime_type === 'application/pdf' || str_contains($doc->mime_type, 'pdf')) && ($doc->has_text_layer ?? false)) {
+                    // Fallback: extract live using pdftotext (layout preserved)
+                    $text = $this->pdftotextStream($doc);
+                } else {
+                    // Leave empty (upstream OCR may still be running or unavailable)
+                    $text = '';
+                }
+            } catch (Exception $e) {
+                Log::warning('collectPayloadForLlm document processing failed', [
+                    'document_id' => $doc->id,
+                    'error' => $e->getMessage(),
+                ]);
+                $text = '';
+            }
+
+            $text = $this->sanitizePayloadText($text);
+
+            $payload['documents'][] = [
+                'name' => $doc->filename ?? $doc->original_filename ?? ('document_' . $doc->id),
+                'mime' => $doc->mime_type,
+                'text' => $text,
+            ];
+        }
+
+        Log::info('Canonical LLM payload built', [
+            'intake_id' => $intake->id,
+            'documents' => count($payload['documents']),
+        ]);
+
+        return $payload;
+    }
+
+    /**
+     * Stream pdf text via system pdftotext sending output to stdout.
+     */
+    private function pdftotextStream(Document $doc): string
+    {
+        try {
+            $tmpPdf = tempnam(sys_get_temp_dir(), 'pdf_llm_');
+            $content = Storage::disk('s3')->get($doc->file_path);
+            file_put_contents($tmpPdf, $content);
+
+            $binary = $this->popplerPath . '/pdftotext';
+            if (!is_file($binary)) {
+                // Fallback: rely on PATH version if available
+                $binary = 'pdftotext';
+            }
+
+            $process = new SymfonyProcess([
+                $binary,
+                '-q',
+                '-enc', 'UTF-8',
+                '-layout',
+                $tmpPdf,
+                '-', // stdout
+            ]);
+            $process->setTimeout(30);
+            $process->run();
+
+            $output = $process->isSuccessful() ? $process->getOutput() : '';
+            @unlink($tmpPdf);
+            return $output;
+        } catch (Exception $e) {
+            return '';
+        }
+    }
+
+    /**
+     * Remove control chars (except basic whitespace) and normalize whitespace/newlines.
+     */
+    private function sanitizePayloadText(string $text): string
+    {
+        // Remove binary/control except tab/newline/carriage return
+        $text = preg_replace('/[^\P{C}\t\n\r]+/u', '', $text) ?? '';
+        // Normalize Windows newlines
+        $text = preg_replace("/\r\n|\r/u", "\n", $text) ?? '';
+        // Collapse >2 blank lines
+        $text = preg_replace("/\n{3,}/u", "\n\n", $text) ?? '';
+        return trim($text);
     }
 
     private function cleanPdfText(string $text): string
