@@ -1,0 +1,27 @@
+*** Begin Patch
+*** Update File: FORGE_DEPLOYMENT_GUIDE.md
+@@
+-     DB_PASSWORD="jfklsfjqmfjqmlfj"
++     # Replace the hard-coded database password with your own value or refer to an environment variable configured in Forge.
++     DB_PASSWORD="[YOUR_DB_PASSWORD]"
+@@
+-     AWS_SECRET_ACCESS_KEY=[from_setup_script]
++     AWS_SECRET_ACCESS_KEY=[YOUR_MINIO_SECRET_KEY]
+*** End Patch
+
+*** Begin Patch
+*** Update File: forge_postgresql_setup.sh
+@@
+-     CREATE USER forge WITH ENCRYPTED PASSWORD 'jfklsfjqmfjqmlfj';
++     # Use POSTGRES_PASSWORD from environment or prompt the user at runtime to avoid hard-coding the password
++     POSTGRES_PASSWORD="${POSTGRES_PASSWORD}"
++     if [ -z "$POSTGRES_PASSWORD" ]; then
++       read -s -p "Enter password for PostgreSQL user 'forge': " POSTGRES_PASSWORD
++       echo
++     fi
++     CREATE USER forge WITH ENCRYPTED PASSWORD '${POSTGRES_PASSWORD}';
+@@
+-     PGPASSWORD='jfklsfjqmfjqmlfj' psql -h 127.0.0.1 -U forge -d forge -c "SELECT
+-  'PostgreSQL is working!' as status;"
++     PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U forge -d forge -c "SELECT 'PostgreSQL is working!' as status;"
+*** End Patch

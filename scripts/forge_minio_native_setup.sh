@@ -17,8 +17,21 @@ sudo chown -R minio:minio /opt/minio /var/minio
 
 # Step 3: Create environment file with production credentials
 echo "Creating MinIO environment configuration..."
-echo 'MINIO_ROOT_USER=3e117cfff5ca11fcae05b689d494157b' | sudo tee /etc/minio.env
-echo 'MINIO_ROOT_PASSWORD=78feddd4b1934633581982b1798ac1c096e44b32966a4782e81b8033219f43ca' | sudo tee -a /etc/minio.env
+# Use environment variables or prompt for credentials to avoid hard-coding
+MINIO_ROOT_USER="${MINIO_ROOT_USER:-[YOUR_MINIO_ACCESS_KEY]}"
+MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-[YOUR_MINIO_SECRET_KEY]}"
+
+if [ "$MINIO_ROOT_USER" = "[YOUR_MINIO_ACCESS_KEY]" ]; then
+  read -p "Enter MinIO access key: " MINIO_ROOT_USER
+fi
+
+if [ "$MINIO_ROOT_PASSWORD" = "[YOUR_MINIO_SECRET_KEY]" ]; then
+  read -s -p "Enter MinIO secret key: " MINIO_ROOT_PASSWORD
+  echo
+fi
+
+echo "MINIO_ROOT_USER=$MINIO_ROOT_USER" | sudo tee /etc/minio.env
+echo "MINIO_ROOT_PASSWORD=$MINIO_ROOT_PASSWORD" | sudo tee -a /etc/minio.env
 
 # Step 4: Create systemd service
 echo "Creating MinIO systemd service..."
@@ -64,7 +77,7 @@ sudo chmod +x /usr/local/bin/mc
 
 # Step 8: Configure client and create buckets
 echo "Creating Bconnect storage buckets..."
-mc alias set local http://localhost:9000 3e117cfff5ca11fcae05b689d494157b 78feddd4b1934633581982b1798ac1c096e44b32966a4782e81b8033219f43ca
+mc alias set local http://localhost:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD
 
 # Create production buckets for freight document processing
 mc mb local/bconnect 2>/dev/null || echo "Bucket 'bconnect' already exists"
@@ -81,8 +94,8 @@ echo ""
 echo "📋 MinIO Configuration:"
 echo "- API Endpoint: http://localhost:9000"
 echo "- Console: http://localhost:9001"
-echo "- Access Key: 3e117cfff5ca11fcae05b689d494157b"
-echo "- Secret Key: 78feddd4b1934633581982b1798ac1c096e44b32966a4782e81b8033219f43ca"
+echo "- Access Key: $MINIO_ROOT_USER"
+echo "- Secret Key: [HIDDEN]"
 echo ""
 echo "🎯 Storage Buckets Created:"
 echo "- bconnect (main document storage)"
@@ -95,8 +108,8 @@ echo "- Restart: sudo systemctl restart minio"
 echo "- Logs: sudo journalctl -u minio -f"
 echo ""
 echo "📦 Update your Forge Environment Variables:"
-echo "AWS_ACCESS_KEY_ID=3e117cfff5ca11fcae05b689d494157b"
-echo "AWS_SECRET_ACCESS_KEY=78feddd4b1934633581982b1798ac1c096e44b32966a4782e81b8033219f43ca"
+echo "AWS_ACCESS_KEY_ID=$MINIO_ROOT_USER"
+echo "AWS_SECRET_ACCESS_KEY=[USE_THE_SECRET_KEY_YOU_ENTERED]"
 echo "AWS_ENDPOINT=http://localhost:9000"
 echo "AWS_BUCKET=bconnect"
 echo "FILESYSTEM_DISK=s3"
