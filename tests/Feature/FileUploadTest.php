@@ -45,7 +45,7 @@ class FileUploadTest extends TestCase
 
         $path = $response->json('data.path');
         $this->assertTrue(Storage::disk('s3')->exists($path));
-        $this->assertStringContains('csv-imports/', $path);
+        $this->assertStringContainsString('csv-imports/', $path);
     }
 
     /** @test */
@@ -107,7 +107,7 @@ class FileUploadTest extends TestCase
 
         $path = $response->json('data.path');
         $this->assertTrue(Storage::disk('s3')->exists($path));
-        $this->assertStringContains('vehicle-images/1HG/', $path);
+        $this->assertStringContainsString('vehicle-images/1HG/', $path);
     }
 
     /** @test */
@@ -170,7 +170,7 @@ class FileUploadTest extends TestCase
 
         $path = $response->json('data.path');
         $this->assertTrue(Storage::disk('s3')->exists($path));
-        $this->assertStringContains('vehicle-documents/1HG/', $path);
+        $this->assertStringContainsString('vehicle-documents/1HG/', $path);
     }
 
     /** @test */
