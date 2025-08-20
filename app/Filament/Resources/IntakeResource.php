@@ -13,6 +13,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Infolists;
 use Filament\Infolists\Infolist;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class IntakeResource extends Resource
 {
@@ -71,6 +72,27 @@ class IntakeResource extends Resource
                             ->columnSpanFull(),
                     ])
                     ->columns(3),
+                    
+                Forms\Components\Section::make('Document Upload')
+                    ->schema([
+                        Forms\Components\FileUpload::make('document_files')
+                            ->label('Upload Documents')
+                            ->multiple()
+                            ->acceptedFileTypes([
+                                'application/pdf',
+                                'image/jpeg', 
+                                'image/jpg',
+                                'image/png', 
+                                'image/tiff',
+                                'image/gif'
+                            ])
+                            ->maxSize(20480) // 20MB max
+                            ->disk('local')
+                            ->directory('temp-uploads')
+                            ->reorderable()
+                            ->helperText('Upload freight documents (PDF, images). Maximum 20MB per file.')
+                            ->columnSpanFull(),
+                    ]),
             ]);
     }
 
