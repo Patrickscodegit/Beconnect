@@ -105,20 +105,20 @@ class CreateIntake extends CreateRecord
                         'file_size' => $fileSize
                     ]);
                     
-                    // Try to store in MinIO, fallback to local if MinIO is down
+                    // Try to store in Spaces, fallback to local if Spaces is down
                     $fileContent = file_get_contents($tempPath);
                     $storagePath = 'documents/' . uniqid() . '_' . $originalName;
                     
                     try {
-                        // Try MinIO first
-                        Storage::disk('minio')->put($storagePath, $fileContent);
-                        $storageDisk = 'minio';
-                        \Log::info('ProcessUploadedFiles: Stored in MinIO', ['path' => $storagePath]);
+                        // Try DigitalOcean Spaces first
+                        Storage::disk('spaces')->put($storagePath, $fileContent);
+                        $storageDisk = 'spaces';
+                        \Log::info('ProcessUploadedFiles: Stored in DigitalOcean Spaces', ['path' => $storagePath]);
                     } catch (\Exception $e) {
                         // Fallback to local storage
                         Storage::disk('local')->put($storagePath, $fileContent);
                         $storageDisk = 'local';
-                        \Log::warning('ProcessUploadedFiles: MinIO failed, using local storage', [
+                        \Log::warning('ProcessUploadedFiles: Spaces failed, using local storage', [
                             'error' => $e->getMessage(),
                             'path' => $storagePath
                         ]);
