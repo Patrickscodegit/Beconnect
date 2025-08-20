@@ -35,70 +35,73 @@ class CreateIntake extends CreateRecord
     
     private function processUploadedFiles(Intake $intake, array $files): void
     {
-        $documentService = app(DocumentService::class);
         $processedCount = 0;
         $failedCount = 0;
         
         foreach ($files as $file) {
             try {
-                if ($file instanceof UploadedFile || is_string($file)) {
-                    // Get the actual file from temporary storage
-                    if (is_string($file)) {
-                        // $file is a path to the temporary file
-                        $tempPath = Storage::disk('local')->path('livewire-tmp/' . $file);
-                        if (!file_exists($tempPath)) {
-                            // Try the direct path
-                            $tempPath = storage_path('app/livewire-tmp/' . $file);
-                        }
-                        
-                        if (file_exists($tempPath)) {
-                            $uploadedFile = new UploadedFile(
-                                $tempPath,
-                                basename($file),
-                                mime_content_type($tempPath),
-                                null,
-                                true
-                            );
-                        } else {
-                            continue; // Skip if file not found
-                        }
-                    } else {
-                        $uploadedFile = $file;
+                if (is_string($file)) {
+                    // $file is a path to the temporary file uploaded by Filament
+                    $tempPath = Storage::disk('local')->path('temp-uploads/' . $file);
+                    if (!file_exists($tempPath)) {
+                        // Try livewire tmp path
+                        $tempPath = storage_path('app/livewire-tmp/' . $file);
                     }
                     
-                    // Store file in MinIO
-                    $filePath = Storage::disk('minio')->putFile('documents', $uploadedFile);
-                    
-                    // Create document record
-                    $document = Document::create([
-                        'intake_id' => $intake->id,
-                        'filename' => $uploadedFile->getClientOriginalName(),
-                        'file_path' => $filePath,
-                        'mime_type' => $uploadedFile->getClientMimeType(),
-                        'file_size' => $uploadedFile->getSize(),
-                        'document_type' => 'unknown', // Will be classified during processing
-                    ]);
-                    
-                    // Queue document for processing
-                    try {
-                        $documentService->processDocument($filePath, $intake->id);
+                    if (file_exists($tempPath)) {
+                        // Get file info
+                        $originalName = basename($file);
+                        $mimeType = mime_content_type($tempPath);
+                        $fileSize = filesize($tempPath);
+                        
+                        // Move file to MinIO S3 storage
+                        $fileContent = file_get_contents($tempPath);
+                        $storagePath = 'documents/' . uniqid() . '_' . $originalName;
+                        Storage::disk('minio')->put($storagePath, $fileContent);
+                        
+                        // Create document record
+                        $document = Document::create([
+                            'intake_id' => $intake->id,
+                            'filename' => $originalName,
+                            'file_path' => $storagePath,
+                            'mime_type' => $mimeType,
+                            'file_size' => $fileSize,
+                            'document_type' => 'freight_document',
+                            'has_text_layer' => false, // Will be determined during processing
+                        ]);
+                        
+                        // Clean up temporary file
+                        unlink($tempPath);
                         $processedCount++;
-                    } catch (\Exception $e) {
-                        // Document created but processing failed
-                        $failedCount++;
+                        
+                        \Log::info('Document uploaded successfully', [
+                            'intake_id' => $intake->id,
+                            'document_id' => $document->id,
+                            'filename' => $originalName
+                        ]);
                     }
                 }
             } catch (\Exception $e) {
+                \Log::error('Failed to process uploaded file', [
+                    'intake_id' => $intake->id,
+                    'file' => $file,
+                    'error' => $e->getMessage()
+                ]);
                 $failedCount++;
                 continue;
             }
+        }
+        
+        // Update intake status if documents were processed
+        if ($processedCount > 0) {
+            $intake->update(['status' => 'processing']);
         }
         
         // Show notification about upload results
         if ($processedCount > 0) {
             Notification::make()
                 ->title("Intake created successfully")
-                ->body("{$processedCount} document(s) uploaded and queued for processing" . 
+                ->body("{$processedCount} document(s) uploaded and stored" . 
                       ($failedCount > 0 ? ". {$failedCount} file(s) failed to process." : "."))
                 ->success()
                 ->send();
