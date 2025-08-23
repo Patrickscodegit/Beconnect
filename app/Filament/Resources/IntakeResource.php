@@ -313,15 +313,67 @@ class IntakeResource extends Resource
                         Infolists\Components\TextEntry::make('extraction.confidence')
                             ->label('Confidence')
                             ->formatStateUsing(fn (?float $state): string => $state ? number_format($state * 100, 1) . '%' : 'N/A'),
+                        Infolists\Components\TextEntry::make('extraction.status')
+                            ->label('Status')
+                            ->badge()
+                            ->color(fn (string $state): string => match ($state) {
+                                'completed' => 'success',
+                                'processing' => 'info',
+                                'failed' => 'danger',
+                                default => 'gray',
+                            }),
+                        Infolists\Components\TextEntry::make('extraction.service_used')
+                            ->label('Service Used')
+                            ->badge(),
                         Infolists\Components\TextEntry::make('extraction.verified_at')
                             ->label('Verified At')
                             ->dateTime()
                             ->placeholder('Not verified'),
-                        Infolists\Components\KeyValueEntry::make('extraction.raw_json')
+                        Infolists\Components\TextEntry::make('dummy_extraction_data')
                             ->label('Extracted Data')
-                            ->keyLabel('Field')
-                            ->valueLabel('Value'),
+                            ->formatStateUsing(function ($record) {
+                                $extraction = $record->extraction;
+                                if (!$extraction || !$extraction->extracted_data || !is_array($extraction->extracted_data)) {
+                                    return 'No data extracted';
+                                }
+                                
+                                $html = '<dl class="space-y-2">';
+                                foreach ($extraction->extracted_data as $key => $value) {
+                                    $label = ucwords(str_replace('_', ' ', $key));
+                                    
+                                    if (is_array($value)) {
+                                        if (array_is_list($value)) {
+                                            $displayValue = '<ul class="list-disc list-inside ml-2">';
+                                            foreach ($value as $item) {
+                                                $itemValue = is_scalar($item) ? $item : json_encode($item);
+                                                $displayValue .= '<li>' . htmlspecialchars($itemValue) . '</li>';
+                                            }
+                                            $displayValue .= '</ul>';
+                                        } else {
+                                            $displayValue = '<div class="ml-2 space-y-1">';
+                                            foreach ($value as $subKey => $subValue) {
+                                                $subLabel = ucwords(str_replace('_', ' ', $subKey));
+                                                $subDisplayValue = is_scalar($subValue) ? $subValue : json_encode($subValue);
+                                                $displayValue .= '<div><span class="font-medium text-gray-600">' . htmlspecialchars($subLabel) . ':</span> ' . htmlspecialchars($subDisplayValue) . '</div>';
+                                            }
+                                            $displayValue .= '</div>';
+                                        }
+                                    } else {
+                                        $displayValue = htmlspecialchars((string)$value);
+                                    }
+                                    
+                                    $html .= '<div class="border-b border-gray-100 pb-1 mb-1">';
+                                    $html .= '<dt class="text-sm font-medium text-gray-700">' . htmlspecialchars($label) . '</dt>';
+                                    $html .= '<dd class="mt-1 text-sm text-gray-900">' . $displayValue . '</dd>';
+                                    $html .= '</div>';
+                                }
+                                $html .= '</dl>';
+                                
+                                return new \Illuminate\Support\HtmlString($html);
+                            })
+                            ->extraAttributes(['class' => 'prose max-w-none']),
                     ])
+                    ->columns(2)
                     ->visible(fn (Intake $record): bool => $record->extraction()->exists()),
             ]);
     }

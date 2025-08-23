@@ -34,9 +34,16 @@
                 <div class="px-4 py-5 sm:p-6">
                     <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
                         @php
-                            $rawData = is_string($extraction->raw_json) ? json_decode($extraction->raw_json, true) : $extraction->raw_json;
+                            $rawData = null;
+                            if ($extraction->raw_json) {
+                                if (is_string($extraction->raw_json)) {
+                                    $rawData = json_decode($extraction->raw_json, true);
+                                } elseif (is_array($extraction->raw_json)) {
+                                    $rawData = $extraction->raw_json;
+                                }
+                            }
                         @endphp
-                        @if(is_array($rawData))
+                        @if(is_array($rawData) && count($rawData) > 0)
                             @foreach($rawData as $key => $value)
                             <div>
                                 <dt class="text-sm font-medium text-gray-500 capitalize">
@@ -86,7 +93,7 @@
                 </svg>
             </summary>
             <div class="mt-4 rounded-lg bg-gray-900 p-4">
-                <pre class="text-sm text-green-400 overflow-x-auto"><code>{{ json_encode($extraction->raw_json, JSON_PRETTY_PRINT) }}</code></pre>
+                <pre class="text-sm text-green-400 overflow-x-auto"><code>{{ is_string($extraction->raw_json) ? $extraction->raw_json : json_encode($extraction->raw_json, JSON_PRETTY_PRINT) }}</code></pre>
             </div>
         </details>
     </div>

@@ -9,18 +9,20 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Filament\Infolists;
 use Filament\Infolists\Infolist;
+use Filament\Infolists\Components\Section;
+use Filament\Infolists\Components\TextEntry;
+use Illuminate\Database\Eloquent\Builder;
 
 class ExtractionResource extends Resource
 {
     protected static ?string $model = Extraction::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-cpu-chip';
+    protected static ?string $navigationIcon = 'heroicon-o-document-magnifying-glass';
     
-    protected static ?string $navigationLabel = 'AI Extractions';
+    protected static ?string $navigationGroup = 'AI Processing';
     
-    protected static ?string $modelLabel = 'Extraction';
+    protected static ?string $modelLabel = 'AI Extraction';
     
     protected static ?string $pluralModelLabel = 'AI Extractions';
     
@@ -210,54 +212,95 @@ class ExtractionResource extends Resource
     {
         return $infolist
             ->schema([
-                Infolists\Components\Section::make('Extraction Overview')
+                Section::make('Extraction Details')
                     ->schema([
-                        Infolists\Components\TextEntry::make('intake.id')
-                            ->label('Intake ID'),
-                        Infolists\Components\TextEntry::make('confidence')
-                            ->label('Confidence Score')
-                            ->formatStateUsing(fn (?float $state): string => $state ? number_format($state * 100, 1) . '%' : 'N/A')
+                        TextEntry::make('status')
                             ->badge()
-                            ->color(fn (?float $state): string => match (true) {
-                                $state === null => 'gray',
-                                $state >= 0.8 => 'success',
-                                $state >= 0.6 => 'warning',
-                                default => 'danger',
+                            ->color(fn (string $state): string => match ($state) {
+                                'completed' => 'success',
+                                'processing' => 'info',
+                                'failed' => 'danger',
+                                default => 'gray',
                             }),
-                        Infolists\Components\TextEntry::make('verified_at')
-                            ->label('Verified At')
-                            ->dateTime()
-                            ->placeholder('Not verified'),
-                        Infolists\Components\TextEntry::make('verified_by')
-                            ->label('Verified By')
-                            ->placeholder('Not verified'),
-                        Infolists\Components\TextEntry::make('created_at')
+                        TextEntry::make('confidence')
+                            ->formatStateUsing(fn ($state) => $state ? number_format($state * 100, 1) . '%' : '0.0%'),
+                        TextEntry::make('service_used')
+                            ->label('Service Used')
+                            ->default('N/A'),
+                        TextEntry::make('created_at')
                             ->label('Extracted At')
                             ->dateTime(),
                     ])
-                    ->columns(3),
-                    
-                Infolists\Components\Section::make('Extracted Data')
+                    ->columns(2),
+
+                Section::make('Extracted Information')
                     ->schema([
-                        Infolists\Components\KeyValueEntry::make('raw_json')
-                            ->label('Extracted Information')
-                            ->keyLabel('Field')
-                            ->valueLabel('Value'),
+                        TextEntry::make('dummy')
+                            ->label('')
+                            ->formatStateUsing(function ($record) {
+                                if (!$record->extracted_data || !is_array($record->extracted_data)) {
+                                    return 'No data extracted';
+                                }
+                                
+                                $html = '<dl class="space-y-3">';
+                                foreach ($record->extracted_data as $key => $value) {
+                                    $label = ucwords(str_replace('_', ' ', $key));
+                                    
+                                    if (is_array($value)) {
+                                        if (array_is_list($value)) {
+                                            // It's a list
+                                            $displayValue = '<ul class="list-disc list-inside ml-4">';
+                                            foreach ($value as $item) {
+                                                $itemValue = is_scalar($item) ? $item : json_encode($item);
+                                                $displayValue .= '<li>' . htmlspecialchars($itemValue) . '</li>';
+                                            }
+                                            $displayValue .= '</ul>';
+                                        } else {
+                                            // It's an associative array
+                                            $displayValue = '<div class="ml-4 space-y-1">';
+                                            foreach ($value as $subKey => $subValue) {
+                                                $subLabel = ucwords(str_replace('_', ' ', $subKey));
+                                                $subDisplayValue = is_scalar($subValue) ? $subValue : json_encode($subValue);
+                                                $displayValue .= '<div><span class="font-medium">' . htmlspecialchars($subLabel) . ':</span> ' . htmlspecialchars($subDisplayValue) . '</div>';
+                                            }
+                                            $displayValue .= '</div>';
+                                        }
+                                    } else {
+                                        $displayValue = htmlspecialchars((string)$value);
+                                    }
+                                    
+                                    $html .= '<div class="border-b border-gray-200 pb-2">';
+                                    $html .= '<dt class="text-sm font-medium text-gray-600">' . htmlspecialchars($label) . '</dt>';
+                                    $html .= '<dd class="mt-1 text-sm text-gray-900">' . $displayValue . '</dd>';
+                                    $html .= '</div>';
+                                }
+                                $html .= '</dl>';
+                                
+                                return new \Illuminate\Support\HtmlString($html);
+                            })
+                            ->extraAttributes(['class' => 'prose max-w-none']),
                     ]),
-                    
-                Infolists\Components\Section::make('Related Intake')
+
+                Section::make('Raw JSON Data')
                     ->schema([
-                        Infolists\Components\TextEntry::make('intake.status')
-                            ->badge(),
-                        Infolists\Components\TextEntry::make('intake.source')
-                            ->badge(),
-                        Infolists\Components\TextEntry::make('intake.priority')
-                            ->badge(),
-                        Infolists\Components\TextEntry::make('intake.created_at')
-                            ->label('Intake Created')
-                            ->dateTime(),
+                        TextEntry::make('dummy_raw')
+                            ->label('')
+                            ->formatStateUsing(function ($record) {
+                                if (!$record->raw_json) {
+                                    return 'No raw data';
+                                }
+                                
+                                $json = is_string($record->raw_json) ? $record->raw_json : json_encode($record->raw_json, JSON_PRETTY_PRINT);
+                                
+                                return new \Illuminate\Support\HtmlString(
+                                    '<pre class="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-xs font-mono">' . 
+                                    htmlspecialchars($json) . 
+                                    '</pre>'
+                                );
+                            }),
                     ])
-                    ->columns(4),
+                    ->collapsible()
+                    ->collapsed(),
             ]);
     }
 
