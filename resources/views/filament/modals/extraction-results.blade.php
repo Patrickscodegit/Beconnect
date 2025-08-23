@@ -93,7 +93,22 @@
                 </svg>
             </summary>
             <div class="mt-4 rounded-lg bg-gray-900 p-4">
-                <pre class="text-sm text-green-400 overflow-x-auto"><code>{{ is_string($extraction->raw_json) ? $extraction->raw_json : json_encode($extraction->raw_json, JSON_PRETTY_PRINT) }}</code></pre>
+                <pre class="text-xs font-mono text-green-400 overflow-x-auto whitespace-pre-wrap"><code>@php
+$json = $extraction->raw_json;
+
+// Ensure it's a string for display
+if (!is_string($json)) {
+    $json = json_encode($json, JSON_PRETTY_PRINT);
+}
+
+// Pretty format the JSON
+$decodedJson = json_decode($json, true);
+if ($decodedJson !== null) {
+    $json = json_encode($decodedJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+}
+
+echo htmlspecialchars($json);
+@endphp</code></pre>
             </div>
         </details>
     </div>
