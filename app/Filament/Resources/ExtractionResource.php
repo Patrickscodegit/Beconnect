@@ -238,8 +238,19 @@ class ExtractionResource extends Resource
                         TextEntry::make('dummy')
                             ->label('')
                             ->formatStateUsing(function ($record) {
+                                // Debug logging
+                                \Log::info('Extraction data debug', [
+                                    'id' => $record->id,
+                                    'has_extracted_data' => !empty($record->extracted_data),
+                                    'extracted_data_type' => gettype($record->extracted_data),
+                                    'extracted_data_count' => is_array($record->extracted_data) ? count($record->extracted_data) : 0,
+                                    'extracted_data_keys' => is_array($record->extracted_data) ? array_keys($record->extracted_data) : [],
+                                ]);
+                                
                                 if (!$record->extracted_data || !is_array($record->extracted_data)) {
-                                    return 'No data extracted';
+                                    return new \Illuminate\Support\HtmlString(
+                                        '<div class="text-gray-500 italic p-4 border border-gray-200 rounded">No data extracted</div>'
+                                    );
                                 }
                                 
                                 $html = '<dl class="space-y-3">';
@@ -286,14 +297,30 @@ class ExtractionResource extends Resource
                         TextEntry::make('dummy_raw')
                             ->label('')
                             ->formatStateUsing(function ($record) {
-                                if (!$record->raw_json) {
-                                    return 'No raw data';
+                                if (empty($record->raw_json)) {
+                                    return new \Illuminate\Support\HtmlString(
+                                        '<div class="text-gray-500 italic p-4 border border-gray-200 rounded">No raw JSON data available</div>'
+                                    );
                                 }
                                 
-                                $json = is_string($record->raw_json) ? $record->raw_json : json_encode($record->raw_json, JSON_PRETTY_PRINT);
+                                // Since we removed array casting, raw_json should be a string
+                                $json = $record->raw_json;
+                                
+                                // If it's still an array somehow, convert it
+                                if (is_array($json)) {
+                                    $json = json_encode($json, JSON_PRETTY_PRINT);
+                                } elseif (!is_string($json)) {
+                                    $json = json_encode($json, JSON_PRETTY_PRINT);
+                                }
+                                
+                                // Pretty format the JSON if it's not already formatted
+                                $decodedJson = json_decode($json, true);
+                                if ($decodedJson !== null) {
+                                    $json = json_encode($decodedJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+                                }
                                 
                                 return new \Illuminate\Support\HtmlString(
-                                    '<pre class="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-xs font-mono">' . 
+                                    '<pre class="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-xs font-mono whitespace-pre-wrap max-h-96 overflow-y-auto">' . 
                                     htmlspecialchars($json) . 
                                     '</pre>'
                                 );

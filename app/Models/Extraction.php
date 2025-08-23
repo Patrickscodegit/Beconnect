@@ -24,7 +24,6 @@ class Extraction extends Model
 
     protected $casts = [
         'extracted_data' => 'array',
-        'raw_json' => 'array',
         'confidence' => 'float',
         'verified_at' => 'datetime',
     ];
