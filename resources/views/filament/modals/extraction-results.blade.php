@@ -33,7 +33,11 @@
             <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
                 <div class="px-4 py-5 sm:p-6">
                     <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
-                        @foreach($extraction->raw_json as $key => $value)
+                        @php
+                            $rawData = is_string($extraction->raw_json) ? json_decode($extraction->raw_json, true) : $extraction->raw_json;
+                        @endphp
+                        @if(is_array($rawData))
+                            @foreach($rawData as $key => $value)
                             <div>
                                 <dt class="text-sm font-medium text-gray-500 capitalize">
                                     {{ str_replace('_', ' ', $key) }}
@@ -57,6 +61,11 @@
                                 </dd>
                             </div>
                         @endforeach
+                        @else
+                            <div class="col-span-2">
+                                <p class="text-sm text-gray-500">No extraction data available</p>
+                            </div>
+                        @endif
                     </dl>
                 </div>
             </div>
