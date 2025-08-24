@@ -36,11 +36,26 @@ return [
     ],
 
     'openai' => [
-        'key' => env('OPENAI_API_KEY'),
-        'model' => env('OPENAI_MODEL', 'gpt-4-turbo-preview'),
-        'timeout' => (int) env('OPENAI_TIMEOUT', 45),
+        'api_key'    => env('OPENAI_API_KEY'),
+        'base_url'   => env('OPENAI_BASE', 'https://api.openai.com/v1'),
+        'model'      => env('OPENAI_MODEL', 'gpt-4o'),
+        'model_cheap'=> env('OPENAI_MODEL_CHEAP', 'gpt-4o-mini'),
+        'vision_model'=> env('OPENAI_VISION_MODEL', 'gpt-4o'),
+        'max_output_tokens' => env('OPENAI_MAX_OUTPUT_TOKENS', 900),
+        'timeout'    => env('OPENAI_TIMEOUT', 20),
         'rate_limit_per_minute' => env('RATE_LIMIT_OPENAI_REQUESTS_PER_MINUTE', 50),
         'max_tokens_input' => env('OPENAI_MAX_TOKENS_INPUT', 120000),
+    ],
+
+    'anthropic' => [
+        'api_key'  => env('ANTHROPIC_API_KEY'),
+        'base_url' => env('ANTHROPIC_BASE', 'https://api.anthropic.com/v1'),
+        'model'    => env('ANTHROPIC_MODEL', 'claude-3-5-sonnet-20241022'),
+        'version'  => env('ANTHROPIC_VERSION', '2023-06-01'),
+        'max_output_tokens' => env('ANTHROPIC_MAX_OUTPUT_TOKENS', 900),
+        'timeout'  => env('ANTHROPIC_TIMEOUT', 20),
+        'rate_limit_per_minute' => env('RATE_LIMIT_ANTHROPIC_REQUESTS_PER_MINUTE', 50),
+        'max_tokens_input' => env('ANTHROPIC_MAX_TOKENS_INPUT', 200000),
     ],
 
     'tesseract' => [
