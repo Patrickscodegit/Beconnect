@@ -5,7 +5,7 @@ namespace App\Jobs;
 use App\Models\Document;
 use App\Models\Extraction;
 use App\Services\DocumentService;
-use App\Services\LlmExtractor;
+use App\Services\AiRouter;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -30,7 +30,7 @@ class ExtractDocumentData implements ShouldQueue
     /**
      * Execute the job.
      */
-    public function handle(DocumentService $documentService, LlmExtractor $llmExtractor): void
+    public function handle(DocumentService $documentService, AiRouter $aiRouter): void
     {
         try {
             Log::info('Starting extraction for document', [
@@ -81,36 +81,69 @@ class ExtractDocumentData implements ShouldQueue
             try {
                 $classification = $documentService->classifyDocument($this->document, $text);
                 
-                // Extract structured data using LLM
-                $extractedData = $llmExtractor->extract([
-                    'intake_id' => $this->document->intake_id,
-                    'documents' => [[
-                        'name' => $this->document->filename,
-                        'mime' => $this->document->mime_type,
-                        'text' => $text
-                    ]]
-                ]);
+                // Define extraction schema for freight forwarding documents
+                $schema = [
+                    'consignee' => [
+                        'type' => 'object',
+                        'description' => 'Consignee information',
+                        'properties' => [
+                            'name' => ['type' => 'string', 'description' => 'Company or person name'],
+                            'address' => ['type' => 'string', 'description' => 'Full address'],
+                            'contact' => ['type' => 'string', 'description' => 'Phone or email']
+                        ]
+                    ],
+                    'invoice' => [
+                        'type' => 'object',
+                        'description' => 'Invoice details',
+                        'properties' => [
+                            'number' => ['type' => 'string', 'description' => 'Invoice number'],
+                            'amount' => ['type' => 'number', 'description' => 'Total amount'],
+                            'currency' => ['type' => 'string', 'description' => 'Currency code'],
+                            'date' => ['type' => 'string', 'description' => 'Invoice date']
+                        ]
+                    ],
+                    'container' => [
+                        'type' => 'object',
+                        'description' => 'Container information',
+                        'properties' => [
+                            'number' => ['type' => 'string', 'description' => 'Container number'],
+                            'size' => ['type' => 'string', 'description' => 'Container size'],
+                            'type' => ['type' => 'string', 'description' => 'Container type']
+                        ]
+                    ],
+                    'ports' => [
+                        'type' => 'object',
+                        'description' => 'Port information',
+                        'properties' => [
+                            'origin' => ['type' => 'string', 'description' => 'Port of origin'],
+                            'destination' => ['type' => 'string', 'description' => 'Port of destination']
+                        ]
+                    ]
+                ];
+                
+                // Extract structured data using AiRouter
+                $extractedData = $aiRouter->extract($text, $schema);
 
                 // Calculate confidence score
-                $confidence = $this->calculateConfidence($extractedData['json'] ?? []);
+                $confidence = $this->calculateConfidence($extractedData ?? []);
                 
                 // Update extraction with results
                 $extraction->update([
                     'status' => 'completed',
-                    'extracted_data' => $extractedData['json'] ?? [],
-                    'confidence' => $extractedData['confidence'] ?? $confidence,
+                    'extracted_data' => $extractedData ?? [],
+                    'confidence' => $confidence,
                     'raw_json' => json_encode($extractedData),
-                    'service_used' => 'llm_extractor',
+                    'service_used' => 'ai_router',
                 ]);
 
-                Log::info('Extraction completed successfully with LLM', [
+                Log::info('Extraction completed successfully with AiRouter', [
                     'document_id' => $this->document->id,
                     'extraction_id' => $extraction->id,
-                    'confidence' => $extractedData['confidence'] ?? $confidence
+                    'confidence' => $confidence
                 ]);
                 
             } catch (\Exception $e) {
-                Log::warning('LLM extraction failed, using basic analysis', [
+                Log::warning('AiRouter extraction failed, using basic analysis', [
                     'document_id' => $this->document->id,
                     'error' => $e->getMessage()
                 ]);
