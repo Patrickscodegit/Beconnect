@@ -91,6 +91,16 @@ class AiRouter
         }
     }
 
+    /**
+     * Check if schema is compatible with OpenAI structured output
+     */
+    protected function isSchemaCompatible(array $schema): bool
+    {
+        // For now, disable structured output for compatibility
+        // You can enable this later when you fine-tune the schema format
+        return false;
+    }
+
     /** Rough token estimator (~4 chars/token heuristic). */
     protected function estimateTokens(string $s): int
     {
@@ -156,8 +166,8 @@ class AiRouter
             'max_tokens'  => $maxTokens,
         ];
 
-        // Try Structured Outputs if supported by your model
-        if (!empty($schema)) {
+        // Try Structured Outputs if supported by your model and schema is simple enough
+        if (!empty($schema) && $this->isSchemaCompatible($schema)) {
             $payload['response_format'] = [
                 'type' => 'json_schema',
                 'json_schema' => [
@@ -166,6 +176,10 @@ class AiRouter
                     'strict' => true,
                 ],
             ];
+        } elseif (!empty($schema)) {
+            // Fallback to JSON mode for complex schemas
+            $payload['response_format'] = ['type' => 'json_object'];
+            $system .= "\n\nReturn JSON matching this schema:\n" . json_encode($schema);
         }
 
         $resp = Http::withToken($cfg['api_key'])
