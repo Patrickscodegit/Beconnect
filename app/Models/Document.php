@@ -26,6 +26,15 @@ class Document extends Model
         'has_text_layer',
         'document_type',
         'page_count',
+        // AI Extraction fields
+        'extraction_data',
+        'extraction_confidence',
+        'extraction_service',
+        'extraction_status',
+        'extracted_at',
+        // Robaws integration fields
+        'robaws_quotation_id',
+        'robaws_quotation_data',
     ];
 
     protected $casts = [
@@ -34,6 +43,10 @@ class Document extends Model
         'has_text_layer' => 'boolean',
         'file_size' => 'integer',
         'page_count' => 'integer',
+        'extraction_data' => 'array',
+        'extraction_confidence' => 'float',
+        'robaws_quotation_data' => 'array',
+        'extracted_at' => 'datetime',
     ];
 
     /**

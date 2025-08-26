@@ -3,6 +3,7 @@
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ResultsController;
+use App\Http\Controllers\RobawsOfferController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -29,6 +30,16 @@ Route::middleware('auth')->group(function () {
     Route::get('/intakes/{intake}/results', [ResultsController::class, 'show'])->name('intakes.results');
     Route::post('/intakes/{intake}/parties/assign', [ResultsController::class, 'assignPartyRole'])->name('intakes.parties.assign');
     Route::post('/intakes/{intake}/push-robaws', [ResultsController::class, 'pushRobaws'])->name('intakes.push-robaws');
+    
+    // Robaws integration routes
+    Route::post('/robaws/offers', [RobawsOfferController::class, 'store'])
+        ->name('robaws.offers.store');
+    Route::post('/documents/{document}/robaws-offer', [RobawsOfferController::class, 'createFromDocument'])
+        ->name('documents.robaws-offer');
 });
+
+// Webhook endpoint (no auth required)
+Route::post('/webhooks/robaws', [RobawsOfferController::class, 'webhook'])
+    ->name('webhooks.robaws');
 
 require __DIR__.'/auth.php';

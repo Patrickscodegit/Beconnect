@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Models\Extraction;
 use App\Services\DocumentService;
 use App\Services\AiRouter;
+use App\Services\SimpleRobawsIntegration;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -141,6 +142,23 @@ class ExtractDocumentData implements ShouldQueue
                     'extraction_id' => $extraction->id,
                     'confidence' => $confidence
                 ]);
+
+                // Auto-format data for Robaws if extraction was successful
+                if (!empty($extractedData) && $confidence > 0.5) {
+                    try {
+                        $robawsIntegration = app(SimpleRobawsIntegration::class);
+                        $robawsIntegration->storeExtractedDataForRobaws($this->document, $extractedData);
+                        
+                        Log::info('Document data automatically formatted for Robaws', [
+                            'document_id' => $this->document->id
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::warning('Failed to format data for Robaws (non-critical)', [
+                            'document_id' => $this->document->id,
+                            'error' => $e->getMessage()
+                        ]);
+                    }
+                }
                 
             } catch (\Exception $e) {
                 Log::warning('AiRouter extraction failed, using basic analysis', [

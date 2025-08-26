@@ -88,10 +88,13 @@ return [
     ],
 
     'robaws' => [
-        'base_url' => env('ROBAWS_BASE_URL', 'https://api.robaws.com'),
-        'api_key' => env('ROBAWS_API_KEY', ''),
-        'sandbox' => env('ROBAWS_SANDBOX', true),
+        'base_url' => env('ROBAWS_BASE_URL', 'https://app.robaws.com'),
+        'username' => env('ROBAWS_USERNAME'),
+        'password' => env('ROBAWS_PASSWORD'),
+        'api_key' => env('ROBAWS_API_KEY'),
+        'api_secret' => env('ROBAWS_API_SECRET'),
         'timeout' => env('ROBAWS_TIMEOUT', 30),
+        'auto_create_quotations' => env('ROBAWS_AUTO_CREATE_QUOTATIONS', false),
     ],
 
 ];
