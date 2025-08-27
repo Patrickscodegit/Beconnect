@@ -425,6 +425,21 @@ class ExtractDocumentData implements ShouldQueue
         foreach ($possibleKeys as $key) {
             $value = $this->findValueRecursive($data, $key);
             if (!empty($value)) {
+                // Handle array values
+                if (is_array($value)) {
+                    // If it's a simple single-value array, return the value
+                    if (count($value) === 1 && isset($value[0]) && is_string($value[0])) {
+                        return $value[0];
+                    }
+                    // If it's an associative array with common keys, extract meaningful text
+                    if (isset($value['type'])) return (string) $value['type'];
+                    if (isset($value['name'])) return (string) $value['name'];
+                    if (isset($value['text'])) return (string) $value['text'];
+                    if (isset($value['value'])) return (string) $value['value'];
+                    
+                    // Otherwise convert to JSON as fallback
+                    return json_encode($value);
+                }
                 return is_string($value) ? $value : (string) $value;
             }
         }
