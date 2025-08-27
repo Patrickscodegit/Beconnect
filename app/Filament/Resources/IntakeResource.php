@@ -635,6 +635,28 @@ class IntakeResource extends Resource
             $parts[] = "- {$vehicle['specifications']}";
         }
         
+        // Add dimensions if available
+        if (!empty($vehicle['dimensions']) && is_array($vehicle['dimensions'])) {
+            $dims = $vehicle['dimensions'];
+            if (!empty($dims['length_m']) && !empty($dims['width_m']) && !empty($dims['height_m'])) {
+                $length = str_replace('.', ',', $dims['length_m']);
+                $width = str_replace('.', ',', $dims['width_m']);
+                $height = str_replace('.', ',', $dims['height_m']);
+                $parts[] = "- Dimensions: LxWxH = {$length} x {$width} x {$height}m";
+            }
+        }
+        
+        // Add weight if available
+        if (!empty($vehicle['weight_kg'])) {
+            $weight = number_format($vehicle['weight_kg'], 0, ',', '.');
+            $parts[] = "- Weight: {$weight} kg";
+        }
+        
+        // Add fuel type if available
+        if (!empty($vehicle['fuel_type'])) {
+            $parts[] = "- Fuel: {$vehicle['fuel_type']}";
+        }
+        
         return implode(' ', $parts) ?: 'Vehicle';
     }
     

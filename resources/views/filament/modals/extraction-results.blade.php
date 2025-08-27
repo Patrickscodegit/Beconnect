@@ -212,6 +212,41 @@ if ($vehicle) {
     if (!empty($vehicle['specifications'])) {
         $output .= "Specifications: " . $vehicle['specifications'] . "\n";
     }
+    
+    // Enhanced dimensions display
+    if (!empty($vehicle['dimensions']) && is_array($vehicle['dimensions'])) {
+        $dims = $vehicle['dimensions'];
+        // Only show dimensions if all three values are present
+        if (!empty($dims['length_m']) && !empty($dims['width_m']) && !empty($dims['height_m'])) {
+            $length = str_replace('.', ',', $dims['length_m']);
+            $width = str_replace('.', ',', $dims['width_m']);
+            $height = str_replace('.', ',', $dims['height_m']);
+            $output .= "Dimensions: LxWxH = {$length} x {$width} x {$height}m\n";
+        }
+        // Show wheelbase if available
+        if (!empty($dims['wheelbase_m'])) {
+            $wheelbase = str_replace('.', ',', $dims['wheelbase_m']);
+            $output .= "Wheelbase: {$wheelbase}m\n";
+        }
+    }
+    
+    // Enhanced weight display
+    if (!empty($vehicle['weight_kg'])) {
+        $weight = number_format($vehicle['weight_kg'], 0, ',', '.');
+        $output .= "Weight: {$weight} kg\n";
+    }
+    
+    // Enhanced fuel type display
+    if (!empty($vehicle['fuel_type'])) {
+        $output .= "Fuel: " . $vehicle['fuel_type'] . "\n";
+    }
+    
+    // Enhanced engine display
+    if (!empty($vehicle['engine_cc'])) {
+        $engine = number_format($vehicle['engine_cc'], 0, ',', '.');
+        $output .= "Engine: {$engine} cc\n";
+    }
+    
     if (!empty($vehicle['price'])) {
         $output .= "Price: " . $vehicle['price'] . "\n";
     }

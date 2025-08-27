@@ -142,13 +142,70 @@ class RobawsIntegrationService
         }
         
         // Vehicle/Cargo Information
-        if (isset($data['original_extraction']['shipment']['vehicle'])) {
+        // Check multiple possible vehicle data structures
+        $vehicle = null;
+        if (isset($data['original_extraction']['vehicle'])) {
+            $vehicle = $data['original_extraction']['vehicle'];
+        } elseif (isset($data['original_extraction']['shipment']['vehicle'])) {
             $vehicle = $data['original_extraction']['shipment']['vehicle'];
+        } elseif (isset($data['original_extraction']['vehicle_details'])) {
+            $vehicle = $data['original_extraction']['vehicle_details'];
+        }
+        
+        if ($vehicle) {
             $output[] = "VEHICLE INFORMATION";
             $output[] = "===================";
             
+            // Basic vehicle information
+            if (isset($vehicle['brand'])) $output[] = "Brand: " . $vehicle['brand'];
+            if (isset($vehicle['full_name'])) {
+                $output[] = "Vehicle: " . $vehicle['full_name'];
+            } else {
+                if (isset($vehicle['make'])) $output[] = "Make: " . $vehicle['make'];
+                if (isset($vehicle['model'])) $output[] = "Model: " . $vehicle['model'];
+            }
+            if (isset($vehicle['year'])) $output[] = "Year: " . $vehicle['year'];
             if (isset($vehicle['type'])) $output[] = "Type: " . $vehicle['type'];
-            if (isset($vehicle['model'])) $output[] = "Model: " . $vehicle['model'];
+            if (isset($vehicle['condition'])) $output[] = "Condition: " . $vehicle['condition'];
+            if (isset($vehicle['color'])) $output[] = "Color: " . $vehicle['color'];
+            if (isset($vehicle['vin'])) $output[] = "VIN: " . $vehicle['vin'];
+            if (isset($vehicle['specifications'])) $output[] = "Specifications: " . $vehicle['specifications'];
+            
+            // Enhanced dimensions display (European format)
+            if (isset($vehicle['dimensions']) && is_array($vehicle['dimensions'])) {
+                $dims = $vehicle['dimensions'];
+                // Only show dimensions if all three values are present
+                if (!empty($dims['length_m']) && !empty($dims['width_m']) && !empty($dims['height_m'])) {
+                    $length = str_replace('.', ',', $dims['length_m']);
+                    $width = str_replace('.', ',', $dims['width_m']);
+                    $height = str_replace('.', ',', $dims['height_m']);
+                    $output[] = "Dimensions: LxWxH = {$length} x {$width} x {$height}m";
+                }
+                // Show wheelbase if available
+                if (!empty($dims['wheelbase_m'])) {
+                    $wheelbase = str_replace('.', ',', $dims['wheelbase_m']);
+                    $output[] = "Wheelbase: {$wheelbase}m";
+                }
+            }
+            
+            // Enhanced weight display (European format)
+            if (isset($vehicle['weight_kg'])) {
+                $weight = number_format($vehicle['weight_kg'], 0, ',', '.');
+                $output[] = "Weight: {$weight} kg";
+            }
+            
+            // Enhanced fuel type display
+            if (isset($vehicle['fuel_type'])) {
+                $output[] = "Fuel: " . $vehicle['fuel_type'];
+            }
+            
+            // Enhanced engine display
+            if (isset($vehicle['engine_cc'])) {
+                $engine = number_format($vehicle['engine_cc'], 0, ',', '.');
+                $output[] = "Engine: {$engine} cc";
+            }
+            
+            if (isset($vehicle['price'])) $output[] = "Price: " . $vehicle['price'];
             if (isset($vehicle['details'])) $output[] = "Details: " . $vehicle['details'];
             $output[] = "";
         }
