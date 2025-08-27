@@ -38,7 +38,7 @@
             if (navigator.clipboard && window.isSecureContext) {
                 navigator.clipboard.writeText(text).then(() => {
                     this.innerHTML = '<svg class=\'w-4 h-4 mr-2\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M5 13l4 4L19 7\'></path></svg>Copied!';
-                    this.className = this.className.replace('text-blue-600 bg-white hover:bg-blue-50 border-blue-600', 'text-green-600 bg-green-50 hover:bg-green-100 border-green-600');
+                    this.className = this.className.replace('text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 border-blue-600 dark:border-blue-400', 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900 hover:bg-green-100 dark:hover:bg-green-800 border-green-600 dark:border-green-400');
                     setTimeout(() => {
                         location.reload();
                     }, 1500);
@@ -56,7 +56,7 @@
                     const successful = document.execCommand('copy');
                     if (successful) {
                         this.innerHTML = '<svg class=\'w-4 h-4 mr-2\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M5 13l4 4L19 7\'></path></svg>Copied!';
-                        this.className = this.className.replace('text-blue-600 bg-white hover:bg-blue-50 border-blue-600', 'text-green-600 bg-green-50 hover:bg-green-100 border-green-600');
+                        this.className = this.className.replace('text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 border-blue-600 dark:border-blue-400', 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900 hover:bg-green-100 dark:hover:bg-green-800 border-green-600 dark:border-green-400');
                         setTimeout(() => { location.reload(); }, 1500);
                     } else {
                         alert('Failed to copy text. Please select and copy manually.');
@@ -67,7 +67,7 @@
                 document.body.removeChild(textArea);
             }
         " id="copyButton"
-                class="inline-flex items-center px-4 py-2 border-2 border-blue-600 text-sm font-medium rounded-lg text-blue-600 bg-white hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 shadow-sm">
+                class="inline-flex items-center px-4 py-2 border-2 border-blue-600 dark:border-blue-400 text-sm font-medium rounded-lg text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-gray-700 hover:text-blue-700 dark:hover:text-blue-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-colors duration-200 shadow-sm">
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
             </svg>
