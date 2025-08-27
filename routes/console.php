@@ -15,12 +15,24 @@ Artisan::command('test:ai-extraction', function () {
     try {
         $aiRouter = app(AiRouter::class);
         
-        // Test with sample bytes input (simulating local development)
-        $sampleInput = FileInput::forExtractor('test/sample.png', 'image/png');
+        // Use one of the available PNG files - use storage path format
+        $storagePath = 'private/documents/68ae8b339dd6a_01K3MWZGDDVPTAB4ZAR3Y7Q830.png';
+        $fullPath = storage_path('app/' . $storagePath);
+        
+        if (!file_exists($fullPath)) {
+            $this->error('Test image not found at: ' . $fullPath);
+            return;
+        }
+        
+        $sampleInput = FileInput::forExtractor($storagePath, 'image/png');
         
         $this->info('Input type: ' . (isset($sampleInput['url']) ? 'URL' : 'bytes'));
+        $this->info('Using file: ' . basename($storagePath));
+        $this->info('Input details: ' . json_encode(array_map(function($v) {
+            return is_string($v) && strlen($v) > 100 ? substr($v, 0, 100) . '...' : $v;
+        }, $sampleInput)));
         
-        $result = $aiRouter->extractAdvanced($sampleInput, 'basic');
+        $result = $aiRouter->extractAdvanced($sampleInput, 'shipping');
         
         $this->info('Extraction completed successfully!');
         $this->line('Document Type: ' . ($result['document_type'] ?? 'N/A'));
@@ -38,4 +50,4 @@ Artisan::command('test:ai-extraction', function () {
         $this->error('AI extraction failed: ' . $e->getMessage());
         $this->line('Trace: ' . $e->getTraceAsString());
     }
-})->purpose('Test AI extraction with sample data');
+})->purpose('Test AI extraction with WhatsApp shipping image');

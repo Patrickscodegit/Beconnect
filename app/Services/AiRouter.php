@@ -6,6 +6,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use OpenAI;
 use Psr\Log\LoggerInterface;
 
 class AiRouter
@@ -461,12 +462,14 @@ class AiRouter
     protected function analyzeImageWithOpenAI(string $base64Image, string $prompt): array
     {
         $cfg = config('services.openai');
-        $timeout = (int)($cfg['timeout'] ?? 30);
         
         // Use vision-capable model
-        $model = 'gpt-4o'; // or gpt-4-vision-preview
+        $model = $cfg['vision_model'] ?? 'gpt-4o';
         
-        $payload = [
+        // Use the OpenAI PHP client for proper authentication
+        $client = OpenAI::client($cfg['api_key']);
+        
+        $response = $client->chat()->create([
             'model' => $model,
             'messages' => [
                 [
@@ -492,21 +495,13 @@ class AiRouter
             ],
             'temperature' => 0.3,
             'max_tokens' => 1500
-        ];
+        ]);
 
-        $resp = Http::withToken($cfg['api_key'])
-            ->timeout($timeout)
-            ->retry(1, 500)
-            ->baseUrl(rtrim((string)$cfg['base_url'], '/'))
-            ->post('/chat/completions', $payload)
-            ->throw();
-
-        $content = data_get($resp->json(), 'choices.0.message.content');
+        $content = $response->choices[0]->message->content ?? '';
         
         // Log usage for cost tracking
-        $usage = data_get($resp->json(), 'usage');
-        if ($usage) {
-            $this->logUsage('openai', $model, $usage['prompt_tokens'], $usage['completion_tokens']);
+        if (isset($response->usage)) {
+            $this->logUsage('openai', $model, $response->usage->promptTokens, $response->usage->completionTokens);
         }
 
         // Parse JSON from the response
