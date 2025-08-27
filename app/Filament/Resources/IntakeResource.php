@@ -442,7 +442,7 @@ class IntakeResource extends Resource
                                             foreach ($value as $subKey => $subValue) {
                                                 $subLabel = ucwords(str_replace('_', ' ', $subKey));
                                                 $subDisplayValue = is_scalar($subValue) ? $subValue : json_encode($subValue);
-                                                $displayValue .= '<div><span class="font-medium text-gray-600">' . htmlspecialchars($subLabel) . ':</span> ' . htmlspecialchars($subDisplayValue) . '</div>';
+                                                $displayValue .= '<div><span class="font-medium text-gray-600 dark:text-gray-300">' . htmlspecialchars($subLabel) . ':</span> ' . htmlspecialchars($subDisplayValue) . '</div>';
                                             }
                                             $displayValue .= '</div>';
                                         }
@@ -450,9 +450,9 @@ class IntakeResource extends Resource
                                         $displayValue = htmlspecialchars((string)$value);
                                     }
                                     
-                                    $html .= '<div class="border-b border-gray-100 pb-1 mb-1">';
-                                    $html .= '<dt class="text-sm font-medium text-gray-700">' . htmlspecialchars($label) . '</dt>';
-                                    $html .= '<dd class="mt-1 text-sm text-gray-900">' . $displayValue . '</dd>';
+                                    $html .= '<div class="border-b border-gray-100 dark:border-gray-700 pb-1 mb-1">';
+                                    $html .= '<dt class="text-sm font-medium text-gray-700 dark:text-gray-300">' . htmlspecialchars($label) . '</dt>';
+                                    $html .= '<dd class="mt-1 text-sm text-gray-900 dark:text-gray-100">' . $displayValue . '</dd>';
                                     $html .= '</div>';
                                 }
                                 $html .= '</dl>';

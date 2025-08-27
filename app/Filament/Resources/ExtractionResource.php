@@ -474,7 +474,7 @@ class ExtractionResource extends Resource
                             })
                             ->formatStateUsing(function ($state) {
                                 return new \Illuminate\Support\HtmlString(
-                                    '<pre class="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-xs font-mono">' . 
+                                    '<pre class="bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-green-400 p-4 rounded-lg overflow-x-auto text-xs font-mono border border-gray-300 dark:border-gray-600">' . 
                                     htmlspecialchars($state) . 
                                     '</pre>'
                                 );

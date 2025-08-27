@@ -1,17 +1,17 @@
 <div class="space-y-6">
     <!-- Extraction Metadata -->
-    <div class="bg-gray-50 rounded-lg p-4">
+    <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
         <div class="grid grid-cols-3 gap-4 text-sm">
             <div>
-                <span class="font-medium text-gray-700">Confidence:</span>
-                <span class="ml-2 text-gray-900">{{ number_format($extraction->confidence * 100, 1) }}%</span>
+                <span class="font-medium text-gray-700 dark:text-gray-300">Confidence:</span>
+                <span class="ml-2 text-gray-900 dark:text-gray-100">{{ number_format($extraction->confidence * 100, 1) }}%</span>
             </div>
             <div>
-                <span class="font-medium text-gray-700">Extracted:</span>
-                <span class="ml-2 text-gray-900">{{ $extraction->created_at->format('M j, Y g:i A') }}</span>
+                <span class="font-medium text-gray-700 dark:text-gray-300">Extracted:</span>
+                <span class="ml-2 text-gray-900 dark:text-gray-100">{{ $extraction->created_at->format('M j, Y g:i A') }}</span>
             </div>
             <div>
-                <span class="font-medium text-gray-700">Status:</span>
+                <span class="font-medium text-gray-700 dark:text-gray-300">Status:</span>
                 @if($extraction->verified_at)
                     <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                         Verified
@@ -27,7 +27,7 @@
 
     <!-- Copy Button -->
     <div class="flex justify-between items-center mb-4">
-        <h4 class="text-lg font-medium text-gray-900">Extracted Information</h4>
+        <h4 class="text-lg font-medium text-gray-900 dark:text-gray-100">Extracted Information</h4>
         <button onclick="
             const elem = document.getElementById('extractedText');
             const text = elem ? (elem.innerText || elem.textContent || '') : '';
@@ -85,8 +85,8 @@
         @endphp
 
         @if($data && is_array($data))
-            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <pre id="extractedText" class="whitespace-pre-wrap font-mono text-sm text-gray-900 leading-relaxed">@php
+            <div class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+                <pre id="extractedText" class="whitespace-pre-wrap font-mono text-sm text-gray-900 dark:text-gray-100 leading-relaxed">@php
 // Format the extracted data as readable text
 $output = '';
 
@@ -255,7 +255,7 @@ echo trim($output);
 @endphp</pre>
             </div>
         @else
-            <div class="text-center text-gray-500 py-8">
+            <div class="text-center text-gray-500 dark:text-gray-400 py-8">
                 <p>No extracted data available.</p>
             </div>
         @endif
@@ -264,14 +264,14 @@ echo trim($output);
     <!-- Raw JSON (collapsible) -->
     <div class="border-t pt-4">
         <details class="group">
-            <summary class="flex cursor-pointer items-center justify-between rounded-lg bg-gray-50 p-4 text-gray-900">
+            <summary class="flex cursor-pointer items-center justify-between rounded-lg bg-gray-50 dark:bg-gray-800 p-4 text-gray-900 dark:text-gray-100">
                 <h5 class="font-medium">Raw JSON Data</h5>
                 <svg class="h-5 w-5 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                 </svg>
             </summary>
-            <div class="mt-4 rounded-lg bg-gray-900 p-4">
-                <pre class="text-xs font-mono text-green-400 overflow-x-auto whitespace-pre-wrap"><code>@php
+            <div class="mt-4 rounded-lg bg-gray-100 dark:bg-gray-800 p-4 border border-gray-300 dark:border-gray-600">
+                <pre class="text-xs font-mono text-gray-900 dark:text-green-400 overflow-x-auto whitespace-pre-wrap"><code>@php
 $json = $extraction->extracted_data ?? $extraction->raw_json;
 
 // Ensure it's a string for display
