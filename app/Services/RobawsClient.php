@@ -193,19 +193,41 @@ class RobawsClient
     }
 
     /**
-     * Find or create a client based on email
+     * Find or create a client based on email or name
      */
     public function findOrCreateClient(array $clientData): array
     {
-        // Search for existing client by email
+        // Search for existing client by email first
         if (!empty($clientData['email'])) {
-            $existingClients = $this->searchClients([
-                'email' => $clientData['email'],
-                'limit' => 1
-            ]);
+            try {
+                $existingClients = $this->searchClients([
+                    'email' => $clientData['email'],
+                    'limit' => 1
+                ]);
 
-            if (!empty($existingClients['data'])) {
-                return $existingClients['data'][0];
+                if (!empty($existingClients['data'])) {
+                    return $existingClients['data'][0];
+                }
+            } catch (\Exception $e) {
+                // Continue to create new client if search fails
+                Log::warning('Client search by email failed', ['error' => $e->getMessage()]);
+            }
+        }
+        
+        // Search by name if no email or email search failed
+        if (!empty($clientData['name'])) {
+            try {
+                $existingClients = $this->searchClients([
+                    'name' => $clientData['name'],
+                    'limit' => 1
+                ]);
+
+                if (!empty($existingClients['data'])) {
+                    return $existingClients['data'][0];
+                }
+            } catch (\Exception $e) {
+                // Continue to create new client if search fails
+                Log::warning('Client search by name failed', ['error' => $e->getMessage()]);
             }
         }
 

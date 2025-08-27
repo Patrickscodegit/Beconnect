@@ -235,13 +235,26 @@ class RobawsIntegrationService
     {
         $consignee = $data['consignee'] ?? [];
         
+        // Parse address properly
+        $addressString = $consignee['address'] ?? $data['client_address'] ?? '';
+        $addressParts = $this->parseAddress($addressString);
+        
         $clientData = [
             'name' => $consignee['name'] ?? $data['client_name'] ?? 'Unknown Client',
-            'email' => $consignee['email'] ?? $data['client_email'] ?? null,
-            'phone' => $consignee['contact'] ?? $consignee['phone'] ?? $data['client_phone'] ?? null,
-            'address' => $consignee['address'] ?? $data['client_address'] ?? null,
-            'type' => 'COMPANY', // or 'PERSON' based on your logic
-            'country' => 'BE', // Default to Belgium, adjust as needed
+            'email' => $consignee['email'] ?? $data['client_email'] ?? '',
+            'tel' => $consignee['contact'] ?? $consignee['phone'] ?? $data['client_phone'] ?? '',
+            'address' => [
+                'addressLine1' => $addressParts['street'] ?? '',
+                'addressLine2' => '',
+                'postalCode' => $addressParts['postal'] ?? '',
+                'city' => $addressParts['city'] ?? '',
+                'country' => $addressParts['country'] ?? 'BE',
+            ],
+            'language' => 'en',
+            'currency' => 'EUR',
+            'paymentConditionId' => 1, // Default payment condition
+            'generalLedgerAccountId' => 1107, // Default account from existing client
+            'vatTariffId' => 16, // Default VAT tariff
         ];
         
         // Skip if no name
@@ -264,32 +277,80 @@ class RobawsIntegrationService
             return null;
         }
     }
+    
+    /**
+     * Parse address string into components
+     */
+    private function parseAddress(string $address): array
+    {
+        if (empty($address)) {
+            return [];
+        }
+        
+        // Simple address parsing - can be enhanced
+        $parts = explode(',', $address);
+        $result = [];
+        
+        if (count($parts) >= 1) {
+            $result['street'] = trim($parts[0]);
+        }
+        if (count($parts) >= 2) {
+            $result['city'] = trim($parts[1]);
+        }
+        if (count($parts) >= 3) {
+            $result['country'] = trim($parts[2]);
+        }
+        
+        // Try to extract postal code (assuming format like "1234 AB" or "12345")
+        if (preg_match('/\b(\d{4,5}\s?[A-Z]{0,2})\b/', $address, $matches)) {
+            $result['postal'] = $matches[1];
+        }
+        
+        return $result;
+    }
 
     /**
      * Save Robaws offer reference in our database
      */
     private function saveRobawsOffer(Document $document, array $offer): void
     {
-        // Update document with Robaws reference
-        $document->update([
-            'robaws_quotation_id' => $offer['id'] ?? null,
-            'robaws_quotation_data' => $offer,
-        ]);
-        
-        // Create or update local quotation record
-        Quotation::updateOrCreate(
-            ['robaws_id' => $offer['id']],
-            [
-                'user_id' => $document->user_id,
-                'document_id' => $document->id,
-                'quotation_number' => $offer['number'] ?? $offer['id'],
-                'status' => strtolower($offer['status'] ?? 'draft'),
-                'client_name' => $offer['client']['name'] ?? null,
-                'client_email' => $offer['client']['email'] ?? null,
-                'robaws_data' => $offer,
-                'auto_created' => true,
-                'created_from_document' => true,
-            ]
-        );
+        try {
+            // Update document with Robaws reference if it's a real document
+            if (isset($document->exists) && $document->exists) {
+                $document->update([
+                    'robaws_quotation_id' => $offer['id'] ?? null,
+                    'robaws_quotation_data' => $offer,
+                ]);
+            }
+            
+            // Try to create or update local quotation record
+            try {
+                Quotation::updateOrCreate(
+                    ['robaws_id' => $offer['id']],
+                    [
+                        'user_id' => $document->user_id ?? 1, // Fallback to user 1
+                        'document_id' => null, // Skip document_id for intake-based exports
+                        'quotation_number' => $offer['logicId'] ?? $offer['id'], // Use logicId (O251069) instead of numeric ID
+                        'status' => strtolower($offer['status'] ?? 'draft'),
+                        'client_name' => $offer['client']['name'] ?? null,
+                        'client_email' => $offer['client']['email'] ?? null,
+                        'robaws_data' => $offer,
+                        'auto_created' => true,
+                        'created_from_document' => false, // Since this is from intake
+                    ]
+                );
+            } catch (\Exception $e) {
+                // Log the error but don't fail the whole process
+                Log::warning('Failed to save quotation to local database', [
+                    'offer_id' => $offer['id'] ?? null,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('Failed to save Robaws offer reference', [
+                'offer_id' => $offer['id'] ?? null,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 }

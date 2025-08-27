@@ -234,13 +234,13 @@ class IntakeResource extends Resource
                             $tempDocument = new \stdClass();
                             $tempDocument->id = $record->id;
                             $tempDocument->extraction_data = $mappedData;
-                            $tempDocument->user_id = auth()->id();
+                            $tempDocument->user_id = auth()->id() ?? 1; // Fallback to user 1 if no auth
                             
                             // Convert to actual Document model for the service
                             $document = Document::make([
                                 'filename' => 'Intake-' . $record->id . '-Extract',
                                 'extraction_data' => $mappedData,
-                                'user_id' => auth()->id(),
+                                'user_id' => auth()->id() ?? 1, // Fallback to user 1 if no auth
                             ]);
                             $document->id = $record->id; // Use intake ID as reference
                             
@@ -472,7 +472,7 @@ class IntakeResource extends Resource
     /**
      * Map extraction data to format expected by Robaws service
      */
-    private static function mapExtractionDataForRobaws(array $extractedData): array
+    public static function mapExtractionDataForRobaws(array $extractedData): array
     {
         // Initialize mapped data structure
         $mappedData = [
@@ -595,7 +595,7 @@ class IntakeResource extends Resource
     /**
      * Build a descriptive text for the vehicle
      */
-    private static function buildVehicleDescription(array $vehicle): string
+    public static function buildVehicleDescription(array $vehicle): string
     {
         $parts = [];
         
@@ -627,7 +627,7 @@ class IntakeResource extends Resource
     /**
      * Extract numeric value from price string
      */
-    private static function extractNumericValue(string $value): float
+    public static function extractNumericValue(string $value): float
     {
         // Remove currency symbols and extract number
         $cleaned = preg_replace('/[^\d.,]/', '', $value);
