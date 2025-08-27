@@ -79,7 +79,7 @@ class ProcessEmailDocument implements ShouldQueue
             // Use AiRouter to extract shipping information from email content
             $aiRouter = app(AiRouter::class);
             
-            // Define shipping extraction schema
+            // Define shipping extraction schema with enhanced vehicle detection
             $schema = [
                 'contact_info' => [
                     'type' => 'object',
@@ -95,18 +95,22 @@ class ProcessEmailDocument implements ShouldQueue
                     'type' => 'object',
                     'description' => 'Shipping route and logistics information',
                     'properties' => [
-                        'origin' => ['type' => 'string', 'description' => 'Origin location or port'],
-                        'destination' => ['type' => 'string', 'description' => 'Destination location or port'],
+                        'origin' => ['type' => 'string', 'description' => 'Origin location or port (e.g., Bruxelles, Brussels)'],
+                        'destination' => ['type' => 'string', 'description' => 'Destination location or port (e.g., Djeddah, Jeddah)'],
                         'route' => ['type' => 'string', 'description' => 'Complete shipping route'],
-                        'service_type' => ['type' => 'string', 'description' => 'Type of shipping service']
+                        'service_type' => ['type' => 'string', 'description' => 'Type of shipping service (e.g., RoRo, maritime transport)']
                     ]
                 ],
                 'vehicle_info' => [
                     'type' => 'object',
-                    'description' => 'Vehicle or cargo information',
+                    'description' => 'Vehicle or cargo information - CRITICAL: Look for car brands and models',
                     'properties' => [
-                        'make_model' => ['type' => 'string', 'description' => 'Vehicle make and model'],
+                        'brand' => ['type' => 'string', 'description' => 'Vehicle brand/make (e.g., BMW, Mercedes, Toyota)'],
+                        'model' => ['type' => 'string', 'description' => 'Vehicle model (e.g., Série 7, E-Class, Camry)'],
+                        'full_name' => ['type' => 'string', 'description' => 'Complete vehicle name (e.g., BMW Série 7)'],
                         'type' => ['type' => 'string', 'description' => 'Vehicle type (car, truck, van, etc.)'],
+                        'year' => ['type' => 'string', 'description' => 'Vehicle year if mentioned'],
+                        'color' => ['type' => 'string', 'description' => 'Vehicle color if mentioned'],
                         'specifications' => ['type' => 'string', 'description' => 'Vehicle specifications or details'],
                         'price' => ['type' => 'string', 'description' => 'Price or cost information']
                     ]
@@ -119,6 +123,11 @@ class ProcessEmailDocument implements ShouldQueue
                         'delivery_date' => ['type' => 'string', 'description' => 'Delivery or arrival date'],
                         'requested_date' => ['type' => 'string', 'description' => 'Requested or preferred date']
                     ]
+                ],
+                'services_requested' => [
+                    'type' => 'array',
+                    'description' => 'List of services requested in the email',
+                    'items' => ['type' => 'string']
                 ],
                 'messages' => [
                     'type' => 'array',
@@ -214,8 +223,14 @@ class ProcessEmailDocument implements ShouldQueue
         }
         
         $prompt .= "\nPlease extract shipping/freight information from this email content. ";
-        $prompt .= "Look for vehicle transport details, shipping routes, contact information, pricing, and any logistics details. ";
-        $prompt .= "The email may contain forwarded messages or quoted text from other communications.\n\n";
+        $prompt .= "Pay special attention to:\n";
+        $prompt .= "- VEHICLE DETAILS: Look carefully for car brands like BMW, Mercedes, Toyota, Audi, etc. and their models (e.g., 'BMW Série 7', 'Mercedes E-Class')\n";
+        $prompt .= "- ORIGIN and DESTINATION locations (cities, ports, countries)\n";
+        $prompt .= "- CONTACT information (names, emails, phone numbers)\n";
+        $prompt .= "- SHIPPING TYPE (RoRo, container, maritime transport, etc.)\n";
+        $prompt .= "- Any pricing or quotes mentioned\n";
+        $prompt .= "- Dates for pickup, delivery, or shipping\n\n";
+        $prompt .= "The email may contain forwarded messages or quoted text. Extract all relevant information.\n\n";
         
         return $prompt;
     }
@@ -256,8 +271,12 @@ class ProcessEmailDocument implements ShouldQueue
                 'service_type' => $this->extractValue($extractedData, ['shipping_details.service_type', 'service', 'type'])
             ],
             'vehicle' => [
+                'brand' => $this->extractValue($extractedData, ['vehicle_info.brand', 'brand', 'make']),
+                'model' => $this->extractValue($extractedData, ['vehicle_info.model', 'model']),
+                'full_name' => $this->extractValue($extractedData, ['vehicle_info.full_name', 'vehicle_info.make_model', 'make_model', 'vehicle']),
                 'type' => $this->extractValue($extractedData, ['vehicle_info.type', 'vehicle_type', 'type']),
-                'make_model' => $this->extractValue($extractedData, ['vehicle_info.make_model', 'make_model', 'vehicle']),
+                'year' => $this->extractValue($extractedData, ['vehicle_info.year', 'year']),
+                'color' => $this->extractValue($extractedData, ['vehicle_info.color', 'color']),
                 'specifications' => $this->extractValue($extractedData, ['vehicle_info.specifications', 'specs', 'details']),
                 'price' => $this->extractValue($extractedData, ['vehicle_info.price', 'price', 'cost', 'amount'])
             ],
@@ -266,6 +285,7 @@ class ProcessEmailDocument implements ShouldQueue
                 'delivery_date' => $this->extractValue($extractedData, ['dates.delivery_date', 'delivery', 'arrival']),
                 'requested_date' => $this->extractValue($extractedData, ['dates.requested_date', 'requested', 'preferred'])
             ],
+            'services_requested' => $extractedData['services_requested'] ?? [],
             'messages' => $extractedData['messages'] ?? [],
             'extracted_text' => $this->buildConversationText($extractedData),
             'metadata' => [
