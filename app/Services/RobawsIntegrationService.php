@@ -79,9 +79,9 @@ class RobawsIntegrationService
             'currency' => $extractedData['invoice']['currency'] ?? $extractedData['currency'] ?? 'EUR',
             'status' => 'DRAFT',
             
-            // Push formatted text into the custom "JSON" field
+            // Push formatted text into the custom "Extracted Information" field
             'extraFields' => [
-                'JSON' => ['stringValue' => $formattedText],
+                'Extracted Information' => ['stringValue' => $formattedText],
             ],
             
             // Include line items if any
@@ -135,7 +135,7 @@ class RobawsIntegrationService
             if ($origin) $output[] = "Origin: " . $origin;
             if ($destination) $output[] = "Destination: " . $destination;
             
-            if (isset($data['shipment_type'])) {
+            if (!empty($data['shipment_type'])) {
                 $output[] = "Shipment Type: " . $data['shipment_type'];
             }
             $output[] = "";
@@ -156,20 +156,20 @@ class RobawsIntegrationService
             $output[] = "VEHICLE INFORMATION";
             $output[] = "===================";
             
-            // Basic vehicle information
-            if (isset($vehicle['brand'])) $output[] = "Brand: " . $vehicle['brand'];
-            if (isset($vehicle['full_name'])) {
+            // Basic vehicle information (only show non-empty values)
+            if (!empty($vehicle['brand']) && trim($vehicle['brand']) !== '') $output[] = "Brand: " . $vehicle['brand'];
+            if (!empty($vehicle['full_name']) && trim($vehicle['full_name']) !== '') {
                 $output[] = "Vehicle: " . $vehicle['full_name'];
             } else {
-                if (isset($vehicle['make'])) $output[] = "Make: " . $vehicle['make'];
-                if (isset($vehicle['model'])) $output[] = "Model: " . $vehicle['model'];
+                if (!empty($vehicle['make']) && trim($vehicle['make']) !== '') $output[] = "Make: " . $vehicle['make'];
+                if (!empty($vehicle['model']) && trim($vehicle['model']) !== '') $output[] = "Model: " . $vehicle['model'];
             }
-            if (isset($vehicle['year'])) $output[] = "Year: " . $vehicle['year'];
-            if (isset($vehicle['type'])) $output[] = "Type: " . $vehicle['type'];
-            if (isset($vehicle['condition'])) $output[] = "Condition: " . $vehicle['condition'];
-            if (isset($vehicle['color'])) $output[] = "Color: " . $vehicle['color'];
-            if (isset($vehicle['vin'])) $output[] = "VIN: " . $vehicle['vin'];
-            if (isset($vehicle['specifications'])) $output[] = "Specifications: " . $vehicle['specifications'];
+            if (!empty($vehicle['year']) && trim($vehicle['year']) !== '') $output[] = "Year: " . $vehicle['year'];
+            if (!empty($vehicle['type']) && trim($vehicle['type']) !== '') $output[] = "Type: " . $vehicle['type'];
+            if (!empty($vehicle['condition']) && trim($vehicle['condition']) !== '') $output[] = "Condition: " . $vehicle['condition'];
+            if (!empty($vehicle['color']) && trim($vehicle['color']) !== '') $output[] = "Color: " . $vehicle['color'];
+            if (!empty($vehicle['vin']) && trim($vehicle['vin']) !== '') $output[] = "VIN: " . $vehicle['vin'];
+            if (!empty($vehicle['specifications']) && trim($vehicle['specifications']) !== '') $output[] = "Specifications: " . $vehicle['specifications'];
             
             // Enhanced dimensions display (European format)
             if (isset($vehicle['dimensions']) && is_array($vehicle['dimensions'])) {
@@ -189,24 +189,24 @@ class RobawsIntegrationService
             }
             
             // Enhanced weight display (European format)
-            if (isset($vehicle['weight_kg'])) {
+            if (!empty($vehicle['weight_kg'])) {
                 $weight = number_format($vehicle['weight_kg'], 0, ',', '.');
                 $output[] = "Weight: {$weight} kg";
             }
             
             // Enhanced fuel type display
-            if (isset($vehicle['fuel_type'])) {
+            if (!empty($vehicle['fuel_type'])) {
                 $output[] = "Fuel: " . $vehicle['fuel_type'];
             }
             
             // Enhanced engine display
-            if (isset($vehicle['engine_cc'])) {
+            if (!empty($vehicle['engine_cc'])) {
                 $engine = number_format($vehicle['engine_cc'], 0, ',', '.');
                 $output[] = "Engine: {$engine} cc";
             }
             
-            if (isset($vehicle['price'])) $output[] = "Price: " . $vehicle['price'];
-            if (isset($vehicle['details'])) $output[] = "Details: " . $vehicle['details'];
+            if (!empty($vehicle['price'])) $output[] = "Price: " . $vehicle['price'];
+            if (!empty($vehicle['details'])) $output[] = "Details: " . $vehicle['details'];
             $output[] = "";
         }
         
@@ -228,10 +228,10 @@ class RobawsIntegrationService
             // From original extraction pricing
             if (isset($data['original_extraction']['pricing'])) {
                 $pricing = $data['original_extraction']['pricing'];
-                if (isset($pricing['amount'])) {
+                if (!empty($pricing['amount'])) {
                     $output[] = "Quoted Amount: " . $pricing['amount'];
                 }
-                if (isset($pricing['notes'])) {
+                if (!empty($pricing['notes'])) {
                     $output[] = "Pricing Notes: " . $pricing['notes'];
                 }
             }
@@ -252,9 +252,9 @@ class RobawsIntegrationService
             $output[] = "===============";
             $invoice = $data['invoice'];
             
-            if (isset($invoice['number'])) $output[] = "Invoice Number: " . $invoice['number'];
-            if (isset($invoice['date'])) $output[] = "Date: " . $invoice['date'];
-            if (isset($invoice['currency'])) $output[] = "Currency: " . $invoice['currency'];
+            if (!empty($invoice['number'])) $output[] = "Invoice Number: " . $invoice['number'];
+            if (!empty($invoice['date'])) $output[] = "Date: " . $invoice['date'];
+            if (!empty($invoice['currency'])) $output[] = "Currency: " . $invoice['currency'];
             $output[] = "";
         }
         
@@ -264,12 +264,12 @@ class RobawsIntegrationService
             $output[] = "===================";
             $metadata = $data['original_extraction']['metadata'];
             
-            if (isset($metadata['confidence'])) {
+            if (!empty($metadata['confidence'])) {
                 $confidence = round($metadata['confidence'] * 100, 1);
                 $output[] = "AI Confidence: {$confidence}%";
             }
-            if (isset($metadata['service_used'])) $output[] = "Service Used: " . $metadata['service_used'];
-            if (isset($metadata['processed_at'])) $output[] = "Processed At: " . $metadata['processed_at'];
+            if (!empty($metadata['service_used'])) $output[] = "Service Used: " . $metadata['service_used'];
+            if (!empty($metadata['processed_at'])) $output[] = "Processed At: " . $metadata['processed_at'];
         }
         
         return implode("\n", $output);
