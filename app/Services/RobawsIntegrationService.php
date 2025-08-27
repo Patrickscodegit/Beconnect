@@ -520,18 +520,9 @@ class RobawsIntegrationService
 
             // For files <= 6MB, use direct upload
             if ($fileSize <= 6 * 1024 * 1024) {
-                // Use stream if available for memory efficiency
-                if (method_exists($disk, 'readStream')) {
-                    $stream = $disk->readStream($filePath);
-                    $uploadResult = $this->robawsClient->addOfferDocument($offerId, $filename, $mimeType, $stream);
-                    if (is_resource($stream)) {
-                        fclose($stream);
-                    }
-                } else {
-                    // Fallback to base64
-                    $content = $disk->get($filePath);
-                    $uploadResult = $this->robawsClient->addOfferDocument($offerId, $filename, $mimeType, $content);
-                }
+                // Use base64 upload for now (more reliable)
+                $content = $disk->get($filePath);
+                $uploadResult = $this->robawsClient->addOfferDocument($offerId, $filename, $mimeType, $content);
 
                 Log::info('Document uploaded to Robaws offer', [
                     'offer_id' => $offerId,

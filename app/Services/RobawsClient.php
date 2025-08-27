@@ -252,32 +252,30 @@ class RobawsClient
     public function addOfferDocument(int $offerId, string $filename, string $mimeType, $streamOrBytes): array
     {
         try {
-            // If we have a stream (preferred for memory efficiency)
-            if (is_resource($streamOrBytes)) {
-                $res = $this->http()
-                    ->timeout(60)
-                    ->attach('file', $streamOrBytes, $filename, ['Content-Type' => $mimeType])
-                    ->post("/api/v2/offers/{$offerId}/documents");
-                
-                $this->throwUnlessOk($res);
-                return $res->json();
-            }
+            Log::info('Uploading document to Robaws offer', [
+                'offer_id' => $offerId,
+                'filename' => $filename,
+                'mime_type' => $mimeType,
+                'content_length' => is_resource($streamOrBytes) ? 'stream' : strlen($streamOrBytes),
+            ]);
 
-            // Or if we have base64 bytes
-            $base64Content = is_string($streamOrBytes) && base64_decode($streamOrBytes, true) !== false 
-                ? $streamOrBytes 
-                : base64_encode($streamOrBytes);
-
-            $res = $this->http()
+            // Always use multipart form upload (more reliable than JSON+base64)
+            $response = Http::baseUrl($this->baseUrl)
+                ->withBasicAuth($this->apiKey, $this->apiSecret)
                 ->timeout(60)
-                ->post("/api/v2/offers/{$offerId}/documents", [
-                    'filename'    => $filename,
-                    'mimeType'    => $mimeType,
-                    'bytesBase64' => $base64Content,
-                ]);
-
-            $this->throwUnlessOk($res);
-            return $res->json();
+                ->attach('file', $streamOrBytes, $filename, ['Content-Type' => $mimeType])
+                ->post("/api/v2/offers/{$offerId}/documents");
+            
+            $this->throwUnlessOk($response);
+            
+            $result = $response->json();
+            Log::info('Document uploaded successfully to Robaws offer', [
+                'offer_id' => $offerId,
+                'document_id' => $result['id'] ?? null,
+                'filename' => $filename,
+            ]);
+            
+            return $result;
 
         } catch (\Illuminate\Http\Client\RequestException $e) {
             $body = $e->response ? $e->response->body() : '';
@@ -297,6 +295,7 @@ class RobawsClient
                 'filename' => $filename,
                 'error' => $errorMessage,
                 'correlation_id' => $correlationId,
+                'response_body' => $body,
             ]);
             
             throw new \Exception($errorMessage);
@@ -317,14 +316,21 @@ class RobawsClient
     public function createOfferDocumentUploadSession(int $offerId, string $filename, string $mimeType, int $fileSize): array
     {
         try {
-            $res = $this->http()->post("/api/v2/offers/{$offerId}/document-upload-sessions", [
-                'filename' => $filename,
-                'mimeType' => $mimeType,
-                'size' => $fileSize,
-            ]);
+            $response = Http::baseUrl($this->baseUrl)
+                ->withBasicAuth($this->apiKey, $this->apiSecret)
+                ->withHeaders([
+                    'Accept' => 'application/json',
+                    'Content-Type' => 'application/json',
+                ])
+                ->post("/api/v2/offers/{$offerId}/document-upload-sessions", [
+                    'name' => $filename, // Robaws requires 'name' field
+                    'filename' => $filename,
+                    'mimeType' => $mimeType,
+                    'size' => $fileSize,
+                ]);
 
-            $this->throwUnlessOk($res);
-            return $res->json();
+            $this->throwUnlessOk($response);
+            return $response->json();
 
         } catch (\Illuminate\Http\Client\RequestException $e) {
             $body = $e->response ? $e->response->body() : '';
@@ -338,13 +344,19 @@ class RobawsClient
     public function uploadDocumentChunk(string $sessionId, string $bytesBase64, int $partNumber): array
     {
         try {
-            $res = $this->http()->post("/api/v2/document-upload-sessions/{$sessionId}", [
-                'bytesBase64' => $bytesBase64,
-                'partNumber' => $partNumber,
-            ]);
+            $response = Http::baseUrl($this->baseUrl)
+                ->withBasicAuth($this->apiKey, $this->apiSecret)
+                ->withHeaders([
+                    'Accept' => 'application/json',
+                    'Content-Type' => 'application/json',
+                ])
+                ->post("/api/v2/document-upload-sessions/{$sessionId}", [
+                    'bytesBase64' => $bytesBase64,
+                    'partNumber' => $partNumber,
+                ]);
 
-            $this->throwUnlessOk($res);
-            return $res->json();
+            $this->throwUnlessOk($response);
+            return $response->json();
 
         } catch (\Illuminate\Http\Client\RequestException $e) {
             $body = $e->response ? $e->response->body() : '';

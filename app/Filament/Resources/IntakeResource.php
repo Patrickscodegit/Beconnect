@@ -233,17 +233,26 @@ class IntakeResource extends Resource
                             // Get the first document associated with this intake
                             $originalDocument = $record->documents()->first();
                             
-                            // Convert to actual Document model for the service
-                            $document = Document::make([
-                                'filename' => $originalDocument ? $originalDocument->filename : 'Intake-' . $record->id . '-Extract',
-                                'path' => $originalDocument ? $originalDocument->path : null,
-                                'file_path' => $originalDocument ? $originalDocument->file_path : null,
-                                'disk' => $originalDocument ? $originalDocument->disk : config('filesystems.default', 'local'),
-                                'mime_type' => $originalDocument ? $originalDocument->mime_type : 'application/json',
+                            if (!$originalDocument) {
+                                Notification::make()
+                                    ->title('Export Failed')
+                                    ->body('No document file found for this intake.')
+                                    ->danger()
+                                    ->send();
+                                return;
+                            }
+                            
+                            // Create a document model with the extraction data for the service
+                            $document = new Document([
+                                'filename' => $originalDocument->filename,
+                                'path' => $originalDocument->path,
+                                'file_path' => $originalDocument->file_path,
+                                'disk' => $originalDocument->disk ?? config('filesystems.default', 'local'),
+                                'mime_type' => $originalDocument->mime_type,
                                 'extraction_data' => $mappedData,
-                                'user_id' => auth()->id() ?? 1, // Fallback to user 1 if no auth
+                                'user_id' => auth()->id() ?? 1,
                             ]);
-                            $document->id = $record->id; // Use intake ID as reference
+                            $document->id = $originalDocument->id; // Use original document ID
                             
                             $offer = $robawsService->createOfferFromDocument($document);
                             
