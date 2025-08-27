@@ -63,8 +63,8 @@ class RobawsIntegrationService
      */
     private function buildOfferPayload(array $extractedData, int $clientId): array
     {
-        // Serialize the entire extracted JSON for the custom field
-        $jsonString = json_encode($extractedData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        // Format the extracted data as readable text instead of JSON
+        $formattedText = $this->formatExtractedDataAsText($extractedData);
         
         // Build line items from extracted data
         $lineItems = $this->buildLineItems($extractedData);
@@ -75,9 +75,9 @@ class RobawsIntegrationService
             'currency' => $extractedData['invoice']['currency'] ?? $extractedData['currency'] ?? 'EUR',
             'status' => 'DRAFT',
             
-            // Push extracted JSON into the custom "JSON" field
+            // Push formatted text into the custom "JSON" field
             'extraFields' => [
-                'JSON' => ['stringValue' => $jsonString],
+                'JSON' => ['stringValue' => $formattedText],
             ],
             
             // Include line items if any
@@ -88,6 +88,130 @@ class RobawsIntegrationService
             'paymentTermDays' => 30,
             'notes' => $this->extractNotes($extractedData),
         ];
+    }
+    
+    /**
+     * Format extracted data as readable text instead of JSON
+     */
+    private function formatExtractedDataAsText(array $data): string
+    {
+        $output = [];
+        
+        // Header
+        $output[] = "=== AI EXTRACTED SHIPPING DATA ===";
+        $output[] = "Generated: " . ($data['extracted_at'] ?? date('Y-m-d H:i:s'));
+        $output[] = "Source: " . ($data['extraction_source'] ?? 'AI Extraction');
+        $output[] = "";
+        
+        // Contact Information
+        if (isset($data['consignee']) || isset($data['client_name'])) {
+            $output[] = "CONTACT INFORMATION";
+            $output[] = "==================";
+            
+            $name = $data['consignee']['name'] ?? $data['client_name'] ?? '';
+            $phone = $data['consignee']['contact'] ?? $data['client_phone'] ?? '';
+            $email = $data['consignee']['email'] ?? $data['client_email'] ?? '';
+            $address = $data['consignee']['address'] ?? '';
+            
+            if ($name) $output[] = "Name: " . $name;
+            if ($phone) $output[] = "Phone: " . $phone;
+            if ($email) $output[] = "Email: " . $email;
+            if ($address) $output[] = "Address: " . $address;
+            $output[] = "";
+        }
+        
+        // Shipping Details
+        if (isset($data['ports']) || isset($data['port_of_loading'])) {
+            $output[] = "SHIPPING DETAILS";
+            $output[] = "================";
+            
+            $origin = $data['ports']['origin'] ?? $data['port_of_loading'] ?? '';
+            $destination = $data['ports']['destination'] ?? $data['port_of_discharge'] ?? '';
+            
+            if ($origin) $output[] = "Origin: " . $origin;
+            if ($destination) $output[] = "Destination: " . $destination;
+            
+            if (isset($data['shipment_type'])) {
+                $output[] = "Shipment Type: " . $data['shipment_type'];
+            }
+            $output[] = "";
+        }
+        
+        // Vehicle/Cargo Information
+        if (isset($data['original_extraction']['shipment']['vehicle'])) {
+            $vehicle = $data['original_extraction']['shipment']['vehicle'];
+            $output[] = "VEHICLE INFORMATION";
+            $output[] = "===================";
+            
+            if (isset($vehicle['type'])) $output[] = "Type: " . $vehicle['type'];
+            if (isset($vehicle['model'])) $output[] = "Model: " . $vehicle['model'];
+            if (isset($vehicle['details'])) $output[] = "Details: " . $vehicle['details'];
+            $output[] = "";
+        }
+        
+        // Pricing Information
+        if (isset($data['charges']) || isset($data['original_extraction']['pricing'])) {
+            $output[] = "PRICING INFORMATION";
+            $output[] = "===================";
+            
+            // From charges array
+            if (isset($data['charges']) && is_array($data['charges'])) {
+                foreach ($data['charges'] as $charge) {
+                    $desc = $charge['description'] ?? 'Service';
+                    $amount = $charge['amount'] ?? 0;
+                    $currency = $charge['currency'] ?? 'EUR';
+                    $output[] = "$desc: $amount $currency";
+                }
+            }
+            
+            // From original extraction pricing
+            if (isset($data['original_extraction']['pricing'])) {
+                $pricing = $data['original_extraction']['pricing'];
+                if (isset($pricing['amount'])) {
+                    $output[] = "Quoted Amount: " . $pricing['amount'];
+                }
+                if (isset($pricing['notes'])) {
+                    $output[] = "Pricing Notes: " . $pricing['notes'];
+                }
+            }
+            $output[] = "";
+        }
+        
+        // Messages/Communication
+        if (isset($data['original_extraction']['extracted_text'])) {
+            $output[] = "ORIGINAL MESSAGE";
+            $output[] = "================";
+            $output[] = $data['original_extraction']['extracted_text'];
+            $output[] = "";
+        }
+        
+        // Invoice Information
+        if (isset($data['invoice'])) {
+            $output[] = "INVOICE DETAILS";
+            $output[] = "===============";
+            $invoice = $data['invoice'];
+            
+            if (isset($invoice['number'])) $output[] = "Invoice Number: " . $invoice['number'];
+            if (isset($invoice['date'])) $output[] = "Date: " . $invoice['date'];
+            if (isset($invoice['currency'])) $output[] = "Currency: " . $invoice['currency'];
+            $output[] = "";
+        }
+        
+        // Metadata
+        if (isset($data['original_extraction']['metadata'])) {
+            $output[] = "EXTRACTION METADATA";
+            $output[] = "===================";
+            $metadata = $data['original_extraction']['metadata'];
+            
+            if (isset($metadata['confidence'])) {
+                $confidence = round($metadata['confidence'] * 100, 1);
+                $output[] = "AI Confidence: {$confidence}%";
+            }
+            if (isset($metadata['service_used'])) $output[] = "Service Used: " . $metadata['service_used'];
+            if (isset($metadata['processed_at'])) $output[] = "Processed At: " . $metadata['processed_at'];
+        }
+        
+        return implode("\n", $output);
     }
 
     /**
