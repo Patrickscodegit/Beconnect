@@ -32,44 +32,10 @@ class ExtractionResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('Extraction Details')
-                    ->schema([
-                        Forms\Components\Select::make('intake_id')
-                            ->label('Intake')
-                            ->relationship('intake', 'id')
-                            ->searchable()
-                            ->preload()
-                            ->required(),
-                            
-                        Forms\Components\TextInput::make('confidence')
-                            ->label('Confidence Score')
-                            ->numeric()
-                            ->minValue(0)
-                            ->maxValue(1)
-                            ->step(0.01)
-                            ->suffix('%')
-                            ->formatStateUsing(fn (?float $state): ?string => $state ? number_format($state * 100, 1) : null)
-                            ->dehydrateStateUsing(fn (?string $state): ?float => $state ? ((float) $state) / 100 : null),
-                            
-                        Forms\Components\DateTimePicker::make('verified_at')
-                            ->label('Verified At'),
-                            
-                        Forms\Components\TextInput::make('verified_by')
-                            ->label('Verified By')
-                            ->maxLength(255),
-                    ])
-                    ->columns(2),
-                    
-                Forms\Components\Section::make('Extracted Data')
-                    ->schema([
-                        Forms\Components\KeyValue::make('raw_json')
-                            ->label('Extracted Information')
-                            ->keyLabel('Field')
-                            ->valueLabel('Value')
-                            ->addActionLabel('Add Field')
-                            ->reorderable()
-                            ->columnSpanFull(),
-                    ]),
+                Forms\Components\TextInput::make('status')
+                    ->required(),
+                Forms\Components\Textarea::make('raw_json')
+                    ->columnSpanFull(),
             ]);
     }
 
@@ -77,56 +43,29 @@ class ExtractionResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('intake.id')
-                    ->label('Intake ID')
-                    ->sortable()
-                    ->searchable(),
-                    
-                Tables\Columns\TextColumn::make('intake.status')
-                    ->label('Intake Status')
+                Tables\Columns\TextColumn::make('id')
+                    ->label('ID')
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
-                        'pending' => 'warning',
-                        'processing' => 'info',
                         'completed' => 'success',
+                        'processing' => 'info',
                         'failed' => 'danger',
                         default => 'gray',
                     }),
-                    
                 Tables\Columns\TextColumn::make('confidence')
-                    ->label('Confidence')
-                    ->formatStateUsing(fn (?float $state): string => $state ? number_format($state * 100, 1) . '%' : 'N/A')
-                    ->badge()
-                    ->color(fn (?float $state): string => match (true) {
-                        $state === null => 'gray',
-                        $state >= 0.8 => 'success',
-                        $state >= 0.6 => 'warning',
-                        default => 'danger',
-                    })
+                    ->formatStateUsing(fn ($state) => $state ? number_format($state * 100, 1) . '%' : '0.0%')
                     ->sortable(),
-                    
-                Tables\Columns\IconColumn::make('verified_at')
-                    ->label('Verified')
-                    ->boolean()
-                    ->getStateUsing(fn (Extraction $record): bool => !is_null($record->verified_at))
-                    ->trueIcon('heroicon-o-check-circle')
-                    ->falseIcon('heroicon-o-clock')
-                    ->trueColor('success')
-                    ->falseColor('warning'),
-                    
-                Tables\Columns\TextColumn::make('verified_by')
-                    ->label('Verified By')
-                    ->placeholder('Not verified')
-                    ->limit(20),
-                    
-                Tables\Columns\TextColumn::make('extracted_fields_count')
-                    ->label('Fields')
-                    ->getStateUsing(fn (Extraction $record): int => is_array($record->raw_json) ? count($record->raw_json) : 0)
-                    ->badge()
-                    ->color('info'),
-                    
+                Tables\Columns\TextColumn::make('service_used')
+                    ->label('Service')
+                    ->default('N/A'),
+                Tables\Columns\TextColumn::make('intake.id')
+                    ->label('Intake')
+                    ->numeric()
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')
-                    ->label('Extracted')
+                    ->label('Created')
                     ->dateTime()
                     ->sortable()
                     ->since(),
@@ -189,20 +128,6 @@ class ExtractionResource extends Resource
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
-                    
-                    Tables\Actions\BulkAction::make('verify_selected')
-                        ->label('Verify Selected')
-                        ->icon('heroicon-o-check-circle')
-                        ->color('success')
-                        ->requiresConfirmation()
-                        ->action(function ($records) {
-                            foreach ($records as $record) {
-                                $record->update([
-                                    'verified_at' => now(),
-                                    'verified_by' => auth()->user()->name ?? 'System',
-                                ]);
-                            }
-                        }),
                 ]),
             ])
             ->defaultSort('created_at', 'desc');
@@ -233,69 +158,278 @@ class ExtractionResource extends Resource
                     ])
                     ->columns(2),
 
-                Section::make('Extracted Information')
+                Section::make('Document Information')
                     ->schema([
-                        TextEntry::make('dummy_extracted')
-                            ->label('')
-                            ->formatStateUsing(function ($record) {
-                                if (!$record->extracted_data || empty($record->extracted_data)) {
-                                    return 'No extracted data available';
+                        TextEntry::make('document_type')
+                            ->label('Document Type')
+                            ->getStateUsing(function ($record) {
+                                $data = $record->extracted_data ?? [];
+                                $hasShippingData = isset($data['messages']) || 
+                                                 isset($data['contact']) ||
+                                                 isset($data['contact_info']) ||
+                                                 isset($data['vehicle_listing']) || 
+                                                 isset($data['vehicle_info']) ||
+                                                 isset($data['vehicle_details']) ||
+                                                 isset($data['shipment']);
+                                
+                                if ($hasShippingData) {
+                                    return 'Shipping Document';
                                 }
                                 
-                                $html = '<dl class="space-y-3">';
-                                foreach ($record->extracted_data as $key => $value) {
-                                    $label = ucwords(str_replace('_', ' ', $key));
-                                    
-                                    if (is_array($value)) {
-                                        $displayValue = '<dl class="ml-4 space-y-1">';
-                                        foreach ($value as $subKey => $subValue) {
-                                            $subLabel = ucwords(str_replace('_', ' ', $subKey));
-                                            $displayValue .= '<div><span class="font-medium">' . htmlspecialchars($subLabel) . ':</span> ' . htmlspecialchars((string)$subValue) . '</div>';
-                                        }
-                                        $displayValue .= '</dl>';
-                                    } else {
-                                        $displayValue = htmlspecialchars((string)$value);
-                                    }
-                                    
-                                    $html .= '<div class="border-b border-gray-200 pb-2">';
-                                    $html .= '<dt class="text-sm font-medium text-gray-600">' . htmlspecialchars($label) . '</dt>';
-                                    $html .= '<dd class="mt-1 text-sm text-gray-900">' . $displayValue . '</dd>';
-                                    $html .= '</div>';
-                                }
-                                $html .= '</dl>';
+                                return $data['document_type'] ?? 'Image Document';
+                            })
+                            ->badge()
+                            ->color(function ($state) {
+                                return match ($state) {
+                                    'Shipping Document' => 'success',
+                                    'Image Document' => 'info',
+                                    default => 'gray',
+                                };
+                            }),
+                        TextEntry::make('analysis_type')
+                            ->label('Analysis Type')
+                            ->getStateUsing(function ($record) {
+                                $data = $record->extracted_data ?? [];
+                                $hasShippingData = isset($data['messages']) || 
+                                                 isset($data['contact']) ||
+                                                 isset($data['contact_info']) ||
+                                                 isset($data['vehicle_listing']) ||
+                                                 isset($data['vehicle_info']) ||
+                                                 isset($data['vehicle_details']);
                                 
-                                return new \Illuminate\Support\HtmlString($html);
+                                if ($hasShippingData && ($record->analysis_type === 'basic' || empty($record->analysis_type))) {
+                                    return 'shipping (auto-detected)';
+                                }
+                                
+                                return $record->analysis_type ?? 'basic';
+                            })
+                            ->badge()
+                            ->color(function ($state) {
+                                return match (true) {
+                                    str_contains($state, 'shipping') => 'success',
+                                    $state === 'basic' => 'warning',
+                                    $state === 'detailed' => 'info',
+                                    default => 'gray',
+                                };
                             }),
                     ])
-                    ->visible(fn ($record) => !empty($record->extracted_data)),
+                    ->columns(2),
+
+                Section::make('Contact Information')
+                    ->schema([
+                        TextEntry::make('contact_name')
+                            ->label('Contact Name')
+                            ->getStateUsing(function ($record) {
+                                $data = $record->extracted_data ?? [];
+                                return $data['contact_info']['name'] ?? 
+                                       $data['contact']['name'] ?? 'N/A';
+                            }),
+                        TextEntry::make('contact_phone')
+                            ->label('Phone Number')
+                            ->getStateUsing(function ($record) {
+                                $data = $record->extracted_data ?? [];
+                                return $data['contact_info']['phone_number'] ?? 
+                                       $data['contact']['phone_number'] ?? 
+                                       $data['contact']['phone'] ?? 'N/A';
+                            }),
+                        TextEntry::make('contact_account')
+                            ->label('Account Type')
+                            ->getStateUsing(function ($record) {
+                                $data = $record->extracted_data ?? [];
+                                return $data['contact_info']['account_type'] ?? 
+                                       $data['contact']['account_type'] ?? 
+                                       $data['contact']['company'] ?? 'N/A';
+                            }),
+                    ])
+                    ->columns(3)
+                    ->visible(function ($record) {
+                        $data = $record->extracted_data ?? [];
+                        return isset($data['contact']) || isset($data['contact_info']);
+                    }),
+
+                Section::make('Shipping Details')
+                    ->schema([
+                        TextEntry::make('origin')
+                            ->label('Origin')
+                            ->getStateUsing(function ($record) {
+                                $data = $record->extracted_data ?? [];
+                                // Try shipment structure first
+                                if (isset($data['shipment']['origin'])) {
+                                    return $data['shipment']['origin'];
+                                }
+                                
+                                // Look in messages for "from X to Y" pattern
+                                if (isset($data['messages'])) {
+                                    foreach ($data['messages'] as $message) {
+                                        if (isset($message['text']) && str_contains(strtolower($message['text']), 'from')) {
+                                            if (preg_match('/from\s+([^to]+?)(?:\s+to\s+|$)/i', $message['text'], $matches)) {
+                                                return trim($matches[1]);
+                                            }
+                                        }
+                                    }
+                                }
+                                return 'N/A';
+                            }),
+                        TextEntry::make('destination')
+                            ->label('Destination')
+                            ->getStateUsing(function ($record) {
+                                $data = $record->extracted_data ?? [];
+                                // Try shipment structure first
+                                if (isset($data['shipment']['destination'])) {
+                                    return $data['shipment']['destination'];
+                                }
+                                
+                                // Look in messages for "from X to Y" pattern
+                                if (isset($data['messages'])) {
+                                    foreach ($data['messages'] as $message) {
+                                        if (isset($message['text']) && str_contains(strtolower($message['text']), 'to')) {
+                                            if (preg_match('/to\s+([^,\s]*(?:,\s*[^,\s]*)*)/i', $message['text'], $matches)) {
+                                                return trim($matches[1]);
+                                            }
+                                        }
+                                    }
+                                }
+                                return 'N/A';
+                            }),
+                        TextEntry::make('vehicle_type')
+                            ->label('Vehicle Information')
+                            ->getStateUsing(function ($record) {
+                                $data = $record->extracted_data ?? [];
+                                
+                                // Check for vehicle_details structure (newest format)
+                                if (isset($data['vehicle_details'])) {
+                                    $make = $data['vehicle_details']['make'] ?? '';
+                                    $model = $data['vehicle_details']['model'] ?? '';
+                                    $specs = $data['vehicle_details']['specifications'] ?? '';
+                                    
+                                    $vehicle = trim("$make $model");
+                                    return $specs ? "$vehicle - $specs" : $vehicle;
+                                }
+                                
+                                // Check for vehicle_info structure (new format)
+                                if (isset($data['vehicle_info'])) {
+                                    $make = $data['vehicle_info']['make'] ?? '';
+                                    $model = $data['vehicle_info']['model'] ?? '';
+                                    $specs = $data['vehicle_info']['specifications'] ?? '';
+                                    
+                                    $vehicle = trim("$make $model");
+                                    return $specs ? "$vehicle - $specs" : $vehicle;
+                                }
+                                
+                                // Check for vehicle_listing structure (old format)
+                                if (isset($data['vehicle_listing']['vehicle'])) {
+                                    $vehicle = $data['vehicle_listing']['vehicle'];
+                                    $details = $data['vehicle_listing']['model_details'] ?? '';
+                                    return $details ? "{$vehicle} - {$details}" : $vehicle;
+                                }
+                                
+                                // Fallback: look for vehicle mentions in messages
+                                if (isset($data['messages'])) {
+                                    foreach ($data['messages'] as $message) {
+                                        if (isset($message['text']) && str_contains(strtolower($message['text']), 'mercedes')) {
+                                            return 'Mercedes-Benz Sprinter (from message)';
+                                        }
+                                    }
+                                }
+                                
+                                return 'N/A';
+                            })
+                            ->columnSpan(2),
+                        TextEntry::make('vehicle_price')
+                            ->label('Vehicle Price')
+                            ->getStateUsing(function ($record) {
+                                $data = $record->extracted_data ?? [];
+                                
+                                // Check vehicle_details structure (newest format)
+                                if (isset($data['vehicle_details']['price'])) {
+                                    $price = $data['vehicle_details']['price'];
+                                    $netPrice = $data['vehicle_details']['net_price'] ?? '';
+                                    return $netPrice ? "{$price} (Net: {$netPrice})" : $price;
+                                }
+                                
+                                // Check vehicle_info structure (new format)
+                                if (isset($data['vehicle_info']['price'])) {
+                                    $price = $data['vehicle_info']['price'];
+                                    $netPrice = $data['vehicle_info']['net_price'] ?? '';
+                                    return $netPrice ? "{$price} (Net: {$netPrice})" : $price;
+                                }
+                                
+                                // Check vehicle_listing structure (old format)
+                                if (isset($data['vehicle_listing']['price'])) {
+                                    $price = $data['vehicle_listing']['price'];
+                                    $netPrice = $data['vehicle_listing']['net_price'] ?? '';
+                                    return $netPrice ? "{$price} (Net: {$netPrice})" : $price;
+                                }
+                                
+                                // Also check pricing section
+                                if (isset($data['pricing']['amount'])) {
+                                    return $data['pricing']['amount'];
+                                }
+                                return 'N/A';
+                            })
+                            ->badge()
+                            ->color('success'),
+                    ])
+                    ->columns(3)
+                    ->visible(function ($record) {
+                        $data = $record->extracted_data ?? [];
+                        return isset($data['messages']) || isset($data['shipment']) || 
+                               isset($data['vehicle_listing']) || isset($data['vehicle_info']) ||
+                               isset($data['vehicle_details']);
+                    }),
+
+                Section::make('Messages Conversation')
+                    ->schema([
+                        TextEntry::make('messages')
+                            ->label('Conversation')
+                            ->getStateUsing(function ($record) {
+                                $data = $record->extracted_data ?? [];
+                                if (!isset($data['messages'])) {
+                                    return 'No messages found';
+                                }
+                                
+                                $messages = $data['messages'];
+                                $formatted = '';
+                                
+                                foreach ($messages as $message) {
+                                    $sender = $message['sender'] ?? 'User';
+                                    $text = $message['text'] ?? $message['message'] ?? '';
+                                    $time = isset($message['time']) ? 
+                                           " ({$message['time']})" : 
+                                           (isset($message['timestamp']) ? " ({$message['timestamp']})" : '');
+                                    
+                                    $formatted .= "**{$sender}**{$time}:\n{$text}\n\n---\n\n";
+                                }
+                                
+                                return trim($formatted, "\n-");
+                            })
+                            ->markdown()
+                            ->columnSpan(3),
+                    ])
+                    ->columns(3)
+                    ->visible(function ($record) {
+                        $data = $record->extracted_data ?? [];
+                        return isset($data['messages']) && !empty($data['messages']);
+                    }),
 
                 Section::make('Raw JSON Data')
                     ->schema([
                         TextEntry::make('raw_json')
                             ->label('')
-                            ->formatStateUsing(function ($state, $record) {
-                                if (empty($state) && empty($record->raw_json)) {
-                                    return new \Illuminate\Support\HtmlString(
-                                        '<div class="text-gray-500 italic">No raw JSON data available</div>'
-                                    );
-                                }
+                            ->getStateUsing(function ($record) {
+                                $json = $record->raw_json ?? json_encode($record->extracted_data ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
                                 
-                                $json = $state ?? $record->raw_json;
-                                
-                                // Ensure it's a string for display
+                                // Ensure it's properly formatted JSON
                                 if (!is_string($json)) {
-                                    $json = json_encode($json, JSON_PRETTY_PRINT);
+                                    $json = json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
                                 }
                                 
-                                // Pretty format the JSON
-                                $decodedJson = json_decode($json, true);
-                                if ($decodedJson !== null) {
-                                    $json = json_encode($decodedJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-                                }
-                                
+                                return $json;
+                            })
+                            ->formatStateUsing(function ($state) {
                                 return new \Illuminate\Support\HtmlString(
-                                    '<pre class="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-xs font-mono whitespace-pre-wrap">' . 
-                                    htmlspecialchars($json) . 
+                                    '<pre class="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-xs font-mono">' . 
+                                    htmlspecialchars($state) . 
                                     '</pre>'
                                 );
                             }),

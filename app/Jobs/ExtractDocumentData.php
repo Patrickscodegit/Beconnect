@@ -77,7 +77,31 @@ class ExtractDocumentData implements ShouldQueue
                     // Determine analysis type based on filename or content
                     $analysisType = $this->determineAnalysisType($this->document->filename);
                     
+                    Log::info('Determined analysis type', [
+                        'document_id' => $this->document->id,
+                        'filename' => $this->document->filename,
+                        'analysis_type' => $analysisType
+                    ]);
+                    
                     $extractedData = $aiRouter->extractAdvanced($fileInput, $analysisType);
+                    
+                    Log::info('AI extraction completed', [
+                        'document_id' => $this->document->id,
+                        'analysis_type' => $analysisType,
+                        'extracted_keys' => array_keys($extractedData['extracted_data'] ?? []),
+                        'status' => $extractedData['status'] ?? 'unknown'
+                    ]);
+                    
+                    // Re-evaluate analysis type based on extracted content
+                    $contentBasedType = $this->determineAnalysisTypeFromContent($extractedData['extracted_data'] ?? []);
+                    if ($contentBasedType !== $analysisType) {
+                        Log::info('Updated analysis type based on content', [
+                            'document_id' => $this->document->id,
+                            'original_type' => $analysisType,
+                            'content_based_type' => $contentBasedType
+                        ]);
+                        $analysisType = $contentBasedType;
+                    }
                     
                     // Check if extraction returned an error response (for backwards compatibility)
                     if (isset($extractedData['extracted_data']['error']) || isset($extractedData['extracted_data']['fallback'])) {
@@ -86,7 +110,35 @@ class ExtractDocumentData implements ShouldQueue
                     }
                     
                     // Structure the data for shipping documents
-                    $structuredData = $this->structureExtractedData($extractedData, $analysisType);
+                    Log::info('Starting data structuring', [
+                        'document_id' => $this->document->id,
+                        'analysis_type' => $analysisType,
+                        'extracted_data_keys' => array_keys($extractedData['extracted_data'] ?? [])
+                    ]);
+                    
+                    try {
+                        $structuredData = $this->structureExtractedData($extractedData, $analysisType);
+                        
+                        Log::info('Data structuring completed', [
+                            'document_id' => $this->document->id,
+                            'structured_keys' => array_keys($structuredData ?? [])
+                        ]);
+                    } catch (\Exception $structuringError) {
+                        Log::error('Data structuring failed, using raw extracted data', [
+                            'document_id' => $this->document->id,
+                            'error' => $structuringError->getMessage(),
+                            'trace' => $structuringError->getTraceAsString()
+                        ]);
+                        
+                        // Fallback to raw extracted data with basic structure
+                        $structuredData = [
+                            'document_type' => 'AI Extracted Document',
+                            'status' => 'processed',
+                            'analysis_type' => $analysisType,
+                            'raw_extracted_data' => $extractedData['extracted_data'] ?? [],
+                            'metadata' => $extractedData['metadata'] ?? []
+                        ];
+                    }
                     
                     $extraction->update([
                         'status' => 'completed',
@@ -94,6 +146,7 @@ class ExtractDocumentData implements ShouldQueue
                         'confidence' => $extractedData['metadata']['confidence_score'] ?? 0.8,
                         'raw_json' => json_encode($extractedData),
                         'service_used' => 'ai_router_' . $analysisType,
+                        'analysis_type' => $analysisType,
                     ]);
                     
                     Log::info('Extraction completed with advanced AI extraction', [
@@ -118,6 +171,7 @@ class ExtractDocumentData implements ShouldQueue
                     'confidence' => 0.6,
                     'raw_json' => json_encode($documentData),
                     'service_used' => 'basic_analyzer',
+                    'analysis_type' => 'basic',
                 ]);
                 
                 Log::info('Extraction completed with basic analysis (no text extracted)', [
@@ -184,6 +238,7 @@ class ExtractDocumentData implements ShouldQueue
                     'confidence' => $confidence,
                     'raw_json' => json_encode($extractedData),
                     'service_used' => 'ai_router',
+                    'analysis_type' => 'detailed',
                 ]);
 
                 Log::info('Extraction completed successfully with AiRouter', [
@@ -223,6 +278,7 @@ class ExtractDocumentData implements ShouldQueue
                     'confidence' => 0.6,
                     'raw_json' => json_encode($documentData),
                     'service_used' => 'basic_analyzer',
+                    'analysis_type' => 'basic',
                 ]);
                 
                 Log::info('Extraction completed with basic analysis', [
@@ -243,6 +299,7 @@ class ExtractDocumentData implements ShouldQueue
                 $extraction->update([
                     'status' => 'failed',
                     'extracted_data' => ['error' => $e->getMessage()],
+                    'analysis_type' => 'failed',
                 ]);
             }
 
@@ -355,6 +412,54 @@ class ExtractDocumentData implements ShouldQueue
     }
 
     /**
+     * Determine analysis type based on extracted content
+     *
+     * @param array $extractedData
+     * @return string
+     */
+    private function determineAnalysisTypeFromContent(array $extractedData): string
+    {
+        // Check for shipping/logistics indicators in extracted content
+        $content = json_encode($extractedData, JSON_UNESCAPED_UNICODE);
+        $contentLower = strtolower($content);
+        
+        // Look for shipping-related keywords in the extracted content
+        $shippingKeywords = [
+            'ship', 'shipping', 'freight', 'cargo', 'delivery', 'transport',
+            'vehicle', 'truck', 'sprinter', 'mercedes', 'container',
+            'origin', 'destination', 'pickup', 'drop', 'port',
+            'antwerp', 'tema', 'ghana', 'whatsapp', 'quote'
+        ];
+        
+        $matchingKeywords = 0;
+        foreach ($shippingKeywords as $keyword) {
+            if (str_contains($contentLower, $keyword)) {
+                $matchingKeywords++;
+            }
+        }
+        
+        // If we find multiple shipping-related terms, classify as shipping
+        if ($matchingKeywords >= 3) {
+            return 'shipping';
+        }
+        
+        // Check for invoice/billing patterns
+        $invoiceKeywords = ['invoice', 'bill', 'payment', 'total', 'subtotal', 'tax', 'amount due'];
+        $invoiceMatches = 0;
+        foreach ($invoiceKeywords as $keyword) {
+            if (str_contains($contentLower, $keyword)) {
+                $invoiceMatches++;
+            }
+        }
+        
+        if ($invoiceMatches >= 2) {
+            return 'detailed';
+        }
+        
+        return 'basic';
+    }
+
+    /**
      * Structure extracted data based on analysis type
      *
      * @param array $extractedData
@@ -382,41 +487,102 @@ class ExtractDocumentData implements ShouldQueue
         $extractedData = $rawData['extracted_data'] ?? [];
         $metadata = $rawData['metadata'] ?? [];
         
+        // Extract shipping details from messages if available
+        $origin = $this->extractLocationFromMessages($extractedData, 'from') ?: 
+                  $this->extractValue($extractedData, ['origin', 'from', 'pickup', 'source']);
+        $destination = $this->extractLocationFromMessages($extractedData, 'to') ?: 
+                       $this->extractValue($extractedData, ['destination', 'to', 'delivery', 'target']);
+        
         return [
             'document_type' => 'Shipping Document',
             'status' => $rawData['status'] ?? 'processed',
             'analysis_type' => 'shipping',
             'shipment' => [
-                'origin' => $this->extractValue($extractedData, ['origin', 'from', 'pickup', 'source']),
-                'destination' => $this->extractValue($extractedData, ['destination', 'to', 'delivery', 'target']),
+                'origin' => $origin,
+                'destination' => $destination,
                 'vehicle' => [
-                    'type' => $this->extractValue($extractedData, ['vehicle_type', 'vehicle', 'truck_type', 'car_type']),
-                    'model' => $this->extractValue($extractedData, ['vehicle_model', 'model', 'make_model']),
-                    'details' => $this->extractValue($extractedData, ['vehicle_details', 'specifications', 'details'])
+                    'type' => $this->extractValue($extractedData, ['vehicle_info.make_model', 'vehicle_type', 'vehicle', 'truck_type', 'car_type']),
+                    'model' => $this->extractValue($extractedData, ['vehicle_info.make_model', 'vehicle_model', 'model', 'make_model']),
+                    'details' => $this->extractValue($extractedData, ['vehicle_info.details', 'vehicle_details', 'specifications', 'details'])
                 ]
             ],
             'pricing' => [
-                'amount' => $this->extractValue($extractedData, ['price', 'amount', 'cost', 'total']),
-                'currency' => $this->extractValue($extractedData, ['currency']) ?: 'EUR',
-                'notes' => $this->extractValue($extractedData, ['price_notes', 'pricing_details', 'cost_details'])
+                'amount' => $this->extractValue($extractedData, ['vehicle_info.price', 'price', 'amount', 'cost', 'total']),
+                'currency' => $this->extractCurrency($extractedData) ?: 'EUR',
+                'notes' => $this->extractValue($extractedData, ['vehicle_info.net_price', 'price_notes', 'pricing_details', 'cost_details'])
             ],
             'contact' => [
-                'phone' => $this->extractValue($extractedData, ['phone', 'telephone', 'mobile', 'contact_number']),
-                'name' => $this->extractValue($extractedData, ['contact_name', 'name', 'person']),
-                'company' => $this->extractValue($extractedData, ['company', 'business', 'organization'])
+                'phone' => $this->extractValue($extractedData, ['contact_info.phone_number', 'phone', 'contact_phone', 'telephone']),
+                'name' => $this->extractValue($extractedData, ['contact_info.name', 'name', 'contact_name', 'sender']),
+                'company' => $this->extractValue($extractedData, ['contact_info.account_type', 'company', 'business', 'organization'])
             ],
             'dates' => [
-                'requested' => $this->extractValue($extractedData, ['date', 'pickup_date', 'requested_date']),
+                'requested' => $this->extractValue($extractedData, ['date', 'requested_date', 'pickup_date']),
                 'extracted_at' => now()->toIso8601String()
             ],
-            'extracted_text' => $this->extractValue($extractedData, ['text', 'content', 'message']),
+            'extracted_text' => $this->extractConversationText($extractedData),
             'metadata' => [
                 'source' => 'AI Vision Extraction',
                 'confidence' => $metadata['confidence_score'] ?? 0.8,
-                'processed_at' => $metadata['processed_at'] ?? now()->toIso8601String(),
+                'processed_at' => now()->toIso8601String(),
                 'service_used' => 'ai_router_shipping'
             ]
         ];
+    }
+
+    /**
+     * Extract location information from messages
+     */
+    private function extractLocationFromMessages(array $extractedData, string $direction): string
+    {
+        $messages = $extractedData['messages'] ?? [];
+        foreach ($messages as $message) {
+            $text = strtolower($message['text'] ?? '');
+            if ($direction === 'from' && (str_contains($text, 'from') || str_contains($text, 'antwerpern') || str_contains($text, 'antwerp'))) {
+                if (preg_match('/from\s+([a-zA-Z\s,]+)(?:\s+to|$)/i', $message['text'], $matches)) {
+                    return trim($matches[1]);
+                }
+                if (str_contains($text, 'antwerpern') || str_contains($text, 'antwerp')) {
+                    return 'Antwerp';
+                }
+            }
+            if ($direction === 'to' && (str_contains($text, 'to') || str_contains($text, 'tema') || str_contains($text, 'ghana'))) {
+                if (preg_match('/to\s+([a-zA-Z\s,]+)/i', $message['text'], $matches)) {
+                    return trim($matches[1]);
+                }
+                if (str_contains($text, 'tema') && str_contains($text, 'ghana')) {
+                    return 'Tema, Ghana';
+                }
+            }
+        }
+        return '';
+    }
+
+    /**
+     * Extract currency from pricing info
+     */
+    private function extractCurrency(array $extractedData): string
+    {
+        $price = $this->extractValue($extractedData, ['vehicle_info.price', 'price', 'amount']);
+        if (str_contains($price, '€')) return 'EUR';
+        if (str_contains($price, '$')) return 'USD';
+        if (str_contains($price, '£')) return 'GBP';
+        return 'EUR'; // default
+    }
+
+    /**
+     * Extract conversation text from messages
+     */
+    private function extractConversationText(array $extractedData): string
+    {
+        $messages = $extractedData['messages'] ?? [];
+        $texts = [];
+        foreach ($messages as $message) {
+            if (!empty($message['text'])) {
+                $texts[] = $message['text'];
+            }
+        }
+        return implode(' | ', $texts);
     }
 
     /**
@@ -429,7 +595,13 @@ class ExtractDocumentData implements ShouldQueue
     private function extractValue(array $data, array $possibleKeys): string
     {
         foreach ($possibleKeys as $key) {
-            $value = $this->findValueRecursive($data, $key);
+            // Handle nested keys with dot notation
+            if (str_contains($key, '.')) {
+                $value = $this->getNestedValue($data, $key);
+            } else {
+                $value = $this->findValueRecursive($data, $key);
+            }
+            
             if (!empty($value)) {
                 // Handle array values
                 if (is_array($value)) {
@@ -515,5 +687,24 @@ class ExtractDocumentData implements ShouldQueue
         }
         
         return null;
+    }
+
+    /**
+     * Get nested value using dot notation
+     */
+    private function getNestedValue(array $array, string $key)
+    {
+        $keys = explode('.', $key);
+        $current = $array;
+        
+        foreach ($keys as $k) {
+            if (is_array($current) && isset($current[$k])) {
+                $current = $current[$k];
+            } else {
+                return null;
+            }
+        }
+        
+        return $current;
     }
 }

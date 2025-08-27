@@ -12,8 +12,8 @@ class DocumentObserver
      */
     public function created(Document $document): void
     {
-        // Dispatch extraction job when document is created
-        ExtractDocumentData::dispatch($document);
+        // Dispatch extraction job synchronously for immediate processing
+        dispatch_sync(new ExtractDocumentData($document));
     }
 
     /**

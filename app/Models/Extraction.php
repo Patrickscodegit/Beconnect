@@ -18,6 +18,7 @@ class Extraction extends Model
         'raw_json',
         'confidence',
         'service_used',
+        'analysis_type',
         'verified_at',
         'verified_by',
     ];

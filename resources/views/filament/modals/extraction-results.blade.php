@@ -25,56 +25,177 @@
         </div>
     </div>
 
-    <!-- Extracted Data -->
+    <!-- Copy Button -->
+    <div class="flex justify-end">
+        <button onclick="copyToClipboard()" 
+                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+            </svg>
+            Copy All Data
+        </button>
+    </div>
+
+    <!-- Extracted Data in Text Format -->
     <div class="space-y-4">
         <h4 class="text-lg font-medium text-gray-900">Extracted Information</h4>
         
-        @if($extraction->raw_json)
-            <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                <div class="px-4 py-5 sm:p-6">
-                    <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
-                        @php
-                            $rawData = null;
-                            if ($extraction->raw_json) {
-                                if (is_string($extraction->raw_json)) {
-                                    $rawData = json_decode($extraction->raw_json, true);
-                                } elseif (is_array($extraction->raw_json)) {
-                                    $rawData = $extraction->raw_json;
-                                }
-                            }
-                        @endphp
-                        @if(is_array($rawData) && count($rawData) > 0)
-                            @foreach($rawData as $key => $value)
-                            <div>
-                                <dt class="text-sm font-medium text-gray-500 capitalize">
-                                    {{ str_replace('_', ' ', $key) }}
-                                </dt>
-                                <dd class="mt-1 text-sm text-gray-900">
-                                    @if(is_array($value))
-                                        <ul class="list-disc list-inside space-y-1">
-                                            @foreach($value as $item)
-                                                <li>{{ is_string($item) ? $item : json_encode($item) }}</li>
-                                            @endforeach
-                                        </ul>
-                                    @elseif(is_bool($value))
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $value ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
-                                            {{ $value ? 'Yes' : 'No' }}
-                                        </span>
-                                    @elseif(is_null($value))
-                                        <span class="text-gray-400 italic">Not available</span>
-                                    @else
-                                        {{ $value }}
-                                    @endif
-                                </dd>
-                            </div>
-                        @endforeach
-                        @else
-                            <div class="col-span-2">
-                                <p class="text-sm text-gray-500">No extraction data available</p>
-                            </div>
-                        @endif
-                    </dl>
-                </div>
+        @php
+            $data = $extraction->extracted_data ?? $extraction->raw_json;
+            if (is_string($data)) {
+                $data = json_decode($data, true);
+            }
+        @endphp
+
+        @if($data && is_array($data))
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <pre id="extractedText" class="whitespace-pre-wrap font-mono text-sm text-gray-900 leading-relaxed">@php
+// Format the extracted data as readable text
+$output = '';
+
+// Helper function to format nested arrays
+function formatValue($value, $indent = 0) {
+    $spaces = str_repeat('  ', $indent);
+    
+    if (is_array($value)) {
+        $result = '';
+        foreach ($value as $key => $val) {
+            if (is_numeric($key)) {
+                $result .= $spaces . '• ' . formatValue($val, $indent) . "\n";
+            } else {
+                $label = ucwords(str_replace('_', ' ', $key));
+                $result .= $spaces . $label . ': ' . formatValue($val, $indent + 1) . "\n";
+            }
+        }
+        return rtrim($result);
+    }
+    
+    if (is_bool($value)) {
+        return $value ? 'Yes' : 'No';
+    }
+    
+    if (is_null($value)) {
+        return 'N/A';
+    }
+    
+    return (string) $value;
+}
+
+// Contact Information Section
+if (isset($data['contact']) || isset($data['contact_info'])) {
+    $contact = $data['contact'] ?? $data['contact_info'];
+    $output .= "CONTACT INFORMATION\n";
+    $output .= "==================\n";
+    
+    if (isset($contact['name'])) {
+        $output .= "Name: " . $contact['name'] . "\n";
+    }
+    if (isset($contact['phone'])) {
+        $output .= "Phone: " . $contact['phone'] . "\n";
+    }
+    if (isset($contact['email'])) {
+        $output .= "Email: " . $contact['email'] . "\n";
+    }
+    $output .= "\n";
+}
+
+// Shipping Details Section
+if (isset($data['shipment']) || isset($data['shipping'])) {
+    $shipment = $data['shipment'] ?? $data['shipping'];
+    $output .= "SHIPPING DETAILS\n";
+    $output .= "================\n";
+    
+    if (isset($shipment['origin'])) {
+        $output .= "Origin: " . $shipment['origin'] . "\n";
+    }
+    if (isset($shipment['destination'])) {
+        $output .= "Destination: " . $shipment['destination'] . "\n";
+    }
+    if (isset($shipment['pickup_date'])) {
+        $output .= "Pickup Date: " . $shipment['pickup_date'] . "\n";
+    }
+    if (isset($shipment['delivery_date'])) {
+        $output .= "Delivery Date: " . $shipment['delivery_date'] . "\n";
+    }
+    $output .= "\n";
+}
+
+// Vehicle Information Section
+$vehicle = null;
+if (isset($data['vehicle'])) {
+    $vehicle = $data['vehicle'];
+} elseif (isset($data['vehicle_details'])) {
+    $vehicle = $data['vehicle_details'];
+} elseif (isset($data['vehicle_info'])) {
+    $vehicle = $data['vehicle_info'];
+} elseif (isset($data['vehicle_listing'])) {
+    $vehicle = $data['vehicle_listing'];
+} elseif (isset($data['shipment']['vehicle'])) {
+    $vehicle = $data['shipment']['vehicle'];
+}
+
+if ($vehicle) {
+    $output .= "VEHICLE INFORMATION\n";
+    $output .= "===================\n";
+    
+    if (isset($vehicle['year'])) {
+        $output .= "Year: " . $vehicle['year'] . "\n";
+    }
+    if (isset($vehicle['make'])) {
+        $output .= "Make: " . $vehicle['make'] . "\n";
+    }
+    if (isset($vehicle['model'])) {
+        $output .= "Model: " . $vehicle['model'] . "\n";
+    }
+    if (isset($vehicle['type'])) {
+        $output .= "Type: " . $vehicle['type'] . "\n";
+    }
+    if (isset($vehicle['condition'])) {
+        $output .= "Condition: " . $vehicle['condition'] . "\n";
+    }
+    if (isset($vehicle['color'])) {
+        $output .= "Color: " . $vehicle['color'] . "\n";
+    }
+    if (isset($vehicle['vin'])) {
+        $output .= "VIN: " . $vehicle['vin'] . "\n";
+    }
+    $output .= "\n";
+}
+
+// Messages Section
+if (isset($data['messages']) && is_array($data['messages'])) {
+    $output .= "MESSAGES CONVERSATION\n";
+    $output .= "====================\n";
+    
+    foreach ($data['messages'] as $message) {
+        if (isset($message['time'])) {
+            $output .= "[" . $message['time'] . "] ";
+        }
+        if (isset($message['text'])) {
+            $output .= $message['text'] . "\n";
+        }
+    }
+    $output .= "\n";
+}
+
+// Additional Information
+$additionalKeys = array_diff(array_keys($data), [
+    'contact', 'contact_info', 'shipment', 'shipping', 'vehicle', 
+    'vehicle_details', 'vehicle_info', 'vehicle_listing', 'messages'
+]);
+
+if (!empty($additionalKeys)) {
+    $output .= "ADDITIONAL INFORMATION\n";
+    $output .= "======================\n";
+    
+    foreach ($additionalKeys as $key) {
+        $label = ucwords(str_replace('_', ' ', $key));
+        $output .= $label . ": " . formatValue($data[$key]) . "\n";
+    }
+}
+
+echo trim($output);
+@endphp</pre>
             </div>
         @else
             <div class="text-center text-gray-500 py-8">
@@ -94,7 +215,7 @@
             </summary>
             <div class="mt-4 rounded-lg bg-gray-900 p-4">
                 <pre class="text-xs font-mono text-green-400 overflow-x-auto whitespace-pre-wrap"><code>@php
-$json = $extraction->raw_json;
+$json = $extraction->extracted_data ?? $extraction->raw_json;
 
 // Ensure it's a string for display
 if (!is_string($json)) {
@@ -113,3 +234,93 @@ echo htmlspecialchars($json);
         </details>
     </div>
 </div>
+
+<script>
+function copyToClipboard() {
+    const textElement = document.getElementById('extractedText');
+    const text = textElement.textContent;
+    
+    if (navigator.clipboard && window.isSecureContext) {
+        // Use the modern clipboard API
+        navigator.clipboard.writeText(text).then(() => {
+            showCopySuccess();
+        }).catch(err => {
+            console.error('Failed to copy text: ', err);
+            fallbackCopyTextToClipboard(text);
+        });
+    } else {
+        // Fallback for older browsers
+        fallbackCopyTextToClipboard(text);
+    }
+}
+
+function fallbackCopyTextToClipboard(text) {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    
+    // Avoid scrolling to bottom
+    textArea.style.top = "0";
+    textArea.style.left = "0";
+    textArea.style.position = "fixed";
+    
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+            showCopySuccess();
+        } else {
+            showCopyError();
+        }
+    } catch (err) {
+        console.error('Fallback: Oops, unable to copy', err);
+        showCopyError();
+    }
+    
+    document.body.removeChild(textArea);
+}
+
+function showCopySuccess() {
+    // Find the copy button and temporarily change its text
+    const button = document.querySelector('button[onclick="copyToClipboard()"]');
+    const originalText = button.innerHTML;
+    
+    button.innerHTML = `
+        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+        Copied!
+    `;
+    button.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+    button.classList.add('bg-green-600', 'hover:bg-green-700');
+    
+    setTimeout(() => {
+        button.innerHTML = originalText;
+        button.classList.remove('bg-green-600', 'hover:bg-green-700');
+        button.classList.add('bg-blue-600', 'hover:bg-blue-700');
+    }, 2000);
+}
+
+function showCopyError() {
+    // Find the copy button and temporarily show error
+    const button = document.querySelector('button[onclick="copyToClipboard()"]');
+    const originalText = button.innerHTML;
+    
+    button.innerHTML = `
+        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+        Failed to Copy
+    `;
+    button.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+    button.classList.add('bg-red-600', 'hover:bg-red-700');
+    
+    setTimeout(() => {
+        button.innerHTML = originalText;
+        button.classList.remove('bg-red-600', 'hover:bg-red-700');
+        button.classList.add('bg-blue-600', 'hover:bg-blue-700');
+    }, 2000);
+}
+</script>
