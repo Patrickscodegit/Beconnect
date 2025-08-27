@@ -79,6 +79,12 @@ class ExtractDocumentData implements ShouldQueue
                     
                     $extractedData = $aiRouter->extractAdvanced($fileInput, $analysisType);
                     
+                    // Check if extraction returned an error response (for backwards compatibility)
+                    if (isset($extractedData['extracted_data']['error']) || isset($extractedData['extracted_data']['fallback'])) {
+                        $errorMsg = $extractedData['extracted_data']['error'] ?? 'Unknown extraction error';
+                        throw new \RuntimeException($errorMsg);
+                    }
+                    
                     // Structure the data for shipping documents
                     $structuredData = $this->structureExtractedData($extractedData, $analysisType);
                     
@@ -432,14 +438,48 @@ class ExtractDocumentData implements ShouldQueue
                         return $value[0];
                     }
                     // If it's an associative array with common keys, extract meaningful text
+                    if (isset($value['make']) && isset($value['model'])) {
+                        return $value['make'] . ' ' . $value['model'];
+                    }
                     if (isset($value['type'])) return (string) $value['type'];
                     if (isset($value['name'])) return (string) $value['name'];
                     if (isset($value['text'])) return (string) $value['text'];
                     if (isset($value['value'])) return (string) $value['value'];
                     
-                    // Otherwise convert to JSON as fallback
+                    // For vehicle data, try to create a readable string
+                    if (isset($value['make']) || isset($value['model']) || isset($value['type'])) {
+                        $parts = array_filter([
+                            $value['make'] ?? '',
+                            $value['model'] ?? '',
+                            $value['type'] ?? ''
+                        ]);
+                        if (!empty($parts)) {
+                            return implode(' ', $parts);
+                        }
+                    }
+                    
+                    // Otherwise convert to a readable format instead of JSON
+                    if (count($value) === 1) {
+                        return (string) reset($value);
+                    }
+                    
+                    // Fallback to JSON for complex structures
                     return json_encode($value);
                 }
+                
+                // Try to decode JSON strings and extract meaningful content
+                if (is_string($value) && (str_starts_with($value, '{') || str_starts_with($value, '['))) {
+                    $decoded = json_decode($value, true);
+                    if (is_array($decoded)) {
+                        // Apply the same logic as above for decoded JSON
+                        if (isset($decoded['make']) && isset($decoded['model'])) {
+                            return $decoded['make'] . ' ' . $decoded['model'];
+                        }
+                        if (isset($decoded['type'])) return (string) $decoded['type'];
+                        if (isset($decoded['name'])) return (string) $decoded['name'];
+                    }
+                }
+                
                 return is_string($value) ? $value : (string) $value;
             }
         }

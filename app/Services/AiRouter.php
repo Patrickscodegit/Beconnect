@@ -430,25 +430,13 @@ class AiRouter
         } catch (\Exception $e) {
             $this->logger->error('Image extraction failed', [
                 'error' => $e->getMessage(),
-                'mime_type' => $mimeType
+                'mime_type' => $mimeType,
+                'analysis_type' => $analysisType
             ]);
             
-            // Return fallback with basic metadata
-            return [
-                'status' => 'processed',
-                'document_type' => 'Image Document',
-                'analysis_type' => $analysisType,
-                'extracted_data' => [
-                    'error' => 'Image extraction failed: ' . $e->getMessage(),
-                    'fallback' => true
-                ],
-                'metadata' => [
-                    'source' => 'fallback_extraction',
-                    'processed_at' => now()->toIso8601String(),
-                    'confidence_score' => 0.3,
-                    'mime_type' => $mimeType
-                ]
-            ];
+            // Re-throw the exception instead of returning fallback data
+            // This ensures proper error handling up the call stack
+            throw new \RuntimeException('Image extraction failed: ' . $e->getMessage(), 0, $e);
         }
     }
 
@@ -463,8 +451,19 @@ class AiRouter
     {
         $cfg = config('services.openai');
         
+        // Validate configuration
+        if (empty($cfg['api_key'])) {
+            throw new \RuntimeException('OpenAI API key is not configured. Please set OPENAI_API_KEY in your .env file.');
+        }
+        
         // Use vision-capable model
         $model = $cfg['vision_model'] ?? 'gpt-4o';
+        
+        // Log the model being used
+        $this->logger->info('Using OpenAI model for vision extraction', [
+            'model' => $model,
+            'vision_model_config' => $cfg['vision_model'] ?? 'not set'
+        ]);
         
         // Use the OpenAI PHP client for proper authentication
         $client = OpenAI::client($cfg['api_key']);

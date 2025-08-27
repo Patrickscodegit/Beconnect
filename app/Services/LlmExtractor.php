@@ -56,8 +56,8 @@ class LlmExtractor
             throw new RuntimeException('Rate limit exceeded for LLM extraction (30/min). Try again shortly.');
         }
 
-        $client = OpenAI::client(config('services.openai.key'));
-        $model  = config('services.openai.model', 'gpt-4-turbo-preview');
+        $client = OpenAI::client(config('services.openai.api_key'));
+        $model  = config('services.openai.model', 'gpt-4o');
         $timeout = (int) config('services.openai.timeout', 45);
 
         $attempts = 0;
