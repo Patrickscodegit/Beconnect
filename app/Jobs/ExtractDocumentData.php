@@ -7,6 +7,7 @@ use App\Models\Extraction;
 use App\Services\DocumentService;
 use App\Services\AiRouter;
 use App\Services\SimpleRobawsIntegration;
+use App\Helpers\FileInput;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -61,7 +62,49 @@ class ExtractDocumentData implements ShouldQueue
             }
             
             if (empty($text)) {
-                // Fallback to basic analysis if text extraction fails
+                // Try advanced extraction using FileInput helper
+                try {
+                    Log::info('Text extraction failed, trying advanced AI extraction', [
+                        'document_id' => $this->document->id,
+                        'filename' => $this->document->filename
+                    ]);
+                    
+                    $fileInput = FileInput::forExtractor(
+                        $this->document->file_path,
+                        $this->document->mime_type ?? 'image/png'
+                    );
+                    
+                    // Determine analysis type based on filename or content
+                    $analysisType = $this->determineAnalysisType($this->document->filename);
+                    
+                    $extractedData = $aiRouter->extractAdvanced($fileInput, $analysisType);
+                    
+                    // Structure the data for shipping documents
+                    $structuredData = $this->structureExtractedData($extractedData, $analysisType);
+                    
+                    $extraction->update([
+                        'status' => 'completed',
+                        'extracted_data' => $structuredData,
+                        'confidence' => $extractedData['metadata']['confidence_score'] ?? 0.8,
+                        'raw_json' => json_encode($extractedData),
+                        'service_used' => 'ai_router_' . $analysisType,
+                    ]);
+                    
+                    Log::info('Extraction completed with advanced AI extraction', [
+                        'document_id' => $this->document->id,
+                        'extraction_id' => $extraction->id,
+                        'analysis_type' => $analysisType
+                    ]);
+                    return;
+                    
+                } catch (\Exception $e) {
+                    Log::warning('Advanced AI extraction failed, falling back to basic analysis', [
+                        'document_id' => $this->document->id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+                
+                // Final fallback to basic analysis
                 $documentData = $this->analyzeDocument($this->document);
                 $extraction->update([
                     'status' => 'completed',
@@ -257,7 +300,7 @@ class ExtractDocumentData implements ShouldQueue
         return max(1, intval($fileSize / 50000));
     }
 
-    /**
+        /**
      * Handle a job failure.
      */
     public function failed(\Throwable $exception): void
@@ -273,5 +316,149 @@ class ExtractDocumentData implements ShouldQueue
                 'status' => 'failed',
                 'extracted_data' => ['error' => 'Job failed: ' . $exception->getMessage()],
             ]);
+    }
+
+    /**
+     * Determine the analysis type based on filename and content patterns
+     *
+     * @param string $filename
+     * @return string
+     */
+    private function determineAnalysisType(string $filename): string
+    {
+        $filename = strtolower($filename);
+        
+        // Check for shipping/logistics indicators
+        if (str_contains($filename, 'whatsapp') || 
+            str_contains($filename, 'screenshot') ||
+            str_contains($filename, 'img_') ||
+            str_contains($filename, 'photo') ||
+            str_contains($filename, 'shipping') ||
+            str_contains($filename, 'freight')) {
+            return 'shipping';
+        }
+        
+        // Check for invoice indicators
+        if (str_contains($filename, 'invoice') ||
+            str_contains($filename, 'bill') ||
+            str_contains($filename, 'receipt')) {
+            return 'detailed';
+        }
+        
+        return 'basic';
+    }
+
+    /**
+     * Structure extracted data based on analysis type
+     *
+     * @param array $extractedData
+     * @param string $analysisType
+     * @return array
+     */
+    private function structureExtractedData(array $extractedData, string $analysisType): array
+    {
+        if ($analysisType === 'shipping') {
+            return $this->structureShippingData($extractedData);
+        }
+        
+        // Return the extracted data as-is for other types
+        return $extractedData;
+    }
+
+    /**
+     * Structure shipping data for better usability
+     *
+     * @param array $rawData
+     * @return array
+     */
+    private function structureShippingData(array $rawData): array
+    {
+        $extractedData = $rawData['extracted_data'] ?? [];
+        $metadata = $rawData['metadata'] ?? [];
+        
+        return [
+            'document_type' => 'Shipping Document',
+            'status' => $rawData['status'] ?? 'processed',
+            'analysis_type' => 'shipping',
+            'shipment' => [
+                'origin' => $this->extractValue($extractedData, ['origin', 'from', 'pickup', 'source']),
+                'destination' => $this->extractValue($extractedData, ['destination', 'to', 'delivery', 'target']),
+                'vehicle' => [
+                    'type' => $this->extractValue($extractedData, ['vehicle_type', 'vehicle', 'truck_type', 'car_type']),
+                    'model' => $this->extractValue($extractedData, ['vehicle_model', 'model', 'make_model']),
+                    'details' => $this->extractValue($extractedData, ['vehicle_details', 'specifications', 'details'])
+                ]
+            ],
+            'pricing' => [
+                'amount' => $this->extractValue($extractedData, ['price', 'amount', 'cost', 'total']),
+                'currency' => $this->extractValue($extractedData, ['currency']) ?: 'EUR',
+                'notes' => $this->extractValue($extractedData, ['price_notes', 'pricing_details', 'cost_details'])
+            ],
+            'contact' => [
+                'phone' => $this->extractValue($extractedData, ['phone', 'telephone', 'mobile', 'contact_number']),
+                'name' => $this->extractValue($extractedData, ['contact_name', 'name', 'person']),
+                'company' => $this->extractValue($extractedData, ['company', 'business', 'organization'])
+            ],
+            'dates' => [
+                'requested' => $this->extractValue($extractedData, ['date', 'pickup_date', 'requested_date']),
+                'extracted_at' => now()->toIso8601String()
+            ],
+            'extracted_text' => $this->extractValue($extractedData, ['text', 'content', 'message']),
+            'metadata' => [
+                'source' => 'AI Vision Extraction',
+                'confidence' => $metadata['confidence_score'] ?? 0.8,
+                'processed_at' => $metadata['processed_at'] ?? now()->toIso8601String(),
+                'service_used' => 'ai_router_shipping'
+            ]
+        ];
+    }
+
+    /**
+     * Extract value from nested array using multiple possible keys
+     *
+     * @param array $data
+     * @param array $possibleKeys
+     * @return string
+     */
+    private function extractValue(array $data, array $possibleKeys): string
+    {
+        foreach ($possibleKeys as $key) {
+            $value = $this->findValueRecursive($data, $key);
+            if (!empty($value)) {
+                return is_string($value) ? $value : (string) $value;
+            }
+        }
+        
+        return '';
+    }
+
+    /**
+     * Find value recursively in nested array
+     *
+     * @param array $array
+     * @param string $key
+     * @return mixed
+     */
+    private function findValueRecursive(array $array, string $key)
+    {
+        if (isset($array[$key])) {
+            return $array[$key];
+        }
+        
+        // Check for case-insensitive match
+        foreach ($array as $k => $v) {
+            if (is_string($k) && strtolower($k) === strtolower($key)) {
+                return $v;
+            }
+            
+            if (is_array($v)) {
+                $result = $this->findValueRecursive($v, $key);
+                if ($result !== null) {
+                    return $result;
+                }
+            }
+        }
+        
+        return null;
     }
 }
