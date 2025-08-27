@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Document;
 use App\Models\Quotation;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class RobawsIntegrationService
 {
@@ -38,6 +39,9 @@ class RobawsIntegrationService
             
             // Create the offer in Robaws
             $offer = $this->robawsClient->createOffer($offerPayload);
+            
+            // Attach the document file to the offer if it exists
+            $this->attachDocumentToOffer($offer['id'], $document);
             
             // Save the Robaws offer ID back to our database
             $this->saveRobawsOffer($document, $offer);
@@ -475,6 +479,131 @@ class RobawsIntegrationService
                 'offer_id' => $offer['id'] ?? null,
                 'error' => $e->getMessage()
             ]);
+        }
+    }
+    
+    /**
+     * Attach document file to Robaws offer
+     */
+    protected function attachDocumentToOffer(int $offerId, Document $document): void
+    {
+        try {
+            // Get the file from storage
+            $filePath = $document->path ?? $document->file_path;
+            if (!$filePath) {
+                Log::warning('No file path found for document', ['document_id' => $document->id]);
+                return;
+            }
+
+            $disk = Storage::disk($document->disk ?? config('filesystems.default', 'local'));
+            
+            if (!$disk->exists($filePath)) {
+                Log::warning('File not found in storage', [
+                    'document_id' => $document->id,
+                    'file_path' => $filePath,
+                    'disk' => $document->disk
+                ]);
+                return;
+            }
+
+            // Get file details
+            $filename = $document->filename ?? basename($filePath);
+            $mimeType = $document->mime_type ?? $disk->mimeType($filePath) ?? 'application/octet-stream';
+            $fileSize = $disk->size($filePath);
+
+            Log::info('Attaching document to Robaws offer', [
+                'offer_id' => $offerId,
+                'filename' => $filename,
+                'mime_type' => $mimeType,
+                'file_size' => $fileSize,
+            ]);
+
+            // For files <= 6MB, use direct upload
+            if ($fileSize <= 6 * 1024 * 1024) {
+                // Use stream if available for memory efficiency
+                if (method_exists($disk, 'readStream')) {
+                    $stream = $disk->readStream($filePath);
+                    $uploadResult = $this->robawsClient->addOfferDocument($offerId, $filename, $mimeType, $stream);
+                    if (is_resource($stream)) {
+                        fclose($stream);
+                    }
+                } else {
+                    // Fallback to base64
+                    $content = $disk->get($filePath);
+                    $uploadResult = $this->robawsClient->addOfferDocument($offerId, $filename, $mimeType, $content);
+                }
+
+                Log::info('Document uploaded to Robaws offer', [
+                    'offer_id' => $offerId,
+                    'document_id' => $uploadResult['id'] ?? null,
+                    'filename' => $filename,
+                ]);
+            } else {
+                // For files > 6MB, use chunked upload
+                $this->uploadLargeDocument($offerId, $disk, $filePath, $filename, $mimeType, $fileSize);
+            }
+
+        } catch (\Exception $e) {
+            // Log the error but don't fail the entire export
+            Log::error('Failed to attach document to Robaws offer', [
+                'offer_id' => $offerId,
+                'document_id' => $document->id,
+                'error' => $e->getMessage(),
+            ]);
+            
+            // Don't throw - we want the offer creation to succeed even if file upload fails
+        }
+    }
+
+    /**
+     * Upload large document using chunked upload
+     */
+    protected function uploadLargeDocument(int $offerId, $disk, string $filePath, string $filename, string $mimeType, int $fileSize): void
+    {
+        // Create upload session
+        $session = $this->robawsClient->createOfferDocumentUploadSession($offerId, $filename, $mimeType, $fileSize);
+        $sessionId = $session['id'];
+
+        Log::info('Created document upload session', [
+            'session_id' => $sessionId,
+            'offer_id' => $offerId,
+            'file_size' => $fileSize,
+        ]);
+
+        // Read and upload file in chunks of 6MB
+        $chunkSize = 6 * 1024 * 1024; // 6MB
+        $handle = $disk->readStream($filePath);
+        $partNumber = 0;
+
+        try {
+            while (!feof($handle)) {
+                $chunk = fread($handle, $chunkSize);
+                if ($chunk === false || strlen($chunk) === 0) {
+                    break;
+                }
+
+                $base64Chunk = base64_encode($chunk);
+                $result = $this->robawsClient->uploadDocumentChunk($sessionId, $base64Chunk, $partNumber);
+
+                Log::info('Uploaded document chunk', [
+                    'session_id' => $sessionId,
+                    'part_number' => $partNumber,
+                    'chunk_size' => strlen($chunk),
+                ]);
+
+                $partNumber++;
+            }
+
+            Log::info('Large document upload completed', [
+                'offer_id' => $offerId,
+                'filename' => $filename,
+                'total_parts' => $partNumber,
+            ]);
+
+        } finally {
+            if (is_resource($handle)) {
+                fclose($handle);
+            }
         }
     }
 }

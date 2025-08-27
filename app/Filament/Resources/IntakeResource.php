@@ -210,7 +210,7 @@ class IntakeResource extends Resource
                     ->color('success')
                     ->requiresConfirmation()
                     ->modalHeading('Export to Robaws')
-                    ->modalDescription('This will create a new quotation in Robaws using the extracted data from this intake.')
+                    ->modalDescription('This will create a new quotation in Robaws using the extracted data from this intake and attach the uploaded file to the offer.')
                     ->action(function (Intake $record) {
                         try {
                             $extraction = $record->extraction;
@@ -230,15 +230,16 @@ class IntakeResource extends Resource
                             // Map the extraction data to a document-like structure for the service
                             $mappedData = self::mapExtractionDataForRobaws($extraction->extracted_data);
                             
-                            // Create a temporary document object to work with the existing service
-                            $tempDocument = new \stdClass();
-                            $tempDocument->id = $record->id;
-                            $tempDocument->extraction_data = $mappedData;
-                            $tempDocument->user_id = auth()->id() ?? 1; // Fallback to user 1 if no auth
+                            // Get the first document associated with this intake
+                            $originalDocument = $record->documents()->first();
                             
                             // Convert to actual Document model for the service
                             $document = Document::make([
-                                'filename' => 'Intake-' . $record->id . '-Extract',
+                                'filename' => $originalDocument ? $originalDocument->filename : 'Intake-' . $record->id . '-Extract',
+                                'path' => $originalDocument ? $originalDocument->path : null,
+                                'file_path' => $originalDocument ? $originalDocument->file_path : null,
+                                'disk' => $originalDocument ? $originalDocument->disk : config('filesystems.default', 'local'),
+                                'mime_type' => $originalDocument ? $originalDocument->mime_type : 'application/json',
                                 'extraction_data' => $mappedData,
                                 'user_id' => auth()->id() ?? 1, // Fallback to user 1 if no auth
                             ]);
@@ -253,9 +254,11 @@ class IntakeResource extends Resource
                                     'notes' => $record->notes . "\n\nRobaws Quotation ID: " . ($offer['id'] ?? 'Unknown'),
                                 ]);
                                 
+                                $attachmentMessage = $originalDocument ? " The uploaded file has been attached to the offer." : "";
+                                
                                 Notification::make()
                                     ->title('Export Successful')
-                                    ->body("Quotation created in Robaws with ID: " . ($offer['id'] ?? 'Unknown'))
+                                    ->body("Quotation created in Robaws with ID: " . ($offer['id'] ?? 'Unknown') . $attachmentMessage)
                                     ->success()
                                     ->send();
                             } else {

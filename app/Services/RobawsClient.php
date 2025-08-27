@@ -5,6 +5,7 @@ namespace App\Services;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class RobawsClient
@@ -243,6 +244,112 @@ class RobawsClient
         $res = $this->http()->get('/api/v2/articles', $filters);
         $this->throwUnlessOk($res);
         return $res->json();
+    }
+
+    /**
+     * Add a document to an offer
+     */
+    public function addOfferDocument(int $offerId, string $filename, string $mimeType, $streamOrBytes): array
+    {
+        try {
+            // If we have a stream (preferred for memory efficiency)
+            if (is_resource($streamOrBytes)) {
+                $res = $this->http()
+                    ->timeout(60)
+                    ->attach('file', $streamOrBytes, $filename, ['Content-Type' => $mimeType])
+                    ->post("/api/v2/offers/{$offerId}/documents");
+                
+                $this->throwUnlessOk($res);
+                return $res->json();
+            }
+
+            // Or if we have base64 bytes
+            $base64Content = is_string($streamOrBytes) && base64_decode($streamOrBytes, true) !== false 
+                ? $streamOrBytes 
+                : base64_encode($streamOrBytes);
+
+            $res = $this->http()
+                ->timeout(60)
+                ->post("/api/v2/offers/{$offerId}/documents", [
+                    'filename'    => $filename,
+                    'mimeType'    => $mimeType,
+                    'bytesBase64' => $base64Content,
+                ]);
+
+            $this->throwUnlessOk($res);
+            return $res->json();
+
+        } catch (\Illuminate\Http\Client\RequestException $e) {
+            $body = $e->response ? $e->response->body() : '';
+            $errorData = json_decode($body, true) ?: [];
+            $correlationId = $errorData['correlationId'] ?? null;
+            
+            $errorMessage = sprintf(
+                "Failed to upload document to offer %d: HTTP %d%s - %s",
+                $offerId,
+                $e->response ? $e->response->status() : 0,
+                $correlationId ? " (correlationId: {$correlationId})" : '',
+                $body
+            );
+            
+            Log::error('Robaws document upload failed', [
+                'offer_id' => $offerId,
+                'filename' => $filename,
+                'error' => $errorMessage,
+                'correlation_id' => $correlationId,
+            ]);
+            
+            throw new \Exception($errorMessage);
+        } catch (\Exception $e) {
+            Log::error('Robaws document upload error', [
+                'offer_id' => $offerId,
+                'filename' => $filename,
+                'error' => $e->getMessage(),
+            ]);
+            
+            throw $e;
+        }
+    }
+
+    /**
+     * Create a chunked upload session for large files (> 6MB)
+     */
+    public function createOfferDocumentUploadSession(int $offerId, string $filename, string $mimeType, int $fileSize): array
+    {
+        try {
+            $res = $this->http()->post("/api/v2/offers/{$offerId}/document-upload-sessions", [
+                'filename' => $filename,
+                'mimeType' => $mimeType,
+                'size' => $fileSize,
+            ]);
+
+            $this->throwUnlessOk($res);
+            return $res->json();
+
+        } catch (\Illuminate\Http\Client\RequestException $e) {
+            $body = $e->response ? $e->response->body() : '';
+            throw new \Exception("Failed to create document upload session: {$body}");
+        }
+    }
+
+    /**
+     * Upload a chunk to a document upload session
+     */
+    public function uploadDocumentChunk(string $sessionId, string $bytesBase64, int $partNumber): array
+    {
+        try {
+            $res = $this->http()->post("/api/v2/document-upload-sessions/{$sessionId}", [
+                'bytesBase64' => $bytesBase64,
+                'partNumber' => $partNumber,
+            ]);
+
+            $this->throwUnlessOk($res);
+            return $res->json();
+
+        } catch (\Illuminate\Http\Client\RequestException $e) {
+            $body = $e->response ? $e->response->body() : '';
+            throw new \Exception("Failed to upload document chunk: {$body}");
+        }
     }
 
     protected function throwUnlessOk(Response $res): void
