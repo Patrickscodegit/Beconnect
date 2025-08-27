@@ -175,27 +175,47 @@ if ($vehicle) {
     $output .= "VEHICLE INFORMATION\n";
     $output .= "===================\n";
     
-    if (isset($vehicle['year'])) {
+    // Check for brand (new format from email extraction)
+    if (!empty($vehicle['brand'])) {
+        $output .= "Brand: " . $vehicle['brand'] . "\n";
+    }
+    
+    // Check for full_name first (complete vehicle name)
+    if (!empty($vehicle['full_name'])) {
+        $output .= "Vehicle: " . $vehicle['full_name'] . "\n";
+    } else {
+        // Fall back to make/model combination
+        if (!empty($vehicle['make'])) {
+            $output .= "Make: " . $vehicle['make'] . "\n";
+        }
+        if (!empty($vehicle['model'])) {
+            $output .= "Model: " . $vehicle['model'] . "\n";
+        }
+    }
+    
+    // Only show fields that have actual values
+    if (!empty($vehicle['year'])) {
         $output .= "Year: " . $vehicle['year'] . "\n";
     }
-    if (isset($vehicle['make'])) {
-        $output .= "Make: " . $vehicle['make'] . "\n";
-    }
-    if (isset($vehicle['model'])) {
-        $output .= "Model: " . $vehicle['model'] . "\n";
-    }
-    if (isset($vehicle['type'])) {
+    if (!empty($vehicle['type'])) {
         $output .= "Type: " . $vehicle['type'] . "\n";
     }
-    if (isset($vehicle['condition'])) {
+    if (!empty($vehicle['condition'])) {
         $output .= "Condition: " . $vehicle['condition'] . "\n";
     }
-    if (isset($vehicle['color'])) {
+    if (!empty($vehicle['color'])) {
         $output .= "Color: " . $vehicle['color'] . "\n";
     }
-    if (isset($vehicle['vin'])) {
+    if (!empty($vehicle['vin'])) {
         $output .= "VIN: " . $vehicle['vin'] . "\n";
     }
+    if (!empty($vehicle['specifications'])) {
+        $output .= "Specifications: " . $vehicle['specifications'] . "\n";
+    }
+    if (!empty($vehicle['price'])) {
+        $output .= "Price: " . $vehicle['price'] . "\n";
+    }
+    
     $output .= "\n";
 }
 

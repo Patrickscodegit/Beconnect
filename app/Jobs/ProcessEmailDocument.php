@@ -273,7 +273,7 @@ class ProcessEmailDocument implements ShouldQueue
             'vehicle' => [
                 'brand' => $this->extractValue($extractedData, ['vehicle_info.brand', 'brand', 'make']),
                 'model' => $this->extractValue($extractedData, ['vehicle_info.model', 'model']),
-                'full_name' => $this->extractValue($extractedData, ['vehicle_info.full_name', 'vehicle_info.make_model', 'make_model', 'vehicle']),
+                'full_name' => $this->buildFullVehicleName($extractedData),
                 'type' => $this->extractValue($extractedData, ['vehicle_info.type', 'vehicle_type', 'type']),
                 'year' => $this->extractValue($extractedData, ['vehicle_info.year', 'year']),
                 'color' => $this->extractValue($extractedData, ['vehicle_info.color', 'color']),
@@ -295,6 +295,37 @@ class ProcessEmailDocument implements ShouldQueue
                 'service_used' => 'email_ai_router'
             ]
         ];
+    }
+
+    /**
+     * Build full vehicle name from extracted data
+     */
+    private function buildFullVehicleName(array $extractedData): string
+    {
+        // Try to get from full_name field first
+        $fullName = $this->extractValue($extractedData, ['vehicle_info.full_name', 'make_model', 'vehicle']);
+        if (!empty($fullName)) {
+            return $fullName;
+        }
+        
+        // Build from brand and model
+        $brand = $this->extractValue($extractedData, ['vehicle_info.brand', 'brand', 'make']);
+        $model = $this->extractValue($extractedData, ['vehicle_info.model', 'model']);
+        
+        if (!empty($brand) && !empty($model)) {
+            return $brand . ' ' . $model;
+        }
+        
+        // Return individual components if available
+        if (!empty($brand)) {
+            return $brand;
+        }
+        
+        if (!empty($model)) {
+            return $model;
+        }
+        
+        return '';
     }
 
     /**

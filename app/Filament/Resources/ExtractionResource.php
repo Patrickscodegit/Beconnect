@@ -170,6 +170,7 @@ class ExtractionResource extends Resource
                                                  isset($data['vehicle_listing']) || 
                                                  isset($data['vehicle_info']) ||
                                                  isset($data['vehicle_details']) ||
+                                                 isset($data['vehicle']) ||
                                                  isset($data['shipment']);
                                 
                                 if ($hasShippingData) {
@@ -195,7 +196,8 @@ class ExtractionResource extends Resource
                                                  isset($data['contact_info']) ||
                                                  isset($data['vehicle_listing']) ||
                                                  isset($data['vehicle_info']) ||
-                                                 isset($data['vehicle_details']);
+                                                 isset($data['vehicle_details']) ||
+                                                 isset($data['vehicle']);
                                 
                                 if ($hasShippingData && ($record->analysis_type === 'basic' || empty($record->analysis_type))) {
                                     return 'shipping (auto-detected)';
@@ -296,6 +298,45 @@ class ExtractionResource extends Resource
                             ->getStateUsing(function ($record) {
                                 $data = $record->extracted_data ?? [];
                                 
+                                // Check for vehicle structure (email extraction format)
+                                if (isset($data['vehicle'])) {
+                                    $vehicle = $data['vehicle'];
+                                    
+                                    // Use full_name if available
+                                    if (!empty($vehicle['full_name'])) {
+                                        $result = $vehicle['full_name'];
+                                        if (!empty($vehicle['specifications'])) {
+                                            $result .= ' - ' . $vehicle['specifications'];
+                                        }
+                                        return $result;
+                                    }
+                                    
+                                    // Build from brand/model
+                                    $parts = [];
+                                    if (!empty($vehicle['brand'])) {
+                                        $parts[] = $vehicle['brand'];
+                                    }
+                                    if (!empty($vehicle['model'])) {
+                                        $parts[] = $vehicle['model'];
+                                    }
+                                    if (!empty($vehicle['year'])) {
+                                        $parts[] = '(' . $vehicle['year'] . ')';
+                                    }
+                                    
+                                    if (!empty($parts)) {
+                                        $result = implode(' ', $parts);
+                                        if (!empty($vehicle['specifications'])) {
+                                            $result .= ' - ' . $vehicle['specifications'];
+                                        }
+                                        return $result;
+                                    }
+                                    
+                                    // Fallback to type
+                                    if (!empty($vehicle['type'])) {
+                                        return $vehicle['type'];
+                                    }
+                                }
+                                
                                 // Check for vehicle_details structure (newest format)
                                 if (isset($data['vehicle_details'])) {
                                     $make = $data['vehicle_details']['make'] ?? '';
@@ -306,7 +347,7 @@ class ExtractionResource extends Resource
                                     return $specs ? "$vehicle - $specs" : $vehicle;
                                 }
                                 
-                                // Check for vehicle_info structure (new format)
+                                // Check for vehicle_info structure (old format)
                                 if (isset($data['vehicle_info'])) {
                                     $make = $data['vehicle_info']['make'] ?? '';
                                     $model = $data['vehicle_info']['model'] ?? '';
@@ -316,7 +357,7 @@ class ExtractionResource extends Resource
                                     return $specs ? "$vehicle - $specs" : $vehicle;
                                 }
                                 
-                                // Check for vehicle_listing structure (old format)
+                                // Check for vehicle_listing structure (legacy format)
                                 if (isset($data['vehicle_listing']['vehicle'])) {
                                     $vehicle = $data['vehicle_listing']['vehicle'];
                                     $details = $data['vehicle_listing']['model_details'] ?? '';
@@ -339,6 +380,11 @@ class ExtractionResource extends Resource
                             ->label('Vehicle Price')
                             ->getStateUsing(function ($record) {
                                 $data = $record->extracted_data ?? [];
+                                
+                                // Check vehicle structure (email extraction format)
+                                if (isset($data['vehicle']['price']) && !empty($data['vehicle']['price'])) {
+                                    return $data['vehicle']['price'];
+                                }
                                 
                                 // Check vehicle_details structure (newest format)
                                 if (isset($data['vehicle_details']['price'])) {
@@ -375,7 +421,7 @@ class ExtractionResource extends Resource
                         $data = $record->extracted_data ?? [];
                         return isset($data['messages']) || isset($data['shipment']) || 
                                isset($data['vehicle_listing']) || isset($data['vehicle_info']) ||
-                               isset($data['vehicle_details']);
+                               isset($data['vehicle_details']) || isset($data['vehicle']);
                     }),
 
                 Section::make('Messages Conversation')
