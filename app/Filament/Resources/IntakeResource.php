@@ -6,6 +6,7 @@ use App\Filament\Resources\IntakeResource\Pages;
 use App\Models\Intake;
 use App\Models\Document;
 use App\Models\Extraction;
+use App\Services\RobawsIntegrationService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -13,6 +14,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Infolists;
 use Filament\Infolists\Infolist;
+use Filament\Notifications\Notification;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class IntakeResource extends Resource
@@ -202,6 +204,78 @@ class IntakeResource extends Resource
                     ->query(fn ($query) => $query->whereHas('documents')),
             ])
             ->actions([
+                Tables\Actions\Action::make('export_to_robaws')
+                    ->label('Export to Robaws')
+                    ->icon('heroicon-o-paper-airplane')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->modalHeading('Export to Robaws')
+                    ->modalDescription('This will create a new quotation in Robaws using the extracted data from this intake.')
+                    ->action(function (Intake $record) {
+                        try {
+                            $extraction = $record->extraction;
+                            
+                            if (!$extraction || !$extraction->extracted_data) {
+                                Notification::make()
+                                    ->title('Export Failed')
+                                    ->body('No extraction data found for this intake.')
+                                    ->danger()
+                                    ->send();
+                                return;
+                            }
+                            
+                            // Use the RobawsIntegrationService to create the offer
+                            $robawsService = app(RobawsIntegrationService::class);
+                            
+                            // Map the extraction data to a document-like structure for the service
+                            $mappedData = self::mapExtractionDataForRobaws($extraction->extracted_data);
+                            
+                            // Create a temporary document object to work with the existing service
+                            $tempDocument = new \stdClass();
+                            $tempDocument->id = $record->id;
+                            $tempDocument->extraction_data = $mappedData;
+                            $tempDocument->user_id = auth()->id();
+                            
+                            // Convert to actual Document model for the service
+                            $document = Document::make([
+                                'filename' => 'Intake-' . $record->id . '-Extract',
+                                'extraction_data' => $mappedData,
+                                'user_id' => auth()->id(),
+                            ]);
+                            $document->id = $record->id; // Use intake ID as reference
+                            
+                            $offer = $robawsService->createOfferFromDocument($document);
+                            
+                            if ($offer) {
+                                // Update the intake with Robaws reference
+                                $record->update([
+                                    'robaws_quotation_id' => $offer['id'] ?? null,
+                                    'notes' => $record->notes . "\n\nRobaws Quotation ID: " . ($offer['id'] ?? 'Unknown'),
+                                ]);
+                                
+                                Notification::make()
+                                    ->title('Export Successful')
+                                    ->body("Quotation created in Robaws with ID: " . ($offer['id'] ?? 'Unknown'))
+                                    ->success()
+                                    ->send();
+                            } else {
+                                Notification::make()
+                                    ->title('Export Failed')
+                                    ->body('Failed to create quotation in Robaws. Please check the logs for more details.')
+                                    ->danger()
+                                    ->send();
+                            }
+                            
+                        } catch (\Exception $e) {
+                            Notification::make()
+                                ->title('Export Error')
+                                ->body('An error occurred: ' . $e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    })
+                    ->visible(fn (Intake $record): bool => $record->extraction()->exists()),
+                    
                 Tables\Actions\Action::make('view_extraction')
                     ->label('Extraction')
                     ->icon('heroicon-o-eye')
@@ -393,5 +467,171 @@ class IntakeResource extends Resource
             'view' => Pages\ViewIntake::route('/{record}'),
             'edit' => Pages\EditIntake::route('/{record}/edit'),
         ];
+    }
+    
+    /**
+     * Map extraction data to format expected by Robaws service
+     */
+    private static function mapExtractionDataForRobaws(array $extractedData): array
+    {
+        // Initialize mapped data structure
+        $mappedData = [
+            'document_type' => 'shipping',
+            'extraction_source' => 'intake_ai_extraction',
+            'extracted_at' => now()->toISOString(),
+        ];
+        
+        // Map contact information
+        $contact = $extractedData['contact'] ?? $extractedData['contact_info'] ?? [];
+        if (!empty($contact)) {
+            $mappedData['consignee'] = [
+                'name' => $contact['name'] ?? 'Unknown Client',
+                'contact' => $contact['phone'] ?? $contact['phone_number'] ?? '',
+                'email' => $contact['email'] ?? '',
+                'address' => $contact['address'] ?? '',
+            ];
+            
+            // Also use as client data
+            $mappedData['client_name'] = $contact['name'] ?? '';
+            $mappedData['client_phone'] = $contact['phone'] ?? $contact['phone_number'] ?? '';
+            $mappedData['client_email'] = $contact['email'] ?? '';
+        }
+        
+        // Map shipping details
+        $shipment = $extractedData['shipment'] ?? [];
+        if (!empty($shipment)) {
+            $mappedData['ports'] = [
+                'origin' => $shipment['origin'] ?? '',
+                'destination' => $shipment['destination'] ?? '',
+            ];
+            
+            // Also map to alternative format
+            $mappedData['port_of_loading'] = $shipment['origin'] ?? '';
+            $mappedData['port_of_discharge'] = $shipment['destination'] ?? '';
+        }
+        
+        // Extract origin/destination from messages if not in shipment
+        if (empty($mappedData['ports']['origin']) && isset($extractedData['messages'])) {
+            foreach ($extractedData['messages'] as $message) {
+                if (isset($message['text'])) {
+                    // Look for "from X to Y" patterns
+                    if (preg_match('/from\s+([^to]+?)\s+to\s+([^,\.\n]+)/i', $message['text'], $matches)) {
+                        $mappedData['ports']['origin'] = trim($matches[1]);
+                        $mappedData['ports']['destination'] = trim($matches[2]);
+                        $mappedData['port_of_loading'] = trim($matches[1]);
+                        $mappedData['port_of_discharge'] = trim($matches[2]);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Map vehicle information
+        $vehicle = $extractedData['vehicle'] ?? 
+                  $extractedData['vehicle_details'] ?? 
+                  $extractedData['vehicle_info'] ?? 
+                  $extractedData['vehicle_listing'] ?? [];
+        
+        if (!empty($vehicle)) {
+            $mappedData['cargo_description'] = self::buildVehicleDescription($vehicle);
+            
+            // Add vehicle as cargo item
+            $mappedData['vehicles'] = [
+                [
+                    'make' => $vehicle['make'] ?? '',
+                    'model' => $vehicle['model'] ?? '',
+                    'year' => $vehicle['year'] ?? '',
+                    'type' => $vehicle['type'] ?? '',
+                    'condition' => $vehicle['condition'] ?? '',
+                    'color' => $vehicle['color'] ?? '',
+                    'vin' => $vehicle['vin'] ?? '',
+                    'specifications' => $vehicle['specifications'] ?? '',
+                ]
+            ];
+        }
+        
+        // Map pricing information
+        $pricing = $extractedData['pricing'] ?? [];
+        if (!empty($pricing)) {
+            $mappedData['charges'] = [
+                [
+                    'description' => 'Vehicle Transport',
+                    'amount' => self::extractNumericValue($pricing['amount'] ?? '0'),
+                    'currency' => $pricing['currency'] ?? 'EUR',
+                ]
+            ];
+            $mappedData['currency'] = $pricing['currency'] ?? 'EUR';
+        }
+        
+        // Map messages as special instructions
+        if (isset($extractedData['messages']) && !empty($extractedData['messages'])) {
+            $messageTexts = [];
+            foreach ($extractedData['messages'] as $message) {
+                if (isset($message['text'])) {
+                    $sender = $message['sender'] ?? 'User';
+                    $time = $message['time'] ?? $message['timestamp'] ?? '';
+                    $messageTexts[] = ($time ? "[$time] " : '') . "$sender: {$message['text']}";
+                }
+            }
+            $mappedData['special_instructions'] = implode("\n", $messageTexts);
+        }
+        
+        // Add document metadata
+        $mappedData['invoice'] = [
+            'number' => 'INTAKE-' . date('Ymd') . '-' . (rand(1000, 9999)),
+            'date' => now()->format('Y-m-d'),
+            'currency' => $mappedData['currency'] ?? 'EUR',
+        ];
+        
+        // Set shipment type
+        $mappedData['shipment_type'] = 'Vehicle Transport';
+        
+        // Add the original extracted data for reference
+        $mappedData['original_extraction'] = $extractedData;
+        
+        return $mappedData;
+    }
+    
+    /**
+     * Build a descriptive text for the vehicle
+     */
+    private static function buildVehicleDescription(array $vehicle): string
+    {
+        $parts = [];
+        
+        if (!empty($vehicle['year'])) {
+            $parts[] = $vehicle['year'];
+        }
+        if (!empty($vehicle['make'])) {
+            $parts[] = $vehicle['make'];
+        }
+        if (!empty($vehicle['model'])) {
+            $parts[] = $vehicle['model'];
+        }
+        if (!empty($vehicle['type'])) {
+            $parts[] = "({$vehicle['type']})";
+        }
+        if (!empty($vehicle['condition'])) {
+            $parts[] = "- {$vehicle['condition']} condition";
+        }
+        if (!empty($vehicle['color'])) {
+            $parts[] = "- {$vehicle['color']}";
+        }
+        if (!empty($vehicle['specifications'])) {
+            $parts[] = "- {$vehicle['specifications']}";
+        }
+        
+        return implode(' ', $parts) ?: 'Vehicle';
+    }
+    
+    /**
+     * Extract numeric value from price string
+     */
+    private static function extractNumericValue(string $value): float
+    {
+        // Remove currency symbols and extract number
+        $cleaned = preg_replace('/[^\d.,]/', '', $value);
+        $cleaned = str_replace(',', '.', $cleaned);
+        return (float) $cleaned;
     }
 }
