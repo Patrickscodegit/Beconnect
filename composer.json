@@ -7,6 +7,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "ddeboer/imap": "^1.19",
         "filament/filament": "^3.2",
         "laravel/breeze": "^2.3",
         "laravel/framework": "^11.31",
@@ -15,7 +16,6 @@
         "laravel/tinker": "^2.9",
         "league/flysystem-aws-s3-v3": "^3.29",
         "openai-php/client": "^0.15.0",
-        "php-mime-mail-parser/php-mime-mail-parser": "^1.0",
         "smalot/pdfparser": "^2.12"
     },
     "require-dev": {

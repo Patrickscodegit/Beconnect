@@ -86,13 +86,15 @@ class IntakeResource extends Resource
                                 'image/jpg',
                                 'image/png', 
                                 'image/tiff',
-                                'image/gif'
+                                'image/gif',
+                                'message/rfc822', // .eml files
+                                'application/vnd.ms-outlook', // .msg files
                             ])
                             ->maxSize(20480) // 20MB max
                             ->disk('local')
                             ->directory('temp-uploads')
                             ->reorderable()
-                            ->helperText('Upload freight documents (PDF, images). Maximum 20MB per file.')
+                            ->helperText('Upload freight documents (PDF, images, email files). Maximum 20MB per file.')
                             ->columnSpanFull(),
                     ]),
             ]);

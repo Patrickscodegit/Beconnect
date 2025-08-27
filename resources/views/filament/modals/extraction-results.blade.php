@@ -26,20 +26,57 @@
     </div>
 
     <!-- Copy Button -->
-    <div class="flex justify-end">
-        <button onclick="copyToClipboard()" 
-                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+    <div class="flex justify-between items-center mb-4">
+        <h4 class="text-lg font-medium text-gray-900">Extracted Information</h4>
+        <button onclick="
+            const elem = document.getElementById('extractedText');
+            const text = elem ? (elem.innerText || elem.textContent || '') : '';
+            if (!text.trim()) {
+                alert('No text available to copy.');
+                return;
+            }
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(() => {
+                    this.innerHTML = '<svg class=\'w-4 h-4 mr-2\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M5 13l4 4L19 7\'></path></svg>Copied!';
+                    this.className = this.className.replace('text-blue-600 bg-white hover:bg-blue-50 border-blue-600', 'text-green-600 bg-green-50 hover:bg-green-100 border-green-600');
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                }).catch(() => {
+                    alert('Failed to copy text. Please select and copy manually.');
+                });
+            } else {
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-9999px';
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    const successful = document.execCommand('copy');
+                    if (successful) {
+                        this.innerHTML = '<svg class=\'w-4 h-4 mr-2\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M5 13l4 4L19 7\'></path></svg>Copied!';
+                        this.className = this.className.replace('text-blue-600 bg-white hover:bg-blue-50 border-blue-600', 'text-green-600 bg-green-50 hover:bg-green-100 border-green-600');
+                        setTimeout(() => { location.reload(); }, 1500);
+                    } else {
+                        alert('Failed to copy text. Please select and copy manually.');
+                    }
+                } catch {
+                    alert('Failed to copy text. Please select and copy manually.');
+                }
+                document.body.removeChild(textArea);
+            }
+        " id="copyButton"
+                class="inline-flex items-center px-4 py-2 border-2 border-blue-600 text-sm font-medium rounded-lg text-blue-600 bg-white hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 shadow-sm">
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
             </svg>
-            Copy All Data
+            Copy Extracted Info
         </button>
     </div>
 
     <!-- Extracted Data in Text Format -->
-    <div class="space-y-4">
-        <h4 class="text-lg font-medium text-gray-900">Extracted Information</h4>
-        
+    <div class="space-y-4">        
         @php
             $data = $extraction->extracted_data ?? $extraction->raw_json;
             if (is_string($data)) {
@@ -234,93 +271,3 @@ echo htmlspecialchars($json);
         </details>
     </div>
 </div>
-
-<script>
-function copyToClipboard() {
-    const textElement = document.getElementById('extractedText');
-    const text = textElement.textContent;
-    
-    if (navigator.clipboard && window.isSecureContext) {
-        // Use the modern clipboard API
-        navigator.clipboard.writeText(text).then(() => {
-            showCopySuccess();
-        }).catch(err => {
-            console.error('Failed to copy text: ', err);
-            fallbackCopyTextToClipboard(text);
-        });
-    } else {
-        // Fallback for older browsers
-        fallbackCopyTextToClipboard(text);
-    }
-}
-
-function fallbackCopyTextToClipboard(text) {
-    const textArea = document.createElement("textarea");
-    textArea.value = text;
-    
-    // Avoid scrolling to bottom
-    textArea.style.top = "0";
-    textArea.style.left = "0";
-    textArea.style.position = "fixed";
-    
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-    
-    try {
-        const successful = document.execCommand('copy');
-        if (successful) {
-            showCopySuccess();
-        } else {
-            showCopyError();
-        }
-    } catch (err) {
-        console.error('Fallback: Oops, unable to copy', err);
-        showCopyError();
-    }
-    
-    document.body.removeChild(textArea);
-}
-
-function showCopySuccess() {
-    // Find the copy button and temporarily change its text
-    const button = document.querySelector('button[onclick="copyToClipboard()"]');
-    const originalText = button.innerHTML;
-    
-    button.innerHTML = `
-        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-        </svg>
-        Copied!
-    `;
-    button.classList.remove('bg-blue-600', 'hover:bg-blue-700');
-    button.classList.add('bg-green-600', 'hover:bg-green-700');
-    
-    setTimeout(() => {
-        button.innerHTML = originalText;
-        button.classList.remove('bg-green-600', 'hover:bg-green-700');
-        button.classList.add('bg-blue-600', 'hover:bg-blue-700');
-    }, 2000);
-}
-
-function showCopyError() {
-    // Find the copy button and temporarily show error
-    const button = document.querySelector('button[onclick="copyToClipboard()"]');
-    const originalText = button.innerHTML;
-    
-    button.innerHTML = `
-        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-        </svg>
-        Failed to Copy
-    `;
-    button.classList.remove('bg-blue-600', 'hover:bg-blue-700');
-    button.classList.add('bg-red-600', 'hover:bg-red-700');
-    
-    setTimeout(() => {
-        button.innerHTML = originalText;
-        button.classList.remove('bg-red-600', 'hover:bg-red-700');
-        button.classList.add('bg-blue-600', 'hover:bg-blue-700');
-    }, 2000);
-}
-</script>
