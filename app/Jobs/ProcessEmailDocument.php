@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Models\Extraction;
 use App\Services\EmailParserService;
 use App\Services\AiRouter;
+use App\Services\VehicleLookupService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -270,16 +271,7 @@ class ProcessEmailDocument implements ShouldQueue
                 'route' => $this->extractValue($extractedData, ['shipping_details.route', 'route', 'shipping_route']),
                 'service_type' => $this->extractValue($extractedData, ['shipping_details.service_type', 'service', 'type'])
             ],
-            'vehicle' => [
-                'brand' => $this->extractValue($extractedData, ['vehicle_info.brand', 'brand', 'make']),
-                'model' => $this->extractValue($extractedData, ['vehicle_info.model', 'model']),
-                'full_name' => $this->buildFullVehicleName($extractedData),
-                'type' => $this->extractValue($extractedData, ['vehicle_info.type', 'vehicle_type', 'type']),
-                'year' => $this->extractValue($extractedData, ['vehicle_info.year', 'year']),
-                'color' => $this->extractValue($extractedData, ['vehicle_info.color', 'color']),
-                'specifications' => $this->extractValue($extractedData, ['vehicle_info.specifications', 'specs', 'details']),
-                'price' => $this->extractValue($extractedData, ['vehicle_info.price', 'price', 'cost', 'amount'])
-            ],
+            'vehicle' => $this->enrichVehicleWithSpecs($extractedData),
             'dates' => [
                 'pickup_date' => $this->extractValue($extractedData, ['dates.pickup_date', 'pickup', 'departure']),
                 'delivery_date' => $this->extractValue($extractedData, ['dates.delivery_date', 'delivery', 'arrival']),
@@ -295,6 +287,45 @@ class ProcessEmailDocument implements ShouldQueue
                 'service_used' => 'email_ai_router'
             ]
         ];
+    }
+
+    /**
+     * Enrich vehicle data with database specifications
+     */
+    private function enrichVehicleWithSpecs(array $extractedData): array
+    {
+        // Build basic vehicle data first
+        $vehicleData = [
+            'brand' => $this->extractValue($extractedData, ['vehicle_info.brand', 'brand', 'make']),
+            'model' => $this->extractValue($extractedData, ['vehicle_info.model', 'model']),
+            'full_name' => $this->buildFullVehicleName($extractedData),
+            'type' => $this->extractValue($extractedData, ['vehicle_info.type', 'vehicle_type', 'type']),
+            'year' => $this->extractValue($extractedData, ['vehicle_info.year', 'year']),
+            'color' => $this->extractValue($extractedData, ['vehicle_info.color', 'color']),
+            'specifications' => $this->extractValue($extractedData, ['vehicle_info.specifications', 'specs', 'details']),
+            'price' => $this->extractValue($extractedData, ['vehicle_info.price', 'price', 'cost', 'amount'])
+        ];
+        
+        // Try to enrich with database specs
+        try {
+            $vehicleLookupService = app(VehicleLookupService::class);
+            $enrichedData = $vehicleLookupService->enrichVehicleData($vehicleData);
+            
+            Log::info('Vehicle data enriched with database specs', [
+                'original' => $vehicleData,
+                'enriched' => $enrichedData,
+                'has_database_match' => $enrichedData['database_match'] ?? false
+            ]);
+            
+            return $enrichedData;
+        } catch (\Exception $e) {
+            Log::warning('Failed to enrich vehicle data with database specs', [
+                'error' => $e->getMessage(),
+                'vehicle_data' => $vehicleData
+            ]);
+            
+            return $vehicleData;
+        }
     }
 
     /**

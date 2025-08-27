@@ -110,8 +110,25 @@ class TestEmailExtraction extends Command
                 $this->info("🚗 Extracted Vehicle Information:");
                 if (isset($data['vehicle']) && !empty(array_filter($data['vehicle']))) {
                     foreach ($data['vehicle'] as $key => $value) {
-                        if (!empty($value)) {
+                        if (!empty($value) && !is_array($value)) {
                             $this->line("  {$key}: {$value}");
+                        } elseif ($key === 'dimensions' && is_array($value)) {
+                            $this->line("  dimensions:");
+                            foreach ($value as $dimKey => $dimValue) {
+                                $this->line("    {$dimKey}: {$dimValue}");
+                            }
+                        }
+                    }
+                    
+                    // Show database match info if available
+                    if (isset($data['vehicle']['database_match']) && $data['vehicle']['database_match']) {
+                        $this->info("✅ Database match found!");
+                        if (isset($data['vehicle']['weight_kg'])) {
+                            $this->line("  Database weight: {$data['vehicle']['weight_kg']} kg");
+                        }
+                        if (isset($data['vehicle']['dimensions'])) {
+                            $dims = $data['vehicle']['dimensions'];
+                            $this->line("  Database dimensions: {$dims['length_m']}L x {$dims['width_m']}W x {$dims['height_m']}H m");
                         }
                     }
                 } else {
