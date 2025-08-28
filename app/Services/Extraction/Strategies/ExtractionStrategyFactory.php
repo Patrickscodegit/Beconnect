@@ -94,8 +94,8 @@ class ExtractionStrategyFactory
         // Register PDF strategy
         $this->register(app(PdfExtractionStrategy::class));
 
-        // Additional strategies can be registered here
-        // $this->register(app(ImageExtractionStrategy::class));
+        // Register image strategy
+        $this->register(app(ImageExtractionStrategy::class));
     }
 
     /**
