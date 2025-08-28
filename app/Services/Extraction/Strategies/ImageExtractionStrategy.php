@@ -174,6 +174,34 @@ class ImageExtractionStrategy implements ExtractionStrategy
         $transformed['extraction_method'] = 'ai_vision';
         $transformed['extraction_timestamp'] = now()->toIso8601String();
         
+        // Handle enhanced vehicle fields from database and AI
+        if (isset($extractedData['vehicle']) && is_array($extractedData['vehicle'])) {
+            $vehicle = $extractedData['vehicle'];
+            
+            // Enhanced specifications from database/AI
+            if (isset($vehicle['wheelbase_m'])) $transformed['wheelbase'] = $vehicle['wheelbase_m'] . ' m';
+            if (isset($vehicle['calculated_volume_m3'])) $transformed['calculated_volume'] = $vehicle['calculated_volume_m3'] . ' m³';
+            if (isset($vehicle['shipping_weight_class'])) $transformed['shipping_class'] = $vehicle['shipping_weight_class'];
+            if (isset($vehicle['typical_container'])) $transformed['typical_container'] = $vehicle['typical_container'];
+            if (isset($vehicle['shipping_notes'])) $transformed['shipping_notes'] = $vehicle['shipping_notes'];
+            if (isset($vehicle['recommended_container'])) $transformed['recommended_container'] = $vehicle['recommended_container'];
+        }
+        
+        // Add data source attribution
+        if (isset($extractedData['data_sources'])) {
+            $transformed['data_attribution'] = json_encode($extractedData['data_sources']);
+            $transformed['fields_from_document'] = count($extractedData['data_sources']['document_extracted'] ?? []);
+            $transformed['fields_from_database'] = count($extractedData['data_sources']['database_enhanced'] ?? []);
+            $transformed['fields_from_ai'] = count($extractedData['data_sources']['ai_enhanced'] ?? []);
+            $transformed['fields_calculated'] = count($extractedData['data_sources']['calculated'] ?? []);
+        }
+        
+        if (isset($extractedData['enhancement_metadata'])) {
+            $transformed['enhancement_confidence'] = $extractedData['enhancement_metadata']['confidence'];
+            $transformed['enhanced_at'] = $extractedData['enhancement_metadata']['enhanced_at'];
+            $transformed['enhancement_time_ms'] = $extractedData['enhancement_metadata']['enhancement_time_ms'];
+        }
+        
         return $transformed;
     }
 
@@ -219,7 +247,31 @@ class ImageExtractionStrategy implements ExtractionStrategy
             // Get the extracted data
             $extractedData = $aiResult['extracted_data'];
             
-            // Transform the structured data to Robaws-compatible format
+            // NEW: Enhance with hybrid data (database + AI)
+            if (config('extraction.enable_vehicle_enhancement', true)) {
+                try {
+                    $enhancer = app(\App\Services\Extraction\VehicleDataEnhancer::class);
+                    $extractedData = $enhancer->enhance($extractedData, [
+                        'document_id' => $document->id,
+                        'extraction_strategy' => $this->getName(),
+                        'mime_type' => $document->mime_type,
+                        'file_size' => strlen($imageContent)
+                    ]);
+                    
+                    Log::info('Vehicle data enhanced successfully', [
+                        'document_id' => $document->id,
+                        'sources_used' => $extractedData['enhancement_metadata']['sources_used'] ?? []
+                    ]);
+                } catch (\Exception $e) {
+                    Log::warning('Vehicle enhancement failed, continuing with original data', [
+                        'error' => $e->getMessage(),
+                        'document_id' => $document->id
+                    ]);
+                    // Continue with original data if enhancement fails
+                }
+            }
+            
+            // Transform the enhanced data to Robaws-compatible format
             $transformedData = $this->transformForRobaws($extractedData);
             
             $confidence = $aiResult['confidence'] ?? 0;
