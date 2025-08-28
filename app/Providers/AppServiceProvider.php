@@ -11,7 +11,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Register extraction services
+        $this->app->singleton(\App\Services\Extraction\ExtractionPipeline::class);
+        $this->app->singleton(\App\Services\Extraction\IntegrationDispatcher::class);
+        $this->app->singleton(\App\Services\Extraction\Strategies\ExtractionStrategyFactory::class);
+        
+        // Register extraction strategies
+        $this->app->bind(\App\Services\Extraction\Strategies\EmailExtractionStrategy::class);
     }
 
     /**
