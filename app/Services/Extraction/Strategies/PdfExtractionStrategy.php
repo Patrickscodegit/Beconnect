@@ -62,29 +62,30 @@ class PdfExtractionStrategy implements ExtractionStrategy
             ]);
 
             // Use hybrid pipeline to extract structured data from text
-            $extractionResult = $this->hybridPipeline->extract($extractedText, [
-                'document_type' => 'pdf',
-                'filename' => $document->filename,
-                'source' => 'pdf_extraction'
-            ]);
+            $pipelineResult = $this->hybridPipeline->extract($extractedText, 'pdf');
 
             // Add PDF-specific metadata
-            $metadata = $extractionResult->getMetadata();
+            $metadata = $pipelineResult['metadata'];
             $metadata['extraction_strategy'] = $this->getName();
             $metadata['pdf_text_length'] = strlen($extractedText);
+            $metadata['document_type'] = 'pdf';
+            $metadata['filename'] = $document->filename;
+            $metadata['source'] = 'pdf_extraction';
             $metadata['processing_time'] = microtime(true) - ($_SERVER['REQUEST_TIME_FLOAT'] ?? microtime(true));
             
             // Create enhanced result with PDF context
-            $enhancedData = $extractionResult->getData();
+            $enhancedData = $pipelineResult['data'];
             $enhancedData['_extraction_context'] = [
                 'source_type' => 'pdf_document',
                 'text_extracted' => true,
                 'strategy_used' => $this->getName()
             ];
 
+            $confidence = $metadata['overall_confidence'] ?? 0;
+
             Log::info('PDF extraction completed', [
                 'document_id' => $document->id,
-                'confidence' => $extractionResult->getConfidence(),
+                'confidence' => $confidence,
                 'vehicle_found' => !empty($enhancedData['vehicle']),
                 'contact_found' => !empty($enhancedData['contact']),
                 'shipment_found' => !empty($enhancedData['shipment'])
@@ -92,7 +93,7 @@ class PdfExtractionStrategy implements ExtractionStrategy
 
             return ExtractionResult::success(
                 $enhancedData,
-                $extractionResult->getConfidence(),
+                $confidence,
                 $this->getName(),
                 $metadata
             );
