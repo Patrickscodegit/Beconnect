@@ -13,12 +13,12 @@
                     'document_data' => [
                         'vehicle' => $extraction->extracted_data['vehicle'] ?? [],
                         'shipping' => $extraction->extracted_data['shipment'] ?? [],
-                        'contact' => [
+                        'contact' => array_filter([
                             'name' => $contactInfo->name,
                             'email' => $contactInfo->email,
                             'phone' => $contactInfo->phone,
                             'company' => $contactInfo->company,
-                        ]
+                        ], fn($v) => !empty($v))
                     ],
                     'ai_enhanced_data' => [],
                     'data_attribution' => [
@@ -27,12 +27,29 @@
                     ],
                     'metadata' => [
                         'overall_confidence' => $contactInfo->confidence ?? $extraction->confidence ?? 0,
-                        'extraction_timestamp' => $extraction->created_at->toISOString()
+                        'extraction_timestamp' => $extraction->created_at->toISOString(),
+                        'contact_extraction_debug' => [
+                            'found_name' => !empty($contactInfo->name),
+                            'found_email' => !empty($contactInfo->email),
+                            'found_phone' => !empty($contactInfo->phone),
+                            'sources_count' => $contactInfo->sources ? $contactInfo->sources->count() : 0,
+                            'raw_confidence' => $contactInfo->confidence
+                        ]
                     ]
                 ];
             } catch (\Exception $e) {
                 \Log::warning('Extraction display error: ' . $e->getMessage());
-                $extractedData = [];
+                $extractedData = [
+                    'document_data' => [
+                        'vehicle' => $extraction->extracted_data['vehicle'] ?? [],
+                        'shipping' => $extraction->extracted_data['shipment'] ?? [],
+                        'contact' => $extraction->extracted_data['contact'] ?? [] // Fallback to raw contact data
+                    ],
+                    'metadata' => [
+                        'overall_confidence' => $extraction->confidence ?? 0,
+                        'extraction_error' => $e->getMessage()
+                    ]
+                ];
             }
         }
     } elseif (function_exists('getState')) {
@@ -271,6 +288,88 @@
                     </div>
                 @endif
             </div>
+        </div>
+    @endif
+
+    {{-- All Extracted Data Section --}}
+    @if(isset($extraction) && $extraction->extracted_data)
+        <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">📄 All Extracted Information</h3>
+            <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+                @php
+                    $rawData = $extraction->extracted_data;
+                @endphp
+                @if(is_array($rawData) && count($rawData) > 0)
+                    @foreach($rawData as $key => $value)
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 capitalize">
+                            {{ str_replace('_', ' ', $key) }}
+                        </dt>
+                        <dd class="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                            @if(is_array($value))
+                                @if(array_is_list($value))
+                                    <ul class="list-disc list-inside space-y-1">
+                                        @foreach($value as $item)
+                                            <li>{{ is_string($item) ? $item : json_encode($item) }}</li>
+                                        @endforeach
+                                    </ul>
+                                @else
+                                    <div class="ml-2 space-y-1">
+                                        @foreach($value as $subKey => $subValue)
+                                            <div><span class="font-medium text-gray-600 dark:text-gray-300">{{ ucwords(str_replace('_', ' ', $subKey)) }}:</span> {{ is_scalar($subValue) ? $subValue : json_encode($subValue) }}</div>
+                                        @endforeach
+                                    </div>
+                                @endif
+                            @elseif(is_bool($value))
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $value ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                    {{ $value ? 'Yes' : 'No' }}
+                                </span>
+                            @elseif(is_null($value))
+                                <span class="text-gray-400 italic">Not available</span>
+                            @else
+                                {{ $value }}
+                            @endif
+                        </dd>
+                    </div>
+                @endforeach
+                @else
+                    <div class="col-span-2">
+                        <p class="text-sm text-gray-500">No extraction data available</p>
+                    </div>
+                @endif
+            </dl>
+        </div>
+    @endif
+
+    {{-- Raw JSON Section --}}
+    @if(isset($extraction) && ($extraction->raw_json || $extraction->extracted_data))
+        <div class="border-t pt-4">
+            <details class="group">
+                <summary class="flex cursor-pointer items-center justify-between rounded-lg bg-gray-50 dark:bg-gray-800 p-4 text-gray-900 dark:text-gray-100">
+                    <h5 class="font-medium">Raw JSON Data</h5>
+                    <svg class="h-5 w-5 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </summary>
+                <div class="mt-4 rounded-lg bg-gray-900 p-4">
+                    <pre class="text-xs font-mono text-green-400 overflow-x-auto whitespace-pre-wrap"><code>@php
+$json = $extraction->raw_json ?? $extraction->extracted_data;
+
+// Ensure it's a string for display
+if (!is_string($json)) {
+    $json = json_encode($json, JSON_PRETTY_PRINT);
+}
+
+// Pretty format the JSON
+$decodedJson = json_decode($json, true);
+if ($decodedJson !== null) {
+    $json = json_encode($decodedJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+}
+
+echo htmlspecialchars($json);
+@endphp</code></pre>
+                </div>
+            </details>
         </div>
     @endif
 </div>
