@@ -276,7 +276,7 @@ class IntakeResource extends Resource
                             $robawsService = app(RobawsIntegrationService::class);
                             
                             // Map the extraction data to a document-like structure for the service
-                            $mappedData = self::mapExtractionDataForRobaws($extraction->extracted_data);
+                            $mappedData = self::mapExtractionDataForRobaws($extraction->extracted_data, $extraction);
                             
                             // Get the first document associated with this intake
                             $originalDocument = $record->documents()->first();
@@ -536,13 +536,29 @@ class IntakeResource extends Resource
     /**
      * Map extraction data to format expected by Robaws service
      */
-    public static function mapExtractionDataForRobaws(array $extractedData): array
+    public static function mapExtractionDataForRobaws(array $extractedData, $extraction = null): array
     {
-        // Initialize mapped data structure
+        // Initialize mapped data structure with enhanced metadata
         $mappedData = [
             'document_type' => 'shipping',
             'extraction_source' => 'intake_ai_extraction',
             'extracted_at' => now()->toISOString(),
+            
+            // Add extraction metadata for enhanced JSON export
+            'metadata' => [
+                'confidence_score' => $extractedData['metadata']['confidence_score'] ?? 
+                                    $extractedData['confidence_score'] ?? 
+                                    $extractedData['metadata']['overall_confidence'] ?? 
+                                    ($extraction ? $extraction->confidence : 0),
+                'strategy_used' => $extractedData['metadata']['strategy_used'] ?? 'standard',
+                'extraction_pipeline_version' => '2.0',
+                'timestamp' => $extraction ? $extraction->created_at->toISOString() : now()->toISOString(),
+                'extraction_strategies' => $extractedData['metadata']['extraction_strategies'] ?? ['ai_extraction'],
+                'extraction_id' => $extraction ? $extraction->id : null,
+            ],
+            
+            // Preserve original extraction data for JSON export
+            'original_extraction' => $extractedData,
         ];
         
         // Extract key sections

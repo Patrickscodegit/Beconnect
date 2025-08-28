@@ -102,6 +102,14 @@ class ExtractionResult
     }
 
     /**
+     * Get error message if extraction failed
+     */
+    public function getErrorMessage(): string
+    {
+        return $this->data['error'] ?? 'Unknown error occurred';
+    }
+
+    /**
      * Add metadata to the result
      */
     public function addMetadata(string $key, $value): self

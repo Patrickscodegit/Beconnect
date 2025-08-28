@@ -43,7 +43,7 @@ try {
 
     // Test the field mapping
     echo "=== Testing Field Mapping ===\n";
-    $mappedData = IntakeResource::mapExtractionDataForRobaws($extraction->extracted_data);
+    $mappedData = IntakeResource::mapExtractionDataForRobaws($extraction->extracted_data, $extraction);
     
     echo "Customer: " . ($mappedData['client_name'] ?? 'N/A') . "\n";
     echo "Email: " . ($mappedData['client_email'] ?? 'N/A') . "\n";
