@@ -19,7 +19,28 @@ class AiRouter
      * Extract structured data from file input (URL or bytes) for advanced AI processing.
      *
      * @param array $input Either ['url' => $url] or ['bytes' => $base64bytes, 'mime' => $mime]
-     * @param string $analysisType Type of analysis ('basic', 'detailed', 'shipping')
+     *         } catch (\Exception $e) {
+            // Enhanced error logging for OpenAI API failures
+            $this->logger->error('OpenAI Vision API call failed', [
+                'error' => $e->getMessage(),
+                'mime_type' => $mimeType,
+                'image_size_estimate' => round(strlen($base64Image) * 0.75),
+                'model' => $model,
+                'data_url_length' => strlen($dataUrl),
+                'error_type' => get_class($e)
+            ]);
+            throw new \RuntimeException('OpenAI Vision API failed: ' . $e->getMessage());
+        }
+
+        // Log successful API call
+        $this->logger->info('OpenAI Vision API call succeeded', [
+            'model' => $model,
+            'mime_type' => $mimeType,
+            'response_content_length' => strlen($response->choices[0]->message->content ?? '')
+        ]);
+
+        return $response->choices[0]->message->content ?? '';
+    }analysisType Type of analysis ('basic', 'detailed', 'shipping')
      * @param string|null $promptType Optional prompt type
      * @return array Decoded JSON result (throws on failure)
      */
@@ -410,6 +431,14 @@ class AiRouter
             // Use OpenAI vision API to analyze the image
             $extractedData = $this->analyzeImageWithOpenAI($base64Image, $prompt, $mimeType);
             
+            // Debug: Log what we got from OpenAI
+            $this->logger->info('Extracted data from OpenAI Vision', [
+                'data_type' => gettype($extractedData),
+                'is_empty' => empty($extractedData),
+                'data_keys' => is_array($extractedData) ? array_keys($extractedData) : 'not_array',
+                'data_count' => is_array($extractedData) ? count($extractedData) : 0
+            ]);
+            
             if (empty($extractedData)) {
                 throw new \RuntimeException('No data extracted from image');
             }
@@ -441,6 +470,73 @@ class AiRouter
     }
 
     /**
+     * Phase 1: Validate image data before sending to OpenAI API
+     */
+    private function validateImageData(string $base64Image, string $mimeType): void
+    {
+        $this->logger->info('Starting image data validation', [
+            'mime_type' => $mimeType,
+            'base64_length' => strlen($base64Image),
+            'estimated_size' => round(strlen($base64Image) * 0.75)
+        ]);
+
+        // Validate base64 encoding
+        if (!base64_decode($base64Image, true)) {
+            $this->logger->error('Invalid base64 encoding detected');
+            throw new \RuntimeException('Invalid base64 image data');
+        }
+
+        // Decode and validate image format
+        $imageData = base64_decode($base64Image);
+        $imageInfo = getimagesizefromstring($imageData);
+        
+        if (!$imageInfo) {
+            $this->logger->error('Could not read image info from data', [
+                'data_length' => strlen($imageData),
+                'first_bytes' => bin2hex(substr($imageData, 0, 20))
+            ]);
+            throw new \RuntimeException('Invalid or corrupted image data');
+        }
+
+        // Validate image dimensions
+        [$width, $height, $type] = $imageInfo;
+        $detectedMimeType = image_type_to_mime_type($type);
+        
+        $this->logger->info('Image validation details', [
+            'dimensions' => "{$width}x{$height}",
+            'detected_mime' => $detectedMimeType,
+            'provided_mime' => $mimeType,
+            'image_type' => $type,
+            'data_size' => strlen($imageData)
+        ]);
+
+        // Check if MIME types match
+        if ($detectedMimeType !== $mimeType) {
+            $this->logger->warning('MIME type mismatch', [
+                'provided' => $mimeType,
+                'detected' => $detectedMimeType
+            ]);
+            // Don't throw error, just log the mismatch for investigation
+        }
+
+        // Validate supported format
+        $supportedFormats = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+        if (!in_array($detectedMimeType, $supportedFormats)) {
+            $this->logger->error('Unsupported image format', [
+                'detected_mime' => $detectedMimeType,
+                'supported' => $supportedFormats
+            ]);
+            throw new \RuntimeException("Unsupported image format: {$detectedMimeType}");
+        }
+
+        $this->logger->info('Image data validation passed', [
+            'format' => $detectedMimeType,
+            'dimensions' => "{$width}x{$height}",
+            'size' => strlen($imageData)
+        ]);
+    }
+
+    /**
      * Analyze an image using OpenAI vision API
      *
      * @param string $base64Image Base64 encoded image
@@ -455,48 +551,85 @@ class AiRouter
         if (empty($cfg['api_key'])) {
             throw new \RuntimeException('OpenAI API key is not configured. Please set OPENAI_API_KEY in your .env file.');
         }
+
+        // Phase 1: Validate image data before sending to OpenAI
+        $this->validateImageData($base64Image, $mimeType);
         
         // Use vision-capable model
         $model = $cfg['vision_model'] ?? 'gpt-4o';
         
-        // Log the model being used
-        $this->logger->info('Using OpenAI model for vision extraction', [
+        // Construct data URL
+        $dataUrl = 'data:' . $mimeType . ';base64,' . $base64Image;
+        
+        // Log detailed request information for debugging
+        $this->logger->info('OpenAI Vision API Request Details', [
             'model' => $model,
+            'mime_type' => $mimeType,
+            'base64_length' => strlen($base64Image),
+            'estimated_file_size' => round(strlen($base64Image) * 0.75), // Base64 is ~1.33x original
+            'data_url_prefix' => substr($dataUrl, 0, 100),
             'vision_model_config' => $cfg['vision_model'] ?? 'not set'
         ]);
         
         // Use the OpenAI PHP client for proper authentication
         $client = OpenAI::client($cfg['api_key']);
-        
-        $response = $client->chat()->create([
-            'model' => $model,
-            'messages' => [
-                [
-                    'role' => 'system',
-                    'content' => 'You are a document extraction specialist. Extract structured data from images and return it as valid JSON. Focus on shipping, logistics, and freight forwarding information. Pay SPECIAL ATTENTION to vehicle details - extract make, model, year, condition, VIN, engine specs, dimensions, weight, and color when visible.'
-                ],
-                [
-                    'role' => 'user',
-                    'content' => [
-                        [
-                            'type' => 'text',
-                            'text' => $prompt
-                        ],
-                        [
-                            'type' => 'image_url',
-                            'image_url' => [
-                                'url' => 'data:' . $mimeType . ';base64,' . $base64Image,
-                                'detail' => 'high'
+
+        try {
+            $response = $client->chat()->create([
+                'model' => $model,
+                'messages' => [
+                    [
+                        'role' => 'system',
+                        'content' => 'You are a logistics data extraction specialist. ' .
+                                    'You MUST return valid JSON matching the exact structure provided in the prompt. ' .
+                                    'Never return explanations, markdown, or any text outside the JSON. ' .
+                                    'If a field cannot be extracted, use null. ' .
+                                    'Do not omit required fields or add extra fields. ' .
+                                    'Focus on vehicle specifications, shipping details, and logistics information.'
+                    ],
+                    [
+                        'role' => 'user',
+                        'content' => [
+                            [
+                                'type' => 'text',
+                                'text' => $prompt . "\n\nIMPORTANT: Return ONLY valid JSON. No explanations. No markdown. No prose."
+                            ],
+                            [
+                                'type' => 'image_url',
+                                'image_url' => [
+                                    'url' => $dataUrl,
+                                    'detail' => 'high'
+                                ]
                             ]
                         ]
                     ]
-                ]
-            ],
-            'temperature' => 0.3,
-            'max_tokens' => 1500
-        ]);
+                ],
+                'response_format' => ['type' => 'json_object'],
+                'temperature' => 0.1,
+                'max_tokens' => 1500
+            ]);
+        } catch (\Exception $e) {
+            // Enhanced error logging for OpenAI API failures
+            $this->logger->error('OpenAI Vision API call failed', [
+                'error' => $e->getMessage(),
+                'mime_type' => $mimeType,
+                'image_size_estimate' => round(strlen($base64Image) * 0.75),
+                'model' => $model,
+                'data_url_length' => strlen($dataUrl),
+                'error_type' => get_class($e)
+            ]);
+            throw new \RuntimeException('OpenAI Vision API failed: ' . $e->getMessage());
+        }
 
         $content = $response->choices[0]->message->content ?? '';
+        
+        // Log the actual OpenAI response for debugging
+        $this->logger->info('OpenAI Vision API Response Content', [
+            'content_length' => strlen($content),
+            'content_preview' => substr($content, 0, 500),
+            'is_json' => json_decode($content) !== null,
+            'json_error' => json_last_error_msg()
+        ]);
         
         // Log usage for cost tracking
         if (isset($response->usage)) {
@@ -508,43 +641,104 @@ class AiRouter
     }
 
     /**
-     * Get extraction prompt based on analysis type
+     * Get extraction prompt based on analysis type with exact expected JSON structure
      *
      * @param string $analysisType
      * @return string
      */
     protected function getExtractionPrompt(string $analysisType): string
     {
-        $basePrompt = "Extract all relevant information from this image. Focus on identifying and extracting structured data. Return the data as a JSON object with clear field names.";
-        
-        $specificPrompts = [
-            'shipping' => "This appears to be a shipping/logistics document or conversation. Extract:\n" .
-                         "- Origin and destination locations\n" .
-                         "- Vehicle/container details with FULL specifications:\n" .
-                         "  * Vehicle make/brand (e.g., BMW, Mercedes, Audi)\n" .
-                         "  * Vehicle model (e.g., X5, E-Class, A4)\n" .
-                         "  * Vehicle year (e.g., 2020, 2019)\n" .
-                         "  * Vehicle condition (new, used, damaged)\n" .
-                         "  * VIN number if present\n" .
-                         "  * Engine specifications (displacement in CC, fuel type)\n" .
-                         "  * Dimensions (length, width, height in meters or feet)\n" .
-                         "  * Weight (in kg or lbs)\n" .
-                         "  * Color if mentioned\n" .
-                         "- Pricing information (amounts, currency)\n" .
-                         "- Contact information (phone numbers, names)\n" .
-                         "- Dates and times\n" .
-                         "- Company names\n" .
-                         "- Any cargo or shipment details\n" .
-                         "- Service type (e.g., freight forwarding, shipping)\n\n" .
-                         "IMPORTANT: Pay special attention to vehicle details - extract ALL available specifications.\n" .
-                         "Format as JSON with nested objects for different categories.",
-                         
-            'invoice' => "Extract invoice information including: invoice number, dates, amounts, currency, line items, parties involved, and payment terms.",
-            
-            'basic' => "Extract all text and structured information visible in the image, organizing it into logical categories."
+        // Define the exact JSON structure we expect
+        $expectedStructure = [
+            'vehicle' => [
+                'make' => 'string or null',
+                'model' => 'string or null',
+                'year' => 'string or null',
+                'condition' => 'string or null (e.g., new, used, non-runner)',
+                'vin' => 'string or null',
+                'engine_cc' => 'number or null',
+                'fuel_type' => 'string or null',
+                'color' => 'string or null',
+                'dimensions' => [
+                    'length' => 'number or null',
+                    'width' => 'number or null',
+                    'height' => 'number or null',
+                    'unit' => 'string (m or ft)'
+                ],
+                'weight' => [
+                    'value' => 'number or null',
+                    'unit' => 'string (kg or lbs)'
+                ]
+            ],
+            'shipment' => [
+                'origin' => 'string or null',
+                'destination' => 'string or null',
+                'type' => 'string or null (e.g., LCL, FCL, RoRo, Air)',
+                'service' => 'string or null',
+                'incoterms' => 'string or null'
+            ],
+            'contact' => [
+                'name' => 'string or null',
+                'company' => 'string or null',
+                'phone' => 'string or null',
+                'email' => 'string or null',
+                'address' => 'string or null'
+            ],
+            'pricing' => [
+                'amount' => 'number or null',
+                'currency' => 'string or null',
+                'payment_terms' => 'string or null',
+                'validity' => 'string or null'
+            ],
+            'dates' => [
+                'pickup' => 'string or null (ISO 8601 format)',
+                'delivery' => 'string or null (ISO 8601 format)',
+                'quote_date' => 'string or null (ISO 8601 format)'
+            ],
+            'cargo' => [
+                'description' => 'string or null',
+                'quantity' => 'number or null',
+                'packaging' => 'string or null',
+                'dangerous_goods' => 'boolean or null',
+                'special_handling' => 'string or null'
+            ],
+            'additional_info' => 'string or null (any other relevant information)'
         ];
         
-        return $basePrompt . "\n\n" . ($specificPrompts[$analysisType] ?? $specificPrompts['basic']);
+        $jsonStructureString = json_encode($expectedStructure, JSON_PRETTY_PRINT);
+        
+        $basePrompt = "You are analyzing an image for logistics and shipping information. " .
+                      "Extract ALL relevant data and return it in EXACTLY this JSON structure:\n\n" . 
+                      $jsonStructureString . "\n\n" .
+                      "CRITICAL INSTRUCTIONS:\n" .
+                      "1. Return ONLY valid JSON matching this exact structure\n" .
+                      "2. Use null for any fields you cannot find\n" .
+                      "3. DO NOT add any fields not in this structure\n" .
+                      "4. DO NOT include explanations or markdown\n" .
+                      "5. Extract data even if partial - use null for missing fields\n" .
+                      "6. Pay special attention to vehicle details when present\n" .
+                      "7. Convert measurements to standard units (meters, kg)\n" .
+                      "8. Use ISO 8601 format for dates (YYYY-MM-DD)\n";
+        
+        // Add analysis-type specific instructions
+        switch ($analysisType) {
+            case 'shipping':
+            case 'comprehensive':
+                $basePrompt .= "\nFocus on: shipping routes, vehicle specifications, pricing, and logistics details.";
+                break;
+                
+            case 'basic':
+                $basePrompt .= "\nExtract basic information focusing on key identifiable data points.";
+                break;
+                
+            case 'detailed':
+                $basePrompt .= "\nExtract comprehensive details including all specifications, measurements, and technical data.";
+                break;
+        }
+        
+        $basePrompt .= "\n\nREMEMBER: Return ONLY the JSON object with the exact structure shown above.";
+        
+        return $basePrompt;
     }
 
     /**

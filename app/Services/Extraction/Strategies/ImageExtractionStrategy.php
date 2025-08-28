@@ -66,15 +66,15 @@ class ImageExtractionStrategy implements ExtractionStrategy
 
             // Use AiRouter to extract data from image using vision AI
             $extractionInput = [
-                'bytes' => $imageContent,
+                'bytes' => base64_encode($imageContent),
                 'mime' => $document->mime_type,
                 'filename' => $document->filename
             ];
 
             $aiResult = $this->aiRouter->extractAdvanced($extractionInput, 'comprehensive');
 
-            // Process the AI result
-            if (empty($aiResult['data'])) {
+            // Process the AI result - check for extracted_data key
+            if (empty($aiResult['extracted_data'])) {
                 throw new \RuntimeException('No data extracted from image by AI vision');
             }
 
@@ -89,7 +89,7 @@ class ImageExtractionStrategy implements ExtractionStrategy
             $metadata['vision_model'] = config('ai.vision_model', 'gpt-4o');
             
             // Create enhanced result with image context
-            $enhancedData = $aiResult['data'];
+            $enhancedData = $aiResult['extracted_data'];
             $enhancedData['_extraction_context'] = [
                 'source_type' => 'image_document',
                 'vision_processed' => true,
