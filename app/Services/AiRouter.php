@@ -408,7 +408,7 @@ class AiRouter
             $prompt = $this->getExtractionPrompt($analysisType);
             
             // Use OpenAI vision API to analyze the image
-            $extractedData = $this->analyzeImageWithOpenAI($base64Image, $prompt);
+            $extractedData = $this->analyzeImageWithOpenAI($base64Image, $prompt, $mimeType);
             
             if (empty($extractedData)) {
                 throw new \RuntimeException('No data extracted from image');
@@ -447,7 +447,7 @@ class AiRouter
      * @param string $prompt Extraction prompt
      * @return array Extracted data
      */
-    protected function analyzeImageWithOpenAI(string $base64Image, string $prompt): array
+    protected function analyzeImageWithOpenAI(string $base64Image, string $prompt, string $mimeType = 'image/png'): array
     {
         $cfg = config('services.openai');
         
@@ -485,7 +485,7 @@ class AiRouter
                         [
                             'type' => 'image_url',
                             'image_url' => [
-                                'url' => 'data:image/png;base64,' . $base64Image,
+                                'url' => 'data:' . $mimeType . ';base64,' . $base64Image,
                                 'detail' => 'high'
                             ]
                         ]
