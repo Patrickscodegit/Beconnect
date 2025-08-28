@@ -1,5 +1,49 @@
 @php
-    $extractedData = $getState() ?? [];
+    // Handle both table context (with $getState) and modal context (with passed variables)
+    $extractedData = [];
+    
+    if (isset($extraction)) {
+        // Modal context - format extraction data for display
+        if ($extraction && $extraction->extracted_data) {
+            try {
+                $contactExtractor = new \App\Services\Extraction\Strategies\Fields\ContactFieldExtractor();
+                $contactInfo = $contactExtractor->extract($extraction->extracted_data, $extraction->raw_content ?? '');
+                
+                $extractedData = [
+                    'document_data' => [
+                        'vehicle' => $extraction->extracted_data['vehicle'] ?? [],
+                        'shipping' => $extraction->extracted_data['shipment'] ?? [],
+                        'contact' => [
+                            'name' => $contactInfo->name,
+                            'email' => $contactInfo->email,
+                            'phone' => $contactInfo->phone,
+                            'company' => $contactInfo->company,
+                        ]
+                    ],
+                    'ai_enhanced_data' => [],
+                    'data_attribution' => [
+                        'document_fields' => $contactInfo->sources ? $contactInfo->sources->where('source', '!=', 'messages')->pluck('source')->toArray() : [],
+                        'ai_enhanced_fields' => $contactInfo->sources ? $contactInfo->sources->where('source', 'messages')->pluck('source')->toArray() : []
+                    ],
+                    'metadata' => [
+                        'overall_confidence' => $contactInfo->confidence ?? $extraction->confidence ?? 0,
+                        'extraction_timestamp' => $extraction->created_at->toISOString()
+                    ]
+                ];
+            } catch (\Exception $e) {
+                \Log::warning('Extraction display error: ' . $e->getMessage());
+                $extractedData = [];
+            }
+        }
+    } elseif (function_exists('getState')) {
+        // Table context - try to get state data
+        try {
+            $extractedData = getState() ?? [];
+        } catch (\Exception $e) {
+            $extractedData = [];
+        }
+    }
+    
     $documentData = $extractedData['document_data'] ?? [];
     $aiEnhancedData = $extractedData['ai_enhanced_data'] ?? [];
     $attribution = $extractedData['data_attribution'] ?? [];
