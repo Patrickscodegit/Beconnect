@@ -55,6 +55,29 @@ class Document extends Model
     ];
 
     /**
+     * Boot the model and set default values
+     */
+    protected static function boot()
+    {
+        parent::boot();
+        
+        static::creating(function ($document) {
+            // Set default disk if not provided
+            if (empty($document->disk)) {
+                $document->disk = config('filesystems.default');
+            }
+        });
+    }
+
+    /**
+     * Get the storage disk for this document with fallback
+     */
+    public function getStorageDiskAttribute(): string
+    {
+        return $this->disk ?: config('filesystems.default');
+    }
+
+    /**
      * Get the intake that owns the document.
      */
     public function intake(): BelongsTo

@@ -243,9 +243,8 @@ class DocumentResource extends Resource
                 Tables\Actions\Action::make('download')
                     ->icon('heroicon-o-arrow-down-tray')
                     ->action(function (Document $record) {
-                        $disk = $record->disk ?: config('filesystems.default');
-                        if (Storage::disk($disk)->exists($record->file_path)) {
-                            return Storage::disk($disk)->download($record->file_path, $record->filename);
+                        if (Storage::disk($record->storage_disk)->exists($record->file_path)) {
+                            return Storage::disk($record->storage_disk)->download($record->file_path, $record->filename);
                         }
                         
                         Notification::make()
