@@ -25,15 +25,33 @@ class RobawsService
         
         $data = $extraction->raw_json;
         
-        // Mock API payload construction
+        // Use JsonFieldMapper for proper field mapping
+        $mapper = app(\App\Services\RobawsIntegration\JsonFieldMapper::class);
+        $mappedData = $mapper->mapFields($data);
+        
+        // Ensure JSON field is present for Robaws JSON tab
+        if (!isset($mappedData['JSON']) && is_array($data)) {
+            $mappedData['JSON'] = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        }
+        
+        // Log the mapped data for debugging
+        logger("Robaws mapped data", [
+            'intake_id' => $intake->id,
+            'mapped_fields' => count($mappedData),
+            'has_json_field' => isset($mappedData['JSON']),
+            'sample_fields' => array_slice(array_keys($mappedData), 0, 10)
+        ]);
+        
+        // Mock API payload construction with properly mapped fields
         $payload = [
             'external_reference' => $externalRef,
-            'shipment_type' => $data['shipment_type'],
-            'origin_port' => $data['pol'],
-            'destination_port' => $data['pod'],
-            'incoterms' => $data['incoterms'],
-            'shipper' => $data['parties']['shipper'],
-            'consignee' => $data['parties']['consignee'],
+            'shipment_type' => $mappedData['shipment_type'] ?? $data['shipment_type'] ?? null,
+            'origin_port' => $mappedData['por'] ?? $data['pol'] ?? null,
+            'destination_port' => $mappedData['pod'] ?? $data['pod'] ?? null,
+            'incoterms' => $mappedData['incoterms'] ?? $data['incoterms'] ?? null,
+            'shipper' => $mappedData['customer'] ?? $data['parties']['shipper'] ?? null,
+            'consignee' => $mappedData['endcustomer'] ?? $data['parties']['consignee'] ?? null,
+            'json_data' => $mappedData['JSON'] ?? null, // Include raw JSON for Robaws JSON tab
             'vehicles' => array_map(function($vehicle) {
                 return [
                     'make' => $vehicle['make'],

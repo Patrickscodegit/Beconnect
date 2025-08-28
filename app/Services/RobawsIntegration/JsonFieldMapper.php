@@ -45,17 +45,79 @@ class JsonFieldMapper
     {
         $result = [];
         
+        // Log input data for debugging
+        Log::info('JsonFieldMapper: Starting field mapping', [
+            'input_field_count' => count($extractedData),
+            'has_json_field' => isset($extractedData['JSON']),
+            'sample_fields' => array_slice(array_keys($extractedData), 0, 10)
+        ]);
+        
         foreach ($this->mappingConfig as $section => $fields) {
             foreach ($fields as $targetField => $config) {
                 $value = $this->extractFieldValue($extractedData, $config);
-                $result[$targetField] = $value;
+                if ($value !== null) {
+                    $result[$targetField] = $value;
+                }
             }
         }
+        
+        // Handle raw JSON data fields specifically for Robaws
+        $result = $this->mapRawJsonFields($extractedData, $result);
         
         // Add computed fields
         $result['formatted_at'] = now()->toISOString();
         $result['source'] = 'bconnect_ai_extraction';
         $result['mapping_version'] = $this->getConfigVersion();
+        
+        // Log mapping results
+        Log::info('JsonFieldMapper: Field mapping completed', [
+            'mapped_field_count' => count($result),
+            'has_json' => isset($result['JSON']),
+            'has_raw_json' => isset($result['raw_json']),
+            'sample_mapped_fields' => array_slice(array_keys($result), 0, 10)
+        ]);
+        
+        return $result;
+    }
+    
+    /**
+     * Map raw JSON fields for Robaws JSON tab display
+     */
+    private function mapRawJsonFields(array $extractedData, array $result): array
+    {
+        // Ensure the main JSON field exists for Robaws JSON tab
+        if (isset($extractedData['JSON'])) {
+            $result['JSON'] = $extractedData['JSON'];
+            Log::info('JsonFieldMapper: Mapped JSON field', [
+                'json_length' => strlen($extractedData['JSON'])
+            ]);
+        } elseif (isset($extractedData['raw_json'])) {
+            $result['JSON'] = $extractedData['raw_json'];
+            $result['raw_json'] = $extractedData['raw_json'];
+        } elseif (isset($extractedData['extraction_json'])) {
+            $result['JSON'] = $extractedData['extraction_json'];
+            $result['extraction_json'] = $extractedData['extraction_json'];
+        }
+        
+        // Also preserve alternative JSON field names
+        foreach (['raw_json', 'extraction_json', 'complete_data'] as $jsonField) {
+            if (isset($extractedData[$jsonField])) {
+                $result[$jsonField] = $extractedData[$jsonField];
+            }
+        }
+        
+        // If no JSON field exists, create one from the complete extraction data
+        if (!isset($result['JSON'])) {
+            $result['JSON'] = json_encode([
+                'extraction_data' => $extractedData,
+                'created_at' => now()->toIso8601String(),
+                'source' => 'bconnect_fallback_json'
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            
+            Log::info('JsonFieldMapper: Created fallback JSON field', [
+                'json_length' => strlen($result['JSON'])
+            ]);
+        }
         
         return $result;
     }

@@ -202,13 +202,46 @@ class ImageExtractionStrategy implements ExtractionStrategy
             $transformed['fields_from_ai'] = count($extractedData['data_sources']['ai_enhanced'] ?? []);
             $transformed['fields_calculated'] = count($extractedData['data_sources']['calculated'] ?? []);
         }
-        
+
         if (isset($extractedData['enhancement_metadata'])) {
             $transformed['enhancement_confidence'] = $extractedData['enhancement_metadata']['confidence'];
             $transformed['enhanced_at'] = $extractedData['enhancement_metadata']['enhanced_at'];
             $transformed['enhancement_time_ms'] = $extractedData['enhancement_metadata']['enhancement_time_ms'];
         }
-        
+
+        // CRITICAL: Add raw JSON field for Robaws JSON tab
+        // This is what Robaws expects to display in the JSON tab
+        $transformed['JSON'] = json_encode([
+            'extraction_info' => [
+                'extracted_at' => now()->toIso8601String(),
+                'extraction_method' => $this->getName(),
+                'confidence_score' => $transformed['enhancement_confidence'] ?? 0.8,
+                'document_type' => 'image',
+                'vision_model' => config('ai.vision_model', 'gpt-4o')
+            ],
+            'vehicle_specifications' => $extractedData['vehicle'] ?? [],
+            'shipment_details' => $extractedData['shipment'] ?? [],
+            'contact_information' => $extractedData['contact'] ?? [],
+            'pricing_information' => $extractedData['pricing'] ?? [],
+            'dates' => $extractedData['dates'] ?? [],
+            'cargo_details' => $extractedData['cargo'] ?? [],
+            'enhancement_details' => [
+                'data_sources' => $extractedData['data_sources'] ?? [],
+                'enhancement_metadata' => $extractedData['enhancement_metadata'] ?? [],
+                'calculated_fields' => [
+                    'volume' => $extractedData['vehicle']['calculated_volume_m3'] ?? null,
+                    'weight_class' => $extractedData['vehicle']['shipping_weight_class'] ?? null,
+                    'container_recommendation' => $extractedData['vehicle']['recommended_container'] ?? null
+                ]
+            ],
+            'original_extraction' => $extractedData,
+            'transformation_applied' => 'robaws_compatibility'
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        // Also add alternative raw JSON fields that Robaws might look for
+        $transformed['raw_json'] = $transformed['JSON'];
+        $transformed['extraction_json'] = $transformed['JSON'];
+
         return $transformed;
     }
 

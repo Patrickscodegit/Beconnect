@@ -275,18 +275,63 @@
       "Dover, UK": "DOV"
     }
   },
-  "validation_rules": {
-    "email": {
-      "type": "regex",
-      "pattern": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+    "validation_rules": {
+      "email": {
+        "type": "regex",
+        "pattern": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+      },
+      "numeric": {
+        "type": "numeric",
+        "min": 0
+      },
+      "date": {
+        "type": "date",
+        "format": "Y-m-d"
+      }
     },
-    "numeric": {
-      "type": "numeric",
-      "min": 0
+    "raw_data_fields": {
+      "json_data": {
+        "sources": ["JSON", "raw_json", "extraction_json"],
+        "target": "JSON",
+        "format": "json_preserve",
+        "description": "Complete extraction data for Robaws JSON tab"
+      },
+      "extraction_metadata": {
+        "sources": ["extraction_method", "extraction_timestamp"],
+        "target": "extraction_info",
+        "format": "json"
+      },
+      "enhancement_data": {
+        "sources": ["data_attribution", "enhancement_confidence"],
+        "target": "enhancement_metadata",
+        "format": "json"
+      }
     },
-    "date": {
-      "type": "date",
-      "format": "Y-m-d"
+    "enhanced_vehicle_fields": {
+      "dimensions": {
+        "sources": ["dimensions", "vehicle_dimensions"],
+        "target": "DIM_REF_DELIVE",
+        "description": "Vehicle dimensions for cargo calculation"
+      },
+      "weight": {
+        "sources": ["weight", "vehicle_weight", "weight_numeric"],
+        "target": "WEIGHT",
+        "description": "Vehicle weight information"
+      },
+      "cargo_volume": {
+        "sources": ["cargo_volume", "calculated_volume"],
+        "target": "CARGO_VOLUME",
+        "description": "Calculated cargo volume"
+      },
+      "container_recommendation": {
+        "sources": ["recommended_container", "typical_container"],
+        "target": "CONTAINER_NR",
+        "description": "Recommended container type"
+      },
+      "shipping_class": {
+        "sources": ["shipping_class", "weight_class"],
+        "target": "SHIPPING_CLASS",
+        "description": "Shipping weight classification"
+      }
     }
   }
-}
