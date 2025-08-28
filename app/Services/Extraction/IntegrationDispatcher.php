@@ -78,8 +78,31 @@ class IntegrationDispatcher
                 'confidence' => $result->getConfidence()
             ]);
 
-            // Prepare data for ROBAWS - use the full result data
-            $extractedData = $result->getData();
+            // Get the latest extraction record which has the transformed data with JSON field
+            $extraction = $document->extractions()->latest()->first();
+            
+            if ($extraction && $extraction->raw_json) {
+                // Use raw_json which contains the transformed data with JSON field
+                $extractedData = is_array($extraction->raw_json) 
+                    ? $extraction->raw_json 
+                    : json_decode($extraction->raw_json, true);
+                    
+                Log::info('Using raw_json data for Robaws integration', [
+                    'document_id' => $document->id,
+                    'has_json_field' => isset($extractedData['JSON']),
+                    'field_count' => count($extractedData),
+                    'json_field_size' => strlen($extractedData['JSON'] ?? '')
+                ]);
+            } else {
+                // Fallback to result data if no extraction record
+                $extractedData = $result->getData();
+                
+                Log::warning('Fallback to result data for Robaws integration', [
+                    'document_id' => $document->id,
+                    'has_extraction' => !!$extraction,
+                    'has_raw_json' => $extraction ? !!$extraction->raw_json : false
+                ]);
+            }
             
             // Send to ROBAWS using the existing processDocument method
             $success = $this->robawsService->processDocument($document, $extractedData);
