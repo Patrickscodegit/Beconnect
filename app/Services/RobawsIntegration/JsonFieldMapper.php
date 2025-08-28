@@ -45,11 +45,14 @@ class JsonFieldMapper
     {
         $result = [];
         
-        // Log input data for debugging
+        // PHASE 1 STEP 3: Enhanced logging for debugging
         Log::info('JsonFieldMapper: Starting field mapping', [
             'input_field_count' => count($extractedData),
             'has_json_field' => isset($extractedData['JSON']),
-            'sample_fields' => array_slice(array_keys($extractedData), 0, 10)
+            'has_vehicle_make' => isset($extractedData['vehicle_make']),
+            'has_origin' => isset($extractedData['origin']),
+            'sample_fields' => array_slice(array_keys($extractedData), 0, 20),
+            'json_preview' => isset($extractedData['JSON']) ? substr($extractedData['JSON'], 0, 200) . '...' : 'NO JSON FIELD'
         ]);
         
         foreach ($this->mappingConfig as $section => $fields) {

@@ -23,7 +23,40 @@ class EnhancedRobawsIntegrationService
                 Log::info('Processing document with JSON field mapping', [
                     'document_id' => $document->id,
                     'filename' => $document->filename,
+                    'has_json_field' => isset($extractedData['JSON']),
+                    'field_count' => count($extractedData),
+                    'data_keys' => array_slice(array_keys($extractedData), 0, 15),
+                    'json_length' => isset($extractedData['JSON']) ? strlen($extractedData['JSON']) : 0
                 ]);
+
+                // PHASE 1 STEP 2: Validate and handle data structure
+                if (!isset($extractedData['JSON']) && isset($extractedData['data']) && isset($extractedData['data']['JSON'])) {
+                    Log::info('Found JSON field in nested data structure, extracting it', [
+                        'document_id' => $document->id
+                    ]);
+                    $extractedData = $extractedData['data'];
+                }
+
+                // Ensure JSON field exists
+                if (!isset($extractedData['JSON'])) {
+                    Log::warning('JSON field missing in extracted data', [
+                        'document_id' => $document->id,
+                        'available_fields' => array_keys($extractedData)
+                    ]);
+                    
+                    // Create JSON field if missing (fallback)
+                    $extractedData['JSON'] = json_encode([
+                        'document_id' => $document->id,
+                        'extraction_data' => $extractedData,
+                        'created_at' => now()->toIso8601String(),
+                        'warning' => 'JSON field was missing and created as fallback'
+                    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+                    
+                    Log::info('Created fallback JSON field', [
+                        'document_id' => $document->id,
+                        'json_length' => strlen($extractedData['JSON'])
+                    ]);
+                }
                 
                 // Map the extracted data using JSON configuration
                 $robawsData = $this->fieldMapper->mapFields($extractedData);
