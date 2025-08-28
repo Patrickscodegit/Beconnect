@@ -277,67 +277,76 @@ class VehicleDataEnhancer
                 'temperature' => 0.1
             ]);
             
-            // Merge AI specs into vehicle data
+            // IMPORTANT: Normalize the AI response to handle various formats
+            $normalizedSpecs = $this->normalizeAiResponse($aiSpecs);
+            
+            Log::info('AI specs normalized', [
+                'original_keys' => array_keys($aiSpecs),
+                'normalized_keys' => array_keys($normalizedSpecs),
+                'has_dimensions' => isset($normalizedSpecs['dimensions']),
+                'has_weight' => isset($normalizedSpecs['weight_kg'])
+            ]);
+            
+            // Merge normalized AI specs into vehicle data
             $aiFields = [];
             
-            // Add dimensions from AI
-            if (!empty($aiSpecs['dimensions'])) {
-                if (empty($extractedData['vehicle']['dimensions'])) {
-                    $extractedData['vehicle']['dimensions'] = [];
+            // Handle dimensions - properly check and merge individual dimension values
+            if (!empty($normalizedSpecs['dimensions'])) {
+                // Ensure dimensions array exists in vehicle
+                if (!isset($extractedData['vehicle']['dimensions'])) {
+                    $extractedData['vehicle']['dimensions'] = ['unit' => 'm'];
                 }
                 
-                if (!empty($aiSpecs['dimensions']['length_m']) && empty($extractedData['vehicle']['dimensions']['length'])) {
-                    $extractedData['vehicle']['dimensions']['length'] = $aiSpecs['dimensions']['length_m'];
-                    $extractedData['vehicle']['dimensions']['unit'] = 'm';
+                // Merge individual dimension values
+                if (isset($normalizedSpecs['dimensions']['length_m']) && empty($extractedData['vehicle']['dimensions']['length'])) {
+                    $extractedData['vehicle']['dimensions']['length'] = $normalizedSpecs['dimensions']['length_m'];
                     $aiFields[] = 'vehicle.dimensions.length';
                 }
-                if (!empty($aiSpecs['dimensions']['width_m']) && empty($extractedData['vehicle']['dimensions']['width'])) {
-                    $extractedData['vehicle']['dimensions']['width'] = $aiSpecs['dimensions']['width_m'];
-                    $extractedData['vehicle']['dimensions']['unit'] = 'm';
+                if (isset($normalizedSpecs['dimensions']['width_m']) && empty($extractedData['vehicle']['dimensions']['width'])) {
+                    $extractedData['vehicle']['dimensions']['width'] = $normalizedSpecs['dimensions']['width_m'];
                     $aiFields[] = 'vehicle.dimensions.width';
                 }
-                if (!empty($aiSpecs['dimensions']['height_m']) && empty($extractedData['vehicle']['dimensions']['height'])) {
-                    $extractedData['vehicle']['dimensions']['height'] = $aiSpecs['dimensions']['height_m'];
-                    $extractedData['vehicle']['dimensions']['unit'] = 'm';
+                if (isset($normalizedSpecs['dimensions']['height_m']) && empty($extractedData['vehicle']['dimensions']['height'])) {
+                    $extractedData['vehicle']['dimensions']['height'] = $normalizedSpecs['dimensions']['height_m'];
                     $aiFields[] = 'vehicle.dimensions.height';
                 }
             }
             
-            // Add weight from AI - Fixed logic to check the actual extracted data
-            if (!empty($aiSpecs['weight_kg']) && (empty($extractedData['vehicle']['weight']['value']) || $extractedData['vehicle']['weight']['value'] === null)) {
-                if (empty($extractedData['vehicle']['weight'])) {
-                    $extractedData['vehicle']['weight'] = [];
+            // Handle weight - properly check the value field
+            if (!empty($normalizedSpecs['weight_kg']) && (empty($extractedData['vehicle']['weight']['value']) || $extractedData['vehicle']['weight']['value'] === null)) {
+                // Ensure weight array exists
+                if (!isset($extractedData['vehicle']['weight'])) {
+                    $extractedData['vehicle']['weight'] = ['unit' => 'kg'];
                 }
-                $extractedData['vehicle']['weight']['value'] = $aiSpecs['weight_kg'];
-                $extractedData['vehicle']['weight']['unit'] = 'kg';
+                $extractedData['vehicle']['weight']['value'] = $normalizedSpecs['weight_kg'];
                 $aiFields[] = 'vehicle.weight.value';
             }
             
             // Add cargo volume from AI
-            if (!empty($aiSpecs['cargo_volume_m3']) && empty($extractedData['vehicle']['cargo_volume_m3'])) {
-                $extractedData['vehicle']['cargo_volume_m3'] = $aiSpecs['cargo_volume_m3'];
+            if (!empty($normalizedSpecs['cargo_volume_m3']) && empty($extractedData['vehicle']['cargo_volume_m3'])) {
+                $extractedData['vehicle']['cargo_volume_m3'] = $normalizedSpecs['cargo_volume_m3'];
                 $aiFields[] = 'vehicle.cargo_volume_m3';
             }
             
             // Add engine specs from AI
-            if (!empty($aiSpecs['engine_cc']) && empty($extractedData['vehicle']['engine_cc'])) {
-                $extractedData['vehicle']['engine_cc'] = $aiSpecs['engine_cc'];
+            if (!empty($normalizedSpecs['engine_cc']) && empty($extractedData['vehicle']['engine_cc'])) {
+                $extractedData['vehicle']['engine_cc'] = $normalizedSpecs['engine_cc'];
                 $aiFields[] = 'vehicle.engine_cc';
             }
             
-            if (!empty($aiSpecs['fuel_type']) && empty($extractedData['vehicle']['fuel_type'])) {
-                $extractedData['vehicle']['fuel_type'] = $aiSpecs['fuel_type'];
+            if (!empty($normalizedSpecs['fuel_type']) && empty($extractedData['vehicle']['fuel_type'])) {
+                $extractedData['vehicle']['fuel_type'] = $normalizedSpecs['fuel_type'];
                 $aiFields[] = 'vehicle.fuel_type';
             }
             
             // Add shipping recommendations
-            if (!empty($aiSpecs['typical_container'])) {
-                $extractedData['vehicle']['typical_container'] = $aiSpecs['typical_container'];
+            if (!empty($normalizedSpecs['typical_container'])) {
+                $extractedData['vehicle']['typical_container'] = $normalizedSpecs['typical_container'];
                 $aiFields[] = 'vehicle.typical_container';
             }
             
-            if (!empty($aiSpecs['shipping_notes'])) {
-                $extractedData['vehicle']['shipping_notes'] = $aiSpecs['shipping_notes'];
+            if (!empty($normalizedSpecs['shipping_notes'])) {
+                $extractedData['vehicle']['shipping_notes'] = $normalizedSpecs['shipping_notes'];
                 $aiFields[] = 'vehicle.shipping_notes';
             }
             
@@ -345,13 +354,13 @@ class VehicleDataEnhancer
             
             Log::info('AI enhancement completed', [
                 'fields_enhanced' => count($aiFields),
-                'ai_specs_received' => array_keys($aiSpecs),
                 'enhanced_fields' => $aiFields
             ]);
             
         } catch (\Exception $e) {
             Log::warning('AI enhancement failed', [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'vehicle' => $vehicleDescription ?? 'Unknown'
             ]);
         }
         
@@ -371,25 +380,227 @@ class VehicleDataEnhancer
         if (!empty($currentSpecs['year'])) $prompt .= "- Year: {$currentSpecs['year']}\n";
         if (!empty($currentSpecs['condition'])) $prompt .= "- Condition: {$currentSpecs['condition']}\n";
         
-        // Add special instruction for classic cars
-        if (isset($currentSpecs['year']) && $currentSpecs['year'] < 1980) {
-            $prompt .= "\nThis is a classic/vintage vehicle. Use historical manufacturer specifications.\n";
+        // Add specific year context for classic cars
+        if (!empty($currentSpecs['year']) && intval($currentSpecs['year']) < 1980) {
+            $prompt .= "\nThis is a classic/vintage vehicle. Use historical manufacturer specifications from that era.\n";
         }
         
-        $prompt .= "\nProvide the following manufacturer specifications using these exact field names:\n";
-        $prompt .= "- Dimensions (use fields: length_m, width_m, height_m in meters)\n";
-        $prompt .= "- Weight (use field: weight_kg in kilograms)\n";
-        $prompt .= "- Cargo volume (use field: cargo_volume_m3 in cubic meters)\n";
-        $prompt .= "- Engine displacement (use field: engine_cc in cubic centimeters)\n";
-        $prompt .= "- Fuel type (use field: fuel_type - petrol, diesel, electric, hybrid)\n";
-        $prompt .= "- Typical shipping container (use field: typical_container - 20ft, 40ft, RoRo, etc.)\n";
-        $prompt .= "- Special shipping notes (use field: shipping_notes)\n\n";
+        $prompt .= "\nRETURN JSON IN EXACTLY THIS FORMAT:\n";
+        $prompt .= "{\n";
+        $prompt .= '  "dimensions": {"length_m": 4.0, "width_m": 1.6, "height_m": 1.4},' . "\n";
+        $prompt .= '  "weight_kg": 950,' . "\n";
+        $prompt .= '  "cargo_volume_m3": 0.5,' . "\n";
+        $prompt .= '  "engine_cc": 1300,' . "\n";
+        $prompt .= '  "fuel_type": "petrol",' . "\n";
+        $prompt .= '  "typical_container": "20ft",' . "\n";
+        $prompt .= '  "shipping_notes": "Non-runner requires flatbed"' . "\n";
+        $prompt .= "}\n\n";
         
-        $prompt .= "Return only factual manufacturer specifications. Be precise and accurate.\n";
-        $prompt .= "Use the exact field names specified above.\n";
-        $prompt .= "For classic/vintage vehicles, provide historical manufacturer data.";
+        $prompt .= "CRITICAL INSTRUCTIONS:\n";
+        $prompt .= "- Use EXACT field names shown above (lowercase, with underscores)\n";
+        $prompt .= "- Put numeric values directly (not in objects)\n";
+        $prompt .= "- Use meters for dimensions, kg for weight\n";
+        $prompt .= "- Return ONLY factual manufacturer specifications\n";
+        $prompt .= "- For non-runners, include appropriate shipping notes\n";
+        $prompt .= "- If a specification is unknown, omit that field entirely\n";
         
         return $prompt;
+    }
+
+    /**
+     * Normalize AI response to handle various formats from OpenAI
+     * 
+     * OpenAI sometimes returns natural language field names instead of our schema keys
+     * This method normalizes the response to match our expected structure
+     */
+    private function normalizeAiResponse(array $aiResponse): array
+    {
+        $normalized = [];
+        
+        Log::info('Normalizing AI response', [
+            'original_keys' => array_keys($aiResponse),
+            'response_sample' => json_encode(array_slice($aiResponse, 0, 3))
+        ]);
+        
+        // Map various possible AI response keys to our expected keys
+        $keyMapping = [
+            // Dimensions variations
+            'dimensions' => 'dimensions',
+            'Dimensions' => 'dimensions',
+            'vehicle dimensions' => 'dimensions',
+            'Vehicle Dimensions' => 'dimensions',
+            
+            // Weight variations
+            'weight' => 'weight_kg',
+            'Weight' => 'weight_kg',
+            'weight_kg' => 'weight_kg',
+            'vehicle weight' => 'weight_kg',
+            'Vehicle Weight' => 'weight_kg',
+            
+            // Cargo volume variations
+            'cargo_volume_m3' => 'cargo_volume_m3',
+            'cargo volume' => 'cargo_volume_m3',
+            'Cargo volume' => 'cargo_volume_m3',
+            'Cargo Volume' => 'cargo_volume_m3',
+            'cargo_volume' => 'cargo_volume_m3',
+            
+            // Engine variations
+            'engine_cc' => 'engine_cc',
+            'engine cc' => 'engine_cc',
+            'engine displacement' => 'engine_cc',
+            'Engine displacement' => 'engine_cc',
+            'Engine Displacement' => 'engine_cc',
+            'engine_displacement' => 'engine_cc',
+            
+            // Fuel type variations
+            'fuel_type' => 'fuel_type',
+            'fuel type' => 'fuel_type',
+            'Fuel type' => 'fuel_type',
+            'Fuel Type' => 'fuel_type',
+            
+            // Container variations
+            'typical_container' => 'typical_container',
+            'typical container' => 'typical_container',
+            'Typical container' => 'typical_container',
+            'Typical shipping container' => 'typical_container',
+            'typical shipping container' => 'typical_container',
+            
+            // Shipping notes variations
+            'shipping_notes' => 'shipping_notes',
+            'shipping notes' => 'shipping_notes',
+            'Special shipping notes' => 'shipping_notes',
+            'special shipping notes' => 'shipping_notes',
+            'Special notes' => 'shipping_notes'
+        ];
+        
+        foreach ($aiResponse as $key => $value) {
+            // Try exact match first, then lowercase match
+            $normalizedKey = $keyMapping[$key] ?? $keyMapping[strtolower($key)] ?? null;
+            
+            if (!$normalizedKey) {
+                Log::warning('Unknown AI response key', [
+                    'key' => $key,
+                    'value_type' => gettype($value)
+                ]);
+                continue;
+            }
+            
+            // Handle different value structures based on the normalized key
+            switch ($normalizedKey) {
+                case 'dimensions':
+                    // Handle nested dimension structure
+                    if (is_array($value)) {
+                        $normalized['dimensions'] = [
+                            'length_m' => $this->extractNumericValue($value, ['length_m', 'length', 'Length']),
+                            'width_m' => $this->extractNumericValue($value, ['width_m', 'width', 'Width']),
+                            'height_m' => $this->extractNumericValue($value, ['height_m', 'height', 'Height'])
+                        ];
+                    }
+                    break;
+                    
+                case 'weight_kg':
+                    // Extract weight value from various possible structures
+                    $weightValue = $this->extractNumericValue($value, ['weight_kg', 'value', 'weight']);
+                    if ($weightValue !== null) {
+                        $normalized['weight_kg'] = $weightValue;
+                    }
+                    break;
+                    
+                case 'cargo_volume_m3':
+                case 'engine_cc':
+                    // Extract numeric values
+                    $numericValue = $this->extractNumericValue($value, [$normalizedKey, 'value']);
+                    if ($numericValue !== null) {
+                        $normalized[$normalizedKey] = $numericValue;
+                    }
+                    break;
+                    
+                case 'fuel_type':
+                case 'typical_container':
+                case 'shipping_notes':
+                    // Extract string values
+                    $stringValue = $this->extractStringValue($value, [$normalizedKey, 'value']);
+                    if ($stringValue !== null) {
+                        $normalized[$normalizedKey] = $stringValue;
+                    }
+                    break;
+            }
+        }
+        
+        Log::info('AI response normalized', [
+            'normalized_keys' => array_keys($normalized),
+            'dimensions_found' => isset($normalized['dimensions']),
+            'weight_found' => isset($normalized['weight_kg']),
+            'engine_found' => isset($normalized['engine_cc'])
+        ]);
+        
+        return $normalized;
+    }
+    
+    /**
+     * Extract numeric value from various possible structures
+     */
+    private function extractNumericValue($value, array $possibleKeys): ?float
+    {
+        // If value is already numeric, return it
+        if (is_numeric($value)) {
+            return (float) $value;
+        }
+        
+        // If value is array, try to find numeric value with possible keys
+        if (is_array($value)) {
+            foreach ($possibleKeys as $key) {
+                if (isset($value[$key]) && is_numeric($value[$key])) {
+                    return (float) $value[$key];
+                }
+            }
+            
+            // Try to get first numeric value in array
+            foreach ($value as $v) {
+                if (is_numeric($v)) {
+                    return (float) $v;
+                }
+            }
+        }
+        
+        // Try to parse numeric from string
+        if (is_string($value)) {
+            $matches = [];
+            if (preg_match('/(\d+(?:\.\d+)?)/', $value, $matches)) {
+                return (float) $matches[1];
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Extract string value from various possible structures
+     */
+    private function extractStringValue($value, array $possibleKeys): ?string
+    {
+        // If value is already string, return it
+        if (is_string($value) && !empty(trim($value))) {
+            return trim($value);
+        }
+        
+        // If value is array, try to find string value with possible keys
+        if (is_array($value)) {
+            foreach ($possibleKeys as $key) {
+                if (isset($value[$key]) && is_string($value[$key]) && !empty(trim($value[$key]))) {
+                    return trim($value[$key]);
+                }
+            }
+            
+            // Try to get first non-empty string value in array
+            foreach ($value as $v) {
+                if (is_string($v) && !empty(trim($v))) {
+                    return trim($v);
+                }
+            }
+        }
+        
+        return null;
     }
 
     /**
