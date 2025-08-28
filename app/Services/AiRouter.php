@@ -473,7 +473,7 @@ class AiRouter
             'messages' => [
                 [
                     'role' => 'system',
-                    'content' => 'You are a document extraction specialist. Extract structured data from images and return it as valid JSON. Focus on shipping, logistics, and freight forwarding information.'
+                    'content' => 'You are a document extraction specialist. Extract structured data from images and return it as valid JSON. Focus on shipping, logistics, and freight forwarding information. Pay SPECIAL ATTENTION to vehicle details - extract make, model, year, condition, VIN, engine specs, dimensions, weight, and color when visible.'
                 ],
                 [
                     'role' => 'user',
@@ -520,13 +520,23 @@ class AiRouter
         $specificPrompts = [
             'shipping' => "This appears to be a shipping/logistics document or conversation. Extract:\n" .
                          "- Origin and destination locations\n" .
-                         "- Vehicle/container details (type, model, specifications)\n" .
+                         "- Vehicle/container details with FULL specifications:\n" .
+                         "  * Vehicle make/brand (e.g., BMW, Mercedes, Audi)\n" .
+                         "  * Vehicle model (e.g., X5, E-Class, A4)\n" .
+                         "  * Vehicle year (e.g., 2020, 2019)\n" .
+                         "  * Vehicle condition (new, used, damaged)\n" .
+                         "  * VIN number if present\n" .
+                         "  * Engine specifications (displacement in CC, fuel type)\n" .
+                         "  * Dimensions (length, width, height in meters or feet)\n" .
+                         "  * Weight (in kg or lbs)\n" .
+                         "  * Color if mentioned\n" .
                          "- Pricing information (amounts, currency)\n" .
                          "- Contact information (phone numbers, names)\n" .
                          "- Dates and times\n" .
                          "- Company names\n" .
                          "- Any cargo or shipment details\n" .
                          "- Service type (e.g., freight forwarding, shipping)\n\n" .
+                         "IMPORTANT: Pay special attention to vehicle details - extract ALL available specifications.\n" .
                          "Format as JSON with nested objects for different categories.",
                          
             'invoice' => "Extract invoice information including: invoice number, dates, amounts, currency, line items, parties involved, and payment terms.",

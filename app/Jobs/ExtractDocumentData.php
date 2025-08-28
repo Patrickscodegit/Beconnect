@@ -7,6 +7,7 @@ use App\Models\Extraction;
 use App\Services\DocumentService;
 use App\Services\AiRouter;
 use App\Services\RobawsIntegration\EnhancedRobawsIntegrationService;
+use App\Services\Extraction\HybridExtractionPipeline;
 use App\Helpers\FileInput;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -49,6 +50,12 @@ class ExtractDocumentData implements ShouldQueue
                 'extracted_data' => [],
                 'raw_json' => '{}',
             ]);
+
+            // Check if this is an email file (.eml) - use hybrid extraction pipeline
+            if ($this->isEmailDocument()) {
+                $this->handleEmailExtraction($extraction);
+                return;
+            }
 
             // Extract text from document
             $text = '';
@@ -706,5 +713,159 @@ class ExtractDocumentData implements ShouldQueue
         }
         
         return $current;
+    }
+
+    /**
+     * Check if document is an email file
+     */
+    private function isEmailDocument(): bool
+    {
+        return $this->document->mime_type === 'message/rfc822' || 
+               str_ends_with(strtolower($this->document->filename), '.eml');
+    }
+
+    /**
+     * Handle email extraction using hybrid pipeline
+     */
+    private function handleEmailExtraction(Extraction $extraction): void
+    {
+        try {
+            Log::info('Starting hybrid email extraction', [
+                'document_id' => $this->document->id,
+                'filename' => $this->document->filename,
+                'extraction_id' => $extraction->id
+            ]);
+
+            // Get email content
+            $emailContent = $this->getEmailContent();
+
+            if (empty($emailContent)) {
+                throw new \RuntimeException('Could not read email content');
+            }
+
+            // Use hybrid extraction pipeline
+            $hybridPipeline = app(HybridExtractionPipeline::class);
+            $extractionResult = $hybridPipeline->extract($emailContent, 'email');
+
+            $extractedData = $extractionResult['data'];
+            $metadata = $extractionResult['metadata'];
+
+            // Update extraction record
+            $extraction->update([
+                'status' => 'completed',
+                'extracted_data' => $extractedData,
+                'confidence' => $metadata['overall_confidence'],
+                'raw_json' => json_encode($extractionResult),
+                'service_used' => 'hybrid_pipeline_' . implode('_', $metadata['extraction_strategies']),
+                'analysis_type' => 'email_shipping',
+            ]);
+
+            // Store the document's AI extracted data
+            $this->document->update([
+                'ai_extracted_data' => $extractedData,
+                'ai_processing_status' => 'completed'
+            ]);
+
+            Log::info('Hybrid email extraction completed successfully', [
+                'document_id' => $this->document->id,
+                'extraction_id' => $extraction->id,
+                'strategies_used' => $metadata['extraction_strategies'],
+                'overall_confidence' => $metadata['overall_confidence'],
+                'database_validated' => $metadata['database_validated'],
+                'processing_time_ms' => $metadata['processing_time_ms']
+            ]);
+
+            // Process with Robaws integration if we have sufficient data
+            if ($metadata['overall_confidence'] >= 0.5) {
+                try {
+                    $robawsIntegration = app(EnhancedRobawsIntegrationService::class);
+                    $robawsIntegration->processDocument($this->document, $extractedData);
+                    
+                    Log::info('Robaws integration completed for email', [
+                        'document_id' => $this->document->id
+                    ]);
+                } catch (\Exception $robawsError) {
+                    Log::error('Robaws integration failed for email', [
+                        'document_id' => $this->document->id,
+                        'error' => $robawsError->getMessage()
+                    ]);
+                }
+            } else {
+                Log::info('Skipping Robaws integration due to low confidence', [
+                    'document_id' => $this->document->id,
+                    'confidence' => $metadata['overall_confidence']
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Hybrid email extraction failed', [
+                'document_id' => $this->document->id,
+                'extraction_id' => $extraction->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            // Update extraction with error
+            $extraction->update([
+                'status' => 'failed',
+                'extracted_data' => [
+                    'error' => $e->getMessage(),
+                    'fallback_data' => $this->getBasicEmailData()
+                ],
+                'confidence' => 0.1,
+                'service_used' => 'hybrid_pipeline_failed'
+            ]);
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Get email content from file
+     */
+    private function getEmailContent(): string
+    {
+        try {
+            $filePath = $this->document->file_path;
+            
+            // Try different methods to get content
+            if (file_exists($filePath)) {
+                return file_get_contents($filePath);
+            }
+            
+            // Try with storage disk
+            if ($this->document->disk) {
+                return \Storage::disk($this->document->disk)->get($filePath);
+            }
+            
+            // Try default storage
+            return \Storage::get($filePath);
+            
+        } catch (\Exception $e) {
+            Log::error('Failed to read email content', [
+                'document_id' => $this->document->id,
+                'file_path' => $this->document->file_path,
+                'disk' => $this->document->disk,
+                'error' => $e->getMessage()
+            ]);
+            
+            throw new \RuntimeException('Could not read email file: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Get basic email data as fallback
+     */
+    private function getBasicEmailData(): array
+    {
+        return [
+            'document_type' => 'Email Document',
+            'filename' => $this->document->filename,
+            'mime_type' => $this->document->mime_type,
+            'file_size' => $this->document->file_size,
+            'status' => 'extraction_failed',
+            'extraction_method' => 'fallback',
+            'timestamp' => now()->toIso8601String()
+        ];
     }
 }

@@ -200,6 +200,21 @@ class JsonFieldMapper
             case 'format_messages':
                 return $this->formatMessages($value);
                 
+            case 'clean_vehicle_model':
+                return $this->cleanVehicleModel($value);
+                
+            case 'extract_engine_cc':
+                return $this->extractEngineCC($value);
+                
+            case 'standardize_fuel_type':
+                return $this->standardizeFuelType($value);
+                
+            case 'extract_weight_numeric':
+                return $this->extractWeightNumeric($value);
+                
+            case 'to_meters':
+                return $this->convertToMeters($value);
+                
             default:
                 return $value;
         }
@@ -213,6 +228,9 @@ class JsonFieldMapper
         switch ($fallback) {
             case 'extract_from_messages':
                 return $this->extractFromMessages($data);
+                
+            case 'calculate_from_vehicle_dims':
+                return $this->calculateDimensionsFromVehicle($data);
                 
             default:
                 return null;
@@ -392,5 +410,193 @@ class JsonFieldMapper
         }
         
         return $summary;
+    }
+    
+    /**
+     * Clean vehicle model name
+     */
+    private function cleanVehicleModel(string $model): string
+    {
+        // Remove brand name if it's at the beginning
+        $commonBrands = ['BMW', 'Mercedes', 'Audi', 'Volkswagen', 'Toyota', 'Honda', 'Ford'];
+        foreach ($commonBrands as $brand) {
+            if (stripos($model, $brand) === 0) {
+                $model = trim(substr($model, strlen($brand)));
+                break;
+            }
+        }
+        
+        return trim($model);
+    }
+    
+    /**
+     * Extract engine CC from various formats
+     */
+    private function extractEngineCC($value): ?int
+    {
+        if (!$value) return null;
+        
+        // Extract numbers followed by CC, L, or other engine indicators
+        if (preg_match('/(\d+(?:\.\d+)?)\s*(?:cc|l|liters?|litres?)/i', $value, $matches)) {
+            $size = floatval($matches[1]);
+            
+            // Convert liters to CC if needed
+            if (stripos($value, 'l') !== false && $size < 10) {
+                return intval($size * 1000);
+            }
+            
+            return intval($size);
+        }
+        
+        // If it's just a number, assume it's CC
+        if (is_numeric($value)) {
+            return intval($value);
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Standardize fuel type
+     */
+    private function standardizeFuelType($value): ?string
+    {
+        if (!$value) return null;
+        
+        $value = strtolower(trim($value));
+        
+        $fuelMapping = [
+            'petrol' => 'Petrol',
+            'gasoline' => 'Petrol', 
+            'gas' => 'Petrol',
+            'diesel' => 'Diesel',
+            'electric' => 'Electric',
+            'hybrid' => 'Hybrid',
+            'lpg' => 'LPG',
+            'cng' => 'CNG'
+        ];
+        
+        foreach ($fuelMapping as $pattern => $standard) {
+            if (stripos($value, $pattern) !== false) {
+                return $standard;
+            }
+        }
+        
+        return ucfirst($value);
+    }
+    
+    /**
+     * Extract numeric weight value
+     */
+    private function extractWeightNumeric($value): ?float
+    {
+        if (!$value) return null;
+        
+        // Extract number from weight strings like "1,950 kg" or "1950kg"
+        if (preg_match('/([0-9,\.]+)\s*(?:kg|kilograms?|lbs?|pounds?)?/i', $value, $matches)) {
+            $weight = floatval(str_replace(',', '', $matches[1]));
+            
+            // Convert pounds to kg if detected
+            if (stripos($value, 'lb') !== false || stripos($value, 'pound') !== false) {
+                $weight = $weight * 0.453592;
+            }
+            
+            return $weight;
+        }
+        
+        if (is_numeric($value)) {
+            return floatval($value);
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Convert various measurements to meters
+     */
+    private function convertToMeters($value): ?float
+    {
+        if (!$value) return null;
+        
+        // Extract number and unit
+        if (preg_match('/([0-9,\.]+)\s*(?:m|meters?|cm|centimeters?|mm|millimeters?|ft|feet|in|inches?)?/i', $value, $matches)) {
+            $measurement = floatval(str_replace(',', '', $matches[1]));
+            $unit = strtolower(trim(substr($value, strlen($matches[1]))));
+            
+            switch ($unit) {
+                case 'cm':
+                case 'centimeters':
+                case 'centimeter':
+                    return $measurement / 100;
+                    
+                case 'mm':
+                case 'millimeters':
+                case 'millimeter':
+                    return $measurement / 1000;
+                    
+                case 'ft':
+                case 'feet':
+                    return $measurement * 0.3048;
+                    
+                case 'in':
+                case 'inches':
+                case 'inch':
+                    return $measurement * 0.0254;
+                    
+                case 'm':
+                case 'meters':
+                case 'meter':
+                case '':
+                default:
+                    return $measurement;
+            }
+        }
+        
+        if (is_numeric($value)) {
+            return floatval($value);
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Calculate formatted dimensions from vehicle data
+     */
+    private function calculateDimensionsFromVehicle(array $data): ?string
+    {
+        // Try to get individual dimensions
+        $length = data_get($data, 'vehicle.length') ?? 
+                  data_get($data, 'vehicle.dimensions.length') ?? 
+                  data_get($data, 'vehicle_details.length');
+                  
+        $width = data_get($data, 'vehicle.width') ?? 
+                 data_get($data, 'vehicle.dimensions.width') ?? 
+                 data_get($data, 'vehicle_details.width');
+                 
+        $height = data_get($data, 'vehicle.height') ?? 
+                  data_get($data, 'vehicle.dimensions.height') ?? 
+                  data_get($data, 'vehicle_details.height');
+        
+        if ($length && $width && $height) {
+            $l = $this->convertToMeters($length);
+            $w = $this->convertToMeters($width);
+            $h = $this->convertToMeters($height);
+            
+            if ($l && $w && $h) {
+                $volume = $l * $w * $h;
+                return sprintf('%.2f x %.2f x %.2f m // %.2f Cbm', $l, $w, $h, $volume);
+            }
+        }
+        
+        // Try to find already formatted dimensions
+        $formatted = data_get($data, 'vehicle.dimensions_formatted') ?? 
+                    data_get($data, 'cargo.dimensions') ?? 
+                    data_get($data, 'shipment.dimensions');
+                    
+        if ($formatted) {
+            return $formatted;
+        }
+        
+        return null;
     }
 }
