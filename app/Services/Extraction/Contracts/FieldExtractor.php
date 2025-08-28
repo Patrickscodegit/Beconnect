@@ -9,7 +9,7 @@ interface FieldExtractor
      * 
      * @param array $data The structured data from the document
      * @param string $content The raw text content
-     * @return array The extracted field data with metadata
+     * @return mixed The extracted field data (can be value object or array with metadata)
      */
-    public function extract(array $data, string $content = ''): array;
+    public function extract(array $data, string $content = '');
 }

@@ -10,8 +10,15 @@ class ContactInfo
         public ?string $phone = null,
         public ?string $company = null,
         public string $source = 'unknown',
-        public float $confidence = 0.0
-    ) {}
+        public float $confidence = 0.0,
+        public ?\Illuminate\Support\Collection $sources = null,
+        public ?array $validation = null,
+        public ?array $metadata = null
+    ) {
+        $this->sources = $this->sources ?? collect();
+        $this->validation = $this->validation ?? ['valid' => false, 'errors' => [], 'warnings' => []];
+        $this->metadata = $this->metadata ?? [];
+    }
     
     public function isValid(): bool
     {

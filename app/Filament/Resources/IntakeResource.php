@@ -148,14 +148,60 @@ class IntakeResource extends Resource
                     ->badge()
                     ->color('success'),
                     
+                Tables\Columns\ViewColumn::make('extraction_summary')
+                    ->label('Extraction')
+                    ->view('filament.tables.extraction-summary')
+                    ->state(function (?Intake $record) {
+                        if (!$record || !$record->extraction) {
+                            return null;
+                        }
+                        
+                        $extraction = $record->extraction;
+                        $extractedData = $extraction->extracted_data ?? [];
+                        
+                        // Use our ContactFieldExtractor to get formatted contact data
+                        try {
+                            $contactExtractor = new \App\Services\Extraction\Strategies\Fields\ContactFieldExtractor();
+                            $contactInfo = $contactExtractor->extract($extractedData, $extraction->raw_content ?? '');
+                            
+                            // Format the data for the summary view
+                            return [
+                                'document_data' => [
+                                    'vehicle' => $extractedData['vehicle'] ?? [],
+                                    'shipping' => $extractedData['shipment'] ?? [],
+                                    'contact' => [
+                                        'name' => $contactInfo->name,
+                                        'email' => $contactInfo->email,
+                                        'phone' => $contactInfo->phone,
+                                        'company' => $contactInfo->company,
+                                    ]
+                                ],
+                                'ai_enhanced_data' => [],
+                                'data_attribution' => [
+                                    'document_fields' => $contactInfo->sources ? $contactInfo->sources->where('source', '!=', 'messages')->pluck('source')->toArray() : [],
+                                    'ai_enhanced_fields' => $contactInfo->sources ? $contactInfo->sources->where('source', 'messages')->pluck('source')->toArray() : []
+                                ],
+                                'metadata' => [
+                                    'overall_confidence' => $contactInfo->confidence ?? 0,
+                                    'extraction_timestamp' => $extraction->created_at->toISOString()
+                                ]
+                            ];
+                        } catch (\Exception $e) {
+                            \Log::warning('Extraction summary error: ' . $e->getMessage());
+                            return null;
+                        }
+                    })
+                    ->visible(fn (?Intake $record): bool => $record && $record->extraction()->exists()),
+                    
                 Tables\Columns\IconColumn::make('has_extraction')
                     ->label('Extracted')
-                    ->getStateUsing(fn (Intake $record): bool => $record->extraction()->exists())
+                    ->getStateUsing(fn (?Intake $record): bool => $record ? $record->extraction()->exists() : false)
                     ->boolean()
                     ->trueIcon('heroicon-o-check-circle')
                     ->falseIcon('heroicon-o-x-circle')
                     ->trueColor('success')
-                    ->falseColor('gray'),
+                    ->falseColor('gray')
+                    ->visible(fn (?Intake $record): bool => $record && !$record->extraction()->exists()),
                     
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Created')
@@ -288,13 +334,14 @@ class IntakeResource extends Resource
                                 ->send();
                         }
                     })
-                    ->visible(fn (Intake $record): bool => $record->extraction()->exists()),
+                    ->visible(fn (?Intake $record): bool => $record && $record->extraction()->exists()),
                     
                 Tables\Actions\Action::make('view_extraction')
                     ->label('Extraction')
                     ->icon('heroicon-o-eye')
                     ->color('info')
                     ->modalHeading('Extraction Results')
+                    ->modalWidth('7xl')
                     ->modalContent(function (Intake $record) {
                         $extraction = $record->extraction;
                         
@@ -302,13 +349,16 @@ class IntakeResource extends Resource
                             return view('filament.modals.no-extraction');
                         }
                         
-                        return view('filament.modals.extraction-results', [
+                        // Use our new professional display component
+                        return view('filament.components.extraction-results-display', [
                             'extraction' => $extraction,
+                            'showMetadata' => true,
+                            'showRawData' => true,
                         ]);
                     })
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel('Close')
-                    ->visible(fn (Intake $record): bool => $record->extraction()->exists()),
+                    ->visible(fn (?Intake $record): bool => $record && $record->extraction()->exists()),
                     
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
@@ -378,7 +428,7 @@ class IntakeResource extends Resource
                         Infolists\Components\TextEntry::make('notes')
                             ->placeholder('No notes available'),
                     ])
-                    ->visible(fn (Intake $record): bool => !empty($record->notes)),
+                    ->visible(fn (?Intake $record): bool => $record && !empty($record->notes)),
                     
                 Infolists\Components\Section::make('Documents')
                     ->schema([
@@ -394,7 +444,7 @@ class IntakeResource extends Resource
                             ])
                             ->columns(4),
                     ])
-                    ->visible(fn (Intake $record): bool => $record->documents()->exists()),
+                    ->visible(fn (?Intake $record): bool => $record && $record->documents()->exists()),
                     
                 Infolists\Components\Section::make('Extraction Results')
                     ->schema([
@@ -462,7 +512,7 @@ class IntakeResource extends Resource
                             ->extraAttributes(['class' => 'prose max-w-none']),
                     ])
                     ->columns(2)
-                    ->visible(fn (Intake $record): bool => $record->extraction()->exists()),
+                    ->visible(fn (?Intake $record): bool => $record && $record->extraction()->exists()),
             ]);
     }
 

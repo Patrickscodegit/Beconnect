@@ -36,7 +36,7 @@ class ContactFieldExtractor implements FieldExtractor
     /**
      * Extract contact information with source tracking
      */
-    public function extract(array $data, string $content = ''): array
+    public function extract(array $data, string $content = ''): ContactInfo
     {
         $sources = new Collection();
         
@@ -73,15 +73,17 @@ class ContactFieldExtractor implements FieldExtractor
         // 5. Merge results intelligently
         $merged = $this->mergeContactInfo($sources);
         
-        return [
-            'contact' => $merged->toArray(),
-            '_metadata' => [
-                'sources' => $sources->map(fn($s) => $s->source)->toArray(),
-                'confidence' => $this->calculateConfidence($merged, $sources),
-                'validation' => $this->validateContact($merged),
-                'complete' => $this->isContactComplete($merged)
-            ]
+        // Set metadata on the ContactInfo object
+        $merged->confidence = $this->calculateConfidence($merged, $sources);
+        $merged->sources = $sources;
+        $merged->validation = $this->validateContact($merged);
+        $merged->metadata = [
+            'complete' => $this->isContactComplete($merged),
+            'sources_count' => $sources->count(),
+            'extracted_at' => now()->toISOString()
         ];
+        
+        return $merged;
     }
     
     /**

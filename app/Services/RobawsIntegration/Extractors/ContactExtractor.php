@@ -22,24 +22,22 @@ class ContactExtractor
         // Get the raw text content if available
         $content = $this->extractContentFromData($data);
         
-        // Use advanced extractor
-        $advancedResult = $this->advancedExtractor->extract($data, $content);
-        
-        // Return in the expected legacy format for backward compatibility
-        $contact = $advancedResult['contact'];
-        $metadata = $advancedResult['_metadata'];
+                // Use the advanced ContactFieldExtractor for better results
+        $fieldExtractor = new AdvancedContactExtractor();
+        $content = $this->extractContentFromData($data);
+        $contactInfo = $fieldExtractor->extract($data, $content);
         
         return [
-            'name' => $contact['name'] ?? $this->fallbackExtractName($data),
-            'email' => $contact['email'] ?? $this->findEmail($data),
-            'phone' => $contact['phone'] ?? $this->fallbackExtractPhone($data),
-            'company' => $contact['company'] ?? $this->fallbackExtractCompany($data),
+            'name' => $contactInfo->name ?? $this->fallbackExtractName($data),
+            'email' => $contactInfo->email ?? $this->findEmail($data),
+            'phone' => $contactInfo->phone ?? $this->fallbackExtractPhone($data),
+            'company' => $contactInfo->company ?? $this->fallbackExtractCompany($data),
             // Add metadata for transparency
             '_advanced_extraction' => [
-                'confidence' => $metadata['confidence'],
-                'sources' => $metadata['sources'],
-                'complete' => $metadata['complete'],
-                'validation' => $metadata['validation']
+                'confidence' => $contactInfo->confidence,
+                'sources' => $contactInfo->sources ? $contactInfo->sources->map(fn($s) => $s->source)->toArray() : [],
+                'complete' => $contactInfo->metadata['complete'] ?? false,
+                'validation' => $contactInfo->validation ?? ['valid' => false, 'errors' => [], 'warnings' => []]
             ]
         ];
     }
