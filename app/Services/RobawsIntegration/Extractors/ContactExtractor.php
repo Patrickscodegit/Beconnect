@@ -2,12 +2,79 @@
 
 namespace App\Services\RobawsIntegration\Extractors;
 
+use App\Services\Extraction\Strategies\Fields\ContactFieldExtractor as AdvancedContactExtractor;
+
 class ContactExtractor
 {
+    private AdvancedContactExtractor $advancedExtractor;
+    
+    public function __construct()
+    {
+        $this->advancedExtractor = new AdvancedContactExtractor();
+    }
+    
     /**
      * Extract contact information from various possible structures
+     * Uses the new advanced contact extractor with fallback to legacy format
      */
     public function extract(array $data): array
+    {
+        // Get the raw text content if available
+        $content = $this->extractContentFromData($data);
+        
+        // Use advanced extractor
+        $advancedResult = $this->advancedExtractor->extract($data, $content);
+        
+        // Return in the expected legacy format for backward compatibility
+        $contact = $advancedResult['contact'];
+        $metadata = $advancedResult['_metadata'];
+        
+        return [
+            'name' => $contact['name'] ?? $this->fallbackExtractName($data),
+            'email' => $contact['email'] ?? $this->findEmail($data),
+            'phone' => $contact['phone'] ?? $this->fallbackExtractPhone($data),
+            'company' => $contact['company'] ?? $this->fallbackExtractCompany($data),
+            // Add metadata for transparency
+            '_advanced_extraction' => [
+                'confidence' => $metadata['confidence'],
+                'sources' => $metadata['sources'],
+                'complete' => $metadata['complete'],
+                'validation' => $metadata['validation']
+            ]
+        ];
+    }
+    
+    /**
+     * Extract content text from various data structures
+     */
+    private function extractContentFromData(array $data): string
+    {
+        $content = '';
+        
+        // Try to get raw text content
+        if (isset($data['extracted_text'])) {
+            $content .= $data['extracted_text'] . "\n";
+        }
+        
+        if (isset($data['raw_content'])) {
+            $content .= $data['raw_content'] . "\n";
+        }
+        
+        // Extract from messages
+        if (isset($data['messages']) && is_array($data['messages'])) {
+            foreach ($data['messages'] as $message) {
+                $text = $message['text'] ?? $message['content'] ?? '';
+                $content .= $text . "\n";
+            }
+        }
+        
+        return trim($content);
+    }
+    
+    /**
+     * Fallback methods for backward compatibility
+     */
+    private function fallbackExtractName(array $data): string
     {
         // Try multiple possible locations for contact data
         $contact = $this->tryExtractFromMultipleSources($data, [
@@ -27,12 +94,31 @@ class ContactExtractor
             $contact = array_merge($contact, $this->extractFromMessages($data['messages']));
         }
         
-        return [
-            'name' => $contact['name'] ?? 'Unknown Customer',
-            'email' => $contact['email'] ?? $this->findEmail($data),
-            'phone' => $contact['phone'] ?? $contact['phone_number'] ?? null,
-            'company' => $contact['company'] ?? null,
-        ];
+        return $contact['name'] ?? 'Unknown Customer';
+    }
+    
+    private function fallbackExtractPhone(array $data): ?string
+    {
+        $contact = $this->tryExtractFromMultipleSources($data, [
+            'contact',
+            'contact_info',
+            'sender',
+            'customer'
+        ]);
+        
+        return $contact['phone'] ?? $contact['phone_number'] ?? null;
+    }
+    
+    private function fallbackExtractCompany(array $data): ?string
+    {
+        $contact = $this->tryExtractFromMultipleSources($data, [
+            'contact',
+            'contact_info',
+            'sender',
+            'customer'
+        ]);
+        
+        return $contact['company'] ?? null;
     }
     
     private function parseEmailFrom(string $from): array

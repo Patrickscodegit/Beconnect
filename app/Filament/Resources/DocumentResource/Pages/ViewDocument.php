@@ -8,7 +8,7 @@ use Filament\Actions;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Infolists\Infolist;
 use Filament\Infolists\Components\Section;
-use Filament\Infolists\Components\TextEntry;
+use Filament\Infolists\Components\ViewEntry;
 
 class ViewDocument extends ViewRecord
 {
@@ -77,20 +77,19 @@ class ViewDocument extends ViewRecord
 
                 Section::make('Extracted Data')
                     ->schema([
-                        TextEntry::make('extraction_data')
+                        ViewEntry::make('extraction_data')
                             ->label('')
-                            ->formatStateUsing(function ($record) {
+                            ->view('filament.components.extraction-results-display')
+                            ->state(function ($record) {
                                 // Get the extraction for this document's intake
                                 $extraction = $record->intake?->extraction;
                                 
                                 if (!$extraction || !$extraction->extracted_data) {
-                                    return "**No extraction data available**\n\n_This document hasn't been processed yet or extraction failed._";
+                                    return [];
                                 }
                                 
-                                $formatter = new ExtractionDataFormatter();
-                                return $formatter->formatForDisplay($extraction->extracted_data);
+                                return $extraction->extracted_data;
                             })
-                            ->markdown()
                             ->columnSpanFull(),
                     ])
                     ->visible(fn ($record) => $record->intake?->extraction?->extracted_data !== null)
