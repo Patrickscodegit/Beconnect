@@ -180,11 +180,18 @@ class ImageExtractionStrategy implements ExtractionStrategy
             
             // Enhanced specifications from database/AI
             if (isset($vehicle['wheelbase_m'])) $transformed['wheelbase'] = $vehicle['wheelbase_m'] . ' m';
+            if (isset($vehicle['cargo_volume_m3'])) $transformed['cargo_volume'] = $vehicle['cargo_volume_m3'] . ' m³';
             if (isset($vehicle['calculated_volume_m3'])) $transformed['calculated_volume'] = $vehicle['calculated_volume_m3'] . ' m³';
             if (isset($vehicle['shipping_weight_class'])) $transformed['shipping_class'] = $vehicle['shipping_weight_class'];
             if (isset($vehicle['typical_container'])) $transformed['typical_container'] = $vehicle['typical_container'];
             if (isset($vehicle['shipping_notes'])) $transformed['shipping_notes'] = $vehicle['shipping_notes'];
             if (isset($vehicle['recommended_container'])) $transformed['recommended_container'] = $vehicle['recommended_container'];
+            
+            // Transform enhanced engine data
+            if (isset($vehicle['engine_cc']) && $vehicle['engine_cc'] !== null) {
+                $transformed['engine_size'] = (string)$vehicle['engine_cc'];
+                $transformed['engine_cc'] = (string)$vehicle['engine_cc'];
+            }
         }
         
         // Add data source attribution

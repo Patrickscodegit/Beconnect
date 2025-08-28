@@ -211,10 +211,21 @@ class VehicleDataEnhancer
                         !empty($vehicle['dimensions']['height']);
                         
         $hasWeight = !empty($vehicle['weight']['value']);
+        $hasVolume = !empty($vehicle['cargo_volume_m3']);
         $hasEngine = !empty($vehicle['engine_cc']);
         
-        // Need AI if we're missing any critical specs
-        return !$hasDimensions || !$hasWeight || !$hasEngine;
+        $needsEnhancement = !$hasDimensions || !$hasWeight || !$hasVolume;
+        
+        Log::info('AI enhancement check', [
+            'has_dimensions' => $hasDimensions,
+            'has_weight' => $hasWeight,
+            'has_volume' => $hasVolume,
+            'has_engine' => $hasEngine,
+            'needs_enhancement' => $needsEnhancement
+        ]);
+        
+        // Need AI if we're missing dimensions, weight, or cargo volume
+        return $needsEnhancement;
     }
 
     /**
@@ -255,6 +266,7 @@ class VehicleDataEnhancer
                         ]
                     ],
                     'weight_kg' => ['type' => 'number'],
+                    'cargo_volume_m3' => ['type' => 'number'],
                     'engine_cc' => ['type' => 'number'],
                     'fuel_type' => ['type' => 'string'],
                     'typical_container' => ['type' => 'string'],
@@ -270,30 +282,30 @@ class VehicleDataEnhancer
             
             // Add dimensions from AI
             if (!empty($aiSpecs['dimensions'])) {
-                if (empty($vehicle['dimensions'])) {
+                if (empty($extractedData['vehicle']['dimensions'])) {
                     $extractedData['vehicle']['dimensions'] = [];
                 }
                 
-                if (!empty($aiSpecs['dimensions']['length_m']) && empty($vehicle['dimensions']['length'])) {
+                if (!empty($aiSpecs['dimensions']['length_m']) && empty($extractedData['vehicle']['dimensions']['length'])) {
                     $extractedData['vehicle']['dimensions']['length'] = $aiSpecs['dimensions']['length_m'];
                     $extractedData['vehicle']['dimensions']['unit'] = 'm';
                     $aiFields[] = 'vehicle.dimensions.length';
                 }
-                if (!empty($aiSpecs['dimensions']['width_m']) && empty($vehicle['dimensions']['width'])) {
+                if (!empty($aiSpecs['dimensions']['width_m']) && empty($extractedData['vehicle']['dimensions']['width'])) {
                     $extractedData['vehicle']['dimensions']['width'] = $aiSpecs['dimensions']['width_m'];
                     $extractedData['vehicle']['dimensions']['unit'] = 'm';
                     $aiFields[] = 'vehicle.dimensions.width';
                 }
-                if (!empty($aiSpecs['dimensions']['height_m']) && empty($vehicle['dimensions']['height'])) {
+                if (!empty($aiSpecs['dimensions']['height_m']) && empty($extractedData['vehicle']['dimensions']['height'])) {
                     $extractedData['vehicle']['dimensions']['height'] = $aiSpecs['dimensions']['height_m'];
                     $extractedData['vehicle']['dimensions']['unit'] = 'm';
                     $aiFields[] = 'vehicle.dimensions.height';
                 }
             }
             
-            // Add weight from AI
-            if (!empty($aiSpecs['weight_kg']) && empty($vehicle['weight']['value'])) {
-                if (empty($vehicle['weight'])) {
+            // Add weight from AI - Fixed logic to check the actual extracted data
+            if (!empty($aiSpecs['weight_kg']) && (empty($extractedData['vehicle']['weight']['value']) || $extractedData['vehicle']['weight']['value'] === null)) {
+                if (empty($extractedData['vehicle']['weight'])) {
                     $extractedData['vehicle']['weight'] = [];
                 }
                 $extractedData['vehicle']['weight']['value'] = $aiSpecs['weight_kg'];
@@ -301,13 +313,19 @@ class VehicleDataEnhancer
                 $aiFields[] = 'vehicle.weight.value';
             }
             
+            // Add cargo volume from AI
+            if (!empty($aiSpecs['cargo_volume_m3']) && empty($extractedData['vehicle']['cargo_volume_m3'])) {
+                $extractedData['vehicle']['cargo_volume_m3'] = $aiSpecs['cargo_volume_m3'];
+                $aiFields[] = 'vehicle.cargo_volume_m3';
+            }
+            
             // Add engine specs from AI
-            if (!empty($aiSpecs['engine_cc']) && empty($vehicle['engine_cc'])) {
+            if (!empty($aiSpecs['engine_cc']) && empty($extractedData['vehicle']['engine_cc'])) {
                 $extractedData['vehicle']['engine_cc'] = $aiSpecs['engine_cc'];
                 $aiFields[] = 'vehicle.engine_cc';
             }
             
-            if (!empty($aiSpecs['fuel_type']) && empty($vehicle['fuel_type'])) {
+            if (!empty($aiSpecs['fuel_type']) && empty($extractedData['vehicle']['fuel_type'])) {
                 $extractedData['vehicle']['fuel_type'] = $aiSpecs['fuel_type'];
                 $aiFields[] = 'vehicle.fuel_type';
             }
@@ -326,7 +344,9 @@ class VehicleDataEnhancer
             $sources['ai_enhanced'] = $aiFields;
             
             Log::info('AI enhancement completed', [
-                'fields_enhanced' => count($aiFields)
+                'fields_enhanced' => count($aiFields),
+                'ai_specs_received' => array_keys($aiSpecs),
+                'enhanced_fields' => $aiFields
             ]);
             
         } catch (\Exception $e) {
@@ -351,15 +371,23 @@ class VehicleDataEnhancer
         if (!empty($currentSpecs['year'])) $prompt .= "- Year: {$currentSpecs['year']}\n";
         if (!empty($currentSpecs['condition'])) $prompt .= "- Condition: {$currentSpecs['condition']}\n";
         
-        $prompt .= "\nProvide ONLY the missing specifications from manufacturer data:\n";
-        $prompt .= "- Dimensions (length, width, height in meters)\n";
-        $prompt .= "- Weight (in kg)\n";
-        $prompt .= "- Engine displacement (in CC)\n";
-        $prompt .= "- Fuel type (petrol, diesel, electric, hybrid)\n";
-        $prompt .= "- Typical shipping container recommendation (20ft, 40ft, RoRo, etc.)\n";
-        $prompt .= "- Any special shipping considerations\n\n";
+        // Add special instruction for classic cars
+        if (isset($currentSpecs['year']) && $currentSpecs['year'] < 1980) {
+            $prompt .= "\nThis is a classic/vintage vehicle. Use historical manufacturer specifications.\n";
+        }
         
-        $prompt .= "Return only factual manufacturer specifications. Be precise and accurate.";
+        $prompt .= "\nProvide the following manufacturer specifications using these exact field names:\n";
+        $prompt .= "- Dimensions (use fields: length_m, width_m, height_m in meters)\n";
+        $prompt .= "- Weight (use field: weight_kg in kilograms)\n";
+        $prompt .= "- Cargo volume (use field: cargo_volume_m3 in cubic meters)\n";
+        $prompt .= "- Engine displacement (use field: engine_cc in cubic centimeters)\n";
+        $prompt .= "- Fuel type (use field: fuel_type - petrol, diesel, electric, hybrid)\n";
+        $prompt .= "- Typical shipping container (use field: typical_container - 20ft, 40ft, RoRo, etc.)\n";
+        $prompt .= "- Special shipping notes (use field: shipping_notes)\n\n";
+        
+        $prompt .= "Return only factual manufacturer specifications. Be precise and accurate.\n";
+        $prompt .= "Use the exact field names specified above.\n";
+        $prompt .= "For classic/vintage vehicles, provide historical manufacturer data.";
         
         return $prompt;
     }
