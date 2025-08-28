@@ -16,7 +16,6 @@ class Document extends Model
         'name',
         'filename',
         'path',
-        'disk',
         'mime_type',
         'size',
         'metadata',
@@ -55,26 +54,11 @@ class Document extends Model
     ];
 
     /**
-     * Boot the model and set default values
-     */
-    protected static function boot()
-    {
-        parent::boot();
-        
-        static::creating(function ($document) {
-            // Set default disk if not provided
-            if (empty($document->disk)) {
-                $document->disk = config('filesystems.default');
-            }
-        });
-    }
-
-    /**
-     * Get the storage disk for this document with fallback
+     * Get the appropriate storage disk based on environment
      */
     public function getStorageDiskAttribute(): string
     {
-        return $this->disk ?: config('filesystems.default');
+        return app()->environment('production') ? 'spaces' : 'local';
     }
 
     /**
