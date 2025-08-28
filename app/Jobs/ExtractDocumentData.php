@@ -60,11 +60,23 @@ class ExtractDocumentData implements ShouldQueue
                 'confidence' => $result->getConfidence(),
                 'service_used' => $result->getStrategy(),
                 'analysis_type' => $result->getMetadata('pipeline.strategy_used', 'unknown'),
-                'raw_json' => json_encode($result->toArray())
+                'raw_json' => json_encode($result->getData()) // Store the transformed data directly
             ];
 
             if ($result->isSuccessful()) {
-                // Separate document data from AI-enhanced data
+                // Store the complete transformed data (includes JSON field and flattened vehicle data)
+                $transformedData = $result->getData();
+                
+                // Log what we're storing
+                Log::info('Storing extraction data', [
+                    'extraction_id' => $extraction->id,
+                    'has_json_field' => isset($transformedData['JSON']),
+                    'field_count' => count($transformedData),
+                    'sample_fields' => array_slice(array_keys($transformedData), 0, 10),
+                    'json_field_size' => strlen($transformedData['JSON'] ?? '')
+                ]);
+                
+                // Separate document data from AI-enhanced data for backward compatibility
                 $extractionData['extracted_data'] = [
                     'document_data' => $result->getDocumentData(),
                     'ai_enhanced_data' => $result->getAiEnhancedData(),
@@ -72,9 +84,9 @@ class ExtractDocumentData implements ShouldQueue
                     'metadata' => $result->getAllMetadata()
                 ];
 
-                // Store AI extracted data on document
+                // Store AI extracted data on document (use transformed data)
                 $this->document->update([
-                    'ai_extracted_data' => $result->getData(),
+                    'ai_extracted_data' => $transformedData, // Use transformed data with JSON field
                     'ai_processing_status' => 'completed'
                 ]);
             } else {

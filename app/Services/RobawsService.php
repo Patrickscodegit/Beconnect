@@ -23,15 +23,37 @@ class RobawsService
             throw new \Exception("No extraction data found for intake {$intake->id}");
         }
         
-        $data = $extraction->raw_json;
+        // Get extraction data - prefer raw_json (transformed data with JSON field)
+        $data = null;
+        if ($extraction->raw_json) {
+            $data = is_string($extraction->raw_json) 
+                ? json_decode($extraction->raw_json, true) 
+                : $extraction->raw_json;
+        } elseif ($extraction->extracted_data) {
+            $data = is_string($extraction->extracted_data) 
+                ? json_decode($extraction->extracted_data, true) 
+                : $extraction->extracted_data;
+        }
+        
+        if (!$data) {
+            throw new \Exception("Invalid extraction data format for intake {$intake->id}");
+        }
         
         // Use JsonFieldMapper for proper field mapping
         $mapper = app(\App\Services\RobawsIntegration\JsonFieldMapper::class);
         $mappedData = $mapper->mapFields($data);
         
         // Ensure JSON field is present for Robaws JSON tab
-        if (!isset($mappedData['JSON']) && is_array($data)) {
-            $mappedData['JSON'] = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        if (!isset($mappedData['JSON']) && isset($data['JSON'])) {
+            $mappedData['JSON'] = $data['JSON'];
+        } elseif (!isset($mappedData['JSON'])) {
+            // Create JSON field if missing
+            $mappedData['JSON'] = json_encode([
+                'intake_id' => $intake->id,
+                'extraction_id' => $extraction->id,
+                'created_at' => now()->toIso8601String(),
+                'extraction_data' => $data
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
         }
         
         // Log the mapped data for debugging
@@ -39,6 +61,7 @@ class RobawsService
             'intake_id' => $intake->id,
             'mapped_fields' => count($mappedData),
             'has_json_field' => isset($mappedData['JSON']),
+            'json_length' => strlen($mappedData['JSON'] ?? ''),
             'sample_fields' => array_slice(array_keys($mappedData), 0, 10)
         ]);
         

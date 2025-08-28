@@ -81,16 +81,41 @@ class RobawsIntegrationService
     {
         $extraction = $document->extractions()->latest()->first();
         
-        if (!$extraction || !$extraction->extracted_data) {
+        if (!$extraction || (!$extraction->extracted_data && !$extraction->raw_json)) {
             Log::warning('No extraction data found for document', [
                 'document_id' => $document->id,
+                'extraction_id' => $extraction->id ?? null
             ]);
-            return false;
+            return ['success' => false, 'message' => 'No extraction data available'];
+        }
+
+        // Get extraction data - prefer raw_json (transformed data) over extracted_data
+        $extractedData = null;
+        if ($extraction->raw_json) {
+            $extractedData = is_array($extraction->raw_json) 
+                ? $extraction->raw_json 
+                : json_decode($extraction->raw_json, true);
+        } elseif ($extraction->extracted_data) {
+            $extractedData = is_array($extraction->extracted_data) 
+                ? $extraction->extracted_data 
+                : json_decode($extraction->extracted_data, true);
         }
         
-        $extractedData = is_array($extraction->extracted_data) 
-            ? $extraction->extracted_data 
-            : json_decode($extraction->extracted_data, true);
+        if (!$extractedData) {
+            Log::warning('Failed to decode extraction data', [
+                'document_id' => $document->id,
+                'extraction_id' => $extraction->id
+            ]);
+            return ['success' => false, 'message' => 'Invalid extraction data format'];
+        }
+        
+        Log::info('Processing extraction data for Robaws', [
+            'document_id' => $document->id,
+            'extraction_id' => $extraction->id,
+            'has_json_field' => isset($extractedData['JSON']),
+            'field_count' => count($extractedData),
+            'sample_fields' => array_slice(array_keys($extractedData), 0, 10)
+        ]);
             
         return $this->processDocument($document, $extractedData);
     }
