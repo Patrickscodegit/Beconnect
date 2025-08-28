@@ -1,0 +1,243 @@
+{
+  "version": "1.0",
+  "description": "Field mapping configuration for Robaws integration",
+  "field_mappings": {
+    "quotation_info": {
+      "customer": {
+        "sources": ["contact.name", "contact_info.name", "email_metadata.from"],
+        "default": "Unknown Customer",
+        "transform": "extract_name"
+      },
+      "customer_reference": {
+        "template": "EXP RORO - {origin_code} - {destination_code} - {cargo_description}",
+        "components": {
+          "origin_code": {
+            "sources": ["shipment.origin", "routing.origin"],
+            "transform": "city_to_code"
+          },
+          "destination_code": {
+            "sources": ["shipment.destination", "routing.destination"],
+            "transform": "city_to_code"
+          },
+          "cargo_description": {
+            "template": "1 x {condition} {brand} {model}",
+            "sources": {
+              "condition": ["vehicle.condition", "vehicle_details.condition"],
+              "brand": ["vehicle.brand", "vehicle.make", "vehicle_details.brand"],
+              "model": ["vehicle.model", "vehicle_details.model"]
+            }
+          }
+        }
+      },
+      "endcustomer": {
+        "sources": ["contact.name", "contact_info.name"],
+        "default": null
+      },
+      "contact": {
+        "sources": ["contact.phone", "contact_info.phone_number", "contact.phone_number"],
+        "default": null
+      },
+      "client_email": {
+        "sources": ["contact.email", "contact_info.email", "email"],
+        "default": null,
+        "validate": "email"
+      }
+    },
+    "routing": {
+      "por": {
+        "sources": ["shipment.origin", "routing.origin", "transport.from"],
+        "fallback": "extract_from_messages",
+        "default": null
+      },
+      "pol": {
+        "sources": ["shipment.origin", "routing.origin"],
+        "transform": "city_to_port",
+        "default": null
+      },
+      "pod": {
+        "sources": ["shipment.destination", "routing.destination", "transport.to"],
+        "fallback": "extract_from_messages",
+        "default": null
+      },
+      "pot": {
+        "sources": ["shipment.transshipment", "routing.via"],
+        "default": null
+      },
+      "fdest": {
+        "sources": ["shipment.final_destination"],
+        "default": null
+      }
+    },
+    "cargo_details": {
+      "cargo": {
+        "template": "{quantity} x {condition} {brand} {model}",
+        "sources": {
+          "quantity": {
+            "default": "1"
+          },
+          "condition": ["vehicle.condition", "vehicle_details.condition"],
+          "brand": ["vehicle.brand", "vehicle.make", "vehicle_details.brand"],
+          "model": ["vehicle.model", "vehicle_details.model"]
+        },
+        "default": "1 x Vehicle"
+      },
+      "dim_bef_delivery": {
+        "template": "{length} x {width} x {height} m // {volume} Cbm",
+        "sources": {
+          "length": ["vehicle.dimensions.length_m", "dimensions.length"],
+          "width": ["vehicle.dimensions.width_m", "dimensions.width"],
+          "height": ["vehicle.dimensions.height_m", "dimensions.height"]
+        },
+        "transform": "calculate_volume",
+        "format": "%.3f x %.2f x %.3f m // %.2f Cbm"
+      },
+      "weight_kg": {
+        "sources": ["vehicle.weight_kg", "vehicle_details.weight", "weight"],
+        "transform": "to_numeric"
+      }
+    },
+    "vehicle_details": {
+      "vehicle_brand": {
+        "sources": ["vehicle.brand", "vehicle.make", "vehicle_details.brand"],
+        "default": null
+      },
+      "vehicle_model": {
+        "sources": ["vehicle.model", "vehicle_details.model"],
+        "default": null
+      },
+      "vehicle_year": {
+        "sources": ["vehicle.year", "vehicle_details.year"],
+        "transform": "to_integer"
+      },
+      "vehicle_color": {
+        "sources": ["vehicle.color", "vehicle_details.color"],
+        "default": null
+      },
+      "engine_cc": {
+        "sources": ["vehicle.engine_cc", "vehicle_details.engine_cc"],
+        "transform": "to_integer"
+      },
+      "fuel_type": {
+        "sources": ["vehicle.fuel_type", "vehicle_details.fuel"],
+        "default": null
+      }
+    },
+    "dates": {
+      "pickup_date": {
+        "sources": ["dates.pickup_date", "shipment.pickup_date"],
+        "transform": "to_date"
+      },
+      "delivery_date": {
+        "sources": ["dates.delivery_date", "shipment.delivery_date"],
+        "transform": "to_date"
+      },
+      "departure_date": {
+        "sources": ["dates.departure_date", "shipment.departure_date"],
+        "transform": "to_date"
+      },
+      "arrival_date": {
+        "sources": ["dates.arrival_date", "shipment.arrival_date"],
+        "transform": "to_date"
+      }
+    },
+    "trade_terms": {
+      "incoterms": {
+        "sources": ["incoterms", "trade_terms.incoterms"],
+        "default": "CIF"
+      },
+      "payment_terms": {
+        "sources": ["payment_terms", "trade_terms.payment"],
+        "default": null
+      }
+    },
+    "metadata": {
+      "email_subject": {
+        "sources": ["email_metadata.subject"],
+        "default": null
+      },
+      "email_from": {
+        "sources": ["email_metadata.from"],
+        "default": null
+      },
+      "email_to": {
+        "sources": ["email_metadata.to"],
+        "default": null
+      },
+      "email_date": {
+        "sources": ["email_metadata.date"],
+        "transform": "to_date"
+      },
+      "internal_remarks": {
+        "sources": ["messages"],
+        "transform": "format_messages"
+      },
+      "special_requirements": {
+        "sources": ["special_requirements", "special_instructions"],
+        "default": null
+      },
+      "reference_number": {
+        "sources": ["reference_number", "invoice_number"],
+        "default": null
+      }
+    },
+    "service_type": {
+      "freight_type": {
+        "default": "RoRo Vehicle Transport"
+      },
+      "shipment_type": {
+        "default": "RoRo"
+      },
+      "container_type": {
+        "default": "RoRo"
+      },
+      "container_quantity": {
+        "default": 1,
+        "transform": "to_integer"
+      }
+    }
+  },
+  "transformations": {
+    "city_to_port": {
+      "Brussels": "Antwerp",
+      "Bruxelles": "Antwerp",
+      "Paris": "Le Havre",
+      "Frankfurt": "Hamburg",
+      "Munich": "Hamburg",
+      "Milano": "Genoa",
+      "Madrid": "Valencia",
+      "Barcelona": "Barcelona",
+      "Amsterdam": "Rotterdam",
+      "London": "Portsmouth",
+      "Dover": "Dover"
+    },
+    "city_to_code": {
+      "Brussels, Belgium": "BRU",
+      "Bruxelles, Belgique": "BRU",
+      "Bruxelles, Belgium": "BRU",
+      "Antwerp, Belgium": "ANR",
+      "Jeddah, Saudi Arabia": "JED",
+      "Djeddah, Arabie Saoudite": "JED",
+      "Djeddah, Saudi Arabia": "JED",
+      "Dubai, UAE": "DXB",
+      "Rotterdam, Netherlands": "RTM",
+      "Hamburg, Germany": "HAM",
+      "Le Havre, France": "LEH",
+      "Portsmouth, UK": "POR",
+      "Dover, UK": "DOV"
+    }
+  },
+  "validation_rules": {
+    "email": {
+      "type": "regex",
+      "pattern": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+    },
+    "numeric": {
+      "type": "numeric",
+      "min": 0
+    },
+    "date": {
+      "type": "date",
+      "format": "Y-m-d"
+    }
+  }
+}

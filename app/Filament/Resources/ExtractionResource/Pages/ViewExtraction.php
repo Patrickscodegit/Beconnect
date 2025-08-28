@@ -16,4 +16,16 @@ class ViewExtraction extends ViewRecord
             Actions\EditAction::make(),
         ];
     }
+
+    // Override to ensure we only use the custom infolist, not any default display
+    public function getInfolist(string $name = 'default'): ?\Filament\Infolists\Infolist
+    {
+        return static::getResource()::infolist($this->makeInfolist());
+    }
+
+    // Hide any default form display
+    protected function hasInfolist(): bool
+    {
+        return true;
+    }
 }

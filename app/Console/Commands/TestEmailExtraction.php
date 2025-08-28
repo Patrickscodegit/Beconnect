@@ -2,181 +2,143 @@
 
 namespace App\Console\Commands;
 
-use App\Jobs\ProcessEmailDocument;
 use App\Models\Document;
-use App\Services\EmailParserService;
+use App\Jobs\ExtractDocumentData;
+use App\Services\AiRouter;
+use App\Helpers\FileInput;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Storage;
 
 class TestEmailExtraction extends Command
 {
-    protected $signature = 'test:email-extraction {document_id? : Document ID to test}';
-    protected $description = 'Test email extraction with improved vehicle detection';
+    protected $signature = 'test:email-extraction {document_id?}';
+    protected $description = 'Test email extraction for debugging';
 
     public function handle()
     {
         $documentId = $this->argument('document_id');
         
-        if ($documentId) {
-            $document = Document::find($documentId);
-            if (!$document) {
-                $this->error("Document with ID {$documentId} not found.");
-                return Command::FAILURE;
-            }
+        if (!$documentId) {
+            // Get latest .eml document
+            $document = Document::where('filename', 'LIKE', '%.eml')->latest()->first();
         } else {
-            // Find the latest email document
-            $document = Document::whereIn('mime_type', ['message/rfc822', 'application/vnd.ms-outlook'])
-                               ->latest()
-                               ->first();
-            
-            if (!$document) {
-                $this->error('No email documents found.');
-                return Command::FAILURE;
-            }
+            $document = Document::find($documentId);
+        }
+        
+        if (!$document) {
+            $this->error('No .eml document found');
+            return;
+        }
+        
+        $this->info("Testing extraction for: {$document->filename}");
+        $this->info("Document ID: {$document->id}");
+        $this->info("MIME Type: {$document->mime_type}");
+        $this->info("File Path: {$document->file_path}");
+        
+                // Check if file exists - try both locations
+        $fullPath = storage_path('app/' . $document->file_path);
+        $privatePath = storage_path('app/private/' . $document->file_path);
+        
+        if (file_exists($fullPath)) {
+            $actualPath = $fullPath;
+        } elseif (file_exists($privatePath)) {
+            $actualPath = $privatePath;
+        } else {
+            $this->error("File not found at: $fullPath");
+            $this->error("Also not found at: $privatePath");
+            return;
+        }
+        
+        $this->info("Testing extraction for: " . $document->filename);
+        $this->info("Document ID: " . $document->id);
+        $this->info("MIME Type: " . $document->mime_type);
+        $this->info("File Path: " . $document->file_path);
+        $this->info("Actual file location: $actualPath");
+        $this->info("File exists: ✓");
+
+        // Test step 1: Check analysis type determination
+        $job = new ExtractDocumentData($document);
+        $analysisType = $this->callProtectedMethod($job, 'determineAnalysisType', [$actualPath, $document->mime_type]);
+        
+        $this->info("Analysis Type: $analysisType");
+        
+        if ($analysisType === 'basic') {
+            $this->error("❌ PROBLEM: .eml file is being classified as 'basic' instead of 'shipping'");
+            $this->info("This is why AI extraction isn't working properly!");
+        } else {
+            $this->info("✅ Analysis type is correct: $analysisType");
         }
 
-        $this->info("Testing extraction for document: {$document->filename} (ID: {$document->id})");
-        $this->info("MIME Type: {$document->mime_type}");
-        $this->newLine();
+        // Test file input creation
+        try {
+            $fileInput = FileInput::forExtractor(
+                $document->file_path,
+                $document->mime_type ?? 'message/rfc822'
+            );
+            
+            $this->info("FileInput created successfully");
+            $this->info("FileInput type: " . (isset($fileInput['url']) ? 'URL' : 'BYTES'));
+            
+        } catch (\Exception $e) {
+            $this->error("FileInput creation failed: " . $e->getMessage());
+            return;
+        }
         
-        // Parse the email
-        $parser = app(EmailParserService::class);
+        // Test AI Router with shipping analysis
+        $aiRouter = new AiRouter(app('log'));
+        
+        $this->info("\nTesting AI extraction with 'shipping' analysis...");
         
         try {
-            $emailData = $parser->parseEmlFile($document);
+            $result = $aiRouter->extractAdvanced($fileInput, 'shipping');
             
-            $this->info("📧 Email Details:");
-            $this->table(['Field', 'Value'], [
-                ['Subject', $emailData['subject'] ?? 'N/A'],
-                ['From', $emailData['from'] ?? 'N/A'],
-                ['To', $emailData['to'] ?? 'N/A'],
-                ['Date', $emailData['date'] ?? 'N/A'],
-                ['Has Text', !empty($emailData['text']) ? 'YES' : 'NO'],
-                ['Has HTML', !empty($emailData['html']) ? 'YES' : 'NO'],
-                ['Attachments', count($emailData['attachments'] ?? [])],
-            ]);
+            $this->info("✓ AI extraction successful!");
+            $this->info("Result status: " . ($result['status'] ?? 'unknown'));
+            $this->info("Analysis type: " . ($result['analysis_type'] ?? 'unknown'));
             
-            $this->newLine();
-            
-            // Test vehicle detection
-            $this->info("🚗 Vehicle Detection Test:");
-            $detectionMethod = new \ReflectionMethod($parser, 'detectVehicleInformation');
-            $detectionMethod->setAccessible(true);
-            $vehicleInfo = $detectionMethod->invoke($parser, $emailData);
-            
-            if (!empty($vehicleInfo)) {
-                $this->info("✅ Vehicle information detected:");
-                foreach ($vehicleInfo as $key => $value) {
-                    $this->line("  {$key}: {$value}");
-                }
-            } else {
-                $this->warn("⚠️  No vehicle information detected in pre-processing");
-            }
-            
-            $this->newLine();
-            
-            // Show content being sent to AI
-            $this->info("📄 Content prepared for AI extraction:");
-            $shippingContent = $parser->extractShippingContent($emailData);
-            $this->line("Content length: " . strlen($shippingContent) . " characters");
-            
-            if ($this->confirm('Show full content being sent to AI?', false)) {
-                $this->line("--- CONTENT START ---");
-                $this->line($shippingContent);
-                $this->line("--- CONTENT END ---");
-                $this->newLine();
-            }
-            
-            // Process with AI
-            $this->info("🤖 Processing with AI extraction...");
-            
-            // Clear existing extractions for this test
-            $document->extractions()->delete();
-            
-            ProcessEmailDocument::dispatchSync($document);
-            
-            // Check results
-            $document->refresh();
-            $extraction = $document->extractions()->latest()->first();
-            
-            if ($extraction && $extraction->extracted_data) {
-                $this->info("✅ Extraction completed!");
-                $this->info("Confidence: " . ($extraction->confidence_score * 100) . "%");
-                $this->info("Status: " . $extraction->status);
+            if (isset($result['extracted_data'])) {
+                $extractedKeys = array_keys($result['extracted_data']);
+                $this->info("Extracted data keys: " . implode(', ', $extractedKeys));
                 
-                $data = $extraction->extracted_data;
-                
-                $this->newLine();
-                $this->info("🚗 Extracted Vehicle Information:");
-                if (isset($data['vehicle']) && !empty(array_filter($data['vehicle']))) {
-                    foreach ($data['vehicle'] as $key => $value) {
-                        if (!empty($value) && !is_array($value)) {
-                            $this->line("  {$key}: {$value}");
-                        } elseif ($key === 'dimensions' && is_array($value)) {
-                            $this->line("  dimensions:");
-                            foreach ($value as $dimKey => $dimValue) {
-                                $this->line("    {$dimKey}: {$dimValue}");
-                            }
-                        }
-                    }
-                    
-                    // Show database match info if available
-                    if (isset($data['vehicle']['database_match']) && $data['vehicle']['database_match']) {
-                        $this->info("✅ Database match found!");
-                        if (isset($data['vehicle']['weight_kg'])) {
-                            $this->line("  Database weight: {$data['vehicle']['weight_kg']} kg");
-                        }
-                        if (isset($data['vehicle']['dimensions'])) {
-                            $dims = $data['vehicle']['dimensions'];
-                            $this->line("  Database dimensions: {$dims['length_m']}L x {$dims['width_m']}W x {$dims['height_m']}H m");
-                        }
-                    }
-                } else {
-                    $this->warn("⚠️  No vehicle information extracted by AI");
+                // Show some key extracted data
+                if (isset($result['extracted_data']['contact'])) {
+                    $contact = $result['extracted_data']['contact'];
+                    $this->info("Contact name: " . ($contact['name'] ?? 'NOT SET'));
                 }
                 
-                $this->newLine();
-                $this->info("📦 Extracted Shipment Information:");
-                if (isset($data['shipment']) && !empty(array_filter($data['shipment']))) {
-                    foreach ($data['shipment'] as $key => $value) {
-                        if (!empty($value)) {
-                            $this->line("  {$key}: {$value}");
-                        }
-                    }
-                } else {
-                    $this->warn("⚠️  No shipment information extracted");
+                if (isset($result['extracted_data']['vehicle'])) {
+                    $vehicle = $result['extracted_data']['vehicle'];
+                    $this->info("Vehicle: " . ($vehicle['brand'] ?? 'NOT SET') . ' ' . ($vehicle['model'] ?? 'NOT SET'));
                 }
                 
-                $this->newLine();
-                $this->info("👤 Extracted Contact Information:");
-                if (isset($data['contact']) && !empty(array_filter($data['contact']))) {
-                    foreach ($data['contact'] as $key => $value) {
-                        if (!empty($value)) {
-                            $this->line("  {$key}: {$value}");
-                        }
-                    }
-                } else {
-                    $this->warn("⚠️  No contact information extracted");
-                }
-                
-                if ($this->confirm('Show full extracted data?', false)) {
-                    $this->newLine();
-                    $this->info("📋 Full Extracted Data:");
-                    $this->line(json_encode($data, JSON_PRETTY_PRINT));
-                }
-                
-            } else {
-                $this->error("❌ Extraction failed or no data extracted");
-                if ($extraction && $extraction->error_message) {
-                    $this->error("Error: " . $extraction->error_message);
+                if (isset($result['extracted_data']['shipment'])) {
+                    $shipment = $result['extracted_data']['shipment'];
+                    $this->info("Route: " . ($shipment['origin'] ?? 'NOT SET') . ' → ' . ($shipment['destination'] ?? 'NOT SET'));
                 }
             }
             
         } catch (\Exception $e) {
-            $this->error("❌ Failed to parse email: " . $e->getMessage());
-            return Command::FAILURE;
+            $this->error("AI extraction failed: " . $e->getMessage());
+            $this->error("File: " . $e->getFile() . ":" . $e->getLine());
+            
+            // Try with basic analysis
+            $this->info("\nTrying with 'basic' analysis...");
+            try {
+                $result = $aiRouter->extractAdvanced($fileInput, 'basic');
+                $this->info("Basic extraction result: " . json_encode($result, JSON_PRETTY_PRINT));
+            } catch (\Exception $e2) {
+                $this->error("Basic extraction also failed: " . $e2->getMessage());
+            }
         }
-        
-        return Command::SUCCESS;
+    }
+    
+    /**
+     * Helper method to call protected methods for testing
+     */
+    private function callProtectedMethod($object, $methodName, $args = [])
+    {
+        $reflection = new \ReflectionClass($object);
+        $method = $reflection->getMethod($methodName);
+        $method->setAccessible(true);
+        return $method->invokeArgs($object, $args);
     }
 }

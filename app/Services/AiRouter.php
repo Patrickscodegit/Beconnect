@@ -620,19 +620,35 @@ class AiRouter
      *
      * @param string $content Raw file content
      * @param string $mimeType MIME type of the file
-     * @return string Extracted text (empty for now)
+     * @return string Extracted text
      */
     protected function createTextFromImage(string $content, string $mimeType): string
     {
-        // For now, return empty string
-        // In a real implementation, this would:
-        // 1. Use OCR service for text extraction
-        // 2. Use Vision API for image analysis
-        // 3. Extract text from PDFs
-        
-        $this->logger->info('Image text extraction requested', [
+        $this->logger->info('Text extraction requested', [
             'mime_type' => $mimeType,
             'content_size' => strlen($content)
+        ]);
+        
+        // Handle email files (.eml) - they're already text
+        if ($mimeType === 'message/rfc822') {
+            $this->logger->info('Processing email file - returning raw content');
+            return $content;
+        }
+        
+        // Handle other text-based files
+        if (str_starts_with($mimeType, 'text/')) {
+            $this->logger->info('Processing text file - returning raw content');
+            return $content;
+        }
+        
+        // For other file types, return empty string for now
+        // In a real implementation, this would:
+        // 1. Use OCR service for images and PDFs
+        // 2. Use Vision API for image analysis
+        // 3. Extract text from PDFs, etc.
+        
+        $this->logger->info('Unsupported file type for text extraction', [
+            'mime_type' => $mimeType
         ]);
         
         return '';

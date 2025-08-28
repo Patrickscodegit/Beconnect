@@ -35,6 +35,9 @@ class Document extends Model
         // Robaws integration fields
         'robaws_quotation_id',
         'robaws_quotation_data',
+        'robaws_formatted_at',
+        'robaws_sync_status',
+        'robaws_synced_at',
     ];
 
     protected $casts = [
@@ -47,6 +50,8 @@ class Document extends Model
         'extraction_confidence' => 'float',
         'robaws_quotation_data' => 'array',
         'extracted_at' => 'datetime',
+        'robaws_formatted_at' => 'datetime',
+        'robaws_synced_at' => 'datetime',
     ];
 
     /**

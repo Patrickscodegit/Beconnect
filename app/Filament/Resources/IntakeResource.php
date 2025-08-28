@@ -495,64 +495,81 @@ class IntakeResource extends Resource
             'extracted_at' => now()->toISOString(),
         ];
         
-        // Map contact information
+        // Extract key sections
         $contact = $extractedData['contact'] ?? $extractedData['contact_info'] ?? [];
+        $shipment = $extractedData['shipment'] ?? [];
+        $vehicle = $extractedData['vehicle'] ?? $extractedData['vehicle_details'] ?? [];
+        
+        // Map customer information (Quotation Info section)
         if (!empty($contact)) {
+            $mappedData['customer'] = $contact['name'] ?? 'Unknown Customer';
+            $mappedData['endcustomer'] = $contact['name'] ?? null;
+            $mappedData['contact'] = $contact['phone'] ?? $contact['phone_number'] ?? null;
+            $mappedData['client_email'] = $contact['email'] ?? null;
+            
+            // Also keep consignee format for compatibility
             $mappedData['consignee'] = [
                 'name' => $contact['name'] ?? 'Unknown Client',
                 'contact' => $contact['phone'] ?? $contact['phone_number'] ?? '',
                 'email' => $contact['email'] ?? '',
                 'address' => $contact['address'] ?? '',
             ];
-            
-            // Also use as client data
-            $mappedData['client_name'] = $contact['name'] ?? '';
-            $mappedData['client_phone'] = $contact['phone'] ?? $contact['phone_number'] ?? '';
-            $mappedData['client_email'] = $contact['email'] ?? '';
         }
         
-        // Map shipping details
-        $shipment = $extractedData['shipment'] ?? [];
-        if (!empty($shipment)) {
-            $mappedData['ports'] = [
-                'origin' => $shipment['origin'] ?? '',
-                'destination' => $shipment['destination'] ?? '',
-            ];
-            
-            // Also map to alternative format
-            $mappedData['port_of_loading'] = $shipment['origin'] ?? '';
-            $mappedData['port_of_discharge'] = $shipment['destination'] ?? '';
-        }
+        // Build customer reference in Robaws format: "EXP RORO - BRU - JED - 1 x Used BMW 7"
+        $mappedData['customer_reference'] = self::buildCustomerReference($extractedData);
         
-        // Extract origin/destination from messages if not in shipment
-        if (empty($mappedData['ports']['origin']) && isset($extractedData['messages'])) {
-            foreach ($extractedData['messages'] as $message) {
-                if (isset($message['text'])) {
-                    // Look for "from X to Y" patterns
-                    if (preg_match('/from\s+([^to]+?)\s+to\s+([^,\.\n]+)/i', $message['text'], $matches)) {
-                        $mappedData['ports']['origin'] = trim($matches[1]);
-                        $mappedData['ports']['destination'] = trim($matches[2]);
-                        $mappedData['port_of_loading'] = trim($matches[1]);
-                        $mappedData['port_of_discharge'] = trim($matches[2]);
-                        break;
-                    }
+        // Map routing information (ROUTING section)
+        $origin = $shipment['origin'] ?? self::extractOriginFromMessages($extractedData);
+        $destination = $shipment['destination'] ?? self::extractDestinationFromMessages($extractedData);
+        
+        $mappedData['por'] = $origin; // Port of Receipt
+        $mappedData['pol'] = self::mapPortOfLoading($origin); // Port of Loading
+        $mappedData['pod'] = $destination; // Port of Discharge
+        $mappedData['pot'] = null; // Port of Transhipment
+        $mappedData['fdest'] = null; // Final destination
+        $mappedData['in_transit_to'] = null;
+        
+        // Also keep legacy format
+        $mappedData['ports'] = [
+            'origin' => $origin,
+            'destination' => $destination,
+        ];
+        $mappedData['port_of_loading'] = $origin;
+        $mappedData['port_of_discharge'] = $destination;
+        
+        // Map cargo details (CARGO DETAILS section)
+        if (!empty($vehicle)) {
+            $mappedData['cargo'] = self::buildCargoDescription($vehicle);
+            
+            // Calculate and format dimensions
+            $dimensions = $vehicle['dimensions'] ?? [];
+            if (!empty($dimensions)) {
+                $length = floatval($dimensions['length_m'] ?? 0);
+                $width = floatval($dimensions['width_m'] ?? 0);
+                $height = floatval($dimensions['height_m'] ?? 0);
+                
+                if ($length > 0 && $width > 0 && $height > 0) {
+                    $volume = $length * $width * $height;
+                    $mappedData['dim_bef_delivery'] = sprintf('%.3f x %.2f x %.3f m // %.2f Cbm', 
+                        $length, $width, $height, $volume);
+                    $mappedData['volume_m3'] = $volume;
                 }
             }
-        }
-        
-        // Map vehicle information
-        $vehicle = $extractedData['vehicle'] ?? 
-                  $extractedData['vehicle_details'] ?? 
-                  $extractedData['vehicle_info'] ?? 
-                  $extractedData['vehicle_listing'] ?? [];
-        
-        if (!empty($vehicle)) {
-            $mappedData['cargo_description'] = self::buildVehicleDescription($vehicle);
             
-            // Add vehicle as cargo item
+            // Vehicle specifications
+            $mappedData['vehicle_brand'] = $vehicle['brand'] ?? $vehicle['make'] ?? null;
+            $mappedData['vehicle_model'] = $vehicle['model'] ?? null;
+            $mappedData['vehicle_year'] = $vehicle['year'] ?? null;
+            $mappedData['vehicle_color'] = $vehicle['color'] ?? null;
+            $mappedData['weight_kg'] = $vehicle['weight_kg'] ?? null;
+            $mappedData['engine_cc'] = $vehicle['engine_cc'] ?? null;
+            $mappedData['fuel_type'] = $vehicle['fuel_type'] ?? null;
+            
+            // Keep vehicles array for compatibility
             $mappedData['vehicles'] = [
                 [
-                    'make' => $vehicle['make'] ?? '',
+                    'make' => $vehicle['brand'] ?? $vehicle['make'] ?? '',
                     'model' => $vehicle['model'] ?? '',
                     'year' => $vehicle['year'] ?? '',
                     'type' => $vehicle['type'] ?? '',
@@ -564,110 +581,229 @@ class IntakeResource extends Resource
             ];
         }
         
-        // Map pricing information
-        $pricing = $extractedData['pricing'] ?? [];
-        if (!empty($pricing)) {
-            $mappedData['charges'] = [
-                [
-                    'description' => 'Vehicle Transport',
-                    'amount' => self::extractNumericValue($pricing['amount'] ?? '0'),
-                    'currency' => $pricing['currency'] ?? 'EUR',
-                ]
-            ];
-            $mappedData['currency'] = $pricing['currency'] ?? 'EUR';
+        // Service details
+        $mappedData['freight_type'] = 'RoRo Vehicle Transport';
+        $mappedData['shipment_type'] = 'RoRo';
+        $mappedData['container_type'] = 'RoRo';
+        $mappedData['container_quantity'] = 1;
+        $mappedData['container_nr'] = null; // Not applicable for RoRo
+        
+        // Map dates
+        $dates = $extractedData['dates'] ?? [];
+        if (!empty($dates)) {
+            $mappedData['departure_date'] = $dates['pickup_date'] ?? null;
+            $mappedData['arrival_date'] = $dates['delivery_date'] ?? null;
+            $mappedData['pickup_date'] = $dates['pickup_date'] ?? null;
+            $mappedData['delivery_date'] = $dates['delivery_date'] ?? null;
         }
         
-        // Map messages as special instructions
+        // Trade terms
+        $mappedData['incoterms'] = $extractedData['incoterms'] ?? 'CIF';
+        $mappedData['payment_terms'] = $extractedData['payment_terms'] ?? null;
+        
+        // Email metadata (if from .eml file)
+        if (isset($extractedData['email_metadata'])) {
+            $mappedData['email_metadata'] = $extractedData['email_metadata'];
+            $mappedData['email_subject'] = $extractedData['email_metadata']['subject'] ?? null;
+            $mappedData['email_from'] = $extractedData['email_metadata']['from'] ?? null;
+            $mappedData['email_to'] = $extractedData['email_metadata']['to'] ?? null;
+            $mappedData['email_date'] = $extractedData['email_metadata']['date'] ?? null;
+        }
+        
+        // Special requirements and notes (INTERNAL REMARKS section)
+        $mappedData['special_requirements'] = $extractedData['special_requirements'] ?? 
+                                            $extractedData['special_instructions'] ?? null;
+        $mappedData['reference_number'] = $extractedData['reference_number'] ?? 
+                                        $extractedData['invoice_number'] ?? null;
+        
+        // Build notes from messages
         if (isset($extractedData['messages']) && !empty($extractedData['messages'])) {
             $messageTexts = [];
             foreach ($extractedData['messages'] as $message) {
                 if (isset($message['text'])) {
                     $sender = $message['sender'] ?? 'User';
-                    $time = $message['time'] ?? $message['timestamp'] ?? '';
-                    $messageTexts[] = ($time ? "[$time] " : '') . "$sender: {$message['text']}";
+                    $messageTexts[] = "{$sender}: {$message['text']}";
                 }
             }
-            $mappedData['special_instructions'] = implode("\n", $messageTexts);
+            if (!empty($messageTexts)) {
+                $mappedData['internal_remarks'] = implode("\n", $messageTexts);
+            }
         }
         
-        // Add document metadata
-        $mappedData['invoice'] = [
-            'number' => 'INTAKE-' . date('Ymd') . '-' . (rand(1000, 9999)),
-            'date' => now()->format('Y-m-d'),
-            'currency' => $mappedData['currency'] ?? 'EUR',
-        ];
+        // Email subject as note if available
+        if (isset($extractedData['email_metadata']['subject'])) {
+            $mappedData['notes'] = "Email: " . $extractedData['email_metadata']['subject'];
+        }
         
-        // Set shipment type
-        $mappedData['shipment_type'] = 'Vehicle Transport';
+        // Vehicle verification
+        $mappedData['database_match'] = $vehicle['database_match'] ?? false;
+        $mappedData['verified_specs'] = $vehicle['verified_specs'] ?? false;
+        $mappedData['spec_id'] = $vehicle['spec_id'] ?? null;
         
-        // Add the original extracted data for reference
+        // Metadata
+        $mappedData['extraction_confidence'] = $extractedData['metadata']['confidence_score'] ?? 
+                                             $extractedData['confidence_score'] ?? null;
+        $mappedData['formatted_at'] = now()->toISOString();
+        $mappedData['source'] = 'bconnect_ai_extraction';
         $mappedData['original_extraction'] = $extractedData;
-        
+
         return $mappedData;
     }
     
     /**
-     * Build a descriptive text for the vehicle
+     * Build customer reference in Robaws format
      */
-    public static function buildVehicleDescription(array $vehicle): string
+    private static function buildCustomerReference(array $extractedData): string
     {
         $parts = [];
         
-        if (!empty($vehicle['year'])) {
-            $parts[] = $vehicle['year'];
-        }
-        if (!empty($vehicle['make'])) {
-            $parts[] = $vehicle['make'];
-        }
-        if (!empty($vehicle['model'])) {
-            $parts[] = $vehicle['model'];
-        }
-        if (!empty($vehicle['type'])) {
-            $parts[] = "({$vehicle['type']})";
-        }
-        if (!empty($vehicle['condition'])) {
-            $parts[] = "- {$vehicle['condition']} condition";
-        }
-        if (!empty($vehicle['color'])) {
-            $parts[] = "- {$vehicle['color']}";
-        }
-        if (!empty($vehicle['specifications'])) {
-            $parts[] = "- {$vehicle['specifications']}";
+        // Add export type
+        $parts[] = 'EXP RORO';
+        
+        // Add route info
+        $origin = $extractedData['shipment']['origin'] ?? self::extractOriginFromMessages($extractedData);
+        $destination = $extractedData['shipment']['destination'] ?? self::extractDestinationFromMessages($extractedData);
+        
+        if ($origin && $destination) {
+            // Simplify location names for reference
+            $originShort = self::simplifyLocationName($origin);
+            $destinationShort = self::simplifyLocationName($destination);
+            $parts[] = $originShort . ' - ' . $destinationShort;
         }
         
-        // Add dimensions if available
-        if (!empty($vehicle['dimensions']) && is_array($vehicle['dimensions'])) {
-            $dims = $vehicle['dimensions'];
-            if (!empty($dims['length_m']) && !empty($dims['width_m']) && !empty($dims['height_m'])) {
-                $length = str_replace('.', ',', $dims['length_m']);
-                $width = str_replace('.', ',', $dims['width_m']);
-                $height = str_replace('.', ',', $dims['height_m']);
-                $parts[] = "- Dimensions: LxWxH = {$length} x {$width} x {$height}m";
+        // Add vehicle info
+        $vehicle = $extractedData['vehicle'] ?? [];
+        if (!empty($vehicle)) {
+            $vehicleDesc = '1 x ';
+            if (!empty($vehicle['condition'])) {
+                $vehicleDesc .= ucfirst($vehicle['condition']) . ' ';
             }
+            $vehicleDesc .= ($vehicle['brand'] ?? 'Vehicle') . ' ' . ($vehicle['model'] ?? '');
+            $parts[] = $vehicleDesc;
         }
         
-        // Add weight if available
-        if (!empty($vehicle['weight_kg'])) {
-            $weight = number_format($vehicle['weight_kg'], 0, ',', '.');
-            $parts[] = "- Weight: {$weight} kg";
-        }
-        
-        // Add fuel type if available
-        if (!empty($vehicle['fuel_type'])) {
-            $parts[] = "- Fuel: {$vehicle['fuel_type']}";
-        }
-        
-        return implode(' ', $parts) ?: 'Vehicle';
+        return implode(' - ', array_filter($parts));
     }
     
     /**
-     * Extract numeric value from price string
+     * Build cargo description for Robaws
      */
-    public static function extractNumericValue(string $value): float
+    private static function buildCargoDescription(array $vehicle): string
     {
-        // Remove currency symbols and extract number
-        $cleaned = preg_replace('/[^\d.,]/', '', $value);
+        if (empty($vehicle)) {
+            return '1 x Vehicle';
+        }
+        
+        $description = '1 x ';
+        
+        if (!empty($vehicle['condition'])) {
+            $description .= ucfirst($vehicle['condition']) . ' ';
+        }
+        
+        $description .= ($vehicle['brand'] ?? 'Vehicle');
+        
+        if (!empty($vehicle['model'])) {
+            $description .= ' ' . $vehicle['model'];
+        }
+        
+        return $description;
+    }
+    
+    /**
+     * Map Port of Receipt to appropriate Port of Loading
+     */
+    private static function mapPortOfLoading(?string $por): ?string
+    {
+        if (!$por) return null;
+        
+        // Common mappings from city to actual port
+        $portMappings = [
+            'Brussels' => 'Antwerp',
+            'Bruxelles' => 'Antwerp',
+            'Antwerp' => 'Antwerp',
+            'Anvers' => 'Antwerp',
+            'Rotterdam' => 'Rotterdam',
+            'Hamburg' => 'Hamburg',
+            'Bremerhaven' => 'Bremerhaven',
+        ];
+        
+        foreach ($portMappings as $city => $port) {
+            if (stripos($por, $city) !== false) {
+                return $port;
+            }
+        }
+        
+        return $por; // Return original if no mapping found
+    }
+    
+    /**
+     * Simplify location names for reference
+     */
+    private static function simplifyLocationName(string $location): string
+    {
+        $simplifications = [
+            'Brussels, Belgium' => 'BRU',
+            'Bruxelles, Belgium' => 'BRU', 
+            'Djeddah, Saudi Arabia' => 'JED',
+            'Jeddah, Saudi Arabia' => 'JED',
+            'Antwerp, Belgium' => 'ANR',
+            'Rotterdam, Netherlands' => 'RTM',
+        ];
+        
+        return $simplifications[$location] ?? $location;
+    }
+    
+    /**
+     * Extract origin from messages if not in shipment
+     */
+    private static function extractOriginFromMessages(array $extractedData): ?string
+    {
+        if (!isset($extractedData['messages'])) {
+            return null;
+        }
+        
+        foreach ($extractedData['messages'] as $message) {
+            if (isset($message['text'])) {
+                if (preg_match('/from\s+([^to]+?)\s+to\s+/i', $message['text'], $matches)) {
+                    return trim($matches[1]);
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Extract destination from messages if not in shipment
+     */
+    private static function extractDestinationFromMessages(array $extractedData): ?string
+    {
+        if (!isset($extractedData['messages'])) {
+            return null;
+        }
+        
+        foreach ($extractedData['messages'] as $message) {
+            if (isset($message['text'])) {
+                if (preg_match('/to\s+([^,\.\n]+)/i', $message['text'], $matches)) {
+                    return trim($matches[1]);
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Extract numeric value from string
+     */
+    private static function extractNumericValue(string $value): float
+    {
+        // Remove currency symbols and extra characters
+        $cleaned = preg_replace('/[^\d\.,]/', '', $value);
+        
+        // Convert comma to dot for decimal
         $cleaned = str_replace(',', '.', $cleaned);
-        return (float) $cleaned;
+        
+        return floatval($cleaned);
     }
 }

@@ -6,7 +6,7 @@ use App\Models\Document;
 use App\Models\Extraction;
 use App\Services\DocumentService;
 use App\Services\AiRouter;
-use App\Services\SimpleRobawsIntegration;
+use App\Services\RobawsIntegration\EnhancedRobawsIntegrationService;
 use App\Helpers\FileInput;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -250,10 +250,10 @@ class ExtractDocumentData implements ShouldQueue
                 // Auto-format data for Robaws if extraction was successful
                 if (!empty($extractedData) && $confidence > 0.5) {
                     try {
-                        $robawsIntegration = app(SimpleRobawsIntegration::class);
-                        $robawsIntegration->storeExtractedDataForRobaws($this->document, $extractedData);
+                        $robawsIntegration = app(EnhancedRobawsIntegrationService::class);
+                        $robawsIntegration->processDocument($this->document, $extractedData);
                         
-                        Log::info('Document data automatically formatted for Robaws', [
+                        Log::info('Document data automatically formatted for Robaws using JSON mapping', [
                             'document_id' => $this->document->id
                         ]);
                     } catch (\Exception $e) {
