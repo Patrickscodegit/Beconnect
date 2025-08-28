@@ -91,8 +91,10 @@ class ExtractionStrategyFactory
         // Register email strategy
         $this->register(app(EmailExtractionStrategy::class));
 
+        // Register PDF strategy
+        $this->register(app(PdfExtractionStrategy::class));
+
         // Additional strategies can be registered here
-        // $this->register(app(PdfExtractionStrategy::class));
         // $this->register(app(ImageExtractionStrategy::class));
     }
 
