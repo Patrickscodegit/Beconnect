@@ -158,14 +158,27 @@ class PatternExtractor
         }
         
         // Extract year (context-aware)
-        if (empty($vehicle['year']) && preg_match_all($this->vehiclePatterns['year'], $content, $matches, PREG_OFFSET_CAPTURE)) {
-            foreach ($matches[0] as $match) {
-                $year = (int)$match[0];
-                $position = $match[1];
-                
-                if ($this->isVehicleYear($year, $content, $position)) {
-                    $vehicle['year'] = $year;
-                    break;
+        if (empty($vehicle['year'])) {
+            // First, try to extract model year specifically
+            if (preg_match('/Model:\s*(\d{4})/i', $content, $matches)) {
+                $modelYear = (int)$matches[1];
+                if ($modelYear >= 1900 && $modelYear <= date('Y')) {
+                    $vehicle['year'] = $modelYear;
+                    $vehicle['year_source'] = 'model_pattern';
+                }
+            }
+            
+            // If no model year found, use general year extraction
+            if (empty($vehicle['year']) && preg_match_all($this->vehiclePatterns['year'], $content, $matches, PREG_OFFSET_CAPTURE)) {
+                foreach ($matches[0] as $match) {
+                    $year = (int)$match[0];
+                    $position = $match[1];
+                    
+                    if ($this->isVehicleYear($year, $content, $position)) {
+                        $vehicle['year'] = $year;
+                        $vehicle['year_source'] = 'context_pattern';
+                        break;
+                    }
                 }
             }
         }
@@ -559,12 +572,38 @@ class PatternExtractor
         
         // Check context around the year
         $context = substr($content, max(0, $position - 50), 100);
-        $vehicleKeywords = ['model', 'year', 'vehicle', 'car', 'auto', 'manufactured'];
         
-        foreach ($vehicleKeywords as $keyword) {
+        // Prioritize vehicle-specific contexts over document dates
+        $vehicleSpecificKeywords = ['model', 'year', 'vehicle', 'car', 'auto', 'manufactured'];
+        $documentKeywords = ['date', 'invoice', 'due', 'created', 'issued'];
+        
+        // Check if it's in a document date context (lower priority)
+        $isDocumentDate = false;
+        foreach ($documentKeywords as $keyword) {
             if (stripos($context, $keyword) !== false) {
-                return true;
+                $isDocumentDate = true;
+                break;
             }
+        }
+        
+        // Check if it's in a vehicle context (higher priority)
+        $isVehicleYear = false;
+        foreach ($vehicleSpecificKeywords as $keyword) {
+            if (stripos($context, $keyword) !== false) {
+                $isVehicleYear = true;
+                break;
+            }
+        }
+        
+        // Prefer vehicle years over document dates
+        if ($isVehicleYear) {
+            return true;
+        }
+        
+        // Only accept document dates if no better vehicle year is found
+        // and the year is reasonable for a vehicle (not too recent for model year)
+        if ($isDocumentDate && $year <= $currentYear - 1) {
+            return true;
         }
         
         return false;
