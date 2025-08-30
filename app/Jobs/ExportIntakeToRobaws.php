@@ -124,7 +124,7 @@ class ExportIntakeToRobaws implements ShouldQueue
                         $updateData = ['robaws_quotation_id' => $result['id']];
                         
                         if (\Schema::hasColumn('documents', 'robaws_upload_status')) {
-                            $updateData['robaws_upload_status'] = 'uploaded';
+                            $updateData['robaws_upload_status'] = 'pending'; // Will be updated by upload job
                         }
                         
                         if (\Schema::hasColumn('documents', 'robaws_uploaded_at')) {
@@ -138,27 +138,13 @@ class ExportIntakeToRobaws implements ShouldQueue
                         Log::info('Document exported to Robaws successfully', [
                             'intake_id' => $this->intake->id,
                             'document_id' => $document->id,
-                            'robaws_quotation_id' => $result['id']
+                            'robaws_quotation_id' => $result['id'],
+                            'note' => 'File upload will be handled automatically by ExtractionObserver'
                         ]);
 
-                        // Upload the actual file to the created quotation
-                        try {
-                            $uploadService = app(\App\Services\MultiDocumentUploadService::class);
-                            $uploadResult = $uploadService->uploadDocumentToQuotation($document);
-                            
-                            Log::info('Document file upload attempted', [
-                                'document_id' => $document->id,
-                                'robaws_quotation_id' => $result['id'],
-                                'upload_result' => $uploadResult
-                            ]);
-                        } catch (\Exception $uploadException) {
-                            Log::error('Failed to upload document file to Robaws', [
-                                'document_id' => $document->id,
-                                'robaws_quotation_id' => $result['id'],
-                                'error' => $uploadException->getMessage()
-                            ]);
-                            // Don't fail the entire export, just log the upload failure
-                        }
+                        // NOTE: File upload is handled automatically by ExtractionObserver
+                        // When robaws_quotation_id is updated, the observer dispatches UploadDocumentToRobaws
+                        // This prevents duplicate uploads
                     } else {
                         $failureCount++;
                         $error = "Failed to create quotation - no ID returned";
