@@ -86,6 +86,11 @@ class ExtractDocumentData implements ShouldQueue
 
                 // Store AI extracted data on document (use transformed data)
                 $this->document->update([
+                    'extraction_status' => 'completed',
+                    'extraction_data' => json_encode($result->getData()),
+                    'extraction_confidence' => $result->getConfidence(),
+                    'extraction_service' => $result->getStrategy(),
+                    'extracted_at' => now(),
                     'ai_extracted_data' => $transformedData, // Use transformed data with JSON field
                     'ai_processing_status' => 'completed'
                 ]);
@@ -96,6 +101,11 @@ class ExtractDocumentData implements ShouldQueue
                 ];
 
                 $this->document->update([
+                    'extraction_status' => 'failed',
+                    'extraction_data' => json_encode(['error' => $result->getErrorMessage()]),
+                    'extraction_confidence' => 0,
+                    'extraction_service' => $result->getStrategy(),
+                    'extracted_at' => now(),
                     'ai_processing_status' => 'failed'
                 ]);
             }
