@@ -500,7 +500,7 @@ class RobawsIntegrationService
         Quotation::updateOrCreate(
             ['robaws_id' => $offer['id']],
             [
-                'user_id' => $document->user_id,
+                'user_id' => $document->user_id ?? 1, // Default to user ID 1 if no user associated
                 'document_id' => $document->id,
                 'quotation_number' => $offer['number'] ?? $offer['id'],
                 'status' => strtolower($offer['status'] ?? 'draft'),
