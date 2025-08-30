@@ -580,12 +580,15 @@ class AiRouter
                 'messages' => [
                     [
                         'role' => 'system',
-                        'content' => 'You are a logistics data extraction specialist. ' .
+                        'content' => 'You are a vehicle transport and logistics data extraction specialist. ' .
+                                    'You excel at extracting vehicle information from text messages, emails, quotes, and transport documents. ' .
                                     'You MUST return valid JSON matching the exact structure provided in the prompt. ' .
                                     'Never return explanations, markdown, or any text outside the JSON. ' .
                                     'If a field cannot be extracted, use null. ' .
                                     'Do not omit required fields or add extra fields. ' .
-                                    'Focus on vehicle specifications, shipping details, and logistics information.'
+                                    'Key expertise: vehicle specifications, shipping details, transport routes, and logistics information. ' .
+                                    'Always populate both vehicle.make and vehicle.brand with the brand name when found. ' .
+                                    'Extract location names for transport routing (pickup/delivery points).'
                     ],
                     [
                         'role' => 'user',
@@ -651,10 +654,11 @@ class AiRouter
         // Define the exact JSON structure we expect
         $expectedStructure = [
             'vehicle' => [
-                'make' => 'string or null',
-                'model' => 'string or null',
-                'year' => 'string or null',
-                'condition' => 'string or null (e.g., new, used, non-runner)',
+                'make' => 'string or null (brand name: Alfa Romeo, BMW, Toyota)',
+                'brand' => 'string or null (same as make - brand name for compatibility)',
+                'model' => 'string or null (model name: Giulietta, 3 Series, Camry)',
+                'year' => 'string or null (year: 1960, 2020, etc.)',
+                'condition' => 'string or null (e.g., new, used, non-runner, runner, classic)',
                 'vin' => 'string or null',
                 'engine_cc' => 'number or null',
                 'fuel_type' => 'string or null',
@@ -671,15 +675,15 @@ class AiRouter
                 ]
             ],
             'shipment' => [
-                'origin' => 'string or null',
-                'destination' => 'string or null',
+                'origin' => 'string or null (pickup location: Beverly Hills Car Club, dealership, port)',
+                'destination' => 'string or null (delivery location: Antwerpen, Rotterdam, city)',
                 'type' => 'string or null (e.g., LCL, FCL, RoRo, Air)',
-                'service' => 'string or null',
+                'service' => 'string or null (export, import, domestic)',
                 'incoterms' => 'string or null'
             ],
             'contact' => [
-                'name' => 'string or null',
-                'company' => 'string or null',
+                'name' => 'string or null (person name)',
+                'company' => 'string or null (company/dealer name: Beverly Hills Car Club)',
                 'phone' => 'string or null',
                 'email' => 'string or null',
                 'address' => 'string or null'
@@ -696,18 +700,18 @@ class AiRouter
                 'quote_date' => 'string or null (ISO 8601 format)'
             ],
             'cargo' => [
-                'description' => 'string or null',
-                'quantity' => 'number or null',
+                'description' => 'string or null (vehicle description: 1 x non-runner Alfa Giulietta)',
+                'quantity' => 'number or null (typically 1 for vehicles)',
                 'packaging' => 'string or null',
                 'dangerous_goods' => 'boolean or null',
                 'special_handling' => 'string or null'
             ],
-            'additional_info' => 'string or null (any other relevant information)'
+            'additional_info' => 'string or null (any other relevant transport information)'
         ];
         
         $jsonStructureString = json_encode($expectedStructure, JSON_PRETTY_PRINT);
         
-        $basePrompt = "You are analyzing an image for logistics and shipping information. " .
+        $basePrompt = "You are a specialist in analyzing images for vehicle transport and logistics information. " .
                       "Extract ALL relevant data and return it in EXACTLY this JSON structure:\n\n" . 
                       $jsonStructureString . "\n\n" .
                       "CRITICAL INSTRUCTIONS:\n" .
@@ -718,21 +722,38 @@ class AiRouter
                       "5. Extract data even if partial - use null for missing fields\n" .
                       "6. Pay special attention to vehicle details when present\n" .
                       "7. Convert measurements to standard units (meters, kg)\n" .
-                      "8. Use ISO 8601 format for dates (YYYY-MM-DD)\n";
+                      "8. Use ISO 8601 format for dates (YYYY-MM-DD)\n" .
+                      "9. For vehicle.make, always use the brand name (e.g., 'Alfa Romeo', 'BMW', 'Toyota')\n" .
+                      "10. Map common transport terms: 'non-runner' = condition, 'LCL' = shipment type\n" .
+                      "11. Extract location names for origin/destination (e.g., 'Beverly Hills Car Club', 'Antwerpen')\n" .
+                      "12. Look for vehicle year in parentheses: (1960), (2020), etc.\n" .
+                      "13. Detect transport requests from text messages, emails, or documents\n";
         
         // Add analysis-type specific instructions
         switch ($analysisType) {
             case 'shipping':
             case 'comprehensive':
-                $basePrompt .= "\nFocus on: shipping routes, vehicle specifications, pricing, and logistics details.";
+                $basePrompt .= "\nSPECIAL FOCUS FOR VEHICLE TRANSPORT:\n" .
+                              "- Look for text mentioning vehicle make/model/year (e.g., '1960 Alfa Giulietta')\n" .
+                              "- Extract pickup locations (e.g., 'Beverly Hills Car Club', dealerships, ports)\n" .
+                              "- Extract destination locations (e.g., 'Antwerpen', 'Rotterdam', cities/ports)\n" .
+                              "- Identify vehicle condition: non-runner, runner, classic, vintage, new, used\n" .
+                              "- Map company names to contact.company and location names to shipment.origin/destination\n" .
+                              "- For transport quotes, extract customer info from context\n" .
+                              "- Always populate both vehicle.make and vehicle.brand with the same brand name\n";
                 break;
                 
             case 'basic':
-                $basePrompt .= "\nExtract basic information focusing on key identifiable data points.";
+                $basePrompt .= "\nExtract basic information focusing on key identifiable data points.\n" .
+                              "- Look for vehicle make, model, year in any text\n" .
+                              "- Extract any location names as potential origin/destination\n";
                 break;
                 
             case 'detailed':
-                $basePrompt .= "\nExtract comprehensive details including all specifications, measurements, and technical data.";
+                $basePrompt .= "\nExtract comprehensive details including all specifications, measurements, and technical data.\n" .
+                              "- Parse vehicle specifications from any visible text\n" .
+                              "- Extract complete transport routing information\n" .
+                              "- Identify all parties involved (customer, transport company, etc.)\n";
                 break;
         }
         

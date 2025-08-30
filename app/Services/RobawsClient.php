@@ -344,6 +344,72 @@ class RobawsClient
     }
 
     /**
+     * Upload document to Robaws (supports stream data for cloud storage)
+     */
+    public function uploadDocument(string $quotationId, array $fileData): array
+    {
+        try {
+            // Handle stream data for cloud storage compatibility
+            if (isset($fileData['stream'])) {
+                $fileContent = stream_get_contents($fileData['stream']);
+                $fileName = $fileData['filename'];
+                $mimeType = $fileData['mime_type'];
+                $fileSize = $fileData['file_size'];
+            } else {
+                // Fallback to file path handling
+                $file = $fileData['file'];
+                if (is_string($file)) {
+                    $fileName = basename($file);
+                    $mimeType = mime_content_type($file);
+                    $fileContent = file_get_contents($file);
+                    $fileSize = filesize($file);
+                } else {
+                    $fileName = $file->getClientOriginalName();
+                    $mimeType = $file->getClientMimeType();
+                    $fileContent = file_get_contents($file->getRealPath());
+                    $fileSize = $file->getSize();
+                }
+            }
+
+            // Check file size limit (6MB for direct upload)
+            if ($fileSize > 6 * 1024 * 1024) {
+                throw new \Exception('File too large for direct upload. Use temp bucket workflow for files >6MB.');
+            }
+
+            Log::info('Uploading document to Robaws quotation', [
+                'quotation_id' => $quotationId,
+                'file_name' => $fileName,
+                'file_size' => $fileSize,
+                'mime_type' => $mimeType
+            ]);
+
+            $response = Http::timeout(120) // Longer timeout for file uploads
+                ->withBasicAuth($this->username, $this->password)
+                ->attach('file', $fileContent, $fileName)
+                ->post($this->baseUrl . "/api/v2/offers/{$quotationId}/documents");
+
+            $result = $this->handleResponse($response);
+            
+            if ($result['success']) {
+                Log::info('Document uploaded successfully to Robaws', [
+                    'document_id' => $result['data']['id'] ?? 'unknown',
+                    'quotation_id' => $quotationId
+                ]);
+                return $result['data'];
+            }
+
+            throw new \Exception('Document upload failed: ' . ($result['message'] ?? 'Unknown error'));
+
+        } catch (\Exception $e) {
+            Log::error('Document upload failed', [
+                'quotation_id' => $quotationId,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
      * Upload small file directly to entity (≤6MB)
      */
     public function uploadDirectToEntity(string $entityType, string $entityId, $file): array

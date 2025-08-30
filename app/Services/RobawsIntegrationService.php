@@ -209,11 +209,19 @@ class RobawsIntegrationService
             $shipment = $normalizedData['shipment'] ?? [];
             $contact = $normalizedData['contact'] ?? [];
             
-            // JSON field - stringValue type
+            // JSON field - stringValue type (use normalized data to avoid nested JSON fields)
+            $cleanedData = $normalizedData;
+            // Add essential metadata
+            $cleanedData['extraction_metadata'] = [
+                'extracted_at' => now()->toISOString(),
+                'document_id' => $extractedData['document_id'] ?? null,
+                'confidence_score' => $extractedData['confidence_score'] ?? null
+            ];
+            
             $map['json'] = [
                 'label' => 'JSON',
                 'type' => 'stringValue',
-                'value' => json_encode($extractedData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
+                'value' => json_encode($cleanedData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
             ];
             
             // CARGO field - stringValue type
@@ -321,113 +329,30 @@ class RobawsIntegrationService
     }
     private function buildOfferPayload(array $extractedData, int $clientId, $extraction = null): array
     {
-        // Start with the base payload - using EXACT same pattern as working JSON
+        // Start with the base payload - core offer properties only
         $payload = [
             'clientId' => $clientId,
             'name' => $this->generateOfferTitle($extractedData),
             'currency' => 'EUR',
             'status' => 'DRAFT',
+            'validityDays' => 30,
+            'paymentTermDays' => 30,
+            'notes' => '',
         ];
 
-        // Add the JSON field EXACTLY as it was working before
-        $payload['JSON'] = json_encode($extractedData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-        
-        // Now add other fields using EXACTLY the same pattern as JSON
-        // All fields are configured the same way in Robaws
-        try {
-            // Get the normalized data
-            $normalizedData = $this->normalizeDataStructure($extractedData);
-            
-            $vehicle = $normalizedData['vehicle'] ?? [];
-            $shipment = $normalizedData['shipment'] ?? [];
-            $contact = $normalizedData['contact'] ?? [];
-            
-            // Add fields EXACTLY like JSON - direct assignment at root level
-            
-            // CARGO field
-            if (!empty($vehicle['brand']) || !empty($vehicle['model'])) {
-                $brand = $vehicle['brand'] ?? '';
-                $model = $vehicle['model'] ?? '';
-                $year = $vehicle['year'] ?? '';
-                $condition = $vehicle['condition'] ?? 'used';
-                $payload['CARGO'] = "1 x {$condition} {$brand} {$model}" . ($year ? " ({$year})" : "");
-            }
-            
-            // Customer field
-            if (!empty($contact['company'])) {
-                $payload['Customer'] = $contact['company'];
-            } else if (!empty($vehicle['brand'])) {
-                $payload['Customer'] = "Customer - {$vehicle['brand']} Owner";
-            }
-            
-            // Customer reference field
-            if (!empty($vehicle['brand']) && !empty($vehicle['model'])) {
-                $payload['Customer reference'] = "EXP RORO - {$vehicle['brand']} {$vehicle['model']}" . 
-                    (!empty($vehicle['year']) ? " ({$vehicle['year']})" : "");
-            }
-            
-            // Contact field (phone number)
-            if (!empty($contact['phone'])) {
-                $payload['Contact'] = $contact['phone'];
-            } else if (!empty($contact['name'])) {
-                $payload['Contact'] = $contact['name'];
-            }
-            
-            // POR field
-            if (!empty($shipment['origin'])) {
-                $payload['POR'] = $this->buildPortValue($shipment['origin']);
-            }
-            
-            // POL field (same as POR)
-            if (!empty($shipment['origin'])) {
-                $payload['POL'] = $this->buildPortValue($shipment['origin']);
-            }
-            
-            // POD field
-            if (!empty($shipment['destination'])) {
-                $payload['POD'] = $this->buildPortValue($shipment['destination']);
-            }
-            
-            // DIM_BEF_DELIVERY field
-            $dims = $this->formatDimensions($vehicle);
-            if ($dims) {
-                $payload['DIM_BEF_DELIVERY'] = $dims;
-            }
-            
-        } catch (\Exception $e) {
-            // If there's any error, at least keep the JSON field
-            Log::error('Error building field values', [
-                'error' => $e->getMessage()
-            ]);
-        }
-        
         // Build line items from extracted data
         $lineItems = $this->buildLineItems($extractedData);
         $payload['lineItems'] = $lineItems;
+
+        // NOTE: Do NOT add extraFields during offer creation - they must be sent via PUT update
+        // This matches the successful PDF pattern which creates the offer first, then updates with custom fields
         
-        $payload['validityDays'] = 30;
-        $payload['paymentTermDays'] = 30;
-        $payload['notes'] = '';
-        
-        // Log exactly what we're sending
-        Log::info('Robaws payload FINAL - using same pattern as working JSON', [
-            'fields' => array_keys($payload),
-            'has_JSON' => isset($payload['JSON']),
-            'JSON_length' => isset($payload['JSON']) ? strlen($payload['JSON']) : 0,
-            'has_CARGO' => isset($payload['CARGO']),
-            'has_Customer' => isset($payload['Customer']),
-            'has_POR' => isset($payload['POR']),
-            'has_POD' => isset($payload['POD']),
-            'sample_values' => [
-                'CARGO' => $payload['CARGO'] ?? 'NOT SET',
-                'Customer' => $payload['Customer'] ?? 'NOT SET',
-                'POR' => $payload['POR'] ?? 'NOT SET',
-                'POD' => $payload['POD'] ?? 'NOT SET'
-            ]
+        Log::info('Robaws payload for creation (no extraFields)', [
+            'base_fields' => array_keys($payload),
+            'has_line_items' => !empty($lineItems),
+            'line_item_count' => count($lineItems)
         ]);
         
-        // Return the payload AS IS - no filtering, no modifications
-        // This is exactly how JSON was working
         return $payload;
     }
 
@@ -816,6 +741,50 @@ class RobawsIntegrationService
         // Handle other possible nesting
         if (isset($data['extraction_data'])) {
             return $data['extraction_data'];
+        }
+        
+        // Handle flat structure (current image extraction format)
+        if (isset($data['vehicle_make']) || isset($data['vehicle_model']) || isset($data['origin']) || isset($data['destination'])) {
+            $normalized = [];
+            
+            // Map vehicle information from flat structure
+            $normalized['vehicle'] = [
+                'make' => $data['vehicle_make'] ?? null,
+                'brand' => $data['vehicle_make'] ?? null,
+                'model' => $data['vehicle_model'] ?? null,
+                'year' => $data['vehicle_year'] ?? null,
+                'condition' => $data['vehicle_condition'] ?? null,
+                'engine_cc' => $data['engine_cc'] ?? null,
+                'fuel_type' => $data['fuel_type'] ?? null,
+                'weight' => [
+                    'value' => $data['weight_numeric'] ?? null,
+                    'unit' => $data['weight_unit'] ?? null
+                ],
+                'dimensions' => [
+                    'length' => $this->extractDimension($data['length'] ?? null),
+                    'width' => $this->extractDimension($data['width'] ?? null),
+                    'height' => $this->extractDimension($data['height'] ?? null)
+                ],
+                'typical_container' => $data['typical_container'] ?? null,
+                'shipping_notes' => $data['shipping_notes'] ?? null
+            ];
+            
+            // Map shipment information from flat structure
+            $normalized['shipment'] = [
+                'origin' => $data['origin'] ?? null,
+                'destination' => $data['destination'] ?? null,
+                'type' => $data['shipment_type'] ?? null
+            ];
+            
+            // Map contact information (may not be present in flat structure)
+            $normalized['contact'] = [
+                'name' => $data['contact_name'] ?? null,
+                'company' => $data['contact_company'] ?? null,
+                'phone' => $data['contact_phone'] ?? null,
+                'email' => $data['contact_email'] ?? null
+            ];
+            
+            return $normalized;
         }
         
         // Handle the main document data structure (legacy)

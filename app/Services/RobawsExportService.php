@@ -130,53 +130,117 @@ class RobawsExportService
     }
 
     /**
-     * Upload document directly without relying on observers
+     * Normalize disk key to avoid double prefixes in file paths
+     * This is needed for DigitalOcean Spaces which sometimes double the prefix
+     */
+    protected function normalizeDiskKey(string $path, ?string $diskRoot = null): string
+    {
+        if (!$diskRoot) {
+            return $path;
+        }
+        
+        // Remove leading slash from disk root for comparison
+        $cleanDiskRoot = ltrim($diskRoot, '/');
+        
+        // If path already starts with the disk root, remove the duplicate
+        if (str_starts_with($path, $cleanDiskRoot . '/')) {
+            return substr($path, strlen($cleanDiskRoot) + 1);
+        }
+        
+        return $path;
+    }
+
+    /**
+     * Upload document directly without relying on observers - FIXED for DO Spaces
      */
     protected function uploadDocumentDirectly(Document $document, string $quotationId): array
     {
         try {
-            // Get file path - check multiple possible locations
-            $filePath = $this->getDocumentFilePath($document);
+            // Use storage disk instead of local file paths
+            $disk = Storage::disk($document->storage_disk ?? 'documents');
             
-            if (!$filePath) {
-                throw new RobawsException('Document file not found');
+            // Normalize the file path to handle potential double prefix
+            $filepath = $this->normalizeDiskKey($document->file_path, config('filesystems.disks.documents.root'));
+            
+            // Check if file exists in storage
+            if (!$disk->exists($filepath)) {
+                // Try without normalization if normalized path doesn't exist
+                if (!$disk->exists($document->file_path)) {
+                    throw new RobawsException("Document file not found in storage. Tried: '{$filepath}' and '{$document->file_path}'");
+                }
+                $filepath = $document->file_path;
+            }
+
+            // Get file info from storage (works with both local and cloud)
+            $mimeType = $disk->mimeType($filepath) ?: 'application/pdf';
+            $fileSize = $disk->size($filepath);
+            $fileName = basename($document->file_path); // Use original filename
+            
+            // For files over 50MB, consider using temporary URL instead
+            if ($fileSize > 50 * 1024 * 1024) {
+                Log::warning('Large file detected, skipping direct upload', [
+                    'document_id' => $document->id,
+                    'file_size' => $fileSize
+                ]);
+                throw new RobawsException('File too large for direct upload');
+            }
+
+            // Stream the file from storage
+            $fileStream = $disk->readStream($filepath);
+            
+            if (!is_resource($fileStream)) {
+                throw new RobawsException("Failed to read file stream from storage");
             }
 
             Log::info('Found document file, attempting upload', [
                 'document_id' => $document->id,
-                'file_path' => $filePath,
+                'filepath_used' => $filepath,
+                'file_size' => $fileSize,
                 'quotation_id' => $quotationId
             ]);
 
-            // Upload directly to the offer
-            $uploadResult = $this->robawsClient->uploadDirectToEntity('offer', $quotationId, $filePath);
-            
-            if (!$uploadResult || !isset($uploadResult['id'])) {
-                throw new RobawsException('Upload failed - no document ID returned');
+            try {
+                // Upload using stream instead of file path
+                $uploadResult = $this->robawsClient->uploadDocument($quotationId, [
+                    'stream' => $fileStream,
+                    'filename' => $fileName,
+                    'mime_type' => $mimeType,
+                    'file_size' => $fileSize
+                ]);
+                
+                if (!$uploadResult || !isset($uploadResult['id'])) {
+                    throw new RobawsException('Upload failed - no document ID returned');
+                }
+
+                // Update document with Robaws document ID
+                $document->update([
+                    'robaws_document_id' => $uploadResult['id'],
+                    'upload_status' => 'uploaded',
+                    'uploaded_at' => now()
+                ]);
+
+                Log::info('Document upload completed', [
+                    'document_id' => $document->id,
+                    'robaws_document_id' => $uploadResult['id'],
+                    'filepath_used' => $filepath
+                ]);
+
+                return [
+                    'success' => true,
+                    'robaws_document_id' => $uploadResult['id']
+                ];
+            } finally {
+                // Always close the stream
+                if (is_resource($fileStream)) {
+                    fclose($fileStream);
+                }
             }
-
-            // Update document with Robaws document ID
-            $document->update([
-                'robaws_document_id' => $uploadResult['id'],
-                'upload_status' => 'uploaded',
-                'uploaded_at' => now()
-            ]);
-
-            Log::info('Document upload completed', [
-                'document_id' => $document->id,
-                'robaws_document_id' => $uploadResult['id']
-            ]);
-
-            return [
-                'success' => true,
-                'robaws_document_id' => $uploadResult['id']
-            ];
 
         } catch (\Exception $e) {
             Log::error('Document upload failed', [
                 'document_id' => $document->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'filepath' => $document->file_path,
+                'error' => $e->getMessage()
             ]);
 
             $document->update(['upload_status' => 'failed']);
