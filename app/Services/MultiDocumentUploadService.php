@@ -107,6 +107,7 @@ class MultiDocumentUploadService
         ]);
 
         try {
+            // Use direct upload to offer - this is the working method
             $uploadResult = $this->robawsClient->uploadDirectToEntity(
                 'offer',
                 $document->robaws_quotation_id,

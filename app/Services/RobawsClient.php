@@ -331,7 +331,7 @@ class RobawsClient
         $response = Http::timeout($this->timeout)
             ->withBasicAuth($this->username, $this->password)
             ->acceptJson()
-            ->post($this->baseUrl . '/api/v2/temp-buckets');
+            ->post($this->baseUrl . '/api/v2/temp-document-buckets');
 
         $result = $this->handleResponse($response);
         
@@ -373,7 +373,7 @@ class RobawsClient
             $response = Http::timeout(300) // Extended timeout for large files
                 ->withBasicAuth($this->username, $this->password)
                 ->attach('file', $fileContent, $fileName)
-                ->post($this->baseUrl . "/api/v2/temp-buckets/{$bucketId}/upload");
+                ->post($this->baseUrl . "/api/v2/temp-document-buckets/{$bucketId}/documents");
 
             $result = $this->handleResponse($response);
             
@@ -401,25 +401,50 @@ class RobawsClient
      */
     public function attachDocumentFromBucket(string $entityType, string $entityId, string $bucketId, string $documentId): array
     {
-        $response = Http::timeout($this->timeout)
-            ->withBasicAuth($this->username, $this->password)
-            ->acceptJson()
-            ->post($this->baseUrl . "/api/v2/{$entityType}s/{$entityId}/documents/attach", [
-                'bucketId' => $bucketId,
-                'documentId' => $documentId
-            ]);
+        // For offers, use PATCH with documentId instead of attach endpoint
+        if ($entityType === 'offer') {
+            $response = Http::timeout($this->timeout)
+                ->withBasicAuth($this->username, $this->password)
+                ->withHeaders(['Content-Type' => 'application/merge-patch+json'])
+                ->patch($this->baseUrl . "/api/v2/{$entityType}s/{$entityId}", [
+                    'documentId' => $documentId
+                ]);
+        } else {
+            // Use attach endpoint for other entity types
+            $response = Http::timeout($this->timeout)
+                ->withBasicAuth($this->username, $this->password)
+                ->acceptJson()
+                ->post($this->baseUrl . "/api/v2/{$entityType}s/{$entityId}/documents/attach", [
+                    'bucketId' => $bucketId,
+                    'documentId' => $documentId
+                ]);
+        }
 
-        $result = $this->handleResponse($response);
-        
-        if ($result['success']) {
+        if ($response->successful()) {
             Log::info('Document attached from bucket', [
                 'entity_type' => $entityType,
                 'entity_id' => $entityId,
-                'document_id' => $documentId
+                'document_id' => $documentId,
+                'method' => $entityType === 'offer' ? 'patch' : 'attach',
+                'status' => $response->status()
             ]);
-            return $result['data'];
+            
+            // Handle different response types
+            if ($response->status() === 204) {
+                // No content response (successful PATCH)
+                return [
+                    'id' => $documentId,
+                    'status' => 'attached',
+                    'entity_type' => $entityType,
+                    'entity_id' => $entityId
+                ];
+            } else {
+                // Response with data
+                return $response->json();
+            }
         }
 
+        $result = $this->handleResponse($response);
         throw new \Exception('Failed to attach document: ' . ($result['message'] ?? 'Unknown error'));
     }
 
