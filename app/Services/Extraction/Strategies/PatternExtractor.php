@@ -54,8 +54,21 @@ class PatternExtractor
             'vin' => '/\b([A-HJ-NPR-Z0-9]{17})\b/',
             'year' => '/\b(19|20)(\d{2})\b/',
             'engine_cc' => '/(\d{3,4})\s*(cc|CC|cm³|CM³|ccm|CCM)/',
-            'dimensions_metric' => '/(\d+\.?\d*)\s*[×xX]\s*(\d+\.?\d*)\s*[×xX]\s*(\d+\.?\d*)\s*(m|M|cm|CM|mm|MM)/',
-            'dimensions_imperial' => '/(\d+\.?\d*)\s*[×xX]\s*(\d+\.?\d*)\s*[×xX]\s*(\d+\.?\d*)\s*(ft|FT|feet|FEET|in|IN|inch|inches)/',
+            // Enhanced dimension patterns - LxWxH format
+            'dimensions_metric' => '/(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*(m|M|cm|CM|mm|MM|meters?|centimeters?|millimeters?)/',
+            'dimensions_imperial' => '/(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*(ft|FT|feet|FEET|in|IN|inch|inches|foot)/',
+            // Individual dimension fields with labels - very specific to avoid false positives
+            'length_labeled' => '/(?:^|\b)(?:vehicle\s+)?length[\s:=]+(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)\b/i',
+            'width_labeled' => '/(?:^|\b)(?:vehicle\s+)?width[\s:=]+(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)\b/i',
+            'height_labeled' => '/(?:^|\b)(?:vehicle\s+)?height[\s:=]+(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)\b/i',
+            // Single letter labels only when followed by units
+            'length_single_letter' => '/\bL[\s:=]+(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)\b/i',
+            'width_single_letter' => '/\bW[\s:=]+(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)\b/i',
+            'height_single_letter' => '/\bH[\s:=]+(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)\b/i',
+            // Dimension context patterns
+            'dimensions_labeled' => '/(?:dimensions?|size|measurements?)[\s:=]+(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)?/i',
+            'dimensions_lwh' => '/(?:L\s*[×x×X*]\s*W\s*[×x×X*]\s*H|LWH)[\s:=]*(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)?/i',
+            'dimensions_parentheses' => '/\((\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)?\)/',
             'weight_kg' => '/(\d+\.?\d*)\s*(kg|KG|Kg|kilo|kilos|kilogram|kilograms)/',
             'weight_lbs' => '/(\d+\.?\d*)\s*(lbs|LBS|lb|LB|pounds|POUNDS)/',
             'mileage_km' => '/(\d+[\d,\.]*)\s*(km|KM|kilometer|kilometers|kilometre|kilometres)/',
@@ -127,6 +140,20 @@ class PatternExtractor
                 $vehicle['model'] = $pattern['model'];
                 $vehicle['extraction_pattern'] = $pattern['pattern'];
                 break; // Use first (longest) match
+            }
+        }
+        
+        // Fallback: Extract brand and model using common patterns (when database is empty)
+        if (empty($vehicle['brand']) || empty($vehicle['model'])) {
+            $commonPatterns = $this->getCommonVehiclePatterns();
+            foreach ($commonPatterns as $pattern) {
+                if (preg_match($pattern['regex'], $content, $matches)) {
+                    $vehicle['brand'] = $pattern['brand'];
+                    $vehicle['model'] = $pattern['model'];
+                    $vehicle['extraction_pattern'] = $pattern['pattern'];
+                    $vehicle['extraction_source'] = 'fallback_patterns';
+                    break; // Use first match
+                }
             }
         }
         
@@ -340,39 +367,157 @@ class PatternExtractor
      */
     private function extractDimensions(string $content): ?array
     {
-        // Try metric dimensions first
-        if (preg_match($this->vehiclePatterns['dimensions_metric'], $content, $matches)) {
-            $unit = strtolower($matches[4]);
-            $multiplier = match($unit) {
-                'cm' => 0.01,
-                'mm' => 0.001,
-                default => 1
-            };
-            
-            return [
-                'length_m' => round((float)$matches[1] * $multiplier, 3),
-                'width_m' => round((float)$matches[2] * $multiplier, 2),
-                'height_m' => round((float)$matches[3] * $multiplier, 3)
-            ];
+        Log::info('Attempting dimension extraction', ['content_length' => strlen($content)]);
+        
+        // Try different dimension patterns in order of preference
+        $patterns = [
+            'dimensions_labeled' => $this->vehiclePatterns['dimensions_labeled'],
+            'dimensions_lwh' => $this->vehiclePatterns['dimensions_lwh'], 
+            'dimensions_parentheses' => $this->vehiclePatterns['dimensions_parentheses'],
+            'dimensions_metric' => $this->vehiclePatterns['dimensions_metric'],
+            'dimensions_imperial' => $this->vehiclePatterns['dimensions_imperial']
+        ];
+        
+        foreach ($patterns as $patternName => $pattern) {
+            if (preg_match($pattern, $content, $matches)) {
+                Log::info("Dimension pattern matched", [
+                    'pattern' => $patternName,
+                    'matches' => $matches
+                ]);
+                
+                $length = (float)$matches[1];
+                $width = (float)$matches[2]; 
+                $height = (float)$matches[3];
+                $unit = isset($matches[4]) ? strtolower(trim($matches[4])) : 'm';
+                
+                // Convert to meters
+                $dimensions = $this->convertDimensionsToMeters($length, $width, $height, $unit);
+                
+                if ($this->validateDimensions($dimensions)) {
+                    Log::info('Valid dimensions extracted', $dimensions);
+                    return $dimensions;
+                }
+            }
         }
         
-        // Try imperial dimensions
-        if (preg_match($this->vehiclePatterns['dimensions_imperial'], $content, $matches)) {
-            $unit = strtolower($matches[4]);
-            $multiplier = match($unit) {
-                'ft', 'feet' => 0.3048,
-                'in', 'inch', 'inches' => 0.0254,
-                default => 1
-            };
+        // Try individual labeled dimensions (L:, W:, H:)
+        $individualDimensions = $this->extractIndividualDimensions($content);
+        if ($individualDimensions && $this->validateDimensions($individualDimensions)) {
+            Log::info('Individual dimensions extracted', $individualDimensions);
+            return $individualDimensions;
+        }
+        
+        Log::info('No dimensions found in content');
+        return null;
+    }
+    
+    /**
+     * Extract individual dimension fields (Length:, Width:, Height:)
+     */
+    private function extractIndividualDimensions(string $content): ?array
+    {
+        $dimensions = [];
+        $unit = 'm'; // Default unit
+        
+        // Extract length - try both full word and single letter patterns
+        if (preg_match($this->vehiclePatterns['length_labeled'], $content, $matches)) {
+            $dimensions['length'] = (float)$matches[1];
+            if (isset($matches[2]) && !empty($matches[2])) {
+                $unit = strtolower(trim($matches[2]));
+            }
+        } elseif (preg_match($this->vehiclePatterns['length_single_letter'], $content, $matches)) {
+            $dimensions['length'] = (float)$matches[1];
+            if (isset($matches[2]) && !empty($matches[2])) {
+                $unit = strtolower(trim($matches[2]));
+            }
+        }
+        
+        // Extract width - try both full word and single letter patterns
+        if (preg_match($this->vehiclePatterns['width_labeled'], $content, $matches)) {
+            $dimensions['width'] = (float)$matches[1];
+            if (isset($matches[2]) && !empty($matches[2])) {
+                $unit = strtolower(trim($matches[2]));
+            }
+        } elseif (preg_match($this->vehiclePatterns['width_single_letter'], $content, $matches)) {
+            $dimensions['width'] = (float)$matches[1];
+            if (isset($matches[2]) && !empty($matches[2])) {
+                $unit = strtolower(trim($matches[2]));
+            }
+        }
+        
+        // Extract height - try both full word and single letter patterns
+        if (preg_match($this->vehiclePatterns['height_labeled'], $content, $matches)) {
+            $dimensions['height'] = (float)$matches[1];
+            if (isset($matches[2]) && !empty($matches[2])) {
+                $unit = strtolower(trim($matches[2]));
+            }
+        } elseif (preg_match($this->vehiclePatterns['height_single_letter'], $content, $matches)) {
+            $dimensions['height'] = (float)$matches[1];
+            if (isset($matches[2]) && !empty($matches[2])) {
+                $unit = strtolower(trim($matches[2]));
+            }
+        }
+        
+        // Need at least 2 dimensions to be useful
+        if (count($dimensions) >= 2) {
+            $length = $dimensions['length'] ?? 0;
+            $width = $dimensions['width'] ?? 0;
+            $height = $dimensions['height'] ?? 0;
             
-            return [
-                'length_m' => round((float)$matches[1] * $multiplier, 3),
-                'width_m' => round((float)$matches[2] * $multiplier, 2),
-                'height_m' => round((float)$matches[3] * $multiplier, 3)
-            ];
+            return $this->convertDimensionsToMeters($length, $width, $height, $unit);
         }
         
         return null;
+    }
+    
+    /**
+     * Convert dimensions to meters from various units
+     */
+    private function convertDimensionsToMeters(float $length, float $width, float $height, string $unit): array
+    {
+        $multiplier = match($unit) {
+            'cm', 'centimeter', 'centimeters' => 0.01,
+            'mm', 'millimeter', 'millimeters' => 0.001,
+            'ft', 'feet', 'foot' => 0.3048,
+            'in', 'inch', 'inches' => 0.0254,
+            default => 1 // meters
+        };
+        
+        return [
+            'length_m' => round($length * $multiplier, 3),
+            'width_m' => round($width * $multiplier, 3),
+            'height_m' => round($height * $multiplier, 3),
+            'unit_source' => $unit,
+            'source' => 'pattern_extraction'
+        ];
+    }
+    
+    /**
+     * Validate that dimensions are reasonable for a vehicle
+     */
+    private function validateDimensions(array $dimensions): bool
+    {
+        $length = $dimensions['length_m'] ?? 0;
+        $width = $dimensions['width_m'] ?? 0;
+        $height = $dimensions['height_m'] ?? 0;
+        
+        // Basic range validation for vehicles
+        $validLength = $length >= 2.0 && $length <= 15.0; // 2m to 15m
+        $validWidth = $width >= 1.0 && $width <= 4.0;    // 1m to 4m  
+        $validHeight = $height >= 0.8 && $height <= 4.0; // 0.8m to 4m
+        
+        $isValid = $validLength && $validWidth && $validHeight;
+        
+        if (!$isValid) {
+            Log::warning('Dimensions failed validation', [
+                'dimensions' => $dimensions,
+                'validLength' => $validLength,
+                'validWidth' => $validWidth, 
+                'validHeight' => $validHeight
+            ]);
+        }
+        
+        return $isValid;
     }
     
     private function extractWeight(string $content): ?int
@@ -470,5 +615,77 @@ class PatternExtractor
             '£', 'GBP' => 'GBP',
             default => 'USD'
         };
+    }
+    
+    /**
+     * Get common vehicle patterns as fallback when database is empty
+     */
+    private function getCommonVehiclePatterns(): array
+    {
+        return [
+            // Luxury brands
+            [
+                'pattern' => 'BENTLEY CONTINENTAL',
+                'brand' => 'BENTLEY',
+                'model' => 'CONTINENTAL',
+                'regex' => '/\bBENTLEY\s+CONTINENTAL\b/i'
+            ],
+            [
+                'pattern' => 'MERCEDES-BENZ',
+                'brand' => 'MERCEDES-BENZ',
+                'model' => 'UNKNOWN',
+                'regex' => '/\bMERCEDES[\s-]*BENZ\s+([A-Z0-9]+)/i'
+            ],
+            [
+                'pattern' => 'BMW',
+                'brand' => 'BMW',
+                'model' => 'UNKNOWN',
+                'regex' => '/\bBMW\s+([A-Z0-9]+)/i'
+            ],
+            [
+                'pattern' => 'AUDI',
+                'brand' => 'AUDI',
+                'model' => 'UNKNOWN',
+                'regex' => '/\bAUDI\s+([A-Z0-9]+)/i'
+            ],
+            [
+                'pattern' => 'LEXUS',
+                'brand' => 'LEXUS',
+                'model' => 'UNKNOWN',
+                'regex' => '/\bLEXUS\s+([A-Z0-9]+)/i'
+            ],
+            // Mass market brands
+            [
+                'pattern' => 'TOYOTA',
+                'brand' => 'TOYOTA',
+                'model' => 'UNKNOWN',
+                'regex' => '/\bTOYOTA\s+([A-Z0-9]+)/i'
+            ],
+            [
+                'pattern' => 'HONDA',
+                'brand' => 'HONDA',
+                'model' => 'UNKNOWN',
+                'regex' => '/\bHONDA\s+([A-Z0-9]+)/i'
+            ],
+            [
+                'pattern' => 'FORD',
+                'brand' => 'FORD',
+                'model' => 'UNKNOWN',
+                'regex' => '/\bFORD\s+([A-Z0-9]+)/i'
+            ],
+            [
+                'pattern' => 'VOLKSWAGEN',
+                'brand' => 'VOLKSWAGEN',
+                'model' => 'UNKNOWN',
+                'regex' => '/\bVOLKSWAGEN\s+([A-Z0-9]+)/i'
+            ],
+            [
+                'pattern' => 'NISSAN',
+                'brand' => 'NISSAN',
+                'model' => 'UNKNOWN',
+                'regex' => '/\bNISSAN\s+([A-Z0-9]+)/i'
+            ],
+            // Add more patterns as needed...
+        ];
     }
 }

@@ -5,7 +5,6 @@ namespace App\Services;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class RobawsClient
@@ -194,41 +193,19 @@ class RobawsClient
     }
 
     /**
-     * Find or create a client based on email or name
+     * Find or create a client based on email
      */
     public function findOrCreateClient(array $clientData): array
     {
-        // Search for existing client by email first
+        // Search for existing client by email
         if (!empty($clientData['email'])) {
-            try {
-                $existingClients = $this->searchClients([
-                    'email' => $clientData['email'],
-                    'limit' => 1
-                ]);
+            $existingClients = $this->searchClients([
+                'email' => $clientData['email'],
+                'limit' => 1
+            ]);
 
-                if (!empty($existingClients['data'])) {
-                    return $existingClients['data'][0];
-                }
-            } catch (\Exception $e) {
-                // Continue to create new client if search fails
-                Log::warning('Client search by email failed', ['error' => $e->getMessage()]);
-            }
-        }
-        
-        // Search by name if no email or email search failed
-        if (!empty($clientData['name'])) {
-            try {
-                $existingClients = $this->searchClients([
-                    'name' => $clientData['name'],
-                    'limit' => 1
-                ]);
-
-                if (!empty($existingClients['data'])) {
-                    return $existingClients['data'][0];
-                }
-            } catch (\Exception $e) {
-                // Continue to create new client if search fails
-                Log::warning('Client search by name failed', ['error' => $e->getMessage()]);
+            if (!empty($existingClients['data'])) {
+                return $existingClients['data'][0];
             }
         }
 
@@ -244,124 +221,6 @@ class RobawsClient
         $res = $this->http()->get('/api/v2/articles', $filters);
         $this->throwUnlessOk($res);
         return $res->json();
-    }
-
-    /**
-     * Add a document to an offer
-     */
-    public function addOfferDocument(int $offerId, string $filename, string $mimeType, $streamOrBytes): array
-    {
-        try {
-            Log::info('Uploading document to Robaws offer', [
-                'offer_id' => $offerId,
-                'filename' => $filename,
-                'mime_type' => $mimeType,
-                'content_length' => is_resource($streamOrBytes) ? 'stream' : strlen($streamOrBytes),
-            ]);
-
-            // Always use multipart form upload (more reliable than JSON+base64)
-            $response = Http::baseUrl($this->baseUrl)
-                ->withBasicAuth($this->apiKey, $this->apiSecret)
-                ->timeout(60)
-                ->attach('file', $streamOrBytes, $filename, ['Content-Type' => $mimeType])
-                ->post("/api/v2/offers/{$offerId}/documents");
-            
-            $this->throwUnlessOk($response);
-            
-            $result = $response->json();
-            Log::info('Document uploaded successfully to Robaws offer', [
-                'offer_id' => $offerId,
-                'document_id' => $result['id'] ?? null,
-                'filename' => $filename,
-            ]);
-            
-            return $result;
-
-        } catch (\Illuminate\Http\Client\RequestException $e) {
-            $body = $e->response ? $e->response->body() : '';
-            $errorData = json_decode($body, true) ?: [];
-            $correlationId = $errorData['correlationId'] ?? null;
-            
-            $errorMessage = sprintf(
-                "Failed to upload document to offer %d: HTTP %d%s - %s",
-                $offerId,
-                $e->response ? $e->response->status() : 0,
-                $correlationId ? " (correlationId: {$correlationId})" : '',
-                $body
-            );
-            
-            Log::error('Robaws document upload failed', [
-                'offer_id' => $offerId,
-                'filename' => $filename,
-                'error' => $errorMessage,
-                'correlation_id' => $correlationId,
-                'response_body' => $body,
-            ]);
-            
-            throw new \Exception($errorMessage);
-        } catch (\Exception $e) {
-            Log::error('Robaws document upload error', [
-                'offer_id' => $offerId,
-                'filename' => $filename,
-                'error' => $e->getMessage(),
-            ]);
-            
-            throw $e;
-        }
-    }
-
-    /**
-     * Create a chunked upload session for large files (> 6MB)
-     */
-    public function createOfferDocumentUploadSession(int $offerId, string $filename, string $mimeType, int $fileSize): array
-    {
-        try {
-            $response = Http::baseUrl($this->baseUrl)
-                ->withBasicAuth($this->apiKey, $this->apiSecret)
-                ->withHeaders([
-                    'Accept' => 'application/json',
-                    'Content-Type' => 'application/json',
-                ])
-                ->post("/api/v2/offers/{$offerId}/document-upload-sessions", [
-                    'name' => $filename, // Robaws requires 'name' field
-                    'filename' => $filename,
-                    'mimeType' => $mimeType,
-                    'size' => $fileSize,
-                ]);
-
-            $this->throwUnlessOk($response);
-            return $response->json();
-
-        } catch (\Illuminate\Http\Client\RequestException $e) {
-            $body = $e->response ? $e->response->body() : '';
-            throw new \Exception("Failed to create document upload session: {$body}");
-        }
-    }
-
-    /**
-     * Upload a chunk to a document upload session
-     */
-    public function uploadDocumentChunk(string $sessionId, string $bytesBase64, int $partNumber): array
-    {
-        try {
-            $response = Http::baseUrl($this->baseUrl)
-                ->withBasicAuth($this->apiKey, $this->apiSecret)
-                ->withHeaders([
-                    'Accept' => 'application/json',
-                    'Content-Type' => 'application/json',
-                ])
-                ->post("/api/v2/document-upload-sessions/{$sessionId}", [
-                    'bytesBase64' => $bytesBase64,
-                    'partNumber' => $partNumber,
-                ]);
-
-            $this->throwUnlessOk($response);
-            return $response->json();
-
-        } catch (\Illuminate\Http\Client\RequestException $e) {
-            $body = $e->response ? $e->response->body() : '';
-            throw new \Exception("Failed to upload document chunk: {$body}");
-        }
     }
 
     protected function throwUnlessOk(Response $res): void

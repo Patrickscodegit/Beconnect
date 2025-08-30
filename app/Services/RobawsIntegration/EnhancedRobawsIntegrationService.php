@@ -84,6 +84,52 @@ class EnhancedRobawsIntegrationService
                     'has_routing' => !empty($robawsData['por']) && !empty($robawsData['pod']),
                     'has_cargo' => !empty($robawsData['cargo']),
                 ]);
+
+                // ENHANCED: Now actually create the offer in Robaws using the main service
+                if ($syncStatus === 'ready') {
+                    Log::info('Document ready for Robaws - creating offer now', [
+                        'document_id' => $document->id,
+                    ]);
+
+                    try {
+                        $mainService = app(\App\Services\RobawsIntegrationService::class);
+                        $result = $mainService->createOfferFromDocument($document);
+
+                        if ($result && isset($result['success']) && $result['success']) {
+                            $document->update([
+                                'robaws_sync_status' => 'synced',
+                                'robaws_synced_at' => now(),
+                                'robaws_quotation_id' => $result['offer']['id'] ?? null,
+                            ]);
+
+                            Log::info('Enhanced Integration: Offer created in Robaws successfully', [
+                                'document_id' => $document->id,
+                                'robaws_offer_id' => $result['offer']['id'] ?? null,
+                                'robaws_url' => $result['robaws_url'] ?? null,
+                            ]);
+                        } else {
+                            Log::warning('Enhanced Integration: Failed to create offer in Robaws', [
+                                'document_id' => $document->id,
+                                'result' => $result,
+                            ]);
+
+                            $document->update([
+                                'robaws_sync_status' => 'failed',
+                                'robaws_last_sync_attempt' => now(),
+                            ]);
+                        }
+                    } catch (\Exception $e) {
+                        Log::error('Enhanced Integration: Error creating offer in Robaws', [
+                            'document_id' => $document->id,
+                            'error' => $e->getMessage(),
+                        ]);
+
+                        $document->update([
+                            'robaws_sync_status' => 'failed',
+                            'robaws_last_sync_attempt' => now(),
+                        ]);
+                    }
+                }
                 
                 return true;
                 

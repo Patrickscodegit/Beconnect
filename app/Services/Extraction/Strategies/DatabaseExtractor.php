@@ -66,6 +66,21 @@ class DatabaseExtractor
         } else {
             // No exact match, try partial enhancement
             $enhanced = $this->partialDatabaseEnhancement($vehicleData, $content);
+            
+            // If we have vehicle info but no dimensions, add placeholder for AI to fill
+            if (!empty($enhanced['brand']) && !empty($enhanced['model']) && empty($enhanced['dimensions'])) {
+                $enhanced['needs_dimension_lookup'] = true;
+                $enhanced['dimension_request'] = [
+                    'make' => $enhanced['brand'],
+                    'model' => $enhanced['model'],
+                    'year' => $enhanced['year'] ?? null
+                ];
+                
+                Log::info('Marked vehicle for dimension AI lookup', [
+                    'vehicle' => $enhanced['brand'] . ' ' . $enhanced['model'],
+                    'year' => $enhanced['year'] ?? 'unknown'
+                ]);
+            }
         }
         
         // Enhance VIN data if available

@@ -157,6 +157,7 @@ class HybridExtractionPipeline
         $criticalFields = [
             'vehicle.brand',
             'vehicle.model', 
+            'vehicle.dimensions', // Add dimensions as critical field
             'shipment.origin',
             'shipment.destination',
             'contact.email'
@@ -191,6 +192,17 @@ class HybridExtractionPipeline
                 if (empty($vehicleData[$field])) {
                     $missingVehicleFields++;
                 }
+            }
+            
+            // Always trigger AI if dimensions are missing and we have vehicle make/model
+            if (empty($vehicleData['dimensions']) && 
+                !empty($vehicleData['brand']) && 
+                !empty($vehicleData['model'])) {
+                Log::info('AI needed: missing dimensions for known vehicle', [
+                    'vehicle' => $vehicleData['brand'] . ' ' . $vehicleData['model'],
+                    'year' => $vehicleData['year'] ?? 'unknown'
+                ]);
+                return true;
             }
             
             if ($missingVehicleFields >= 2) {
@@ -229,10 +241,21 @@ class HybridExtractionPipeline
             if (empty($vehicle['year'])) $needed[] = "manufacturing year";
             if (empty($vehicle['engine_cc'])) $needed[] = "engine displacement (CC)";
             if (empty($vehicle['fuel_type'])) $needed[] = "fuel type";
-            if (empty($vehicle['dimensions'])) $needed[] = "dimensions (L×W×H)";
             if (empty($vehicle['weight_kg'])) $needed[] = "weight";
             if (empty($vehicle['condition'])) $needed[] = "condition (new/used/damaged)";
             if (empty($vehicle['color'])) $needed[] = "color";
+            
+            // Special handling for dimensions - always request if missing
+            if (empty($vehicle['dimensions'])) {
+                $needed[] = "DIMENSIONS (Length x Width x Height in meters)";
+                
+                $prompt .= "IMPORTANT: This document mentions a " . $vehicle['brand'] . " " . $vehicle['model'];
+                if (!empty($vehicle['year'])) $prompt .= " from " . $vehicle['year'];
+                $prompt .= ".\n";
+                $prompt .= "Please provide the standard factory dimensions for this specific vehicle model.\n";
+                $prompt .= "Use accurate manufacturer specifications for Length x Width x Height in meters.\n";
+                $prompt .= "Example format: {'length_m': 5.299, 'width_m': 1.946, 'height_m': 1.405}\n\n";
+            }
             
             if (!empty($needed)) {
                 $prompt .= "Still needed for vehicle: " . implode(", ", $needed) . "\n\n";
@@ -253,7 +276,14 @@ class HybridExtractionPipeline
         
         // Add specific extraction instructions
         $prompt .= "Extract the following with high precision:\n";
-        $prompt .= "- Complete vehicle specifications (year, make, model, VIN, engine CC, fuel type, dimensions L×W×H, weight, color, condition)\n";
+        $prompt .= "- Complete vehicle specifications (year, make, model, VIN, engine CC, fuel type, weight, color, condition)\n";
+        $prompt .= "- VEHICLE DIMENSIONS: **CRITICAL** - Provide accurate manufacturer dimensions:\n";
+        $prompt .= "  * If document contains dimensions: Extract exactly as stated\n";
+        $prompt .= "  * If NO dimensions in document: Look up standard factory specifications\n";
+        $prompt .= "  * Use your knowledge of real vehicle specifications from manufacturers\n";
+        $prompt .= "  * Format: Length × Width × Height in meters (e.g., 5.299 × 1.946 × 1.405)\n";
+        $prompt .= "  * For Bentley Continental: Use actual Bentley factory specifications\n";
+        $prompt .= "  * Convert all measurements to meters with 3 decimal precision\n";
         $prompt .= "- Shipping route (origin city/country → destination city/country, ports if mentioned)\n";
         $prompt .= "- Shipping method (RORO, 20ft container, 40ft container, 40HC container)\n";
         $prompt .= "- Timeline (pickup date, delivery date, ETD, ETA)\n";

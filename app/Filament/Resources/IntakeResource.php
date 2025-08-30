@@ -298,6 +298,7 @@ class IntakeResource extends Resource
                                 'disk' => $originalDocument->disk ?? config('filesystems.default', 'local'),
                                 'mime_type' => $originalDocument->mime_type,
                                 'extraction_data' => $mappedData,
+                                'raw_json' => $extraction->raw_json, // Include raw_json for JSON field access
                                 'user_id' => auth()->id() ?? 1,
                             ]);
                             $document->id = $originalDocument->id; // Use original document ID

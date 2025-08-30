@@ -39,6 +39,43 @@ class VehicleDatabaseService
     }
     
     /**
+     * Check if vehicle has dimensions available in database
+     */
+    public function hasVehicleDimensions(array $vehicleData): bool
+    {
+        $vehicle = $this->findVehicle($vehicleData);
+        
+        if (!$vehicle) {
+            return false;
+        }
+        
+        return !empty($vehicle->length_m) && !empty($vehicle->width_m) && !empty($vehicle->height_m);
+    }
+    
+    /**
+     * Get dimensions for a vehicle if available in database
+     */
+    public function getVehicleDimensions(array $vehicleData): ?array
+    {
+        $vehicle = $this->findVehicle($vehicleData);
+        
+        if (!$vehicle || !$this->hasVehicleDimensions($vehicleData)) {
+            return null;
+        }
+        
+        return [
+            'length_m' => (float) $vehicle->length_m,
+            'width_m' => (float) $vehicle->width_m,
+            'height_m' => (float) $vehicle->height_m,
+            'source' => 'database',
+            'vehicle_id' => $vehicle->id,
+            'make' => $vehicle->make,
+            'model' => $vehicle->model,
+            'year' => $vehicle->year
+        ];
+    }
+    
+    /**
      * Find exact match by make, model, and optionally year
      */
     private function findExactMatch(array $data): ?VehicleSpec

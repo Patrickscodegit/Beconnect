@@ -120,8 +120,23 @@ class RobawsOfferController extends Controller
                 ], 409);
             }
             
-            // Check if document has extraction data
-            if (empty($document->extraction_data)) {
+            // Check if document has extraction data (prefer extraction.raw_json for JSON field support)
+            $extraction = $document->extractions()->first();
+            $extractionDataSource = null;
+            $dataSource = 'unknown';
+            
+            if ($extraction && $extraction->raw_json) {
+                $extractionDataSource = $extraction->raw_json;
+                $dataSource = 'extraction.raw_json';
+            } elseif ($document->raw_json) {
+                $extractionDataSource = $document->raw_json;
+                $dataSource = 'document.raw_json';
+            } else {
+                $extractionDataSource = $document->extraction_data;
+                $dataSource = 'document.extraction_data';
+            }
+            
+            if (empty($extractionDataSource)) {
                 return response()->json([
                     'message' => 'Document has no extraction data. Please wait for AI processing to complete.'
                 ], 400);
@@ -129,7 +144,18 @@ class RobawsOfferController extends Controller
             
             // Try using the RobawsClient first, fallback to RobawsIntegrationService
             try {
-                $extractedData = json_decode($document->extraction_data, true);
+                $extractedData = is_string($extractionDataSource) 
+                    ? json_decode($extractionDataSource, true)
+                    : $extractionDataSource;
+                
+                Log::info('RobawsOfferController: Creating offer with enhanced data', [
+                    'document_id' => $document->id,
+                    'data_source' => $dataSource,
+                    'has_json_field' => isset($extractedData['JSON']),
+                    'json_field_length' => strlen($extractedData['JSON'] ?? ''),
+                    'field_count' => count($extractedData ?? [])
+                ]);
+                
                 $clientData = $this->extractClientData($extractedData);
                 $client = $this->robawsClient->findOrCreateClient($clientData);
                 
@@ -143,6 +169,39 @@ class RobawsOfferController extends Controller
                         'source_document' => [
                             'value' => $document->original_filename,
                             'type' => 'TEXT'
+                        ],
+                        'JSON' => [
+                            'value' => $extractedData['JSON'] ?? '',
+                            'type' => 'LONG_TEXT'
+                        ],
+                        'extracted_json' => [
+                            'value' => json_encode($extractedData, JSON_PRETTY_PRINT),
+                            'type' => 'LONG_TEXT'
+                        ]
+                    ]
+                ];
+                
+                Log::info('RobawsOfferController: Sending offer data to API', [
+                    'document_id' => $document->id,
+                    'has_json_in_extrafields' => !empty($offerData['extraFields']['JSON']['value']),
+                    'json_field_length_in_payload' => strlen($offerData['extraFields']['JSON']['value'] ?? ''),
+                    'extrafields_count' => count($offerData['extraFields'])
+                ]);
+                
+                $offerData = [
+                    'title' => $extractedData['title'] ?? "Offer from {$document->original_filename}",
+                    'date' => $extractedData['date'] ?? $document->created_at->format('Y-m-d'),
+                    'clientId' => $client['id'],
+                    'currency' => $extractedData['currency'] ?? 'EUR',
+                    'companyId' => config('services.robaws.default_company_id'),
+                    'extraFields' => [
+                        'source_document' => [
+                            'value' => $document->original_filename,
+                            'type' => 'TEXT'
+                        ],
+                        'JSON' => [
+                            'value' => $extractedData['JSON'] ?? '',
+                            'type' => 'LONG_TEXT'
                         ],
                         'extracted_json' => [
                             'value' => json_encode($extractedData, JSON_PRETTY_PRINT),

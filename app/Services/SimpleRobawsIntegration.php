@@ -19,7 +19,9 @@ class SimpleRobawsIntegration
             // Update the document with Robaws-ready JSON
             $document->update([
                 'robaws_quotation_data' => $robawsData,
-                'robaws_quotation_id' => null // Will be set when actually synced
+                'robaws_quotation_id' => null, // Will be set when actually synced
+                'robaws_sync_status' => 'ready', // ADD THIS
+                'robaws_formatted_at' => now()   // ADD THIS
             ]);
 
             Log::info('Document data formatted for Robaws', [
@@ -315,10 +317,12 @@ class SimpleRobawsIntegration
      */
     public function getDocumentsReadyForExport(): \Illuminate\Database\Eloquent\Collection
     {
-        return Document::where('extraction_status', 'completed')
-                      ->whereNotNull('robaws_quotation_data')
-                      ->whereNull('robaws_quotation_id')
-                      ->get();
+        return Document::whereHas('extractions', function($q) {
+                $q->where('status', 'completed');
+            })
+            ->whereNotNull('robaws_quotation_data')
+            ->whereNull('robaws_quotation_id')
+            ->get();
     }
 
     /**
@@ -349,6 +353,8 @@ class SimpleRobawsIntegration
         try {
             $document->update([
                 'robaws_quotation_id' => $robawsQuotationId,
+                'robaws_sync_status' => 'synced', // ADD THIS
+                'robaws_synced_at' => now()      // ADD THIS
             ]);
 
             Log::info('Document marked as synced to Robaws', [
@@ -373,7 +379,10 @@ class SimpleRobawsIntegration
      */
     public function getIntegrationSummary(): array
     {
-        $totalDocuments = Document::where('extraction_status', 'completed')->count();
+        $totalDocuments = Document::whereHas('extractions', function($q) {
+            $q->where('status', 'completed');
+        })->count();
+        
         $readyForSync = Document::where('robaws_sync_status', 'ready')->count();
         $synced = Document::where('robaws_sync_status', 'synced')->count();
         $pending = $totalDocuments - $readyForSync - $synced;

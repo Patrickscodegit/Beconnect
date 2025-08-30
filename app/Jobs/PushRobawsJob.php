@@ -24,8 +24,14 @@ class PushRobawsJob implements ShouldQueue
 
     public function handle(): void
     {
+        // NOTE: This job uses legacy RobawsService which has been deprecated.
+        // TODO: Update to use EnhancedRobawsIntegrationService for Document-based workflow
+        
+        $this->fail(new \Exception('PushRobawsJob is deprecated. Use Document extraction pipeline instead.'));
+        
+        /*
         /** @var \App\Services\RobawsService $robaws */
-        $robaws = app(\App\Services\RobawsService::class);
+        /*$robaws = app(\App\Services\RobawsService::class);
 
         $intake = Intake::findOrFail($this->intakeId);
         $intake->update(['status' => 'pushing_to_robaws']);
@@ -35,7 +41,7 @@ class PushRobawsJob implements ShouldQueue
         $intake->update([
             'status' => 'posted_to_robaws',
             'notes'  => array_merge($intake->notes ?? [], ["robaws_id:{$robawsId}"]),
-        ]);
+        ]);*/
     }
 
     public function failed(Throwable $e): void
