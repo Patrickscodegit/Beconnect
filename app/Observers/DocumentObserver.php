@@ -29,7 +29,20 @@ class DocumentObserver
      */
     public function updated(Document $document): void
     {
-        //
+        // Check if Robaws quotation was just created
+        if ($document->wasChanged('robaws_quotation_id') && $document->robaws_quotation_id) {
+            Log::info('Robaws quotation added to document, uploading file', [
+                'document_id' => $document->id,
+                'quotation_id' => $document->robaws_quotation_id,
+                'filename' => $document->filename
+            ]);
+
+            // Upload document to the quotation
+            \App\Jobs\UploadDocumentToRobaws::dispatch(
+                $document, 
+                $document->robaws_quotation_id
+            )->delay(now()->addSeconds(5)); // Small delay to ensure quotation is fully created
+        }
     }
 
     /**
