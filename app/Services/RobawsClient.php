@@ -262,6 +262,88 @@ class RobawsClient
     }
 
     /**
+     * Get offer from Robaws
+     */
+    public function getOffer(string $offerId): ?array
+    {
+        try {
+            $response = $this->makeRequest()
+                ->get($this->baseUrl . '/api/v2/offers/' . $offerId);
+
+            $result = $this->handleResponse($response);
+            
+            if ($result['success']) {
+                Log::info('Retrieved Robaws offer', [
+                    'offer_id' => $offerId
+                ]);
+                return $result['data'];
+            }
+
+            Log::error('Failed to get offer', [
+                'offer_id' => $offerId,
+                'error' => $result['error'] ?? 'Unknown error'
+            ]);
+            return null;
+        } catch (\Exception $e) {
+            Log::error('Failed to get offer', [
+                'offer_id' => $offerId,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Update offer in Robaws with extraFields using GET → PUT pattern
+     */
+    public function updateOfferWithExtraFields(string $offerId, array $fullPayload): ?array
+    {
+        try {
+            $response = $this->makeRequest()
+                ->acceptJson()
+                ->asJson()
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->put($this->baseUrl . '/api/v2/offers/' . $offerId, $fullPayload);
+
+            Log::info('PUT request to Robaws', [
+                'offer_id' => $offerId,
+                'status' => $response->status(),
+                'payload_keys' => array_keys($fullPayload),
+                'has_extra_fields' => isset($fullPayload['extraFields']),
+                'extra_fields_count' => isset($fullPayload['extraFields']) ? count($fullPayload['extraFields']) : 0
+            ]);
+            
+            if ($response->status() === 204) {
+                // 204 No Content means success, get the updated offer
+                Log::info('Successfully updated Robaws offer with extraFields', [
+                    'offer_id' => $offerId
+                ]);
+                return $this->getOffer($offerId);
+            }
+            
+            $result = $this->handleResponse($response);
+            
+            if ($result['success']) {
+                Log::info('Updated Robaws offer with extraFields', [
+                    'offer_id' => $offerId
+                ]);
+                return $result['data'];
+            }
+
+            throw new RobawsException('Failed to update offer with extraFields: ' . ($result['error'] ?? 'Unknown error'));
+        } catch (\Exception $e) {
+            Log::error('Failed to update offer with extraFields', [
+                'offer_id' => $offerId,
+                'error' => $e->getMessage(),
+                'response_status' => isset($response) ? $response->status() : 'no response',
+                'response_body' => isset($response) ? substr($response->body(), 0, 500) : 'no response'
+            ]);
+            
+            throw new RobawsException('Failed to update offer with extraFields: ' . $e->getMessage());
+        }
+    }
+
+    /**
      * Upload small file directly to entity (≤6MB)
      */
     public function uploadDirectToEntity(string $entityType, string $entityId, $file): array
