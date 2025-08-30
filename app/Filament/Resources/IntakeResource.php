@@ -7,8 +7,8 @@ use App\Models\Intake;
 use App\Models\Document;
 use App\Models\Extraction;
 use App\Services\RobawsIntegrationService;
+use App\Services\RobawsExportService;
 use App\Jobs\ProcessIntake;
-use App\Jobs\ExportIntakeToRobaws;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -19,6 +19,7 @@ use Filament\Infolists\Infolist;
 use Filament\Notifications\Notification;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Log;
 
 class IntakeResource extends Resource
 {
@@ -282,97 +283,45 @@ class IntakeResource extends Resource
                     ->modalDescription('This will create a new quotation in Robaws using the extracted data from this intake and attach the uploaded file to the offer.')
                     ->action(function (Intake $record) {
                         try {
-                            $extraction = $record->extraction;
+                            // Use the new RobawsExportService for reliable exports
+                            $exportService = app(RobawsExportService::class);
+                            $results = $exportService->exportIntake($record);
                             
-                            if (!$extraction || !$extraction->extracted_data) {
-                                // Try using the new job system
-                                ExportIntakeToRobaws::dispatch($record);
-                                
-                                Notification::make()
-                                    ->title('Export Started')
-                                    ->body('Export to Robaws has been queued for processing.')
-                                    ->success()
-                                    ->send();
-                                return;
-                            }
-                            
-                            // Use the RobawsIntegrationService to create the offer
-                            $robawsService = app(RobawsIntegrationService::class);
-                            
-                            // Map the extraction data to a document-like structure for the service
-                            $mappedData = self::mapExtractionDataForRobaws($extraction->extracted_data, $extraction);
-                            
-                            // Get the first document associated with this intake
-                            $originalDocument = $record->documents()->first();
-                            
-                            if (!$originalDocument) {
-                                Notification::make()
-                                    ->title('Export Failed')
-                                    ->body('No document file found for this intake.')
-                                    ->danger()
-                                    ->send();
-                                return;
-                            }
-                            
-                            // Create a document model with the extraction data for the service
-                            $document = new Document([
-                                'filename' => $originalDocument->filename,
-                                'path' => $originalDocument->path,
-                                'file_path' => $originalDocument->file_path,
-                                'disk' => $originalDocument->disk ?? config('filesystems.default', 'local'),
-                                'mime_type' => $originalDocument->mime_type,
-                                'extraction_data' => $mappedData,
-                                'raw_json' => $extraction->raw_json, // Include raw_json for JSON field access
-                                'user_id' => auth()->id() ?? 1,
-                            ]);
-                            $document->id = $originalDocument->id; // Use original document ID
-                            
-                            $offer = $robawsService->createOfferFromDocument($document);
-                            
-                            if ($offer) {
-                                // Update the intake with Robaws reference
-                                $record->update([
-                                    'robaws_quotation_id' => $offer['id'] ?? null,
-                                    'notes' => $record->notes . "\n\nRobaws Quotation ID: " . ($offer['id'] ?? 'Unknown'),
-                                ]);
-                                
-                                $attachmentMessage = $originalDocument ? " The uploaded file has been attached to the offer." : "";
+                            if ($results['failed'] === 0 && $results['success'] > 0) {
+                                // Update the intake with success status
+                                $record->update(['status' => 'exported']);
                                 
                                 Notification::make()
                                     ->title('Export Successful')
-                                    ->body("Quotation created in Robaws with ID: " . ($offer['id'] ?? 'Unknown') . $attachmentMessage)
+                                    ->body("Successfully exported {$results['success']} document(s) to Robaws with file uploads")
                                     ->success()
+                                    ->send();
+                            } else if ($results['success'] > 0) {
+                                Notification::make()
+                                    ->title('Export Partially Successful')
+                                    ->body("Exported {$results['success']} document(s), {$results['failed']} failed. Check logs for details.")
+                                    ->warning()
                                     ->send();
                             } else {
                                 Notification::make()
                                     ->title('Export Failed')
-                                    ->body('Failed to create quotation in Robaws. Please check the logs for more details.')
+                                    ->body('No documents could be exported. ' . implode(' ', $results['errors']))
                                     ->danger()
                                     ->send();
                             }
                             
-                        } catch (\App\Exceptions\RobawsException $e) {
-                            Notification::make()
-                                ->title('Configuration Error')
-                                ->body($e->getMessage())
-                                ->danger()
-                                ->send();
-                                
-                            Log::error('Robaws configuration error', [
-                                'intake_id' => $record->id,
-                                'error' => $e->getMessage()
-                            ]);
                         } catch (\Exception $e) {
+                            Log::error('Export to Robaws failed', [
+                                'intake_id' => $record->id,
+                                'error' => $e->getMessage(),
+                                'trace' => $e->getTraceAsString()
+                            ]);
+                            
                             Notification::make()
                                 ->title('Export Error')
                                 ->body('An error occurred: ' . $e->getMessage())
                                 ->danger()
                                 ->send();
-                                
-                            Log::error('Failed to export intake to Robaws', [
-                                'intake_id' => $record->id,
-                                'error' => $e->getMessage()
-                            ]);
                         }
                     })
                     ->visible(fn (?Intake $record): bool => $record && $record->extraction()->exists()),
@@ -439,19 +388,43 @@ class IntakeResource extends Resource
                         ->modalHeading('Bulk Export to Robaws')
                         ->modalDescription('This will create quotations in Robaws for all extracted data in the selected intakes.')
                         ->action(function (Collection $records) {
-                            $count = 0;
+                            $exportService = app(RobawsExportService::class);
+                            $totalSuccess = 0;
+                            $totalFailed = 0;
+                            $allErrors = [];
+                            
                             foreach ($records as $record) {
                                 if ($record->extraction()->exists()) {
-                                    ExportIntakeToRobaws::dispatch($record);
-                                    $count++;
+                                    $results = $exportService->exportIntake($record);
+                                    $totalSuccess += $results['success'];
+                                    $totalFailed += $results['failed'];
+                                    $allErrors = array_merge($allErrors, $results['errors']);
+                                    
+                                    if ($results['success'] > 0) {
+                                        $record->update(['status' => 'exported']);
+                                    }
                                 }
                             }
                             
-                            Notification::make()
-                                ->title('Bulk Export Started')
-                                ->body("{$count} intakes queued for Robaws export.")
-                                ->success()
-                                ->send();
+                            if ($totalFailed === 0 && $totalSuccess > 0) {
+                                Notification::make()
+                                    ->title('Bulk Export Successful')
+                                    ->body("Successfully exported {$totalSuccess} document(s) to Robaws with file uploads")
+                                    ->success()
+                                    ->send();
+                            } else if ($totalSuccess > 0) {
+                                Notification::make()
+                                    ->title('Bulk Export Partially Successful')
+                                    ->body("Exported {$totalSuccess} document(s), {$totalFailed} failed. Check logs for details.")
+                                    ->warning()
+                                    ->send();
+                            } else {
+                                Notification::make()
+                                    ->title('Bulk Export Failed')
+                                    ->body('No documents could be exported. Check logs for details.')
+                                    ->danger()
+                                    ->send();
+                            }
                         }),
                     
                     Tables\Actions\BulkAction::make('mark_as_completed')
