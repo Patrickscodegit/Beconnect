@@ -496,6 +496,15 @@ class RobawsIntegrationService
             'robaws_quotation_data' => $offer,
         ]);
         
+        // NOTE: Do NOT dispatch upload job here - the ExtractionObserver will handle it
+        // This ensures we only have one quotation with both data and document
+        
+        Log::info('Robaws quotation created and saved to document', [
+            'document_id' => $document->id,
+            'robaws_quotation_id' => $offer['id'],
+            'filename' => $document->filename
+        ]);
+        
         // Create or update local quotation record
         Quotation::updateOrCreate(
             ['robaws_id' => $offer['id']],

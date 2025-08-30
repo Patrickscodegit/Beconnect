@@ -2,60 +2,70 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Http;
 use Illuminate\Http\Client\Response;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
+use App\Exceptions\RobawsException;
 
 class RobawsClient
 {
-    protected string $baseUrl;
-    protected ?string $username;
-    protected ?string $password;
-    protected ?string $apiKey;
-    protected ?string $apiSecret;
-    protected int $timeout;
+    private string $baseUrl;
+    private ?string $username;
+    private ?string $password;
+    private ?string $apiKey;
+    private ?string $apiSecret;
+    private int $timeout;
 
     public function __construct()
     {
-        $this->baseUrl = config('services.robaws.base_url');
+        $this->baseUrl = config('services.robaws.base_url', 'https://app.robaws.com');
         $this->username = config('services.robaws.username');
         $this->password = config('services.robaws.password');
         $this->apiKey = config('services.robaws.api_key');
         $this->apiSecret = config('services.robaws.api_secret');
-        $this->timeout = config('services.robaws.timeout', 30);
+        $this->timeout = config('services.robaws.timeout', 60);
+        
+        // Debug logging to help track down null values
+        if (!$this->username || !$this->password) {
+            Log::warning('RobawsClient: Missing credentials', [
+                'username' => $this->username,
+                'password_set' => !empty($this->password),
+                'config_username' => config('services.robaws.username'),
+                'config_password_set' => !empty(config('services.robaws.password')),
+                'env_username' => env('ROBAWS_USERNAME'),
+                'env_password_set' => !empty(env('ROBAWS_PASSWORD')),
+            ]);
+        }
+    }
+    
+    /**
+     * Validate that required credentials are present
+     * 
+     * @throws RobawsException
+     */
+    private function validateCredentials(): void
+    {
+        if (empty($this->baseUrl)) {
+            throw new RobawsException('Robaws base URL is not configured. Please set ROBAWS_BASE_URL in your .env file.');
+        }
+        
+        if (empty($this->username) || empty($this->password)) {
+            throw new RobawsException('Robaws credentials are not configured. Please set ROBAWS_USERNAME and ROBAWS_PASSWORD in your .env file.');
+        }
     }
 
-    protected function http()
+    /**
+     * Make an authenticated HTTP request
+     */
+    private function makeRequest()
     {
-        // Robaws API uses Basic Auth with API Key as username and API Secret as password
-        if (!$this->apiKey || !$this->apiSecret) {
-            throw new \Exception('Robaws API Key and API Secret are required for API access');
-        }
-
-        return Http::baseUrl($this->baseUrl)
-            ->withBasicAuth($this->apiKey, $this->apiSecret)  // API Key as username, Secret as password
-            ->acceptJson()
-            ->withHeaders([
-                'Accept' => 'application/json',
-                'Content-Type' => 'application/json',
-                'User-Agent' => 'Laravel/11.0 Bconnect/1.0'
-            ])
-            ->timeout($this->timeout)
-            ->retry(2, 1000, function ($exception, $request) {
-                if ($exception instanceof \Illuminate\Http\Client\RequestException) {
-                    $response = $exception->response;
-                    return $response && ($response->status() === 429 || $response->serverError());
-                }
-                return false;
-            })
-            ->beforeSending(function ($request) {
-                Log::debug('Robaws API Request', [
-                    'method' => $request->method(),
-                    'url' => $request->url(),
-                    'headers' => $request->headers()
-                ]);
-            });
+        $this->validateCredentials();
+        
+        return Http::timeout($this->timeout)
+            ->withBasicAuth($this->username, $this->password)
+            ->acceptJson();
     }
 
     /**
@@ -63,176 +73,494 @@ class RobawsClient
      */
     public function testConnection(): array
     {
-        try {
-            // Test actual API endpoints (302 on base URL is normal)
-            $tests = [
-                ['name' => 'API V2 Metadata', 'url' => '/api/v2/metadata', 'method' => 'GET'],
-                ['name' => 'API V2 Clients', 'url' => '/api/v2/clients', 'method' => 'GET'],
-                ['name' => 'API V2 Offers', 'url' => '/api/v2/offers', 'method' => 'GET'],
-            ];
-            
-            $results = [];
-            
-            foreach ($tests as $test) {
-                try {
-                    $response = $this->http()->get($test['url'] . '?limit=1');
-                    
-                    $results[] = [
-                        'test' => $test['name'],
-                        'url' => $this->baseUrl . $test['url'],
-                        'status' => $response->status(),
-                        'success' => $response->successful(),
-                        'headers' => $response->headers(),
-                        'body_preview' => substr($response->body(), 0, 200) . '...'
-                    ];
-                    
-                    // If this one succeeded, return success
-                    if ($response->successful()) {
-                        return [
-                            'success' => true,
-                            'status' => $response->status(),
-                            'message' => "Connected successfully via {$test['name']}",
-                            'data' => $response->json(),
-                            'endpoint' => $test['url'],
-                            'all_tests' => $results
-                        ];
-                    }
-                } catch (\Exception $e) {
-                    $results[] = [
-                        'test' => $test['name'],
-                        'url' => $this->baseUrl . $test['url'],
-                        'error' => $e->getMessage(),
-                        'success' => false
-                    ];
-                }
-            }
-            
+        if (!$this->username || !$this->password) {
             return [
                 'success' => false,
-                'status' => $results[0]['status'] ?? 0,
-                'message' => 'All API endpoint tests failed',
-                'all_tests' => $results
+                'status' => 0,
+                'message' => 'Robaws credentials not configured. Please set ROBAWS_USERNAME and ROBAWS_PASSWORD in .env'
             ];
-            
+        }
+
+        try {
+            $response = Http::timeout($this->timeout)
+                ->withBasicAuth($this->username, $this->password)
+                ->acceptJson()
+                ->get($this->baseUrl . '/api/v2/clients', ['limit' => 1]);
+
+            if ($response->successful()) {
+                return [
+                    'success' => true,
+                    'status' => $response->status(),
+                    'message' => 'Connection successful',
+                    'data' => $response->json()
+                ];
+            }
+
+            return [
+                'success' => false,
+                'status' => $response->status(),
+                'message' => 'Connection failed: ' . $response->body(),
+                'headers' => $response->headers()
+            ];
         } catch (\Exception $e) {
             return [
                 'success' => false,
                 'status' => 0,
-                'message' => $e->getMessage(),
-                'data' => null
+                'message' => 'Connection error: ' . $e->getMessage()
             ];
         }
     }
 
     /**
-     * Create a new offer (quotation) in Robaws
+     * List clients
      */
-    public function createOffer(array $payload): array
+    public function listClients(array $params = []): array
     {
-        $res = $this->http()
-            ->withHeaders(['Idempotency-Key' => (string) Str::uuid()])
-            ->post('/api/v2/offers', $payload);
+        try {
+            $response = $this->makeRequest()
+                ->get($this->baseUrl . '/api/v2/clients', $params);
 
-        $this->throwUnlessOk($res);
+            return $this->handleResponse($response);
+        } catch (\Exception $e) {
+            Log::error('Failed to list clients', [
+                'params' => $params,
+                'error' => $e->getMessage()
+            ]);
+            
+            return [
+                'success' => false,
+                'data' => [],
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Search clients
+     */
+    public function searchClients(array $params = []): array
+    {
+        // If searching by email, use the search endpoint
+        if (isset($params['email'])) {
+            try {
+                $response = $this->makeRequest()
+                    ->get($this->baseUrl . '/api/v2/clients/search', [
+                        'query' => $params['email']
+                    ]);
+
+                return $this->handleResponse($response);
+            } catch (\Exception $e) {
+                Log::error('Failed to search clients', [
+                    'params' => $params,
+                    'error' => $e->getMessage()
+                ]);
+                
+                return [
+                    'success' => false,
+                    'data' => [],
+                    'error' => $e->getMessage()
+                ];
+            }
+        }
         
-        $result = $res->json();
-        Log::info('Robaws offer created', ['offer_id' => $result['id'] ?? null]);
-        
-        return $result;
+        // Fallback to regular list
+        return $this->listClients($params);
     }
 
     /**
-     * Get an offer by ID
-     */
-    public function getOffer(string $offerId): array
-    {
-        $res = $this->http()->get("/api/v2/offers/{$offerId}");
-        $this->throwUnlessOk($res);
-        return $res->json();
-    }
-
-    /**
-     * Add a line item to an offer
-     */
-    public function addOfferLineItem(string $offerId, array $line): array
-    {
-        $res = $this->http()->post("/api/v2/offers/{$offerId}/line-items", $line);
-        $this->throwUnlessOk($res);
-        return $res->json();
-    }
-
-    /**
-     * List clients with optional query parameters
-     */
-    public function listClients(array $q = []): array
-    {
-        $res = $this->http()->get('/api/v2/clients', $q);
-        $this->throwUnlessOk($res);
-        return $res->json();
-    }
-
-    /**
-     * Search/list clients
-     */
-    public function searchClients(array $filters = []): array
-    {
-        return $this->listClients($filters);
-    }
-
-    /**
-     * Create a client if it doesn't exist
-     */
-    public function createClient(array $clientData): array
-    {
-        $res = $this->http()
-            ->withHeaders(['Idempotency-Key' => (string) Str::uuid()])
-            ->post('/api/v2/clients', $clientData);
-
-        $this->throwUnlessOk($res);
-        return $res->json();
-    }
-
-    /**
-     * Find or create a client based on email
+     * Find or create client
      */
     public function findOrCreateClient(array $clientData): array
     {
-        // Search for existing client by email
+        // First try to find existing client by email
         if (!empty($clientData['email'])) {
-            $existingClients = $this->searchClients([
-                'email' => $clientData['email'],
-                'limit' => 1
-            ]);
-
-            if (!empty($existingClients['data'])) {
-                return $existingClients['data'][0];
+            $existing = $this->searchClients(['email' => $clientData['email']]);
+            if ($existing['success'] && !empty($existing['data']['items'])) {
+                Log::info('Found existing Robaws client', [
+                    'client_id' => $existing['data']['items'][0]['id'],
+                    'email' => $clientData['email']
+                ]);
+                return $existing['data']['items'][0];
             }
         }
 
         // Create new client
-        return $this->createClient($clientData);
+        try {
+            // Prepare address data in the correct format
+            $addressData = null;
+            if (!empty($clientData['address'])) {
+                $addressData = [
+                    'addressLine1' => $clientData['address'],
+                    'addressLine2' => null,
+                    'postalCode' => $clientData['postalCode'] ?? null,
+                    'city' => $clientData['city'] ?? null,
+                    'country' => $clientData['country'] ?? 'BE', // Default to Belgium
+                    'latitude' => 0,
+                    'longitude' => 0
+                ];
+            }
+            
+            $response = $this->makeRequest()
+                ->post($this->baseUrl . '/api/v2/clients', [
+                    'name' => $clientData['name'],
+                    'email' => $clientData['email'] ?? null,
+                    'tel' => $clientData['tel'] ?? null,
+                    'address' => $addressData,
+                ]);
+
+            $result = $this->handleResponse($response);
+            
+            if ($result['success']) {
+                Log::info('Created new Robaws client', [
+                    'client_id' => $result['data']['id'],
+                    'client_name' => $clientData['name']
+                ]);
+                return $result['data'];
+            }
+            
+            throw new RobawsException('Failed to create client: ' . ($result['error'] ?? 'Unknown error'));
+        } catch (RobawsException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            Log::error('Failed to create client', [
+                'client_data' => $clientData,
+                'error' => $e->getMessage()
+            ]);
+            
+            throw new RobawsException('Failed to create client: ' . $e->getMessage());
+        }
     }
 
     /**
-     * Get list of available line item types/articles
+     * Create offer in Robaws
      */
-    public function getArticles(array $filters = []): array
+    public function createOffer(array $offerData): array
     {
-        $res = $this->http()->get('/api/v2/articles', $filters);
-        $this->throwUnlessOk($res);
-        return $res->json();
-    }
+        try {
+            $response = $this->makeRequest()
+                ->post($this->baseUrl . '/api/v2/offers', $offerData);
 
-    protected function throwUnlessOk(Response $res): void
-    {
-        if ($res->failed()) {
-            Log::error('Robaws API Error', [
-                'status' => $res->status(),
-                'body' => $res->body(),
-                'headers' => $res->headers()
+            $result = $this->handleResponse($response);
+            
+            if ($result['success']) {
+                Log::info('Created Robaws offer', [
+                    'offer_id' => $result['data']['id'],
+                    'client_id' => $offerData['clientId']
+                ]);
+                return $result['data'];
+            }
+
+            throw new RobawsException('Failed to create offer: ' . ($result['error'] ?? 'Unknown error'));
+        } catch (\Exception $e) {
+            Log::error('Failed to create offer', [
+                'offer_data' => $offerData,
+                'error' => $e->getMessage()
             ]);
             
-            throw new \RuntimeException("Robaws error {$res->status()}: " . $res->body());
+            throw new RobawsException('Failed to create offer: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Upload small file directly to entity (≤6MB)
+     */
+    public function uploadDirectToEntity(string $entityType, string $entityId, $file): array
+    {
+        try {
+            // Handle both UploadedFile and file path
+            if (is_string($file)) {
+                $filePath = $file;
+                $fileName = basename($file);
+                $mimeType = mime_content_type($file);
+                $fileContent = file_get_contents($file);
+                $fileSize = filesize($file);
+            } else {
+                $filePath = $file->getRealPath();
+                $fileName = $file->getClientOriginalName();
+                $mimeType = $file->getClientMimeType();
+                $fileContent = file_get_contents($filePath);
+                $fileSize = $file->getSize();
+            }
+
+            // Check file size limit (6MB)
+            if ($fileSize > 6 * 1024 * 1024) {
+                throw new \Exception('File too large for direct upload. Use temp bucket workflow for files >6MB.');
+            }
+
+            Log::info('Uploading file directly to Robaws entity', [
+                'entity_type' => $entityType,
+                'entity_id' => $entityId,
+                'file_name' => $fileName,
+                'file_size' => $fileSize,
+                'mime_type' => $mimeType
+            ]);
+
+            $response = Http::timeout(120) // Longer timeout for file uploads
+                ->withBasicAuth($this->username, $this->password)
+                ->attach('file', $fileContent, $fileName)
+                ->post($this->baseUrl . "/api/v2/{$entityType}s/{$entityId}/documents");
+
+            $result = $this->handleResponse($response);
+            
+            if ($result['success']) {
+                Log::info('File uploaded successfully to Robaws', [
+                    'document_id' => $result['data']['id'] ?? 'unknown',
+                    'entity_type' => $entityType,
+                    'entity_id' => $entityId
+                ]);
+                return $result['data'];
+            }
+
+            throw new \Exception('File upload failed: ' . ($result['message'] ?? 'Unknown error'));
+
+        } catch (\Exception $e) {
+            Log::error('Direct file upload failed', [
+                'entity_type' => $entityType,
+                'entity_id' => $entityId,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Create temporary bucket for large file uploads
+     */
+    public function createTempBucket(): array
+    {
+        $response = Http::timeout($this->timeout)
+            ->withBasicAuth($this->username, $this->password)
+            ->acceptJson()
+            ->post($this->baseUrl . '/api/v2/temp-buckets');
+
+        $result = $this->handleResponse($response);
+        
+        if ($result['success']) {
+            Log::info('Created temporary bucket', [
+                'bucket_id' => $result['data']['id']
+            ]);
+            return $result['data'];
+        }
+
+        throw new \Exception('Failed to create temp bucket: ' . ($result['message'] ?? 'Unknown error'));
+    }
+
+    /**
+     * Upload file to temporary bucket
+     */
+    public function uploadToBucket(string $bucketId, $file): array
+    {
+        try {
+            // Handle both UploadedFile and file path
+            if (is_string($file)) {
+                $filePath = $file;
+                $fileName = basename($file);
+                $fileContent = file_get_contents($file);
+                $fileSize = filesize($file);
+            } else {
+                $filePath = $file->getRealPath();
+                $fileName = $file->getClientOriginalName();
+                $fileContent = file_get_contents($filePath);
+                $fileSize = $file->getSize();
+            }
+
+            Log::info('Uploading file to temp bucket', [
+                'bucket_id' => $bucketId,
+                'file_name' => $fileName,
+                'file_size' => $fileSize
+            ]);
+
+            $response = Http::timeout(300) // Extended timeout for large files
+                ->withBasicAuth($this->username, $this->password)
+                ->attach('file', $fileContent, $fileName)
+                ->post($this->baseUrl . "/api/v2/temp-buckets/{$bucketId}/upload");
+
+            $result = $this->handleResponse($response);
+            
+            if ($result['success']) {
+                Log::info('File uploaded to temp bucket successfully', [
+                    'document_id' => $result['data']['id'] ?? 'unknown',
+                    'bucket_id' => $bucketId
+                ]);
+                return $result['data'];
+            }
+
+            throw new \Exception('Bucket upload failed: ' . ($result['message'] ?? 'Unknown error'));
+
+        } catch (\Exception $e) {
+            Log::error('Bucket file upload failed', [
+                'bucket_id' => $bucketId,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Attach document from bucket to entity
+     */
+    public function attachDocumentFromBucket(string $entityType, string $entityId, string $bucketId, string $documentId): array
+    {
+        $response = Http::timeout($this->timeout)
+            ->withBasicAuth($this->username, $this->password)
+            ->acceptJson()
+            ->post($this->baseUrl . "/api/v2/{$entityType}s/{$entityId}/documents/attach", [
+                'bucketId' => $bucketId,
+                'documentId' => $documentId
+            ]);
+
+        $result = $this->handleResponse($response);
+        
+        if ($result['success']) {
+            Log::info('Document attached from bucket', [
+                'entity_type' => $entityType,
+                'entity_id' => $entityId,
+                'document_id' => $documentId
+            ]);
+            return $result['data'];
+        }
+
+        throw new \Exception('Failed to attach document: ' . ($result['message'] ?? 'Unknown error'));
+    }
+
+    /**
+     * Upload multiple documents (batch processing)
+     */
+    public function uploadMultipleDocuments(string $entityType, string $entityId, array $files): array
+    {
+        $results = [];
+        $smallFiles = [];
+        $largeFiles = [];
+
+        // Group files by size
+        foreach ($files as $file) {
+            $fileSize = is_string($file) ? filesize($file) : $file->getSize();
+            
+            if ($fileSize <= 6 * 1024 * 1024) {
+                $smallFiles[] = $file;
+            } else {
+                $largeFiles[] = $file;
+            }
+        }
+
+        Log::info('Starting batch upload', [
+            'entity_type' => $entityType,
+            'entity_id' => $entityId,
+            'small_files' => count($smallFiles),
+            'large_files' => count($largeFiles)
+        ]);
+
+        // Upload small files directly
+        foreach ($smallFiles as $file) {
+            try {
+                $result = $this->uploadDirectToEntity($entityType, $entityId, $file);
+                $results[] = [
+                    'file' => is_string($file) ? basename($file) : $file->getClientOriginalName(),
+                    'status' => 'success',
+                    'method' => 'direct',
+                    'document_id' => $result['id'] ?? null
+                ];
+            } catch (\Exception $e) {
+                $results[] = [
+                    'file' => is_string($file) ? basename($file) : $file->getClientOriginalName(),
+                    'status' => 'error',
+                    'method' => 'direct',
+                    'error' => $e->getMessage()
+                ];
+            }
+        }
+
+        // Upload large files via temp bucket
+        if (!empty($largeFiles)) {
+            try {
+                $bucket = $this->createTempBucket();
+                
+                foreach ($largeFiles as $file) {
+                    try {
+                        $uploadResult = $this->uploadToBucket($bucket['id'], $file);
+                        $attachResult = $this->attachDocumentFromBucket(
+                            $entityType, 
+                            $entityId, 
+                            $bucket['id'], 
+                            $uploadResult['id']
+                        );
+                        
+                        $results[] = [
+                            'file' => is_string($file) ? basename($file) : $file->getClientOriginalName(),
+                            'status' => 'success',
+                            'method' => 'bucket',
+                            'document_id' => $attachResult['id'] ?? null
+                        ];
+                    } catch (\Exception $e) {
+                        $results[] = [
+                            'file' => is_string($file) ? basename($file) : $file->getClientOriginalName(),
+                            'status' => 'error',
+                            'method' => 'bucket',
+                            'error' => $e->getMessage()
+                        ];
+                    }
+                }
+            } catch (\Exception $e) {
+                foreach ($largeFiles as $file) {
+                    $results[] = [
+                        'file' => is_string($file) ? basename($file) : $file->getClientOriginalName(),
+                        'status' => 'error',
+                        'method' => 'bucket',
+                        'error' => 'Failed to create temp bucket: ' . $e->getMessage()
+                    ];
+                }
+            }
+        }
+
+        return $results;
+    }
+
+    /**
+     * Handle HTTP response from Robaws API
+     */
+    private function handleResponse(Response $response): array
+    {
+        $statusCode = $response->status();
+        $body = $response->body();
+
+        if ($response->successful()) {
+            return [
+                'success' => true,
+                'status' => $statusCode,
+                'data' => $response->json(),
+                'message' => 'Request successful'
+            ];
+        }
+
+        // Handle specific error cases
+        $errorMessage = "HTTP {$statusCode}";
+        $errorData = null;
+
+        try {
+            $errorData = $response->json();
+            $errorMessage = $errorData['message'] ?? $errorData['error'] ?? $errorMessage;
+        } catch (\Exception $e) {
+            $errorMessage .= ": " . $body;
+        }
+
+        // Check for temp-blocked status
+        $unauthorizedReason = $response->header('X-Robaws-Unauthorized-Reason');
+        if ($unauthorizedReason === 'temp-blocked') {
+            $errorMessage = 'Account temporarily blocked from API access. Contact Robaws support.';
+        }
+
+        Log::error('Robaws API error', [
+            'status' => $statusCode,
+            'error' => $errorMessage,
+            'unauthorized_reason' => $unauthorizedReason,
+            'response_body' => $body
+        ]);
+
+        return [
+            'success' => false,
+            'status' => $statusCode,
+            'message' => $errorMessage,
+            'data' => $errorData
+        ];
     }
 }

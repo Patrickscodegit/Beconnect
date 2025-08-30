@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Document;
 use App\Services\RobawsClient;
 use App\Services\RobawsIntegrationService;
+use App\Services\MultiDocumentUploadService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
@@ -14,7 +15,8 @@ class RobawsOfferController extends Controller
 {
     public function __construct(
         private RobawsIntegrationService $robawsService,
-        private RobawsClient $robawsClient
+        private RobawsClient $robawsClient,
+        private MultiDocumentUploadService $uploadService
     ) {}
 
     /**
@@ -218,9 +220,27 @@ class RobawsOfferController extends Controller
                     'robaws_client_id' => $client['id'] ?? null,
                 ]);
                 
+                // NEW: Upload the document file to Robaws
+                $fileUploadResult = null;
+                try {
+                    $fileUploadResult = $this->uploadService->uploadDocumentToQuotation($document);
+                    Log::info('Document file uploaded to Robaws', [
+                        'document_id' => $document->id,
+                        'upload_result' => $fileUploadResult
+                    ]);
+                } catch (\Exception $uploadException) {
+                    Log::warning('File upload failed, but quotation created successfully', [
+                        'document_id' => $document->id,
+                        'upload_error' => $uploadException->getMessage()
+                    ]);
+                    // Don't fail the entire request if file upload fails
+                }
+                
                 return response()->json([
-                    'message' => 'Robaws offer created successfully via API',
+                    'message' => 'Robaws offer created successfully via API' . 
+                               ($fileUploadResult && $fileUploadResult['status'] === 'success' ? ' with file attachment' : ''),
                     'offer' => $offer,
+                    'file_upload' => $fileUploadResult,
                     'robaws_url' => config('services.robaws.base_url') . '/offers/' . $offer['id']
                 ]);
                 
@@ -372,6 +392,91 @@ class RobawsOfferController extends Controller
             
             // Trigger additional business logic here
             // e.g., create shipment, notify user, etc.
+        }
+    }
+
+    /**
+     * Upload documents for an existing quotation
+     */
+    public function uploadDocuments(Request $request, string $quotationId): JsonResponse
+    {
+        $quotation = \App\Models\Quotation::where('robaws_id', $quotationId)->first();
+        
+        if (!$quotation) {
+            return response()->json([
+                'message' => 'Quotation not found'
+            ], 404);
+        }
+
+        try {
+            $uploadResults = $this->uploadService->uploadQuotationDocuments($quotation);
+            
+            return response()->json([
+                'message' => 'Document upload process completed',
+                'quotation_id' => $quotationId,
+                'upload_results' => $uploadResults,
+                'total_files' => count($uploadResults),
+                'successful' => count(array_filter($uploadResults, fn($r) => $r['status'] === 'success')),
+                'failed' => count(array_filter($uploadResults, fn($r) => $r['status'] === 'error'))
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Document upload failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get upload status for a quotation
+     */
+    public function getUploadStatus(string $quotationId): JsonResponse
+    {
+        $quotation = \App\Models\Quotation::where('robaws_id', $quotationId)->first();
+        
+        if (!$quotation) {
+            return response()->json([
+                'message' => 'Quotation not found'
+            ], 404);
+        }
+
+        $status = $this->uploadService->getUploadStatus($quotation);
+        
+        return response()->json([
+            'quotation_id' => $quotationId,
+            'upload_status' => $status
+        ]);
+    }
+
+    /**
+     * Retry failed uploads for a quotation
+     */
+    public function retryFailedUploads(string $quotationId): JsonResponse
+    {
+        $quotation = \App\Models\Quotation::where('robaws_id', $quotationId)->first();
+        
+        if (!$quotation) {
+            return response()->json([
+                'message' => 'Quotation not found'
+            ], 404);
+        }
+
+        try {
+            $retryResults = $this->uploadService->retryFailedUploads($quotation);
+            
+            return response()->json([
+                'message' => 'Retry process completed',
+                'quotation_id' => $quotationId,
+                'retry_results' => $retryResults,
+                'total_retried' => count($retryResults),
+                'successful' => count(array_filter($retryResults, fn($r) => $r['status'] === 'success')),
+                'failed' => count(array_filter($retryResults, fn($r) => $r['status'] === 'error'))
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Retry failed: ' . $e->getMessage()
+            ], 500);
         }
     }
 

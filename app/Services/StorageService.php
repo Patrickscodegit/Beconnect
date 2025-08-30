@@ -11,7 +11,15 @@ class StorageService
     /**
      * The storage disk to use
      */
-    private string $disk = 's3';
+    private string $disk;
+
+    /**
+     * Create a new storage service instance
+     */
+    public function __construct()
+    {
+        $this->disk = config('filesystems.default', 'local');
+    }
 
     /**
      * Store a file and return its path

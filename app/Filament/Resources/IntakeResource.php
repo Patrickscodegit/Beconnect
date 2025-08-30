@@ -7,6 +7,8 @@ use App\Models\Intake;
 use App\Models\Document;
 use App\Models\Extraction;
 use App\Services\RobawsIntegrationService;
+use App\Jobs\ProcessIntake;
+use App\Jobs\ExportIntakeToRobaws;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -16,6 +18,7 @@ use Filament\Infolists;
 use Filament\Infolists\Infolist;
 use Filament\Notifications\Notification;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Illuminate\Database\Eloquent\Collection;
 
 class IntakeResource extends Resource
 {
@@ -252,6 +255,24 @@ class IntakeResource extends Resource
                     ->query(fn ($query) => $query->whereHas('documents')),
             ])
             ->actions([
+                Tables\Actions\Action::make('process_extraction')
+                    ->label('Extract Data')
+                    ->icon('heroicon-o-document-magnifying-glass')
+                    ->color('info')
+                    ->requiresConfirmation()
+                    ->modalHeading('Extract Document Data')
+                    ->modalDescription('This will process all documents in this intake and extract their data using AI.')
+                    ->action(function (Intake $record) {
+                        ProcessIntake::dispatch($record);
+                        
+                        Notification::make()
+                            ->title('Extraction Started')
+                            ->body('Document extraction has been queued for processing.')
+                            ->success()
+                            ->send();
+                    })
+                    ->visible(fn (?Intake $record): bool => $record && $record->documents()->exists()),
+                    
                 Tables\Actions\Action::make('export_to_robaws')
                     ->label('Export to Robaws')
                     ->icon('heroicon-o-paper-airplane')
@@ -264,10 +285,13 @@ class IntakeResource extends Resource
                             $extraction = $record->extraction;
                             
                             if (!$extraction || !$extraction->extracted_data) {
+                                // Try using the new job system
+                                ExportIntakeToRobaws::dispatch($record);
+                                
                                 Notification::make()
-                                    ->title('Export Failed')
-                                    ->body('No extraction data found for this intake.')
-                                    ->danger()
+                                    ->title('Export Started')
+                                    ->body('Export to Robaws has been queued for processing.')
+                                    ->success()
                                     ->send();
                                 return;
                             }
@@ -327,12 +351,28 @@ class IntakeResource extends Resource
                                     ->send();
                             }
                             
+                        } catch (\App\Exceptions\RobawsException $e) {
+                            Notification::make()
+                                ->title('Configuration Error')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                                
+                            Log::error('Robaws configuration error', [
+                                'intake_id' => $record->id,
+                                'error' => $e->getMessage()
+                            ]);
                         } catch (\Exception $e) {
                             Notification::make()
                                 ->title('Export Error')
                                 ->body('An error occurred: ' . $e->getMessage())
                                 ->danger()
                                 ->send();
+                                
+                            Log::error('Failed to export intake to Robaws', [
+                                'intake_id' => $record->id,
+                                'error' => $e->getMessage()
+                            ]);
                         }
                     })
                     ->visible(fn (?Intake $record): bool => $record && $record->extraction()->exists()),
@@ -367,6 +407,52 @@ class IntakeResource extends Resource
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
+                    
+                    Tables\Actions\BulkAction::make('bulk_extract')
+                        ->label('Extract All')
+                        ->icon('heroicon-o-document-magnifying-glass')
+                        ->color('info')
+                        ->requiresConfirmation()
+                        ->modalHeading('Bulk Extract Document Data')
+                        ->modalDescription('This will process all documents in the selected intakes and extract their data using AI.')
+                        ->action(function (Collection $records) {
+                            $count = 0;
+                            foreach ($records as $record) {
+                                if ($record->documents()->exists()) {
+                                    ProcessIntake::dispatch($record);
+                                    $count++;
+                                }
+                            }
+                            
+                            Notification::make()
+                                ->title('Bulk Extraction Started')
+                                ->body("{$count} intakes queued for extraction processing.")
+                                ->success()
+                                ->send();
+                        }),
+                        
+                    Tables\Actions\BulkAction::make('bulk_export_robaws')
+                        ->label('Export All to Robaws')
+                        ->icon('heroicon-o-paper-airplane')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->modalHeading('Bulk Export to Robaws')
+                        ->modalDescription('This will create quotations in Robaws for all extracted data in the selected intakes.')
+                        ->action(function (Collection $records) {
+                            $count = 0;
+                            foreach ($records as $record) {
+                                if ($record->extraction()->exists()) {
+                                    ExportIntakeToRobaws::dispatch($record);
+                                    $count++;
+                                }
+                            }
+                            
+                            Notification::make()
+                                ->title('Bulk Export Started')
+                                ->body("{$count} intakes queued for Robaws export.")
+                                ->success()
+                                ->send();
+                        }),
                     
                     Tables\Actions\BulkAction::make('mark_as_completed')
                         ->label('Mark as Completed')

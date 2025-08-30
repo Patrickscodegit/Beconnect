@@ -26,5 +26,6 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         \App\Models\Document::observe(\App\Observers\DocumentObserver::class);
+        \App\Models\Extraction::observe(\App\Observers\ExtractionObserver::class);
     }
 }

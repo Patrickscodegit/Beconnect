@@ -12,6 +12,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class ExtractDocumentData implements ShouldQueue
 {
@@ -30,26 +31,56 @@ class ExtractDocumentData implements ShouldQueue
     /**
      * Execute the job.
      */
-    public function handle(ExtractionPipeline $pipeline, IntegrationDispatcher $dispatcher): void
+    public function handle(
+        ExtractionPipeline $pipeline, 
+        IntegrationDispatcher $dispatcher
+    ): void
     {
         $startTime = microtime(true);
 
         try {
-            Log::info('Starting document extraction with new pipeline', [
+            Log::info('Starting document extraction', [
                 'document_id' => $this->document->id,
-                'filename' => $this->document->filename,
-                'mime_type' => $this->document->mime_type
+                'filename' => $this->document->filename
             ]);
 
-            // Create extraction record
-            $extraction = $this->document->extractions()->create([
-                'intake_id' => $this->document->intake_id,
-                'status' => 'processing',
-                'confidence' => 0.0,
-                'service_used' => 'extraction_pipeline',
-                'extracted_data' => [],
-                'raw_json' => '{}',
-            ]);
+            // Use database transaction to prevent race conditions
+            $extraction = DB::transaction(function () {
+                // Lock the document record to prevent concurrent extractions
+                $this->document->lockForUpdate();
+
+                // Check if extraction already exists
+                $existingExtraction = $this->document->extractions()
+                    ->whereIn('status', ['processing', 'completed'])
+                    ->first();
+                
+                if ($existingExtraction) {
+                    Log::info('Extraction already exists, skipping', [
+                        'document_id' => $this->document->id,
+                        'existing_extraction_id' => $existingExtraction->id,
+                        'existing_status' => $existingExtraction->status
+                    ]);
+                    return $existingExtraction;
+                }
+
+                // Create new extraction record
+                return $this->document->extractions()->create([
+                    'intake_id' => $this->document->intake_id,
+                    'status' => 'processing',
+                    'confidence' => 0.0,
+                    'service_used' => 'extraction_pipeline',
+                    'extracted_data' => [],
+                    'raw_json' => '{}',
+                ]);
+            });
+
+            // If extraction already existed and is completed, don't reprocess
+            if ($extraction->status === 'completed') {
+                Log::info('Using existing completed extraction', [
+                    'extraction_id' => $extraction->id
+                ]);
+                return;
+            }
 
             // Process document through extraction pipeline
             $result = $pipeline->process($this->document);
@@ -60,23 +91,18 @@ class ExtractDocumentData implements ShouldQueue
                 'confidence' => $result->getConfidence(),
                 'service_used' => $result->getStrategy(),
                 'analysis_type' => $result->getMetadata('pipeline.strategy_used', 'unknown'),
-                'raw_json' => json_encode($result->getData()) // Store the transformed data directly
+                'raw_json' => json_encode($result->getData())
             ];
 
             if ($result->isSuccessful()) {
-                // Store the complete transformed data (includes JSON field and flattened vehicle data)
                 $transformedData = $result->getData();
                 
-                // Log what we're storing
-                Log::info('Storing extraction data', [
+                Log::info('Extraction successful', [
                     'extraction_id' => $extraction->id,
-                    'has_json_field' => isset($transformedData['JSON']),
-                    'field_count' => count($transformedData),
-                    'sample_fields' => array_slice(array_keys($transformedData), 0, 10),
-                    'json_field_size' => strlen($transformedData['JSON'] ?? '')
+                    'confidence' => $result->getConfidence(),
+                    'strategy' => $result->getStrategy()
                 ]);
                 
-                // Separate document data from AI-enhanced data for backward compatibility
                 $extractionData['extracted_data'] = [
                     'document_data' => $result->getDocumentData(),
                     'ai_enhanced_data' => $result->getAiEnhancedData(),
@@ -84,16 +110,36 @@ class ExtractDocumentData implements ShouldQueue
                     'metadata' => $result->getAllMetadata()
                 ];
 
-                // Store AI extracted data on document (use transformed data)
+                // Update document with extraction results
                 $this->document->update([
                     'extraction_status' => 'completed',
                     'extraction_data' => json_encode($result->getData()),
                     'extraction_confidence' => $result->getConfidence(),
                     'extraction_service' => $result->getStrategy(),
                     'extracted_at' => now(),
-                    'ai_extracted_data' => $transformedData, // Use transformed data with JSON field
+                    'ai_extracted_data' => $transformedData,
                     'ai_processing_status' => 'completed'
                 ]);
+
+                // Dispatch to integrations (this will create the quotation)
+                try {
+                    $integrationResults = $dispatcher->dispatch($this->document, $result);
+                    
+                    Log::info('Integration dispatch completed', [
+                        'document_id' => $this->document->id,
+                        'extraction_id' => $extraction->id,
+                        'integration_count' => count($integrationResults)
+                    ]);
+                    
+                    // The ExtractionObserver will handle file upload when robaws_quotation_id is set
+                    
+                } catch (\Exception $e) {
+                    Log::error('Integration dispatch failed', [
+                        'document_id' => $this->document->id,
+                        'extraction_id' => $extraction->id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
             } else {
                 $extractionData['extracted_data'] = [
                     'error' => $result->getErrorMessage(),
@@ -102,35 +148,11 @@ class ExtractDocumentData implements ShouldQueue
 
                 $this->document->update([
                     'extraction_status' => 'failed',
-                    'extraction_data' => json_encode(['error' => $result->getErrorMessage()]),
-                    'extraction_confidence' => 0,
-                    'extraction_service' => $result->getStrategy(),
-                    'extracted_at' => now(),
                     'ai_processing_status' => 'failed'
                 ]);
             }
 
             $extraction->update($extractionData);
-
-            // Dispatch to integrations if extraction was successful
-            if ($result->isSuccessful()) {
-                try {
-                    $integrationResults = $dispatcher->dispatch($this->document, $result);
-                    
-                    Log::info('Integration dispatch completed', [
-                        'document_id' => $this->document->id,
-                        'extraction_id' => $extraction->id,
-                        'integration_results' => array_keys($integrationResults)
-                    ]);
-                } catch (\Exception $e) {
-                    Log::error('Integration dispatch failed', [
-                        'document_id' => $this->document->id,
-                        'extraction_id' => $extraction->id,
-                        'error' => $e->getMessage()
-                    ]);
-                    // Don't fail the job for integration errors
-                }
-            }
 
             $processingTime = round((microtime(true) - $startTime) * 1000, 2);
 
@@ -138,11 +160,7 @@ class ExtractDocumentData implements ShouldQueue
                 'document_id' => $this->document->id,
                 'extraction_id' => $extraction->id,
                 'success' => $result->isSuccessful(),
-                'confidence' => $result->getConfidence(),
-                'strategy' => $result->getStrategy(),
-                'processing_time_ms' => $processingTime,
-                'document_fields' => count($result->getDocumentData()),
-                'ai_enhanced_fields' => count($result->getAiEnhancedData())
+                'processing_time_ms' => $processingTime
             ]);
 
         } catch (\Exception $e) {
@@ -151,23 +169,17 @@ class ExtractDocumentData implements ShouldQueue
             Log::error('Document extraction failed', [
                 'document_id' => $this->document->id,
                 'error' => $e->getMessage(),
-                'processing_time_ms' => $processingTime,
-                'trace' => $e->getTraceAsString()
+                'processing_time_ms' => $processingTime
             ]);
 
-            // Update extraction status if it exists
-            if (isset($extraction)) {
+            if (isset($extraction) && $extraction->status === 'processing') {
                 $extraction->update([
                     'status' => 'failed',
-                    'extracted_data' => [
-                        'error' => $e->getMessage(),
-                        'processing_time_ms' => $processingTime
-                    ],
+                    'extracted_data' => ['error' => $e->getMessage()],
                     'analysis_type' => 'failed',
                 ]);
             }
 
-            // Update document status
             $this->document->update([
                 'ai_processing_status' => 'failed'
             ]);
@@ -193,7 +205,6 @@ class ExtractDocumentData implements ShouldQueue
                 'extracted_data' => ['error' => 'Job failed: ' . $exception->getMessage()],
             ]);
 
-        // Update document status
         $this->document->update([
             'ai_processing_status' => 'failed'
         ]);

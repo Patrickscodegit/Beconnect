@@ -15,6 +15,7 @@ class Document extends Model
         'intake_id',
         'name',
         'filename',
+        'original_filename',
         'path',
         'mime_type',
         'size',
@@ -22,6 +23,7 @@ class Document extends Model
         // Legacy fields
         'file_path',
         'file_size',
+        'storage_disk',
         'has_text_layer',
         'document_type',
         'page_count',
@@ -37,6 +39,13 @@ class Document extends Model
         'robaws_formatted_at',
         'robaws_sync_status',
         'robaws_synced_at',
+        // Robaws file upload tracking
+        'robaws_document_id',
+        'robaws_uploaded_at',
+        'robaws_upload_attempted_at',
+        'upload_status',
+        'upload_error',
+        'upload_method',
     ];
 
     protected $casts = [
@@ -51,6 +60,8 @@ class Document extends Model
         'extracted_at' => 'datetime',
         'robaws_formatted_at' => 'datetime',
         'robaws_synced_at' => 'datetime',
+        'robaws_uploaded_at' => 'datetime',
+        'robaws_upload_attempted_at' => 'datetime',
     ];
 
     /**

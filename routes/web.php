@@ -36,6 +36,14 @@ Route::middleware('auth')->group(function () {
         ->name('robaws.offers.store');
     Route::post('/documents/{document}/robaws-offer', [RobawsOfferController::class, 'createFromDocument'])
         ->name('documents.robaws-offer');
+    
+    // Robaws file upload routes
+    Route::post('/robaws/quotations/{quotationId}/upload-documents', [RobawsOfferController::class, 'uploadDocuments'])
+        ->name('robaws.quotations.upload-documents');
+    Route::get('/robaws/quotations/{quotationId}/upload-status', [RobawsOfferController::class, 'getUploadStatus'])
+        ->name('robaws.quotations.upload-status');
+    Route::post('/robaws/quotations/{quotationId}/retry-uploads', [RobawsOfferController::class, 'retryFailedUploads'])
+        ->name('robaws.quotations.retry-uploads');
 });
 
 // Webhook endpoint (no auth required)

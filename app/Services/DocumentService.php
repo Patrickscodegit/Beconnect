@@ -41,8 +41,8 @@ class DocumentService
         }
 
         try {
-            // Store file in MinIO S3
-            $path = Storage::disk('s3')->put('documents', $file);
+            // Store file in configured storage disk (local for dev, spaces for prod)
+            $path = Storage::disk(config('filesystems.default'))->put('documents', $file);
             
             // Create intake record
             $intake = Intake::create([
@@ -85,7 +85,7 @@ class DocumentService
         return Cache::remember($cacheKey, 3600, function () use ($document) {
             try {
                 // Get file from storage
-                $fileContent = Storage::disk('s3')->get($document->file_path);
+                $fileContent = Storage::disk(config('filesystems.default'))->get($document->file_path);
                 $tempPath = storage_path('app/temp/' . $document->id . '_' . basename($document->file_path));
                 
                 // Ensure temp directory exists

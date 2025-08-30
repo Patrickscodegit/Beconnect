@@ -37,7 +37,7 @@ class DocumentResource extends Resource
                 Forms\Components\Section::make('Document Upload')
                     ->schema([
                         Forms\Components\Select::make('intake_id')
-                            ->label('Intake')
+                            ->label('Intake (Optional)')
                             ->relationship('intake', 'id')
                             ->searchable()
                             ->preload()
@@ -73,14 +73,13 @@ class DocumentResource extends Resource
                                     ->rows(3)
                                     ->placeholder('Additional notes about this intake...'),
                             ])
-                            ->required()
                             ->columnSpanFull(),
                             
                         Forms\Components\FileUpload::make('file_upload')
                             ->label('Document File')
                             ->acceptedFileTypes(['application/pdf', 'image/jpeg', 'image/png', 'image/tiff'])
                             ->maxSize(10240) // 10MB
-                            ->disk('minio')
+                            ->disk(config('filesystems.default'))
                             ->directory('documents')
                             ->visibility('private')
                             ->afterStateUpdated(function ($state, callable $set) {

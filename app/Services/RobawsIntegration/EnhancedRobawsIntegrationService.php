@@ -95,17 +95,34 @@ class EnhancedRobawsIntegrationService
                         $mainService = app(\App\Services\RobawsIntegrationService::class);
                         $result = $mainService->createOfferFromDocument($document);
 
-                        if ($result && isset($result['success']) && $result['success']) {
+                        if ($result && isset($result['id'])) {
+                            $quotationId = $result['id'];
+                            
                             $document->update([
                                 'robaws_sync_status' => 'synced',
                                 'robaws_synced_at' => now(),
-                                'robaws_quotation_id' => $result['offer']['id'] ?? null,
+                                'robaws_quotation_id' => $quotationId,
                             ]);
+
+                            // IMPORTANT: Update the extraction with the quotation ID
+                            // This will trigger the ExtractionObserver to upload the document
+                            $extraction = $document->extractions()->latest()->first();
+                            if ($extraction) {
+                                $extraction->update([
+                                    'robaws_quotation_id' => $quotationId
+                                ]);
+                                
+                                Log::info('Updated extraction with quotation ID - will trigger document upload', [
+                                    'document_id' => $document->id,
+                                    'extraction_id' => $extraction->id,
+                                    'quotation_id' => $quotationId
+                                ]);
+                            }
 
                             Log::info('Enhanced Integration: Offer created in Robaws successfully', [
                                 'document_id' => $document->id,
-                                'robaws_offer_id' => $result['offer']['id'] ?? null,
-                                'robaws_url' => $result['robaws_url'] ?? null,
+                                'robaws_offer_id' => $quotationId,
+                                'extraction_updated' => !!$extraction
                             ]);
                         } else {
                             Log::warning('Enhanced Integration: Failed to create offer in Robaws', [

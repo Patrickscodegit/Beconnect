@@ -4,6 +4,7 @@ namespace App\Observers;
 
 use App\Models\Document;
 use App\Jobs\ExtractDocumentData;
+use Illuminate\Support\Facades\Log;
 
 class DocumentObserver
 {
@@ -12,8 +13,15 @@ class DocumentObserver
      */
     public function created(Document $document): void
     {
-        // Dispatch extraction job synchronously for immediate processing
-        dispatch_sync(new ExtractDocumentData($document));
+        // Only dispatch extraction for standalone documents
+        if (!$document->intake_id) {
+            Log::info('Dispatching extraction job for standalone document', [
+                'document_id' => $document->id
+            ]);
+            
+            // Use async dispatch to prevent blocking
+            ExtractDocumentData::dispatch($document);
+        }
     }
 
     /**
