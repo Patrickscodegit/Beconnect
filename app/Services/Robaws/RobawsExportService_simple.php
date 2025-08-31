@@ -105,109 +105,6 @@ class RobawsExportService implements RobawsExporter
     }
 
     /**
-     * Upload a document by path to a specific offer ID (for tests)
-     */
-    public function uploadDocumentToOffer(int|string $offerId, string $dbPath): array
-    {
-        try {
-            $doc = Files::openDocumentStream($dbPath, ['documents', 'local', 's3']);
-        } catch (\RuntimeException $e) {
-            return [
-                'status' => 'error',
-                'error' => 'File not found: ' . $dbPath . ' — ' . $e->getMessage(),
-                'document' => [
-                    'id' => null,
-                    'name' => basename($dbPath),
-                    'mime' => null,
-                    'size' => null,
-                    'sha256' => null
-                ],
-                '_raw' => ['exception' => get_class($e)],
-            ];
-        }
-
-        $filename = $this->prettifyFilename($doc['filename']);
-        $hashed = $this->streamHasher->toTempHashedStream($doc['stream']);
-        fclose($doc['stream']);
-
-        $sha256 = $hashed['sha256'];
-        $size = $doc['size'] ?? $hashed['size'];
-
-        // 1) Local ledger check
-        $existing = RobawsDocument::query()
-            ->where('robaws_offer_id', $offerId)
-            ->where('sha256', $sha256)
-            ->first();
-
-        if ($existing) {
-            if (is_resource($hashed['stream'])) {
-                fclose($hashed['stream']);
-            }
-            return [
-                'status' => 'exists',
-                'reason' => 'Found in local ledger',
-                'document' => [
-                    'id' => $existing->robaws_document_id,
-                    'name' => $existing->filename ?? $filename,
-                    'mime' => $existing->mime ?? $doc['mime'],
-                    'size' => $existing->filesize ?? $size,
-                    'sha256' => $existing->sha256,
-                ],
-                '_raw' => ['source' => 'local'],
-            ];
-        }
-
-        // 2) Not in ledger → upload
-        $fileData = [
-            'filename' => $filename,
-            'mime' => $doc['mime'],
-            'stream' => $hashed['stream'],
-            'size' => $size,
-            'sha256' => $sha256,
-        ];
-
-        try {
-            $res = $this->client->uploadDocument((string)$offerId, $fileData);
-        } catch (\Throwable $e) {
-            if (is_resource($hashed['stream'])) {
-                fclose($hashed['stream']);
-            }
-            return [
-                'status' => 'error',
-                'error' => $e->getMessage(),
-                'document' => [
-                    'id' => null,
-                    'name' => $filename,
-                    'mime' => $doc['mime'],
-                    'size' => $size,
-                    'sha256' => $sha256
-                ],
-                '_raw' => ['exception' => get_class($e)],
-            ];
-        } finally {
-            if (is_resource($hashed['stream'])) {
-                fclose($hashed['stream']);
-            }
-        }
-
-        $normalized = $this->normalizeUploadResponse($res, $filename, ['mime' => $doc['mime'], 'size' => $size]);
-        $normalized['document']['sha256'] = $sha256;
-
-        // 3) Persist to ledger (so next time it resolves to 'exists')
-        if ($normalized['status'] === 'uploaded' && class_exists(RobawsDocument::class)) {
-            RobawsDocument::create([
-                'robaws_offer_id' => $offerId,
-                'filename' => $normalized['document']['name'],
-                'filesize' => $normalized['document']['size'],
-                'sha256' => $sha256,
-                'robaws_document_id' => $normalized['document']['id'],
-            ]);
-        }
-
-        return $normalized;
-    }
-
-    /**
      * Main upload method - clean and simple
      */
     public function uploadDocumentToRobaws(Document $document, string $robawsOfferId): array
@@ -264,7 +161,6 @@ class RobawsExportService implements RobawsExporter
                 fclose($tempStream);
                 return [
                     'status' => 'exists',
-                    'reason' => 'Found in local ledger - skipping duplicate upload',
                     'error' => null,
                     'document' => [
                         'id' => $existing->robaws_document_id,
