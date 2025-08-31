@@ -19,20 +19,29 @@ class EnhancedRobawsIntegrationService
      */
     public function processDocument(Document $document, array $extractedData): bool
     {
-        return DB::transaction(function () use ($document, $extractedData) {
+        // Idempotency guard: if quotation already exists, skip
+        if ($document->robaws_quotation_id) {
+            Log::channel('robaws')->info('Offer already exists; skipping creation', [
+                'document_id' => $document->id,
+                'quotation_id' => $document->robaws_quotation_id,
+            ]);
+            return true;
+        }
+
+        $result = DB::transaction(function () use ($document, $extractedData) {
             try {
-                Log::info('Processing document with JSON field mapping', [
+                Log::channel('robaws')->info('Processing document with JSON field mapping', [
                     'document_id' => $document->id,
                     'filename' => $document->filename,
                     'has_json_field' => isset($extractedData['JSON']),
                     'field_count' => count($extractedData),
                     'data_keys' => array_slice(array_keys($extractedData), 0, 15),
-                    'json_length' => isset($extractedData['JSON']) ? strlen($extractedData['JSON']) : 0
+                    'json_length' => isset($extractedData['JSON']) && is_string($extractedData['JSON']) ? strlen($extractedData['JSON']) : 0
                 ]);
 
                 // PHASE 1 STEP 2: Validate and handle data structure
                 if (!isset($extractedData['JSON']) && isset($extractedData['data']) && isset($extractedData['data']['JSON'])) {
-                    Log::info('Found JSON field in nested data structure, extracting it', [
+                    Log::channel('robaws')->info('Found JSON field in nested data structure, extracting it', [
                         'document_id' => $document->id
                     ]);
                     $extractedData = $extractedData['data'];
@@ -40,7 +49,7 @@ class EnhancedRobawsIntegrationService
 
                 // Ensure JSON field exists
                 if (!isset($extractedData['JSON'])) {
-                    Log::warning('JSON field missing in extracted data', [
+                    Log::channel('robaws')->warning('JSON field missing in extracted data', [
                         'document_id' => $document->id,
                         'available_fields' => array_keys($extractedData)
                     ]);
@@ -53,7 +62,7 @@ class EnhancedRobawsIntegrationService
                         'warning' => 'JSON field was missing and created as fallback'
                     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
                     
-                    Log::info('Created fallback JSON field', [
+                    Log::channel('robaws')->info('Created fallback JSON field', [
                         'document_id' => $document->id,
                         'json_length' => strlen($extractedData['JSON'])
                     ]);
@@ -78,7 +87,7 @@ class EnhancedRobawsIntegrationService
                     'robaws_sync_status' => $syncStatus,
                 ]);
                 
-                Log::info('Document formatted for Robaws using JSON mapping', [
+                Log::channel('robaws')->info('Document formatted for Robaws using JSON mapping', [
                     'document_id' => $document->id,
                     'mapping_version' => $robawsData['mapping_version'] ?? 'unknown',
                     'sync_status' => $syncStatus,
@@ -87,83 +96,91 @@ class EnhancedRobawsIntegrationService
                     'has_customer' => !empty($robawsData['customer']),
                     'has_routing' => !empty($robawsData['por']) && !empty($robawsData['pod']),
                     'has_cargo' => !empty($robawsData['cargo']),
+                    'status_reason' => !$validationResult['is_valid'] ? ($validationResult['errors'][0] ?? 'validation failed') : null,
                 ]);
-
-                // ENHANCED: Now actually create the offer in Robaws using the main service
-                if ($syncStatus === 'ready') {
-                    Log::info('Document ready for Robaws - creating offer now', [
-                        'document_id' => $document->id,
-                    ]);
-
-                    try {
-                        $mainService = app(\App\Services\RobawsIntegrationService::class);
-                        $result = $mainService->createOfferFromDocument($document);
-
-                        if ($result && isset($result['id'])) {
-                            $quotationId = $result['id'];
-                            
-                            $document->update([
-                                'robaws_sync_status' => 'synced',
-                                'robaws_synced_at' => now(),
-                                'robaws_quotation_id' => $quotationId,
-                            ]);
-
-                            // IMPORTANT: Update the extraction with the quotation ID
-                            // This will trigger the ExtractionObserver to upload the document
-                            $extraction = $document->extractions()->latest()->first();
-                            if ($extraction) {
-                                $extraction->update([
-                                    'robaws_quotation_id' => $quotationId
-                                ]);
-                                
-                                Log::info('Updated extraction with quotation ID - will trigger document upload', [
-                                    'document_id' => $document->id,
-                                    'extraction_id' => $extraction->id,
-                                    'quotation_id' => $quotationId
-                                ]);
-                            }
-
-                            Log::info('Enhanced Integration: Offer created in Robaws successfully', [
-                                'document_id' => $document->id,
-                                'robaws_offer_id' => $quotationId,
-                                'extraction_updated' => !!$extraction
-                            ]);
-                        } else {
-                            Log::warning('Enhanced Integration: Failed to create offer in Robaws', [
-                                'document_id' => $document->id,
-                                'result' => $result,
-                            ]);
-
-                            $document->update([
-                                'robaws_sync_status' => 'failed',
-                                'robaws_last_sync_attempt' => now(),
-                            ]);
-                        }
-                    } catch (\Exception $e) {
-                        Log::error('Enhanced Integration: Error creating offer in Robaws', [
-                            'document_id' => $document->id,
-                            'error' => $e->getMessage(),
-                        ]);
-
-                        $document->update([
-                            'robaws_sync_status' => 'failed',
-                            'robaws_last_sync_attempt' => now(),
-                        ]);
-                    }
-                }
                 
-                return true;
+                return [
+                    'sync_status' => $syncStatus,
+                ];
                 
             } catch (\Exception $e) {
-                Log::error('Failed to process document for Robaws with JSON mapping', [
+                Log::channel('robaws')->error('Failed to process document for Robaws with JSON mapping', [
                     'document_id' => $document->id,
                     'error' => $e->getMessage(),
                     'trace' => $e->getTraceAsString()
                 ]);
                 
-                return false;
+                return [
+                    'sync_status' => 'failed',
+                    'error' => $e->getMessage(),
+                ];
             }
         });
+
+        // External API calls AFTER transaction commits
+        if (($result['sync_status'] ?? null) === 'ready') {
+            Log::channel('robaws')->info('Document ready for Robaws - creating offer now', [
+                'document_id' => $document->id,
+            ]);
+
+            try {
+                $mainService = app(\App\Services\RobawsIntegrationService::class);
+                $createResult = $mainService->createOfferFromDocument($document);
+
+                if ($createResult && isset($createResult['id'])) {
+                    $quotationId = $createResult['id'];
+                    
+                    $document->update([
+                        'robaws_sync_status' => 'synced',
+                        'robaws_synced_at' => now(),
+                        'robaws_quotation_id' => $quotationId,
+                    ]);
+
+                    // IMPORTANT: Update the extraction with the quotation ID
+                    // This will trigger the ExtractionObserver to upload the document
+                    $extraction = $document->extractions()->latest()->first();
+                    if ($extraction) {
+                        $extraction->update([
+                            'robaws_quotation_id' => $quotationId
+                        ]);
+                        
+                        Log::channel('robaws')->info('Updated extraction with quotation ID - will trigger document upload', [
+                            'document_id' => $document->id,
+                            'extraction_id' => $extraction->id,
+                            'quotation_id' => $quotationId
+                        ]);
+                    }
+
+                    Log::channel('robaws')->info('Enhanced Integration: Offer created in Robaws successfully', [
+                        'document_id' => $document->id,
+                        'robaws_offer_id' => $quotationId,
+                        'extraction_updated' => !!$extraction
+                    ]);
+                } else {
+                    Log::channel('robaws')->warning('Enhanced Integration: Failed to create offer in Robaws', [
+                        'document_id' => $document->id,
+                        'result' => $createResult,
+                    ]);
+
+                    $document->update([
+                        'robaws_sync_status' => 'failed',
+                        'robaws_last_sync_attempt' => now(),
+                    ]);
+                }
+            } catch (\Exception $e) {
+                Log::channel('robaws')->error('Enhanced Integration: Error creating offer in Robaws', [
+                    'document_id' => $document->id,
+                    'error' => $e->getMessage(),
+                ]);
+
+                $document->update([
+                    'robaws_sync_status' => 'failed',
+                    'robaws_last_sync_attempt' => now(),
+                ]);
+            }
+        }
+
+        return ($result['sync_status'] ?? 'failed') !== 'failed';
     }
     
     /**
@@ -347,7 +364,7 @@ class EnhancedRobawsIntegrationService
             return $data; // nothing to do
         }
 
-        Log::info('Backfilling routing from text', [
+        Log::channel('robaws')->info('Backfilling routing from text', [
             'needs_por' => $needsPor,
             'needs_pol' => $needsPol,
             'needs_pod' => $needsPod,
@@ -370,45 +387,67 @@ class EnhancedRobawsIntegrationService
                 continue;
             }
 
-            [$o, $d] = [$codes[0], $codes[1]];
+            // Filter to codes we can map to cities
+            $mappedCodes = array_values(array_filter($codes, fn($c) => (bool) $this->codeToCity($c)));
+            if (count($mappedCodes) < 2) {
+                continue; // try next candidate instead of breaking
+            }
+
+            [$o, $d] = [$mappedCodes[0], $mappedCodes[1]];
             $porCity = $this->codeToCity($o);
             $podCity = $this->codeToCity($d);
 
-            Log::info('Found routing codes in text', [
+            Log::channel('robaws')->info('Found routing codes in text', [
                 'text' => substr($text, 0, 100),
                 'codes' => $codes,
+                'mapped_codes' => $mappedCodes,
                 'origin_code' => $o,
                 'dest_code' => $d,
                 'por_city' => $porCity,
                 'pod_city' => $podCity
             ]);
 
+            $changed = false;
+
             if ($needsPor && $porCity) {
                 $data['por'] = $porCity;
+                $changed = true;
             }
             if ($needsPod && $podCity) {
                 $data['pod'] = $podCity;
+                $changed = true;
             }
             if ($needsPol && $porCity) {
-                $data['pol'] = $this->cityToPort($porCity) ?? $porCity;
-            }
-
-            // optional third code as POT
-            if (empty($data['pot']) && isset($codes[2])) {
-                $potCity = $this->codeToCity($codes[2]);
-                if ($potCity) {
-                    $data['pot'] = $potCity;
+                if ($pol = $this->cityToPort($porCity)) {
+                    $data['pol'] = $pol;
+                    $changed = true;
                 }
             }
 
-            Log::info('Backfilled routing data', [
+            // optional third code as POT
+            if (empty($data['pot']) && isset($mappedCodes[2])) {
+                $potCity = $this->codeToCity($mappedCodes[2]);
+                if ($potCity) {
+                    $data['pot'] = $potCity;
+                    $changed = true;
+                }
+            }
+
+            $hasEnoughRouting = !empty($data['por']) && !empty($data['pod']);
+            Log::channel('robaws')->info('Backfilled routing data', [
                 'por' => $data['por'] ?? null,
                 'pol' => $data['pol'] ?? null,
                 'pod' => $data['pod'] ?? null,
-                'pot' => $data['pot'] ?? null
+                'pot' => $data['pot'] ?? null,
+                'has_enough_routing' => $hasEnoughRouting,
+                'source_text' => $text,
+                'extracted_codes' => $codes,
+                'mapped_codes' => $mappedCodes
             ]);
 
-            break; // first usable text is enough
+            if ($changed) {
+                break; // only stop when we actually set at least one value
+            }
         }
 
         return $data;
@@ -419,8 +458,10 @@ class EnhancedRobawsIntegrationService
      */
     private function extractIataCodes(string $text): array
     {
-        preg_match_all('/\b[A-Z]{3}\b/', strtoupper($text), $m);
-        return $m[0] ?? [];
+        // match 3-letter uppers delimited by start/space/dash and end/space/dash
+        preg_match_all('/(?<=^|[\s\-])([A-Z]{3})(?=$|[\s\-])/u', strtoupper($text), $m);
+        // de-duplicate, keep order
+        return array_values(array_unique($m[1] ?? []));
     }
 
     /**
