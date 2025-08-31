@@ -11,7 +11,10 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
+    // Use fakes for all storage disks that might be used
     Storage::fake('s3');
+    Storage::fake('documents');
+    Storage::fake('local');  // DocumentService uses config('filesystems.default')
 });
 
 describe('Production Pipeline Integration', function () {
@@ -48,8 +51,8 @@ describe('Production Pipeline Integration', function () {
             ->toBeArray()
             ->and(count($extractedData))->toBeGreaterThan(0);
         
-        // 4. Storage verification
-        Storage::disk('s3')->assertExists($document->file_path);
+        // 4. Storage verification (DocumentService uses default disk which is 'local')
+        Storage::disk('local')->assertExists($document->file_path);
     });
 
     it('handles file validation correctly', function () {
@@ -106,6 +109,7 @@ describe('Production Pipeline Integration', function () {
         $documents = Document::factory()->count(3)->create([
             'intake_id' => $intake->id,
             'document_type' => 'invoice',
+            'storage_disk' => 's3',  // PdfService uses s3 disk
             'file_path' => function () {
                 return 'documents/' . fake()->uuid() . '.pdf';
             }

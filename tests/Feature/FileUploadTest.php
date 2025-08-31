@@ -13,7 +13,13 @@ class FileUploadTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        
+        // Fake both s3 and local disks
         Storage::fake('s3');
+        Storage::fake('local');
+        
+        // Override default disk to s3 for these tests
+        config(['filesystems.default' => 's3']);
     }
 
     /** @test */

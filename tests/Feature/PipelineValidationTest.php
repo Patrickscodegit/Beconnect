@@ -85,7 +85,8 @@ class PipelineValidationTest extends TestCase
         
         // Test config exists
         $this->assertNotNull(config('services.robaws.base_url'));
-        $this->assertNotNull(config('services.robaws.sandbox'));
+        $this->assertNotNull(config('services.robaws.api_key'));
+        $this->assertNotNull(config('services.robaws.api_secret'));
         
         $this->assertTrue(true, 'Robaws service is properly configured');
     }

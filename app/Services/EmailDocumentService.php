@@ -48,6 +48,22 @@ class EmailDocumentService
             $filename = $originalFilename ?: basename($path);
             $fileSize = Storage::disk($disk)->size($path);
             
+            // Check for existing document by (intake_id, source_content_sha) to avoid unique constraint
+            $existingBySha = Document::query()
+                ->where('intake_id', $intakeId)
+                ->where('source_content_sha', $fingerprint['content_sha'])
+                ->first();
+                
+            if ($existingBySha) {
+                return [
+                    'status' => 'duplicate',
+                    'skipped_as_duplicate' => true,
+                    'message' => 'Email already processed in this intake (by content hash)',
+                    'document_id' => $existingBySha->id,
+                    'original_extraction' => $existingBySha->extraction_data,
+                ];
+            }
+            
             $document = Document::create([
                 'intake_id' => $intakeId,
                 'filename' => $filename,
@@ -184,6 +200,20 @@ class EmailDocumentService
             $filename = $filename ?: 'email_' . now()->format('Y-m-d_H-i-s') . '.eml';
             $filePath = 'emails/' . date('Y/m/d') . '/' . $filename;
             Storage::disk('documents')->put($filePath, $rawEmail);
+
+            // Check for existing document by content_sha to avoid unique constraint
+            $existingBySha = Document::where('source_content_sha', $fingerprint['content_sha'])->first();
+            if ($existingBySha) {
+                // Clean up the file we just stored since it's a duplicate
+                Storage::disk('documents')->delete($filePath);
+                
+                return [
+                    'status' => 'duplicate',
+                    'message' => 'Email already processed (detected after file storage)',
+                    'document_id' => $existingBySha->id,
+                    'original_extraction' => $existingBySha->extraction_data,
+                ];
+            }
 
             // Create document record with fingerprint
             $document = Document::create([
