@@ -79,6 +79,15 @@ final class RobawsExportService
                 try {
                     $result = $this->uploadDocumentToRobaws($document, $robawsOfferId);
                     
+                    // Log intake context for successful processing
+                    Log::info('Robaws export: document processed', [
+                        'intake_id' => $intake->id,
+                        'offer_id'  => (string) $robawsOfferId,
+                        'document_id' => $result['document']['id'] ?? null,
+                        'status' => $result['status'],
+                        'path'   => $document->filepath ?? $document->path ?? null,
+                    ]);
+                    
                     // Map individual document result to canonical summary
                     if ($result['status'] === 'uploaded') {
                         $summary['uploaded'][] = [
@@ -243,7 +252,7 @@ final class RobawsExportService
             ->first();
 
         if ($existing) {
-            if (is_resource($hashed['stream'])) {
+            if (isset($hashed['stream']) && is_resource($hashed['stream'])) {
                 fclose($hashed['stream']);
             }
             
@@ -282,7 +291,7 @@ final class RobawsExportService
         try {
             $res = $this->client->uploadDocument((string)$offerId, $fileData);
         } catch (\Throwable $e) {
-            if (is_resource($hashed['stream'])) {
+            if (isset($hashed['stream']) && is_resource($hashed['stream'])) {
                 fclose($hashed['stream']);
             }
             
@@ -307,7 +316,7 @@ final class RobawsExportService
                 '_raw' => ['exception' => get_class($e)],
             ];
         } finally {
-            if (is_resource($hashed['stream'])) {
+            if (isset($hashed['stream']) && is_resource($hashed['stream'])) {
                 fclose($hashed['stream']);
             }
         }
@@ -344,6 +353,12 @@ final class RobawsExportService
      */
     public function uploadDocumentToOffer(int|string $offerId, string $dbPath): array
     {
+        if (app()->environment('local')) {
+            Log::warning('DEPRECATED: uploadDocumentToOffer() called. Use uploadDocumentByPath().', [
+                'offer_id' => (string) $offerId, 
+                'path' => $dbPath
+            ]);
+        }
         return $this->uploadDocumentByPath($offerId, $dbPath);
     }
 
