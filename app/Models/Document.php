@@ -29,6 +29,7 @@ class Document extends Model
         'page_count',
         'has_text_layer',
         'document_type',
+        'status',         // document approval status
         'metadata',
 
         // email deduplication

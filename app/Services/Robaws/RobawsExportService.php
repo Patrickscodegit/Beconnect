@@ -61,7 +61,10 @@ final class RobawsExportService
             $robawsOfferId = $this->getRobawsOfferId($intake);
             
             $approvedDocuments = Document::where('intake_id', $intake->id)
-                ->where('status', 'approved')
+                ->where(function ($q) {
+                    $q->where('status', 'approved')
+                      ->orWhereNull('status');
+                })
                 ->get();
 
             if ($approvedDocuments->isEmpty()) {
