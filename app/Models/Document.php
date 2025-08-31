@@ -43,6 +43,7 @@ class Document extends Model
         'robaws_document_id',
         'robaws_uploaded_at',
         'robaws_upload_attempted_at',
+        'robaws_last_sync_at',
         'upload_status',
         'upload_error',
         'upload_method',
@@ -62,6 +63,7 @@ class Document extends Model
         'robaws_synced_at' => 'datetime',
         'robaws_uploaded_at' => 'datetime',
         'robaws_upload_attempted_at' => 'datetime',
+        'robaws_last_sync_at' => 'datetime',
     ];
 
     /**

@@ -109,27 +109,19 @@ class CreateIntake extends CreateRecord
                     $fileContent = file_get_contents($tempPath);
                     $storagePath = 'documents/' . uniqid() . '_' . $originalName;
                     
-                    // Use local storage for local development, Spaces for production
-                    if (config('app.env') === 'local' || config('filesystems.default') === 'local') {
-                        // Local development - store in local disk
+                    try {
+                        // Try DigitalOcean Spaces first
+                        Storage::disk('spaces')->put($storagePath, $fileContent);
+                        $storageDisk = 'spaces';
+                        \Log::info('ProcessUploadedFiles: Stored in DigitalOcean Spaces', ['path' => $storagePath]);
+                    } catch (\Exception $e) {
+                        // Fallback to local storage
                         Storage::disk('local')->put($storagePath, $fileContent);
                         $storageDisk = 'local';
-                        \Log::info('ProcessUploadedFiles: Stored in local storage (development)', ['path' => $storagePath]);
-                    } else {
-                        try {
-                            // Production - try DigitalOcean Spaces first
-                            Storage::disk('spaces')->put($storagePath, $fileContent);
-                            $storageDisk = 'spaces';
-                            \Log::info('ProcessUploadedFiles: Stored in DigitalOcean Spaces', ['path' => $storagePath]);
-                        } catch (\Exception $e) {
-                            // Fallback to local storage
-                            Storage::disk('local')->put($storagePath, $fileContent);
-                            $storageDisk = 'local';
-                            \Log::warning('ProcessUploadedFiles: Spaces failed, using local storage', [
-                                'error' => $e->getMessage(),
-                                'path' => $storagePath
-                            ]);
-                        }
+                        \Log::warning('ProcessUploadedFiles: Spaces failed, using local storage', [
+                            'error' => $e->getMessage(),
+                            'path' => $storagePath
+                        ]);
                     }
                     
                     // Create document record

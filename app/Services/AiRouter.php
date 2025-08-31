@@ -880,6 +880,109 @@ class AiRouter
     }
 
     /**
+     * Extract information from email data
+     */
+    public function extractFromEmail(array $emailData): array
+    {
+        try {
+            // Prepare email context for AI
+            $emailContext = $this->prepareEmailContext($emailData);
+            
+            $messages = [
+                [
+                    'role' => 'system',
+                    'content' => 'You are a vehicle transport and logistics data extraction specialist. ' .
+                                'Extract vehicle transport information from emails and return ONLY valid JSON. ' .
+                                'Focus on identifying the sender as the customer/client requesting transport. ' .
+                                'Key expertise: vehicle specifications, shipping details, transport routes, and contact information.'
+                ],
+                [
+                    'role' => 'user',
+                    'content' => "Extract vehicle transport information from this email:\n\n" .
+                                "From: " . ($emailData['from_name'] ?? 'Unknown') . " <" . ($emailData['from_email'] ?? 'unknown') . ">\n" .
+                                "To: " . ($emailData['to_email'] ?? 'unknown') . "\n" .
+                                "Subject: " . ($emailData['subject'] ?? 'No subject') . "\n" .
+                                "Date: " . ($emailData['date'] ?? 'Unknown') . "\n\n" .
+                                "Email Body:\n" . $emailContext . "\n\n" .
+                                "IMPORTANT: The sender (From) is the customer/client requesting the transport. " .
+                                "Extract their name and email as the contact information. " .
+                                "Return ONLY valid JSON matching this structure:\n" .
+                                json_encode([
+                                    'vehicle' => [
+                                        'make' => 'string or null',
+                                        'brand' => 'string or null',
+                                        'model' => 'string or null',
+                                        'year' => 'string or null'
+                                    ],
+                                    'shipment' => [
+                                        'origin' => 'string or null',
+                                        'destination' => 'string or null',
+                                        'type' => 'string or null'
+                                    ],
+                                    'contact' => [
+                                        'name' => 'string or null',
+                                        'company' => 'string or null',
+                                        'phone' => 'string or null',
+                                        'email' => 'string or null'
+                                    ]
+                                ], JSON_PRETTY_PRINT)
+                ]
+            ];
+
+            $response = $this->extract($emailContext, [], [
+                'temperature' => 0.3
+            ]);
+
+            // Ensure sender information is properly captured
+            if (isset($emailData['from_email']) || isset($emailData['from_name'])) {
+                if (!isset($response['contact'])) {
+                    $response['contact'] = [];
+                }
+                
+                // Override with actual sender information
+                if (isset($emailData['from_email'])) {
+                    $response['contact']['email'] = $emailData['from_email'];
+                }
+                if (isset($emailData['from_name'])) {
+                    $response['contact']['name'] = $emailData['from_name'];
+                    // Use sender name as company if no company was extracted
+                    if (empty($response['contact']['company'])) {
+                        $response['contact']['company'] = $emailData['from_name'];
+                    }
+                }
+            }
+            
+            return $response ?? [];
+            
+        } catch (\Exception $e) {
+            $this->logger->error('Email extraction failed', [
+                'error' => $e->getMessage()
+            ]);
+            return [];
+        }
+    }
+
+    /**
+     * Prepare email context for AI processing
+     */
+    protected function prepareEmailContext(array $emailData): string
+    {
+        $context = $emailData['body'] ?? '';
+        
+        // Add subject if not already in body
+        if (isset($emailData['subject']) && stripos($context, $emailData['subject']) === false) {
+            $context = "Subject: " . $emailData['subject'] . "\n\n" . $context;
+        }
+        
+        // Limit context length
+        if (strlen($context) > 4000) {
+            $context = substr($context, 0, 4000) . '...';
+        }
+        
+        return $context;
+    }
+
+    /**
      * Get extraction schema based on analysis type
      *
      * @param string $analysisType
