@@ -62,6 +62,9 @@ class EnhancedRobawsIntegrationService
                 // Map the extracted data using JSON configuration
                 $robawsData = $this->fieldMapper->mapFields($extractedData);
                 
+                // Backfill routing from text when missing
+                $robawsData = $this->backfillRoutingFromText($robawsData, $extractedData);
+                
                 // Validate the mapped data using shared validator
                 $validationResult = RobawsDataValidator::validate($robawsData);
                 
@@ -329,5 +332,150 @@ class EnhancedRobawsIntegrationService
             ],
             'quotations' => $exportData,
         ];
+    }
+
+    /**
+     * Backfill routing information from text when POR/POL/POD are missing
+     */
+    private function backfillRoutingFromText(array $data, array $extracted): array
+    {
+        $needsPor = empty($data['por']);
+        $needsPod = empty($data['pod']);
+        $needsPol = empty($data['pol']);
+
+        if (!($needsPor || $needsPod || $needsPol)) {
+            return $data; // nothing to do
+        }
+
+        Log::info('Backfilling routing from text', [
+            'needs_por' => $needsPor,
+            'needs_pol' => $needsPol,
+            'needs_pod' => $needsPod,
+            'has_customer_reference' => !empty($data['customer_reference'])
+        ]);
+
+        $candidates = array_filter([
+            $data['customer_reference'] ?? null,
+            data_get($extracted, 'email_metadata.subject'),
+            data_get($extracted, 'title'),
+            data_get($extracted, 'description'),
+            data_get($extracted, 'concerning'),
+        ]);
+
+        foreach ($candidates as $text) {
+            if (empty($text)) continue;
+            
+            $codes = $this->extractIataCodes((string)$text);
+            if (count($codes) < 2) {
+                continue;
+            }
+
+            [$o, $d] = [$codes[0], $codes[1]];
+            $porCity = $this->codeToCity($o);
+            $podCity = $this->codeToCity($d);
+
+            Log::info('Found routing codes in text', [
+                'text' => substr($text, 0, 100),
+                'codes' => $codes,
+                'origin_code' => $o,
+                'dest_code' => $d,
+                'por_city' => $porCity,
+                'pod_city' => $podCity
+            ]);
+
+            if ($needsPor && $porCity) {
+                $data['por'] = $porCity;
+            }
+            if ($needsPod && $podCity) {
+                $data['pod'] = $podCity;
+            }
+            if ($needsPol && $porCity) {
+                $data['pol'] = $this->cityToPort($porCity) ?? $porCity;
+            }
+
+            // optional third code as POT
+            if (empty($data['pot']) && isset($codes[2])) {
+                $potCity = $this->codeToCity($codes[2]);
+                if ($potCity) {
+                    $data['pot'] = $potCity;
+                }
+            }
+
+            Log::info('Backfilled routing data', [
+                'por' => $data['por'] ?? null,
+                'pol' => $data['pol'] ?? null,
+                'pod' => $data['pod'] ?? null,
+                'pot' => $data['pot'] ?? null
+            ]);
+
+            break; // first usable text is enough
+        }
+
+        return $data;
+    }
+
+    /**
+     * Extract IATA-like 3-letter codes from text
+     */
+    private function extractIataCodes(string $text): array
+    {
+        preg_match_all('/\b[A-Z]{3}\b/', strtoupper($text), $m);
+        return $m[0] ?? [];
+    }
+
+    /**
+     * Convert IATA code to city name
+     */
+    private function codeToCity(string $code): ?string
+    {
+        $map = [
+            // extend as needed for your traffic
+            'BRU' => 'Brussels',
+            'ANR' => 'Antwerp',
+            'JED' => 'Jeddah',
+            'DXB' => 'Dubai',
+            'RTM' => 'Rotterdam',
+            'HAM' => 'Hamburg',
+            'LEH' => 'Le Havre',
+            'POR' => 'Portsmouth',
+            'DOV' => 'Dover',
+            'LON' => 'London',
+            'PAR' => 'Paris',
+            'FRA' => 'Frankfurt',
+            'MUN' => 'Munich',
+            'MIL' => 'Milano',
+            'MAD' => 'Madrid',
+            'BAR' => 'Barcelona',
+            'AMS' => 'Amsterdam',
+            'GEN' => 'Genoa',
+            'VAL' => 'Valencia',
+        ];
+        return $map[strtoupper($code)] ?? null;
+    }
+
+    /**
+     * Convert city name to port name
+     */
+    private function cityToPort(string $city): ?string
+    {
+        $map = [
+            'Brussels'   => 'Antwerp',
+            'Bruxelles'  => 'Antwerp',
+            'Paris'      => 'Le Havre',
+            'Frankfurt'  => 'Hamburg',
+            'Munich'     => 'Hamburg',
+            'Milano'     => 'Genoa',
+            'Madrid'     => 'Valencia',
+            'Barcelona'  => 'Barcelona',
+            'Amsterdam'  => 'Rotterdam',
+            'London'     => 'Portsmouth',
+            'Dover'      => 'Dover',
+            'Jeddah'     => 'Jeddah',
+            'Dubai'      => 'Dubai',
+            'Hamburg'    => 'Hamburg',
+            'Rotterdam'  => 'Rotterdam',
+            'Antwerp'    => 'Antwerp',
+        ];
+        return $map[$city] ?? null;
     }
 }
