@@ -19,6 +19,8 @@ class RobawsDocument extends Model
     protected $casts = [
         'filesize' => 'integer',
         'robaws_document_id' => 'integer',
+        'robaws_offer_id' => 'string',
+        'document_id' => 'integer',
     ];
 
     public function document(): BelongsTo

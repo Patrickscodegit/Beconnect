@@ -1,0 +1,93 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: testing
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+        extensions: mbstring, dom, fileinfo, pgsql, zip, gd, exif
+        coverage: none
+
+    - name: Copy environment file
+      run: php -r "file_exists('.env') || copy('.env.example', '.env');"
+
+    - name: Install Composer dependencies
+      run: composer install --no-progress --prefer-dist --optimize-autoloader
+
+    - name: Generate application key
+      run: php artisan key:generate
+
+    - name: Clear config cache
+      run: php artisan config:clear
+
+    - name: Run database migrations
+      run: php artisan migrate --force
+      env:
+        DB_CONNECTION: pgsql
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_DATABASE: testing
+        DB_USERNAME: postgres
+        DB_PASSWORD: postgres
+
+    - name: Syntax check core files
+      run: |
+        php -l app/Services/Robaws/RobawsExportService.php
+        php -l app/Support/Files.php
+        php -l app/Support/StreamHasher.php
+
+    - name: Run RobawsExportService tests
+      run: php artisan test --filter=RobawsExportServiceTest --stop-on-failure
+      env:
+        DB_CONNECTION: pgsql
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_DATABASE: testing
+        DB_USERNAME: postgres
+        DB_PASSWORD: postgres
+
+    - name: Run Unit Tests
+      run: php artisan test --testsuite=Unit --stop-on-failure
+      env:
+        DB_CONNECTION: pgsql
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_DATABASE: testing
+        DB_USERNAME: postgres
+        DB_PASSWORD: postgres
+
+    - name: Run Feature Tests
+      run: php artisan test --testsuite=Feature
+      env:
+        DB_CONNECTION: pgsql
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_DATABASE: testing
+        DB_USERNAME: postgres
+        DB_PASSWORD: postgres

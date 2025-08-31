@@ -106,6 +106,22 @@ class RobawsExportService implements RobawsExporter
 
     /**
      * Upload a document by path to a specific offer ID (for tests)
+     * 
+     * @param int|string $offerId The Robaws offer ID
+     * @param string $dbPath The document path (e.g., 'documents/file.eml')
+     * @return array{
+     *   status: 'uploaded'|'exists'|'error',
+     *   error: string|null,
+     *   document: array{
+     *     id: int|string|null,
+     *     name: string,
+     *     mime: string|null,
+     *     size: int|null,
+     *     sha256: string|null
+     *   },
+     *   reason?: string,
+     *   _raw?: array
+     * }
      */
     public function uploadDocumentToOffer(int|string $offerId, string $dbPath): array
     {
@@ -143,6 +159,14 @@ class RobawsExportService implements RobawsExporter
             if (is_resource($hashed['stream'])) {
                 fclose($hashed['stream']);
             }
+            
+            Log::info('Robaws upload: local ledger hit', [
+                'offer_id' => $offerId,
+                'filename' => $filename,
+                'sha256' => $sha256,
+                'status' => 'exists'
+            ]);
+            
             return [
                 'status' => 'exists',
                 'reason' => 'Found in local ledger',
@@ -172,6 +196,15 @@ class RobawsExportService implements RobawsExporter
             if (is_resource($hashed['stream'])) {
                 fclose($hashed['stream']);
             }
+            
+            Log::error('Robaws upload: client error', [
+                'offer_id' => $offerId,
+                'filename' => $filename,
+                'sha256' => $sha256,
+                'error' => $e->getMessage(),
+                'status' => 'error'
+            ]);
+            
             return [
                 'status' => 'error',
                 'error' => $e->getMessage(),
@@ -192,6 +225,15 @@ class RobawsExportService implements RobawsExporter
 
         $normalized = $this->normalizeUploadResponse($res, $filename, ['mime' => $doc['mime'], 'size' => $size]);
         $normalized['document']['sha256'] = $sha256;
+
+        // Log the successful upload
+        Log::info('Robaws upload: new upload successful', [
+            'offer_id' => $offerId,
+            'filename' => $filename,
+            'sha256' => $sha256,
+            'robaws_doc_id' => $normalized['document']['id'],
+            'status' => $normalized['status']
+        ]);
 
         // 3) Persist to ledger (so next time it resolves to 'exists')
         if ($normalized['status'] === 'uploaded' && class_exists(RobawsDocument::class)) {
