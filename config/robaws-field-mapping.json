@@ -12,19 +12,21 @@
         "template": "EXP RORO - {origin_code} - {destination_code} - {cargo_description}",
         "components": {
           "origin_code": {
-            "sources": ["origin", "shipment.origin", "routing.origin", "document_data.shipment.origin"],
-            "transform": "city_to_code"
+            "transform": "city_to_code",
+            "sources": ["origin","shipment.origin","routing.origin","document_data.shipment.origin","document_data.routing.por"]
           },
           "destination_code": {
-            "sources": ["destination", "shipment.destination", "routing.destination", "document_data.shipment.destination"],
-            "transform": "city_to_code"
+            "transform": "city_to_code",
+            "sources": ["destination","shipment.destination","routing.destination","document_data.shipment.destination","document_data.routing.pod"]
           },
           "cargo_description": {
-            "template": "1 x {condition} {brand} {model}",
+            "transform": "format_cargo_core",
             "sources": {
-              "condition": ["vehicle_condition", "vehicle.condition", "vehicle_details.condition", "document_data.vehicle.condition"],
-              "brand": ["vehicle_make", "vehicle.brand", "vehicle.make", "vehicle_details.brand", "document_data.vehicle.brand"],
-              "model": ["vehicle_model", "vehicle.model", "vehicle_details.model", "document_data.vehicle.model"]
+              "quantity": { "sources": ["vehicle.quantity","cargo.quantity"], "default": "1" },
+              "condition": ["vehicle_condition","vehicle.condition","vehicle_details.condition","vehicle.status","document_data.vehicle.condition"],
+              "brand": ["vehicle_make","vehicle.brand","vehicle.make","vehicle_details.brand","document_data.vehicle.brand"],
+              "model": ["vehicle_model","vehicle.model","vehicle_details.model","document_data.vehicle.model"],
+              "year": ["vehicle_year","vehicle.year","vehicle_details.year","document_data.vehicle.year"]
             }
           }
         }
@@ -45,22 +47,24 @@
     },
     "routing": {
       "por": {
-        "sources": ["origin", "shipment.origin", "routing.origin", "transport.from", "document_data.shipment.origin"],
+        "transform": "normalize_city",
+        "sources": ["origin","shipment.origin","routing.origin","transport.from","document_data.shipment.origin","document_data.routing.por"],
         "fallback": "extract_from_messages",
         "default": null
       },
       "pol": {
-        "sources": ["origin", "shipment.origin", "routing.origin", "document_data.shipment.origin"],
+        "sources": ["origin","shipment.origin","routing.origin","document_data.shipment.origin","document_data.routing.pol","por"],
         "transform": "city_to_port",
         "default": null
       },
       "pod": {
-        "sources": ["destination", "shipment.destination", "routing.destination", "transport.to", "document_data.shipment.destination"],
+        "transform": "normalize_city",
+        "sources": ["destination","shipment.destination","routing.destination","transport.to","document_data.shipment.destination","document_data.routing.pod"],
         "fallback": "extract_from_messages",
         "default": null
       },
       "pot": {
-        "sources": ["shipment.transshipment", "routing.via"],
+        "sources": ["shipment.transshipment","routing.via","document_data.routing.pot"],
         "default": null
       },
       "fdest": {
@@ -70,25 +74,25 @@
     },
     "cargo_details": {
       "cargo": {
-        "template": "{quantity} x {condition} {brand} {model} ({year})",
+        "transform": "format_cargo",
         "sources": {
-          "quantity": {
-            "sources": ["vehicle.quantity", "cargo.quantity"],
-            "default": "1"
-          },
-          "condition": ["vehicle_condition", "vehicle.condition", "vehicle_details.condition", "vehicle.status"],
-          "brand": ["vehicle_make", "vehicle.brand", "vehicle.make", "vehicle_details.brand"],
-          "model": ["vehicle_model", "vehicle.model", "vehicle_details.model"],
-          "year": ["vehicle_year", "vehicle.year", "vehicle_details.year"]
+          "quantity": { "sources": ["vehicle.quantity","cargo.quantity"], "default": "1" },
+          "condition": ["vehicle_condition","vehicle.condition","vehicle_details.condition","vehicle.status","document_data.vehicle.condition"],
+          "brand": ["vehicle_make","vehicle.brand","vehicle.make","vehicle_details.brand","document_data.vehicle.brand"],
+          "model": ["vehicle_model","vehicle.model","vehicle_details.model","document_data.vehicle.model"],
+          "year": ["vehicle_year","vehicle.year","vehicle_details.year","document_data.vehicle.year"]
         },
         "default": "1 x Vehicle"
       },
       "dim_bef_delivery": {
+        "transform": "format_dimensions",
         "sources": [
           "dimensions",
-          "vehicle.dimensions_formatted", 
+          "vehicle.dimensions_formatted",
           "cargo.dimensions",
-          "shipment.dimensions"
+          "shipment.dimensions",
+          "document_data.vehicle.dimensions",
+          "document_data.vehicle.dimensions_m"
         ],
         "fallback": "calculate_from_vehicle_dims",
         "default": null
@@ -107,28 +111,28 @@
     },
     "vehicle_details": {
       "vehicle_brand": {
-        "sources": ["vehicle_make", "vehicle.brand", "vehicle.make", "vehicle_details.brand"],
+        "sources": ["vehicle_make", "vehicle.brand", "vehicle.make", "vehicle_details.brand", "document_data.vehicle.brand"],
         "default": null
       },
       "vehicle_model": {
-        "sources": ["vehicle_model", "vehicle.model", "vehicle_details.model", "vehicle.full_name"],
+        "sources": ["vehicle_model", "vehicle.model", "vehicle_details.model", "vehicle.full_name", "document_data.vehicle.model"],
         "transform": "clean_vehicle_model",
         "default": null
       },
       "vehicle_year": {
-        "sources": ["vehicle_year", "vehicle.year", "vehicle_details.year", "vehicle.model_year"],
+        "sources": ["vehicle_year", "vehicle.year", "vehicle_details.year", "vehicle.model_year", "document_data.vehicle.year"],
         "transform": "to_integer"
       },
       "vehicle_color": {
-        "sources": ["vehicle.color", "vehicle_details.color", "vehicle.colour"],
+        "sources": ["vehicle.color", "vehicle_details.color", "vehicle.colour", "document_data.vehicle.color"],
         "default": null
       },
       "vehicle_condition": {
-        "sources": ["vehicle_condition", "vehicle.condition", "vehicle_details.condition", "vehicle.status"],
+        "sources": ["vehicle_condition", "vehicle.condition", "vehicle_details.condition", "vehicle.status", "document_data.vehicle.condition"],
         "default": "Used"
       },
       "vehicle_vin": {
-        "sources": ["vehicle.vin", "vehicle_details.vin", "vehicle.chassis_number"],
+        "sources": ["vehicle.vin", "vehicle_details.vin", "vehicle.chassis_number", "document_data.vehicle.vin"],
         "default": null
       },
       "engine_cc": {
@@ -152,30 +156,15 @@
         "transform": "standardize_fuel_type"
       },
       "vehicle_length": {
-        "sources": [
-          "length",
-          "vehicle.length",
-          "vehicle.dimensions.length",
-          "vehicle_details.length"
-        ],
+        "sources": ["length","vehicle.length","vehicle.dimensions.length","vehicle_details.length","document_data.vehicle.dimensions.length_m"],
         "transform": "to_meters"
       },
       "vehicle_width": {
-        "sources": [
-          "width",
-          "vehicle.width",
-          "vehicle.dimensions.width", 
-          "vehicle_details.width"
-        ],
+        "sources": ["width","vehicle.width","vehicle.dimensions.width","vehicle_details.width","document_data.vehicle.dimensions.width_m"],
         "transform": "to_meters"
       },
       "vehicle_height": {
-        "sources": [
-          "height",
-          "vehicle.height",
-          "vehicle.dimensions.height",
-          "vehicle_details.height"
-        ],
+        "sources": ["height","vehicle.height","vehicle.dimensions.height","vehicle_details.height","document_data.vehicle.dimensions.height_m"],
         "transform": "to_meters"
       }
     },

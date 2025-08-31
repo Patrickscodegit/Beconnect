@@ -58,6 +58,19 @@ class JsonFieldMapper
         foreach ($this->mappingConfig as $section => $fields) {
             foreach ($fields as $targetField => $config) {
                 $value = $this->extractFieldValue($extractedData, $config);
+                
+                // POL fallback: if POL is empty but we have POR, try to map POR to port
+                if ($targetField === 'pol' && empty($value)) {
+                    $por = $result['por'] ?? $this->findValueFromSources($extractedData, [
+                        'routing.origin',
+                        'document_data.routing.por',
+                        'origin'
+                    ]);
+                    if ($por) {
+                        $value = $this->applyTransformation($por, 'city_to_port', $extractedData);
+                    }
+                }
+                
                 if ($value !== null) {
                     $result[$targetField] = $value;
                 }
@@ -137,24 +150,36 @@ class JsonFieldMapper
         
         // Handle direct source mapping
         if (isset($config['sources'])) {
-            $value = $this->findValueFromSources($data, $config['sources']);
-            
-            // Apply fallback if configured
-            if ($value === null && isset($config['fallback'])) {
-                $value = $this->applyFallback($data, $config['fallback']);
+            $value = null;
+
+            // Composite sources object with nested keys
+            if (is_array($config['sources']) && array_is_list($config['sources']) === false && isset($config['transform'])) {
+                $composite = [];
+                foreach ($config['sources'] as $ck => $csrc) {
+                    if (is_array($csrc) && isset($csrc['sources'])) {
+                        $val = $this->findValueFromSources($data, $csrc['sources']);
+                        $composite[$ck] = $val ?? ($csrc['default'] ?? null);
+                    } else {
+                        $composite[$ck] = $this->findValueFromSources($data, $csrc);
+                    }
+                }
+                $value = $this->applyTransformation($composite, $config['transform'], $data);
+            } else {
+                // Simple list/string
+                $value = $this->findValueFromSources($data, $config['sources']);
+
+                if ($value === null && isset($config['fallback'])) {
+                    $value = $this->applyFallback($data, $config['fallback']);
+                }
+                if ($value !== null && isset($config['transform'])) {
+                    $value = $this->applyTransformation($value, $config['transform'], $data);
+                }
             }
-            
-            // Apply transformation if configured
-            if ($value !== null && isset($config['transform'])) {
-                $value = $this->applyTransformation($value, $config['transform'], $data);
-            }
-            
-            // Apply validation if configured
+
             if ($value !== null && isset($config['validate'])) {
                 $value = $this->validateValue($value, $config['validate']) ? $value : null;
             }
-            
-            // Return default if still null
+
             return $value ?? ($config['default'] ?? null);
         }
         
@@ -171,21 +196,62 @@ class JsonFieldMapper
         
         if (isset($config['components'])) {
             foreach ($config['components'] as $key => $componentConfig) {
-                $components[$key] = $this->extractFieldValue($data, $componentConfig);
+                // Composite component (object with nested keys)
+                if (isset($componentConfig['sources']) && is_array($componentConfig['sources']) && array_is_list($componentConfig['sources']) === false) {
+                    $composite = [];
+                    foreach ($componentConfig['sources'] as $ck => $csrc) {
+                        if (is_array($csrc) && isset($csrc['sources'])) {
+                            $val = $this->findValueFromSources($data, $csrc['sources']);
+                            $composite[$ck] = $val ?? ($csrc['default'] ?? null);
+                        } else {
+                            $composite[$ck] = $this->findValueFromSources($data, $csrc);
+                        }
+                    }
+                    $val = $composite;
+
+                    // Apply transform/validate on composite
+                    if (isset($componentConfig['transform'])) {
+                        $val = $this->applyTransformation($val, $componentConfig['transform'], $data);
+                    }
+                    if (isset($componentConfig['validate']) && !$this->validateValue($val, $componentConfig['validate'])) {
+                        $val = $componentConfig['default'] ?? null;
+                    }
+
+                    $components[$key] = $val;
+                    continue;
+                }
+
+                // Simple component
+                $val = $this->extractFieldValue($data, $componentConfig);
+                if (isset($componentConfig['transform'])) {
+                    $val = $this->applyTransformation($val, $componentConfig['transform'], $data);
+                }
+                if (isset($componentConfig['validate']) && !$this->validateValue($val, $componentConfig['validate'])) {
+                    $val = $componentConfig['default'] ?? null;
+                }
+                $components[$key] = $val;
             }
         } elseif (isset($config['sources'])) {
+            // legacy branch — fine to leave as you had
             foreach ($config['sources'] as $key => $sources) {
-                $components[$key] = $this->findValueFromSources($data, $sources);
+                if (is_array($sources) && isset($sources['sources'])) {
+                    $value = $this->findValueFromSources($data, $sources['sources']);
+                    $components[$key] = $value ?: ($sources['default'] ?? null);
+                } else {
+                    $components[$key] = $this->findValueFromSources($data, $sources);
+                }
             }
         }
         
         // Replace template variables
         foreach ($components as $key => $value) {
-            $template = str_replace('{' . $key . '}', $value ?? '', $template);
+            $template = str_replace('{' . $key . '}', (string)($value ?? ''), $template);
         }
         
         // Clean up template
-        $template = $this->cleanTemplate($template);
+        $template = preg_replace('/\(\s*\)/', '', $template);
+        $template = preg_replace('/\s{2,}/', ' ', trim($template));
+        $template = rtrim($template, ' -x');
         
         return $template ?: ($config['default'] ?? '');
     }
@@ -199,6 +265,10 @@ class JsonFieldMapper
         $template = preg_replace('/\s+x\s+x/', ' x', $template);
         $template = preg_replace('/-\s+-/', '-', $template);
         $template = preg_replace('/\s{2,}/', ' ', $template);
+        
+        // Remove empty parentheses
+        $template = preg_replace('/\(\s*\)/', '', $template);
+        
         $template = trim($template);
         
         // Remove trailing separators
@@ -212,17 +282,43 @@ class JsonFieldMapper
      */
     private function findValueFromSources(array $data, array|string $sources): mixed
     {
-        if (is_string($sources)) {
-            $sources = [$sources];
-        }
-        
-        foreach ($sources as $source) {
-            $value = data_get($data, $source);
-            if ($value !== null && $value !== '') {
-                return $value;
+        // Normalize to a uniform iterable of "items", where each item can be:
+        // - string path
+        // - array of paths
+        // - associative ['sources'=>[...], 'default'=>...] block
+        $items = is_array($sources) ? $sources : [$sources];
+
+        foreach ($items as $item) {
+            // Case A: associative block with "sources" and optional "default"
+            if (is_array($item) && array_is_list($item) === false && isset($item['sources'])) {
+                $candidate = $this->findValueFromSources($data, $item['sources']);
+                if ($candidate !== null && $candidate !== '') {
+                    return $candidate;
+                }
+                if (array_key_exists('default', $item)) {
+                    // only return default if nothing found *in this block*
+                    return $item['default'];
+                }
+                // else continue to next item
+                continue;
+            }
+
+            // Case B: an array of paths (list)
+            if (is_array($item) && array_is_list($item)) {
+                foreach ($item as $path) {
+                    $v = data_get($data, $path);
+                    if ($v !== null && $v !== '') return $v;
+                }
+                continue;
+            }
+
+            // Case C: a single string path
+            if (is_string($item)) {
+                $v = data_get($data, $item);
+                if ($v !== null && $v !== '') return $v;
             }
         }
-        
+
         return null;
     }
     
@@ -236,11 +332,13 @@ class JsonFieldMapper
                 return $this->extractNameFromEmail($value);
                 
             case 'city_to_code':
+                if (!is_string($value) || $value === '') return $value;
                 return $this->transformations['city_to_code'][$value] ?? $this->extractCodeFromCity($value);
                 
             case 'city_to_port':
-                foreach ($this->transformations['city_to_port'] as $city => $port) {
-                    if (stripos($value, $city) !== false) {
+                if (!is_string($value) || $value === '') return $value;
+                foreach (($this->transformations['city_to_port'] ?? []) as $city => $port) {
+                    if (stripos($value, (string)$city) !== false) {
                         return $port;
                     }
                 }
@@ -279,6 +377,28 @@ class JsonFieldMapper
                 
             case 'to_meters':
                 return $this->convertToMeters($value);
+                
+            case 'format_cargo':
+                // format_cargo expects a composite input (array with keys)
+                if (!is_array($value)) {
+                    $value = ['quantity' => (string)$value];
+                }
+                Log::channel('robaws')->debug('format_cargo inputs', ['inputs' => $value]);
+                return $this->transform_format_cargo($value);
+                
+            case 'format_cargo_core':
+                if (!is_array($value)) $value = [];
+                return $this->transform_format_cargo_core($value);
+                
+            case 'format_dimensions':
+                Log::channel('robaws')->debug('format_dimensions input', ['value' => $value]);
+                return $this->transform_format_dimensions($value);
+                
+            case 'normalize_city':
+                return $this->transform_normalize_city($value);
+                
+            case 'ensure_upper':
+                return is_string($value) ? strtoupper($value) : $value;
                 
             default:
                 return $value;
@@ -662,6 +782,115 @@ class JsonFieldMapper
             return $formatted;
         }
         
+        return null;
+    }
+    
+    /**
+     * Format cargo description from components (full line with qty + safe default)
+     */
+    private function transform_format_cargo(array $inputs): ?string
+    {
+        $qty = trim((string)($inputs['quantity'] ?? '1'));
+        $core = $this->transform_format_cargo_core($inputs);
+        return $core ? "{$qty} x {$core}" : "{$qty} x Vehicle";
+    }
+
+    /**
+     * Core cargo formatter (no quantity, no default "Vehicle")
+     */
+    private function transform_format_cargo_core(array $inputs): ?string
+    {
+        $cond = trim((string)($inputs['condition'] ?? ''));
+        $brand = trim((string)($inputs['brand'] ?? ''));
+        $model = trim((string)($inputs['model'] ?? ''));
+        $year = trim((string)($inputs['year'] ?? ''));
+
+        $parts = array_values(array_filter([$cond ?: null, $brand ?: null, $model ?: null]));
+        if (!$parts) return null;
+
+        $core = implode(' ', $parts);
+        return $year !== '' ? "{$core} ({$year})" : $core;
+    }
+
+    /**
+     * Format dimensions from various inputs
+     */
+    private function transform_format_dimensions($value): ?string
+    {
+        // Accept already formatted strings
+        if (is_string($value) && trim($value) !== '') {
+            return $value;
+        }
+
+        // Accept array/object with length/width/height (meters or mm/cm)
+        $len = $this->pickFirstNumeric([
+            $value['length_m'] ?? null,
+            $value['length'] ?? null,
+            $value['L'] ?? null,
+            data_get($value, 'dimensions.length_m'),
+        ]);
+        $wid = $this->pickFirstNumeric([
+            $value['width_m'] ?? null,
+            $value['width'] ?? null,
+            $value['W'] ?? null,
+            data_get($value, 'dimensions.width_m'),
+        ]);
+        $hei = $this->pickFirstNumeric([
+            $value['height_m'] ?? null,
+            $value['height'] ?? null,
+            $value['H'] ?? null,
+            data_get($value, 'dimensions.height_m'),
+        ]);
+
+        // Convert to meters if values look like cm/mm
+        $toMeters = function ($v) {
+            if ($v === null) return null;
+            $v = floatval($v);
+            if ($v > 100) return $v / 1000;   // assume mm
+            if ($v > 10)  return $v / 100;    // assume cm
+            return $v;                         // already meters
+        };
+
+        $len = $toMeters($len); $wid = $toMeters($wid); $hei = $toMeters($hei);
+        if ($len && $wid && $hei) {
+            return sprintf('%.3f x %.3f x %.3f m', $len, $wid, $hei);
+        }
+
+        return null;
+    }
+
+    /**
+     * Normalize city names
+     */
+    private function transform_normalize_city($value): ?string
+    {
+        if (!is_string($value) || $value === '') return is_scalar($value) ? (string)$value : null;
+        $v = trim($value);
+        // Normalize common variants
+        $map = [
+            'Bruxelles' => 'Brussels',
+            'Brussels, Belgium' => 'Brussels',
+            'Bruxelles, Belgique' => 'Brussels',
+            'Djeddah' => 'Jeddah',
+            'Jeddah, Saudi Arabia' => 'Jeddah',
+            'Djeddah, Arabie Saoudite' => 'Jeddah',
+            'Dubai, UAE' => 'Dubai',
+        ];
+        return $map[$v] ?? $v;
+    }
+
+    /**
+     * Helper to pick first numeric value from candidates
+     */
+    private function pickFirstNumeric(array $candidates): ?float
+    {
+        foreach ($candidates as $c) {
+            if ($c === null) continue;
+            if (is_numeric($c)) return (float) $c;
+            if (is_string($c) && preg_match('/[\d.]+/', $c, $m)) {
+                return (float) $m[0];
+            }
+        }
         return null;
     }
 }
