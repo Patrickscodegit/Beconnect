@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Models\Intake;
 use App\Models\RobawsDocument;
 use App\Services\RobawsClient;
+use App\Services\RobawsIntegration\JsonFieldMapper;
 use App\Support\Files;
 use App\Support\StreamHasher;
 use Illuminate\Support\Arr;
@@ -16,6 +17,7 @@ final class RobawsExportService
     public function __construct(
         private readonly RobawsClient $client,
         private readonly StreamHasher $streamHasher,
+        private readonly ?JsonFieldMapper $fieldMapper = null, // ← inject if available
     ) {}
 
     /**
@@ -398,10 +400,15 @@ final class RobawsExportService
     }
 
     /**
-     * Map extraction data to Robaws format with smart client ID resolution
+     * Map extraction data to Robaws format with JsonFieldMapper-first logic + fallback
      */
     protected function mapExtractionToRobaws(array $extractedData): array
     {
+        // Normalize weird shapes (extractions sometimes nest JSON under data.JSON)
+        if (!isset($extractedData['JSON']) && isset($extractedData['data']['JSON'])) {
+            $extractedData = $extractedData['data'];
+        }
+
         // Merge document_data into the root so "vehicle.*" paths work either way
         $root = $extractedData;
         if (!empty($extractedData['document_data']) && is_array($extractedData['document_data'])) {
@@ -409,12 +416,105 @@ final class RobawsExportService
             $root = array_replace_recursive($extractedData, $extractedData['document_data']);
         }
 
-        // 1) Prefer an explicit client id if present on the extraction/intake
+        Log::info('RobawsExportService: Starting mapping with JsonFieldMapper-first approach', [
+            'has_mapper' => $this->fieldMapper !== null,
+            'input_keys' => array_keys($root),
+            'has_document_data' => isset($extractedData['document_data'])
+        ]);
+
+        // Mapper-first path
+        if ($this->fieldMapper) {
+            try {
+                $mapped = $this->fieldMapper->mapFields($root);
+
+                // Minimal validation to keep old expectations intact
+                $required = ['customer', 'por', 'pod', 'cargo'];
+                $missing = array_filter($required, fn($k) => empty($mapped[$k] ?? null));
+
+                if ($missing) {
+                    Log::warning('JsonFieldMapper mapped data is missing required keys, falling back to legacy', [
+                        'missing' => $missing, 
+                        'mapped_keys' => array_keys($mapped),
+                        'sample_values' => array_intersect_key($mapped, array_flip(['customer', 'por', 'pod', 'cargo']))
+                    ]);
+                } else {
+                    Log::info('JsonFieldMapper successfully mapped all required fields', [
+                        'mapped_field_count' => count($mapped),
+                        'customer' => $mapped['customer'] ?? 'null',
+                        'routing' => ($mapped['por'] ?? 'null') . ' → ' . ($mapped['pod'] ?? 'null'),
+                        'cargo' => $mapped['cargo'] ?? 'null'
+                    ]);
+
+                    // Convert mapped data to Robaws offer format
+                    return $this->buildRobawsPayloadFromMapping($mapped, $root);
+                }
+            } catch (\Throwable $e) {
+                Log::error('JsonFieldMapper failed; falling back to legacy extraction', [
+                    'error' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ]);
+            }
+        }
+
+        // Fallback: legacy/manual extraction to keep BC
+        Log::info('Using legacy fallback mapping');
+        return $this->buildLegacyRobawsPayload($root);
+    }
+
+    /**
+     * Build Robaws payload from JsonFieldMapper results
+     */
+    private function buildRobawsPayloadFromMapping(array $mapped, array $root): array
+    {
+        // Extract client information using mapped data + fallbacks
+        $clientId = $this->resolveClientId($mapped, $root);
+
+        $payload = [
+            'clientId'            => $clientId,
+            'title'               => $mapped['customer_reference'] ?? 'Vehicle Transport Quotation',
+            'description'         => $this->buildDescription($mapped),
+            'reference'           => $mapped['customer_reference'] ?? ($root['file_ref'] ?? 'AUTO-' . uniqid()),
+            'customer_reference'  => $mapped['customer_reference'] ?? null,
+            'origin'              => $mapped['por'] ?? null,
+            'destination'         => $mapped['pod'] ?? null,
+            'cargo_description'   => $this->cleanLooseParens($mapped['cargo'] ?? 'Vehicle Transport'),
+            'vehicle_count'       => $this->extractVehicleCount($mapped, $root),
+            'lines'               => $this->mapLines($root['lines'] ?? $root['vehicles'] ?? []),
+            'extraction_metadata' => [
+                'mapping_version' => $mapped['mapping_version'] ?? '1.0',
+                'mapped_at' => $mapped['formatted_at'] ?? now()->toISOString(),
+                'source' => $mapped['source'] ?? 'bconnect_ai_extraction',
+                'pipeline' => 'JsonFieldMapper'
+            ]
+        ];
+
+        // Add additional Robaws fields from mapping
+        if (!empty($mapped['client_email'])) {
+            $payload['customer_email'] = $mapped['client_email'];
+        }
+        
+        if (!empty($mapped['contact'])) {
+            $payload['customer_phone'] = $mapped['contact'];
+        }
+
+        if (!empty($mapped['dim_bef_delivery'])) {
+            $payload['dimensions'] = $mapped['dim_bef_delivery'];
+        }
+
+        return $payload;
+    }
+
+    /**
+     * Build legacy Robaws payload for backward compatibility
+     */
+    private function buildLegacyRobawsPayload(array $root): array
+    {
+        // Legacy client ID resolution
         $clientId = $root['clientId'] 
             ?? $root['client_id'] 
             ?? null;
 
-        // 2) If missing, try to find/create via client data
         if (!$clientId) {
             $clientData = [
                 'name'       => $root['client']['name']       ?? $root['company']     ?? $root['contact_name'] ?? null,
@@ -426,13 +526,81 @@ final class RobawsExportService
                 'country'    => $root['client']['country']    ?? $root['country']     ?? 'BE',
             ];
 
-            // If we have enough data to identify a client, try find/create
             if (!empty($clientData['name']) || !empty($clientData['email'])) {
                 try {
                     $client = $this->client->findOrCreateClient($clientData);
                     $clientId = $client['id'] ?? null;
                 } catch (\Throwable $e) {
                     Log::warning('Failed to find/create client, falling back to default', [
+                        'client_data' => $clientData,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+        }
+
+        $clientId = $clientId ?: (int) config('services.robaws.default_client_id');
+
+        if (!$clientId) {
+            throw new \RuntimeException(
+                'Missing clientId for offer creation. Provide clientId on the record or configure ROBAWS_DEFAULT_CLIENT_ID.'
+            );
+        }
+
+        return [
+            'clientId'            => $clientId,
+            'title'               => $root['title']               ?? 'Vehicle Transport Quotation',
+            'description'         => $root['description']         ?? null,
+            'reference'           => $root['reference']           ?? ($root['file_ref'] ?? 'AUTO-' . uniqid()),
+            'customer_reference'  => $root['customer_reference']  ?? ($root['reference'] ?? null),
+            'origin'              => $root['shipment']['origin']  ?? $root['origin'] ?? null,
+            'destination'         => $root['shipment']['destination'] ?? $root['destination'] ?? null,
+            'cargo_description'   => $this->cleanLooseParens($root['cargo']['description'] ?? $root['cargo_description'] ?? null),
+            'vehicle_count'       => count($root['vehicles'] ?? []),
+            'lines'               => $this->mapLines($root['lines'] ?? $root['vehicles'] ?? []),
+            'extraction_metadata' => [
+                'mapping_version' => 'legacy-fallback',
+                'mapped_at' => now()->toISOString(),
+                'source' => 'bconnect_legacy_extraction',
+                'pipeline' => 'legacy'
+            ]
+        ];
+    }
+
+    /**
+     * Resolve client ID using mapped data and fallbacks (shared method)
+     */
+    private function resolveClientId(array $mappedData, array $root): int
+    {
+        // 1) Prefer an explicit client id if present on the extraction/intake
+        $clientId = $root['clientId'] 
+            ?? $root['client_id'] 
+            ?? null;
+
+        // 2) If missing, try to find/create via client data from mapping
+        if (!$clientId && !empty($mappedData['customer'])) {
+            $clientData = [
+                'name'       => $mappedData['customer'] ?? null,
+                'email'      => $mappedData['client_email'] ?? null,
+                'tel'        => $mappedData['contact'] ?? null,
+                'address'    => $root['address'] ?? null,
+                'postalCode' => $root['postalCode'] ?? null,
+                'city'       => $root['city'] ?? null,
+                'country'    => $root['country'] ?? 'BE',
+            ];
+
+            // If we have enough data to identify a client, try find/create
+            if (!empty($clientData['name']) || !empty($clientData['email'])) {
+                try {
+                    $client = $this->client->findOrCreateClient($clientData);
+                    $clientId = $client['id'] ?? null;
+                    
+                    Log::info('RobawsExportService: Created/found client via mapping data', [
+                        'client_data' => $clientData,
+                        'resolved_client_id' => $clientId
+                    ]);
+                } catch (\Throwable $e) {
+                    Log::warning('Failed to find/create client via mapping, falling back to default', [
                         'client_data' => $clientData,
                         'error' => $e->getMessage()
                     ]);
@@ -450,30 +618,45 @@ final class RobawsExportService
             );
         }
 
-        Log::debug('Mapped extraction to Robaws offer', [
-            'resolved_client_id' => $clientId,
-            'extraction_keys' => array_keys($root)
-        ]);
+        return $clientId;
+    }
 
-        // Build offer payload in Robaws format from the merged root
-        $payload = [
-            'clientId'            => $clientId,
-            'title'               => $root['title']               ?? 'Vehicle Transport Quotation',
-            'description'         => $root['description']         ?? null,
-            'reference'           => $root['reference']           ?? ($root['file_ref'] ?? 'AUTO-' . uniqid()),
-            'customer_reference'  => $root['customer_reference']  ?? ($root['reference'] ?? null),
-            'origin'              => $root['shipment']['origin']  ?? $root['origin'] ?? null,
-            'destination'         => $root['shipment']['destination'] ?? $root['destination'] ?? null,
-            'cargo_description'   => $root['cargo']['description'] ?? $root['cargo_description'] ?? null,
-            'vehicle_count'       => count($root['vehicles'] ?? []),
-            'lines'               => $this->mapLines($root['lines'] ?? $root['vehicles'] ?? []),
-            'extraction_metadata' => $root['metadata'] ?? []
-        ];
+    /**
+     * Build description from mapped data
+     */
+    private function buildDescription(array $mappedData): ?string
+    {
+        $parts = [];
+        
+        if (!empty($mappedData['cargo'])) {
+            $parts[] = 'Cargo: ' . $mappedData['cargo'];
+        }
+        
+        if (!empty($mappedData['por']) && !empty($mappedData['pod'])) {
+            $parts[] = 'Route: ' . $mappedData['por'] . ' → ' . $mappedData['pod'];
+        }
+        
+        if (!empty($mappedData['vehicle_brand']) && !empty($mappedData['vehicle_model'])) {
+            $parts[] = 'Vehicle: ' . $mappedData['vehicle_brand'] . ' ' . $mappedData['vehicle_model'];
+        }
 
-        // Clean up cargo description to remove dangling parentheses
-        $payload['cargo_description'] = $this->cleanLooseParens($payload['cargo_description'] ?? null);
+        return !empty($parts) ? implode(' | ', $parts) : null;
+    }
 
-        return $payload;
+    /**
+     * Extract vehicle count from mapped data
+     */
+    private function extractVehicleCount(array $mappedData, array $root): int
+    {
+        // Try to extract from cargo description
+        if (!empty($mappedData['cargo'])) {
+            if (preg_match('/(\d+)\s*x/', $mappedData['cargo'], $matches)) {
+                return (int) $matches[1];
+            }
+        }
+
+        // Fallback to vehicles array count or 1
+        return count($root['vehicles'] ?? []) ?: 1;
     }
 
     /**

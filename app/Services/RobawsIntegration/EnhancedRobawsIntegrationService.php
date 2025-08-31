@@ -4,6 +4,7 @@ namespace App\Services\RobawsIntegration;
 
 use App\Models\Document;
 use App\Services\RobawsIntegration\JsonFieldMapper;
+use App\Services\RobawsIntegration\RobawsDataValidator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -61,8 +62,8 @@ class EnhancedRobawsIntegrationService
                 // Map the extracted data using JSON configuration
                 $robawsData = $this->fieldMapper->mapFields($extractedData);
                 
-                // Validate the mapped data
-                $validationResult = $this->validateRobawsData($robawsData);
+                // Validate the mapped data using shared validator
+                $validationResult = RobawsDataValidator::validate($robawsData);
                 
                 // Determine sync status based on validation
                 $syncStatus = $validationResult['is_valid'] ? 'ready' : 'needs_review';
@@ -184,49 +185,11 @@ class EnhancedRobawsIntegrationService
     }
     
     /**
-     * Validate mapped Robaws data
+     * Legacy wrapper for shared validator (for backward compatibility)
      */
     private function validateRobawsData(array $data): array
     {
-        $errors = [];
-        $warnings = [];
-        
-        // Required fields validation
-        $requiredFields = ['customer', 'por', 'pod', 'cargo'];
-        foreach ($requiredFields as $field) {
-            if (empty($data[$field])) {
-                $errors[] = "Missing required field: {$field}";
-            }
-        }
-        
-        // Optional but recommended fields
-        $recommendedFields = ['client_email', 'customer_reference', 'dim_bef_delivery'];
-        foreach ($recommendedFields as $field) {
-            if (empty($data[$field])) {
-                $warnings[] = "Missing recommended field: {$field}";
-            }
-        }
-        
-        // Validate email format if present
-        if (!empty($data['client_email']) && !filter_var($data['client_email'], FILTER_VALIDATE_EMAIL)) {
-            $errors[] = "Invalid email format: {$data['client_email']}";
-        }
-        
-        // Check for routing information
-        if (empty($data['por']) && empty($data['pod'])) {
-            $errors[] = "Origin and destination are required";
-        }
-        
-        // Check for cargo information
-        if (empty($data['cargo']) || $data['cargo'] === '1 x Vehicle') {
-            $warnings[] = "Generic cargo description detected";
-        }
-        
-        return [
-            'is_valid' => empty($errors),
-            'errors' => $errors,
-            'warnings' => $warnings
-        ];
+        return RobawsDataValidator::validate($data);
     }
     
     /**

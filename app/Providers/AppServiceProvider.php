@@ -31,6 +31,14 @@ class AppServiceProvider extends ServiceProvider
         // Bind the Robaws client
         $this->app->singleton(\App\Services\RobawsClient::class);
 
+        // Bind the JsonFieldMapper
+        $this->app->bind(\App\Services\RobawsIntegration\JsonFieldMapper::class, function ($app) {
+            return new \App\Services\RobawsIntegration\JsonFieldMapper();
+        });
+
+        // Bind the enhanced integration service
+        $this->app->singleton(\App\Services\RobawsIntegration\EnhancedRobawsIntegrationService::class);
+
         // Bind the payload builder
         $this->app->singleton(\App\Services\Robaws\RobawsPayloadBuilder::class);
 
