@@ -4,7 +4,7 @@
   "field_mappings": {
     "quotation_info": {
       "customer": {
-        "sources": ["contact.name", "contact_info.name", "email_metadata.from"],
+        "sources": ["contact.name", "contact_info.name", "email_metadata.from", "document_data.contact.name"],
         "default": "Unknown Customer",
         "transform": "extract_name"
       },
@@ -12,19 +12,19 @@
         "template": "EXP RORO - {origin_code} - {destination_code} - {cargo_description}",
         "components": {
           "origin_code": {
-            "sources": ["origin", "shipment.origin", "routing.origin"],
+            "sources": ["origin", "shipment.origin", "routing.origin", "document_data.shipment.origin"],
             "transform": "city_to_code"
           },
           "destination_code": {
-            "sources": ["destination", "shipment.destination", "routing.destination"],
+            "sources": ["destination", "shipment.destination", "routing.destination", "document_data.shipment.destination"],
             "transform": "city_to_code"
           },
           "cargo_description": {
             "template": "1 x {condition} {brand} {model}",
             "sources": {
-              "condition": ["vehicle_condition", "vehicle.condition", "vehicle_details.condition"],
-              "brand": ["vehicle_make", "vehicle.brand", "vehicle.make", "vehicle_details.brand"],
-              "model": ["vehicle_model", "vehicle.model", "vehicle_details.model"]
+              "condition": ["vehicle_condition", "vehicle.condition", "vehicle_details.condition", "document_data.vehicle.condition"],
+              "brand": ["vehicle_make", "vehicle.brand", "vehicle.make", "vehicle_details.brand", "document_data.vehicle.brand"],
+              "model": ["vehicle_model", "vehicle.model", "vehicle_details.model", "document_data.vehicle.model"]
             }
           }
         }
@@ -38,24 +38,24 @@
         "default": null
       },
       "client_email": {
-        "sources": ["contact.email", "contact_info.email", "email"],
+        "sources": ["contact.email", "contact_info.email", "email", "document_data.contact.email"],
         "default": null,
         "validate": "email"
       }
     },
     "routing": {
       "por": {
-        "sources": ["origin", "shipment.origin", "routing.origin", "transport.from"],
+        "sources": ["origin", "shipment.origin", "routing.origin", "transport.from", "document_data.shipment.origin"],
         "fallback": "extract_from_messages",
         "default": null
       },
       "pol": {
-        "sources": ["origin", "shipment.origin", "routing.origin"],
+        "sources": ["origin", "shipment.origin", "routing.origin", "document_data.shipment.origin"],
         "transform": "city_to_port",
         "default": null
       },
       "pod": {
-        "sources": ["destination", "shipment.destination", "routing.destination", "transport.to"],
+        "sources": ["destination", "shipment.destination", "routing.destination", "transport.to", "document_data.shipment.destination"],
         "fallback": "extract_from_messages",
         "default": null
       },
@@ -257,6 +257,8 @@
     "city_to_port": {
       "Brussels": "Antwerp",
       "Bruxelles": "Antwerp",
+      "Brussels, Belgium": "Antwerp",
+      "Bruxelles, Belgique": "Antwerp",
       "Paris": "Le Havre",
       "Frankfurt": "Hamburg",
       "Munich": "Hamburg",
@@ -268,6 +270,10 @@
       "Dover": "Dover"
     },
     "city_to_code": {
+      "Brussels": "BRU",
+      "Bruxelles": "BRU",
+      "Jeddah": "JED",
+      "Djeddah": "JED",
       "Brussels, Belgium": "BRU",
       "Bruxelles, Belgique": "BRU",
       "Bruxelles, Belgium": "BRU",

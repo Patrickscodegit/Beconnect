@@ -387,25 +387,43 @@ final class RobawsExportService
     }
 
     /**
+     * Clean up cargo strings by removing empty parentheses and extra spaces
+     */
+    private function cleanLooseParens(?string $s): ?string
+    {
+        if ($s === null) return null;
+        $s = preg_replace('/\(\s*\)/', '', $s);        // remove empty ()
+        $s = preg_replace('/\s{2,}/', ' ', trim($s));  // collapse spaces
+        return $s;
+    }
+
+    /**
      * Map extraction data to Robaws format with smart client ID resolution
      */
     protected function mapExtractionToRobaws(array $extractedData): array
     {
+        // Merge document_data into the root so "vehicle.*" paths work either way
+        $root = $extractedData;
+        if (!empty($extractedData['document_data']) && is_array($extractedData['document_data'])) {
+            // document_data should not overwrite explicit top-level values
+            $root = array_replace_recursive($extractedData, $extractedData['document_data']);
+        }
+
         // 1) Prefer an explicit client id if present on the extraction/intake
-        $clientId = $extractedData['clientId'] 
-            ?? $extractedData['client_id'] 
+        $clientId = $root['clientId'] 
+            ?? $root['client_id'] 
             ?? null;
 
         // 2) If missing, try to find/create via client data
         if (!$clientId) {
             $clientData = [
-                'name'       => $extractedData['client']['name']       ?? $extractedData['company']     ?? $extractedData['contact_name'] ?? null,
-                'email'      => $extractedData['client']['email']      ?? $extractedData['email']       ?? null,
-                'tel'        => $extractedData['client']['tel']        ?? $extractedData['phone']       ?? null,
-                'address'    => $extractedData['client']['address']    ?? $extractedData['address']     ?? null,
-                'postalCode' => $extractedData['client']['postalCode'] ?? $extractedData['postalCode']  ?? null,
-                'city'       => $extractedData['client']['city']       ?? $extractedData['city']        ?? null,
-                'country'    => $extractedData['client']['country']    ?? $extractedData['country']     ?? 'BE',
+                'name'       => $root['client']['name']       ?? $root['company']     ?? $root['contact_name'] ?? null,
+                'email'      => $root['client']['email']      ?? $root['email']       ?? null,
+                'tel'        => $root['client']['tel']        ?? $root['phone']       ?? null,
+                'address'    => $root['client']['address']    ?? $root['address']     ?? null,
+                'postalCode' => $root['client']['postalCode'] ?? $root['postalCode']  ?? null,
+                'city'       => $root['client']['city']       ?? $root['city']        ?? null,
+                'country'    => $root['client']['country']    ?? $root['country']     ?? 'BE',
             ];
 
             // If we have enough data to identify a client, try find/create
@@ -434,23 +452,28 @@ final class RobawsExportService
 
         Log::debug('Mapped extraction to Robaws offer', [
             'resolved_client_id' => $clientId,
-            'extraction_keys' => array_keys($extractedData)
+            'extraction_keys' => array_keys($root)
         ]);
 
-        // Build offer payload in Robaws format
-        return [
+        // Build offer payload in Robaws format from the merged root
+        $payload = [
             'clientId'            => $clientId,
-            'title'               => $extractedData['title']               ?? 'Vehicle Transport Quotation',
-            'description'         => $extractedData['description']         ?? null,
-            'reference'           => $extractedData['reference']           ?? ($extractedData['file_ref'] ?? 'AUTO-' . uniqid()),
-            'customer_reference'  => $extractedData['customer_reference']  ?? ($extractedData['reference'] ?? null),
-            'origin'              => $extractedData['shipment']['origin']  ?? $extractedData['origin'] ?? null,
-            'destination'         => $extractedData['shipment']['destination'] ?? $extractedData['destination'] ?? null,
-            'cargo_description'   => $extractedData['cargo']['description'] ?? $extractedData['cargo_description'] ?? null,
-            'vehicle_count'       => count($extractedData['vehicles'] ?? []),
-            'lines'               => $this->mapLines($extractedData['lines'] ?? $extractedData['vehicles'] ?? []),
-            'extraction_metadata' => $extractedData['metadata'] ?? []
+            'title'               => $root['title']               ?? 'Vehicle Transport Quotation',
+            'description'         => $root['description']         ?? null,
+            'reference'           => $root['reference']           ?? ($root['file_ref'] ?? 'AUTO-' . uniqid()),
+            'customer_reference'  => $root['customer_reference']  ?? ($root['reference'] ?? null),
+            'origin'              => $root['shipment']['origin']  ?? $root['origin'] ?? null,
+            'destination'         => $root['shipment']['destination'] ?? $root['destination'] ?? null,
+            'cargo_description'   => $root['cargo']['description'] ?? $root['cargo_description'] ?? null,
+            'vehicle_count'       => count($root['vehicles'] ?? []),
+            'lines'               => $this->mapLines($root['lines'] ?? $root['vehicles'] ?? []),
+            'extraction_metadata' => $root['metadata'] ?? []
         ];
+
+        // Clean up cargo description to remove dangling parentheses
+        $payload['cargo_description'] = $this->cleanLooseParens($payload['cargo_description'] ?? null);
+
+        return $payload;
     }
 
     /**

@@ -1,0 +1,289 @@
+Received: from FRWPR03MB10958.eurprd03.prod.outlook.com
+ (2603:10a6:d10:172::12) by AM0PR03MB5972.eurprd03.prod.outlook.com with
+ HTTPS; Wed, 27 Aug 2025 11:44:39 +0000
+Received: from DB7PR05CA0035.eurprd05.prod.outlook.com (2603:10a6:10:36::48)
+ by FRWPR03MB10958.eurprd03.prod.outlook.com (2603:10a6:d10:172::12) with
+ Microsoft SMTP Server (version=TLS1_2,
+ cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.20.9052.20; Wed, 27 Aug
+ 2025 11:44:38 +0000
+Received: from DU6PEPF0000952A.eurprd02.prod.outlook.com
+ (2603:10a6:10:36:cafe::6d) by DB7PR05CA0035.outlook.office365.com
+ (2603:10a6:10:36::48) with Microsoft SMTP Server (version=TLS1_3,
+ cipher=TLS_AES_256_GCM_SHA384) id 15.20.9073.14 via Frontend Transport; Wed,
+ 27 Aug 2025 11:44:38 +0000
+Authentication-Results: spf=pass (sender IP is 2a00:1450:4864:20::330)
+ smtp.mailfrom=gmail.com; dkim=pass (signature was verified)
+ header.d=gmail.com;dmarc=pass action=none header.from=gmail.com;compauth=pass
+ reason=100
+Received-SPF: Pass (protection.outlook.com: domain of gmail.com designates
+ 2a00:1450:4864:20::330 as permitted sender) receiver=protection.outlook.com;
+ client-ip=2a00:1450:4864:20::330; helo=mail-wm1-x330.google.com; pr=C
+Received: from mail-wm1-x330.google.com (2a00:1450:4864:20::330) by
+ DU6PEPF0000952A.mail.protection.outlook.com (2603:10a6:18:3::b) with
+ Microsoft SMTP Server (version=TLS1_3, cipher=TLS_AES_256_GCM_SHA384) id
+ 15.20.9073.11 via Frontend Transport; Wed, 27 Aug 2025 11:44:37 +0000
+Received: by mail-wm1-x330.google.com with SMTP id 5b1f17b1804b1-45a1b04f8b5so41484675e9.1
+        for <sales@belgaco.be>; Wed, 27 Aug 2025 04:44:37 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20230601; t=1756295077; x=1756899877; darn=belgaco.be;
+        h=to:message-id:subject:date:mime-version:from
+         :content-transfer-encoding:from:to:cc:subject:date:message-id
+         :reply-to;
+        bh=1TbKvvZiPDtQJgNA+eZYoqLF+gcBiLD4YTbx96h7aa4=;
+        b=XZ0wjcTjWbaA5P89InhTrsbszu1x4dcOWwRAI33LetTsLa4s10gd8pso+3hMLP/9qg
+         LhsMCkjIVRSchu5falHm3aqCWLIyPmO8pLIWr7ac5+895J8q2gM4UkAa7dihaomWqvXc
+         UPcSdIP6sJKxgOUtko3jwad6SQ9QyuXVYEWSWqkBvnX8kwhWYvHWVDJmT9/hFjmymqJc
+         6kRDhJpDJYtL5cvXijgMqumIUEOqaUtXHFEOf/Q9VY0qSxXbLJyN005/xZlrfG7m5cVm
+         85DjSAAhrHZdPurf9FdQSIsBV82dcWRkig2wCvCq0RFa8NArydOOblozPbxMqwS5qjmw
+         LrlA==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1756295077; x=1756899877;
+        h=to:message-id:subject:date:mime-version:from
+         :content-transfer-encoding:x-gm-message-state:from:to:cc:subject
+         :date:message-id:reply-to;
+        bh=1TbKvvZiPDtQJgNA+eZYoqLF+gcBiLD4YTbx96h7aa4=;
+        b=kle8vJUQs3Rlf4o9zfyEewCRRo9N2eJpl3gpqU6lxAS9vln7Sbge8XN9R7kREiProX
+         07zxbpjYyU7aBxcJzC+SaRAlu5WFbigdtm8NnGCL2x2vtmdVr+WJClIXKOZDZgsMDDrY
+         xo7NZT+S+01UbQU7V/okbCrWJT0zFXs4j9A03YNXIisLsC/LkyG1ph+Tco083/LI8AyE
+         u+cc8LWi3rQHmDrHvV6iB5dHd8IPuy/0eF8Sq9WyCzTCwrFgJkC/q6g+Oi9MLY+g6k9C
+         lZSjHWLWrGaBfXXQqhbsAorOG6R2sUYMjbOVhKUvr3HgdDEWfLly2/Xw09qyjaufv1e7
+         b8Lg==
+X-Gm-Message-State: AOJu0Ywr8UPfzULxu4WwZvdVNQvNfuLwPWEMxXJ8xyd4ZdBOQSVTCuut
+	Ak0hofXg5KTP/9whryhPPby30+wwRpy0TyWZtsPP+x/XMNjJvrv+/5VL5KcCrw==
+X-Gm-Gg: ASbGncvaKFLoiH2zB4WawXli1yOjAkqGdEr8+SHPTUaInduMJeeMJomd5lgmrgs+8Io
+	zDmFj7kkq87mXWgMm7CFbUcIrAb3KaHthKMzSsoLvfibR1tjkZue0WTHs+vZ3kgSAFXySJ2TYZj
+	S3nlzideM8vRHq47VMUjns00KA+hYT43nUr0ICJ3kLXU5EFuPnD2Yn4fhD7QdBaGkC1OT5okHrG
+	xESwF9jtabJl1kUVb/1fWZ2LnV750yJvc5acQz36pZewDfdKJYVoKfMwwTDvFOummYrqSHzUEM6
+	4VAvukqd6iaQpr6nXY+SJRqteG42JCaf/jpbRYTYMjHl0/zC+tBoAa2lulOmJkQPSbGe7/AIYvb
+	uIDLZaIfeDXfPUMbAawdVtu5FUe0Tr9DR8dcRK2H7mlveXRkv9mwLeA==
+X-Google-Smtp-Source: AGHT+IF62onmCwaVXHpyea+EcpmsksNGYsO7pv9s0zfMbC4ZtnuawbKMyIMSu1+pf7l6z+u55Ev31A==
+X-Received: by 2002:a05:600c:1c23:b0:459:d9a2:e92d with SMTP id 5b1f17b1804b1-45b57d530b8mr135289705e9.5.1756295076805;
+        Wed, 27 Aug 2025 04:44:36 -0700 (PDT)
+Return-Path: badr.algothami@gmail.com
+Received: from smtpclient.apple ([2001:16a4:61:aeb1:18a9:650b:7ce8:bb21])
+        by smtp.gmail.com with ESMTPSA id 5b1f17b1804b1-45b736bba5bsm4429105e9.6.2025.08.27.04.44.35
+        for <sales@belgaco.be>
+        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
+        Wed, 27 Aug 2025 04:44:36 -0700 (PDT)
+Content-Type: multipart/alternative;
+	boundary="Apple-Mail-96D1A45D-0519-4344-9489-54BDFB6B1151"
+Content-Transfer-Encoding: 7bit
+From: Badr Algothami <badr.algothami@gmail.com>
+Date: Wed, 27 Aug 2025 14:44:32 +0300
+Subject: =?utf-8?Q?Demande_de_transport_maritime_RoRo_=E2=80=93_BMW_S?=
+ =?utf-8?Q?=C3=A9rie_7?=
+Message-Id: <5B483D23-08F8-44DB-8418-FA0B9C49AAB6@gmail.com>
+To: sales@belgaco.be
+X-Mailer: iPhone Mail (22G90)
+X-MS-Exchange-Organization-ExpirationStartTime: 27 Aug 2025 11:44:38.1164
+ (UTC)
+X-MS-Exchange-Organization-ExpirationStartTimeReason: OriginalSubmit
+X-MS-Exchange-Organization-ExpirationInterval: 1:00:00:00.0000000
+X-MS-Exchange-Organization-ExpirationIntervalReason: OriginalSubmit
+X-MS-Exchange-Organization-Network-Message-Id: a201f1ac-eadb-440b-5dc0-08dde55f1a3a
+X-EOPAttributedMessage: 0
+X-EOPTenantAttributedMessage: 02ceaed9-55e3-451c-abea-72a2cfb39e70:0
+X-MS-Exchange-Organization-MessageDirectionality: Incoming
+X-MS-PublicTrafficType: Email
+X-MS-TrafficTypeDiagnostic: DU6PEPF0000952A:EE_|FRWPR03MB10958:EE_|AM0PR03MB5972:EE_
+X-MS-Exchange-Organization-AuthSource: DU6PEPF0000952A.eurprd02.prod.outlook.com
+X-MS-Exchange-Organization-AuthAs: Anonymous
+X-MS-Office365-Filtering-Correlation-Id: a201f1ac-eadb-440b-5dc0-08dde55f1a3a
+X-MS-Exchange-Organization-SCL: 1
+X-Microsoft-Antispam: BCL:0;ARA:13230040|7093399015|8096899003;
+X-Forefront-Antispam-Report: CIP:2a00:1450:4864:20::330;CTRY:;LANG:fr;SCL:1;SRV:;IPV:NLI;SFV:NSPM;H:mail-wm1-x330.google.com;PTR:mail-wm1-x330.google.com;CAT:NONE;SFS:(13230040)(7093399015)(8096899003);DIR:INB;
+X-MS-Exchange-CrossTenant-OriginalArrivalTime: 27 Aug 2025 11:44:37.9637
+ (UTC)
+X-MS-Exchange-CrossTenant-Network-Message-Id: a201f1ac-eadb-440b-5dc0-08dde55f1a3a
+X-MS-Exchange-CrossTenant-Id: 02ceaed9-55e3-451c-abea-72a2cfb39e70
+X-MS-Exchange-CrossTenant-AuthSource: DU6PEPF0000952A.eurprd02.prod.outlook.com
+X-MS-Exchange-CrossTenant-AuthAs: Anonymous
+X-MS-Exchange-CrossTenant-FromEntityHeader: Internet
+X-MS-Exchange-Transport-CrossTenantHeadersStamped: FRWPR03MB10958
+X-MS-Exchange-Transport-EndToEndLatency: 00:00:01.8607628
+X-MS-Exchange-Processed-By-BccFoldering: 15.20.9052.000
+X-Microsoft-Antispam-Mailbox-Delivery:
+	ucf:0;jmr:0;auth:0;dest:I;ENG:(910005)(944506478)(944626604)(4710137)(4712097)(4999163)(920097)(930097)(140003);
+X-Microsoft-Antispam-Message-Info:
+	=?utf-8?B?RDE1QlRxUXBQeVRaajdxUmhqSFdQT1I2OXppYnZkcjBVUkw1Qk5ZWHFIOWdQ?=
+ =?utf-8?B?ZHF1QUNTZlNIdTQzVTFrTm1sbm1DZGNnSFVybDRucS9pdjl1MDFSK1hDeHlw?=
+ =?utf-8?B?bG0rbEFNNUpvMGh4YmtxdjVQM280ZlA5Vk9xTk5qc1VYdVhuWVN1Z05iQWM5?=
+ =?utf-8?B?aFh3NURBUlpUaVdGWFBkSHJ4bm9CN3V3OFJhTU81bXM1NnVyZGkzc3F2L3U2?=
+ =?utf-8?B?SWJEaGI2elBLczlXWmp0LzBGSFhjU2dxYzJaczFWWTZZVmptTWV2dkkvRHgw?=
+ =?utf-8?B?NWh3QytveEt3V2g1czNhQmxYdStDNFd5QU4ySmhGTCtoWXVTZWRmTENSaWVl?=
+ =?utf-8?B?Qkw1TFdSZmVtd0lxeENvaEVVaDFadFJhQzdsWFlRSC9GcXZFTWozaEJDTER6?=
+ =?utf-8?B?YUM5eXJKU3JUckl6YWRGc1hRa3RsWUNQRThUU0xPbkJEQXpmVkxOdjdXam5E?=
+ =?utf-8?B?WldiOHExN3NJTjhBbjVyZk40MzJVZHNrVjhPTmdGYVArSDN6QjRlcjM3Wklk?=
+ =?utf-8?B?SjZGM3NXVWNyN2Nib0pubGlNMlRIVVA4SVk2NWNiU2VabWpSZHNHU290WGI2?=
+ =?utf-8?B?L1Y2UE1kSXdabjNac1MvR0NIV0ZEYUpvVk1wQnd5RkZqdU9lQjhaVm12RDJX?=
+ =?utf-8?B?TVBKQlpJcDQ3aTBlejIybE4xSzhTV1NoaDdWOFNac0JCUTl5UzN5WVQ4eTNY?=
+ =?utf-8?B?bDVMS1ZMMlZBK0I2a1dCcjUzQXBkWGZhczVTc2xGY3VIVG1JTXh3S0ZIdG8r?=
+ =?utf-8?B?TDd0UnhSQWFpU2VIUUJucjdUWW5BcWx3NTVqVFArc29zNG5vV3cxWE5yRVYr?=
+ =?utf-8?B?RXI0azgxeURBR1VHR3FMVHlQckp0R1lRQ09XQ1RSL25lRlQ2Z3NJa1dOQ0Jq?=
+ =?utf-8?B?dVIxRktkOHVIa2h1VFhOY3FlNVM2bHZOVzFPV0dXREM5NmtJRldOdVdOcy8z?=
+ =?utf-8?B?UE1TN3VNMDJUT3J0bWpKQ2M5ZVh5MjhQemIrNHh6Vm1URDdpMjR4QUJENnI1?=
+ =?utf-8?B?UWhBbXpRZXQ5T0xCRit6NmYvREJ4QkdQRllyTHBUL1lyQ2s5NCtSNWhmUng1?=
+ =?utf-8?B?TVpLc2hVbFg2QzlseDhrdlRHSnZIcDYvTVFpVE5YYXYvbEVMYjFEQ2tXZWhk?=
+ =?utf-8?B?bzN0eEI4K0lweUh2RDRpQzJjWUMvUHA3QnRLNXRyMEliWEhCKzhvdUlnWkox?=
+ =?utf-8?B?Y1dKQ3R5cWowZy81M1RsKy81VmpLRjJiMlpuZlNmVWMvUnNxOU9sa2k4L1gx?=
+ =?utf-8?B?cC9manVLYkp1Q2VWVEl4aXRQY2llcGhIeW03OEN5c0hnTlZrVHVNOUp4ZXAr?=
+ =?utf-8?B?QmFYdE9OQk45N0E1NlVwMVBuKzdmU0RxQ2dCUDR4YUhWKzdZRmF3WDBkK1Ro?=
+ =?utf-8?B?QkF6WkkvajNrZm40MFpBUVJaVmxTQ2w2QnJ3N0U4bWFyMk10T2ZvaEJWTVZL?=
+ =?utf-8?B?VlhRYlh4K25ucUtodHFWbDM1TkxadGxkVERpWFBTb1ZYVHN3M2ROdG5XQnBI?=
+ =?utf-8?B?Ymw1T1FUM1NCRFhtQ2lEN05RMnVmdGNrSFE3djludHUxaGJzTWxUWExqSHlT?=
+ =?utf-8?B?RjFXakM5QWprNmlPbysyVm9OM2M0UEZhQW81VUxYTDdacGFaV1BLNWtyT2Yz?=
+ =?utf-8?B?ZEJDczlaNWRRMi9rdCtpdktHQmhEYk9lVFB1NUEwQWVLY1lCQm84U0Vhaktz?=
+ =?utf-8?B?cHVhb3VLVWJpU1lhZzNjUEd3OTdWNEFvNHdlZnlNUXcvRDFwZm1nRjM0RERF?=
+ =?utf-8?B?ZEpEZktFOVZuUWsxOE9FakpxcjVMTzJ0M1hKRXAzdW9FSGIxZlc2NTR0cG43?=
+ =?utf-8?B?ZVpRdStIaFhCYzNQM0tnVWxDektKUFkwNTVDZ0FCZ1BJM0pYdVJmN3g3MFBI?=
+ =?utf-8?B?c0trZ05mbkplc0lsTTdUaExSbldLRTF6TDBnT2dDTUlueWFjRkNhQndHdGxR?=
+ =?utf-8?B?bXAxRWY2TGJSYmdiMGMrU0xsemxOZXdpUWx1UEhMWG9LUURFaFJEY3AybEpW?=
+ =?utf-8?B?UUVKOUFMbThPWjRpUmZhNDRScEhMZUx2ODUzL3NKV3dWM3pYZ094RVZNTVE1?=
+ =?utf-8?B?d29JalcrcFRWUzBNQ3BsSmNIKzVkRjBieElNNjdob1ozdGxRVXZjdTZRUm5t?=
+ =?utf-8?B?NkZ5cytNL2p1QitqTURvaGpJRmJ4Y0dtZTdtZG9Fa2lWSmtDS25pejVnTnhN?=
+ =?utf-8?B?c3h5aDZWdzFxakxiQ0diUy9VYS9Eakd2YjVzVGY0SVR2eTJMZEhtSzFmekdx?=
+ =?utf-8?B?Si9heDJmODdKeDF4QXNZSzBROEwrUzUrR1V3eG5OcmV3cVowYUFwRVptdWtt?=
+ =?utf-8?B?TUR6RWlPdkU3KzJubGVRREZ5cFdINzhZUGpIM09teWZyVXRGTHpZeTdCNmQ4?=
+ =?utf-8?B?U2YxVGIxYXY5ZkRGQzBuVTJ6WUM0dDJHY3BLUVg3enFJRml4ei82aC90UDdM?=
+ =?utf-8?B?NURwUHRlNzRwa1dZQzUvbVNjYmUzdElUbUNMdjBCSzFxd096NitSRzNSU3lZ?=
+ =?utf-8?B?QTVwSUQvMVZRVzRpVjlzZWQyK0p1WVNaRHVIM3lOV2NxMkN4WWFpUmtiWG5Q?=
+ =?utf-8?B?WHk3NnVHZVRhNy9idjZORzNaRTI3UUMyK1g2TVAzVVNybmpTaCtUdVNOSHFh?=
+ =?utf-8?B?WllqSnRPOVJiVEVRTWlXSWhhdGd0MkNRUjFkV0hRT0NMdDJHc25Kdm1SMk1I?=
+ =?utf-8?B?N1B6Z2FHWFdPRXI5ejNHRTBSQ21qMGNtZHJCdkxXQnZjYzl1b3VxWWo5WXZ1?=
+ =?utf-8?B?NTNNVG9RSXdDeWJ1MVdDSS80WXZRMWUwbFdtQ01Nb25KOUdYUnpRdDNsMWlo?=
+ =?utf-8?B?OEVVenR1bU5yWVZ1aXN6R2l0WUt6T01aOW4zd2UwRHZIUWdZRVcyd0p5SlB1?=
+ =?utf-8?B?Zko3MWdLY1JXZjZlTTV4NndHQT09?=
+MIME-Version: 1.0
+
+--Apple-Mail-96D1A45D-0519-4344-9489-54BDFB6B1151
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+    Bonjour,
+
+
+Je souhaite exp=C3=A9dier ma voiture BMW S=C3=A9rie 7 de Bruxelles vers Djed=
+dah par transport maritime (RoRo).
+
+Merci d=E2=80=99inclure dans votre offre :
+
+	=E2=80=A2	Le transport maritime RoRo.
+
+	=E2=80=A2	L=E2=80=99accomplissement de toutes les formalit=C3=
+=A9s douani=C3=A8res et administratives jusqu=E2=80=99=C3=A0 la livraison =C3=
+=A0 Djeddah.
+
+	=E2=80=A2	L=E2=80=99ajout d=E2=80=99une assurance tous risque=
+s pour le v=C3=A9hicule, si n=C3=A9cessaire.
+
+	=E2=80=A2	Le d=C3=A9lai estimatif pour l=E2=80=99exp=C3=A9dit=
+ion.
+
+	=E2=80=A2	Un devis d=C3=A9taill=C3=A9 et complet.
+
+Badr algothami
+
+
+
+--Apple-Mail-96D1A45D-0519-4344-9489-54BDFB6B1151
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><head>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3Dutf-8"></=
+head><body dir=3D"auto"><blockquote style=3D"margin: 0 0 0 40px; border: no=
+ne; padding: 0px;"><div style=3D"text-align: left; direction: rtl;"><span s=
+tyle=3D"-webkit-text-stroke-color: rgb(0, 0, 0);">&nbsp; &nbsp;&nbsp;</span=
+><span style=3D"font-size: 19px; -webkit-text-stroke-color: rgb(0, 0, 0); f=
+ont-family: &quot;Times New Roman&quot;;">Bonjour,</span></div></blockquote=
+><div dir=3D"ltr" style=3D"direction: rtl;"><p style=3D"text-align: left; m=
+argin: 0px 0px 12px; font-width: normal; line-height: normal; font-size-adj=
+ust: none; font-kerning: auto; font-variant-alternates: normal; font-varian=
+t-ligatures: normal; font-variant-numeric: normal; font-variant-east-asian:=
+ normal; font-variant-position: normal; font-feature-settings: normal; font=
+-optical-sizing: auto; font-variation-settings: normal;"><font face=3D"Time=
+s New Roman"><span style=3D"font-size: 19px; -webkit-text-stroke-color: rgb=
+(0, 0, 0);"><br></span></font></p><p style=3D"text-align: left; margin: 0px=
+ 0px 12px; font-width: normal; line-height: normal; font-size-adjust: none;=
+ font-kerning: auto; font-variant-alternates: normal; font-variant-ligature=
+s: normal; font-variant-numeric: normal; font-variant-east-asian: normal; f=
+ont-variant-position: normal; font-feature-settings: normal; font-optical-s=
+izing: auto; font-variation-settings: normal;"><font face=3D"Times New Roma=
+n"><span style=3D"font-size: 19px; -webkit-text-stroke-color: rgb(0, 0, 0);=
+">Je souhaite exp=C3=A9dier ma voiture BMW S=C3=A9rie 7 de Bruxelles vers D=
+jeddah par transport maritime (RoRo).</span></font></p><p style=3D"text-ali=
+gn: left; margin: 0px 0px 12px; font-width: normal; line-height: normal; fo=
+nt-size-adjust: none; font-kerning: auto; font-variant-alternates: normal; =
+font-variant-ligatures: normal; font-variant-numeric: normal; font-variant-=
+east-asian: normal; font-variant-position: normal; font-feature-settings: n=
+ormal; font-optical-sizing: auto; font-variation-settings: normal;"><font f=
+ace=3D"Times New Roman"><span style=3D"font-size: 19px; -webkit-text-stroke=
+-color: rgb(0, 0, 0);">Merci d=E2=80=99inclure dans votre offre :</span></f=
+ont></p><p style=3D"text-align: left; margin: 0px 0px 12px; font-width: nor=
+mal; line-height: normal; font-size-adjust: none; font-kerning: auto; font-=
+variant-alternates: normal; font-variant-ligatures: normal; font-variant-nu=
+meric: normal; font-variant-east-asian: normal; font-variant-position: norm=
+al; font-feature-settings: normal; font-optical-sizing: auto; font-variatio=
+n-settings: normal;"><span class=3D"Apple-tab-span" style=3D"font-size: 19p=
+x; -webkit-text-stroke-color: rgb(0, 0, 0); font-family: &quot;Times New Ro=
+man&quot;; white-space: pre;">	</span><span style=3D"font-size: 19px; -webk=
+it-text-stroke-color: rgb(0, 0, 0); font-family: &quot;Times New Roman&quot=
+;;">=E2=80=A2</span><span class=3D"Apple-tab-span" style=3D"font-size: 19px=
+; -webkit-text-stroke-color: rgb(0, 0, 0); font-family: &quot;Times New Rom=
+an&quot;; white-space: pre;">	</span><span style=3D"font-size: 19px; -webki=
+t-text-stroke-color: rgb(0, 0, 0); font-family: &quot;Times New Roman&quot;=
+;">Le transport maritime RoRo.</span></p><p style=3D"text-align: left; marg=
+in: 0px 0px 12px; font-width: normal; line-height: normal; font-size-adjust=
+: none; font-kerning: auto; font-variant-alternates: normal; font-variant-l=
+igatures: normal; font-variant-numeric: normal; font-variant-east-asian: no=
+rmal; font-variant-position: normal; font-feature-settings: normal; font-op=
+tical-sizing: auto; font-variation-settings: normal;"><font face=3D"Times N=
+ew Roman"><span style=3D"font-size: 19px; -webkit-text-stroke-color: rgb(0,=
+ 0, 0);"><span class=3D"Apple-tab-span" style=3D"white-space:pre">	</span>=
+=E2=80=A2<span class=3D"Apple-tab-span" style=3D"white-space:pre">	</span>L=
+=E2=80=99accomplissement de toutes les formalit=C3=A9s douani=C3=A8res et a=
+dministratives jusqu=E2=80=99=C3=A0 la livraison =C3=A0 Djeddah.</span></fo=
+nt></p><p style=3D"text-align: left; margin: 0px 0px 12px; font-width: norm=
+al; line-height: normal; font-size-adjust: none; font-kerning: auto; font-v=
+ariant-alternates: normal; font-variant-ligatures: normal; font-variant-num=
+eric: normal; font-variant-east-asian: normal; font-variant-position: norma=
+l; font-feature-settings: normal; font-optical-sizing: auto; font-variation=
+-settings: normal;"><font face=3D"Times New Roman"><span style=3D"font-size=
+: 19px; -webkit-text-stroke-color: rgb(0, 0, 0);"><span class=3D"Apple-tab-=
+span" style=3D"white-space:pre">	</span>=E2=80=A2<span class=3D"Apple-tab-s=
+pan" style=3D"white-space:pre">	</span>L=E2=80=99ajout d=E2=80=99une assura=
+nce tous risques pour le v=C3=A9hicule, si n=C3=A9cessaire.</span></font></=
+p><p style=3D"text-align: left; margin: 0px 0px 12px; font-width: normal; l=
+ine-height: normal; font-size-adjust: none; font-kerning: auto; font-varian=
+t-alternates: normal; font-variant-ligatures: normal; font-variant-numeric:=
+ normal; font-variant-east-asian: normal; font-variant-position: normal; fo=
+nt-feature-settings: normal; font-optical-sizing: auto; font-variation-sett=
+ings: normal;"><font face=3D"Times New Roman"><span style=3D"font-size: 19p=
+x; -webkit-text-stroke-color: rgb(0, 0, 0);"><span class=3D"Apple-tab-span"=
+ style=3D"white-space:pre">	</span>=E2=80=A2<span class=3D"Apple-tab-span" =
+style=3D"white-space:pre">	</span>Le d=C3=A9lai estimatif pour l=E2=80=99ex=
+p=C3=A9dition.</span></font></p><p style=3D"text-align: left; margin: 0px 0=
+px 12px; font-width: normal; line-height: normal; font-size-adjust: none; f=
+ont-kerning: auto; font-variant-alternates: normal; font-variant-ligatures:=
+ normal; font-variant-numeric: normal; font-variant-east-asian: normal; fon=
+t-variant-position: normal; font-feature-settings: normal; font-optical-siz=
+ing: auto; font-variation-settings: normal;"><font face=3D"Times New Roman"=
+><span style=3D"font-size: 19px; -webkit-text-stroke-color: rgb(0, 0, 0);">=
+<span class=3D"Apple-tab-span" style=3D"white-space:pre">	</span>=E2=80=A2<=
+span class=3D"Apple-tab-span" style=3D"white-space:pre">	</span>Un devis d=
+=C3=A9taill=C3=A9 et complet.</span></font></p><p style=3D"direction: ltr; =
+text-align: left; margin: 0px 0px 12px; font-width: normal; line-height: no=
+rmal; font-size-adjust: none; font-kerning: auto; font-variant-alternates: =
+normal; font-variant-ligatures: normal; font-variant-numeric: normal; font-=
+variant-east-asian: normal; font-variant-position: normal; font-feature-set=
+tings: normal; font-optical-sizing: auto; font-variation-settings: normal;"=
+><font face=3D"Times New Roman"><span style=3D"font-size: 19px; -webkit-tex=
+t-stroke-color: rgb(0, 0, 0);">Badr algothami</span></font></p><p style=3D"=
+margin: 0px 0px 12px; font-width: normal; line-height: normal; font-size-ad=
+just: none; font-kerning: auto; font-variant-alternates: normal; font-varia=
+nt-ligatures: normal; font-variant-numeric: normal; font-variant-east-asian=
+: normal; font-variant-position: normal; font-feature-settings: normal; fon=
+t-optical-sizing: auto; font-variation-settings: normal;"><br></p></div></b=
+ody></html>=
+
+--Apple-Mail-96D1A45D-0519-4344-9489-54BDFB6B1151--
