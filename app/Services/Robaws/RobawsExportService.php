@@ -194,7 +194,7 @@ final class RobawsExportService
             'offer_id' => $offerId
         ]);
 
-        return $offerId;
+        return (string) $offerId;
     }
 
     /**
@@ -229,7 +229,9 @@ final class RobawsExportService
 
         $filename = $this->prettifyFilename($doc['filename']);
         $hashed = $this->streamHasher->toTempHashedStream($doc['stream']);
-        fclose($doc['stream']);
+        if (is_resource($doc['stream'])) {
+            fclose($doc['stream']);
+        }
 
         $sha256 = $hashed['sha256'];
         $size = $doc['size'] ?? $hashed['size'];
@@ -315,7 +317,7 @@ final class RobawsExportService
 
         // Log the successful upload
         Log::info('Robaws upload: new upload successful', [
-            'offer_id' => $offerId,
+            'offer_id' => (string) $offerId,
             'filename' => $filename,
             'sha256' => $sha256,
             'robaws_doc_id' => $normalized['document']['id'],
@@ -350,7 +352,7 @@ final class RobawsExportService
      */
     protected function uploadDocumentToRobaws(Document $document, string $robawsOfferId): array
     {
-        $dbPath = $document->filepath ?? $document->path ?? $document->storage_path ?? null;
+        $dbPath = $document->filepath ?? $document->path ?? $document->storage_path ?? $document->full_path ?? null;
         if (!$dbPath) {
             return [
                 'status' => 'error',
@@ -465,7 +467,7 @@ final class RobawsExportService
 
         $finalStatus = $ok ? 'uploaded' : 'error';
 
-        $docBlock = $res['document'] ?? [];
+        $docBlock = is_array($res['document'] ?? null) ? $res['document'] : [];
         $normalizedDoc = [
             'id'   => $docBlock['id'] ?? ($res['id'] ?? ($res['file_id'] ?? null)),
             'name' => $docBlock['name'] ?? ($res['name'] ?? $filename),
