@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\RobawsClient;
-use App\Services\RobawsIntegrationService;
+use App\Services\RobawsIntegration\EnhancedRobawsIntegrationService;
 use App\Models\Document;
 use Illuminate\Console\Command;
 
@@ -12,7 +12,7 @@ class TestRobawsIntegration extends Command
     protected $signature = 'robaws:test {--document-id= : Test with specific document ID}';
     protected $description = 'Test Robaws API connection and offer creation';
 
-    public function handle(RobawsClient $robaws, RobawsIntegrationService $integration)
+    public function handle(RobawsClient $robaws, EnhancedRobawsIntegrationService $integration)
     {
         $this->info('🧪 Testing Robaws API Integration...');
         $this->newLine();

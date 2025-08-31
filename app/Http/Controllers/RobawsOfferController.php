@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Document;
 use App\Services\RobawsClient;
-use App\Services\RobawsIntegrationService;
+use App\Services\RobawsIntegration\EnhancedRobawsIntegrationService;
 use App\Services\MultiDocumentUploadService;
 use App\Services\RobawsIntegration\JsonFieldMapper;
 use Illuminate\Http\Request;
@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Validator;
 class RobawsOfferController extends Controller
 {
     public function __construct(
-        private RobawsIntegrationService $robawsService,
+        private EnhancedRobawsIntegrationService $robawsService,
         private RobawsClient $robawsClient,
         private MultiDocumentUploadService $uploadService,
         private JsonFieldMapper $fieldMapper

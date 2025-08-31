@@ -46,7 +46,7 @@ class JsonFieldMapper
         $result = [];
         
         // PHASE 1 STEP 3: Enhanced logging for debugging
-        Log::info('JsonFieldMapper: Starting field mapping', [
+        Log::channel('robaws')->info('JsonFieldMapper: Starting field mapping', [
             'input_field_count' => count($extractedData),
             'has_json_field' => isset($extractedData['JSON']),
             'has_vehicle_make' => isset($extractedData['vehicle_make']),
@@ -62,9 +62,12 @@ class JsonFieldMapper
                 // POL fallback: if POL is empty but we have POR, try to map POR to port
                 if ($targetField === 'pol' && empty($value)) {
                     $por = $result['por'] ?? $this->findValueFromSources($extractedData, [
+                        'shipment.origin',
                         'routing.origin',
+                        'document_data.shipment.origin',
+                        'document_data.routing.origin',
                         'document_data.routing.por',
-                        'origin'
+                        'origin',
                     ]);
                     if ($por) {
                         $value = $this->applyTransformation($por, 'city_to_port', $extractedData);
@@ -81,12 +84,12 @@ class JsonFieldMapper
         $result = $this->mapRawJsonFields($extractedData, $result);
         
         // Add computed fields
-        $result['formatted_at'] = now()->toISOString();
+        $result['formatted_at'] = now()->toIso8601String();
         $result['source'] = 'bconnect_ai_extraction';
         $result['mapping_version'] = $this->getConfigVersion();
         
         // Log mapping results
-        Log::info('JsonFieldMapper: Field mapping completed', [
+        Log::channel('robaws')->info('JsonFieldMapper: Field mapping completed', [
             'mapped_field_count' => count($result),
             'has_json' => isset($result['JSON']),
             'has_raw_json' => isset($result['raw_json']),
@@ -104,7 +107,7 @@ class JsonFieldMapper
         // Ensure the main JSON field exists for Robaws JSON tab
         if (isset($extractedData['JSON'])) {
             $result['JSON'] = $extractedData['JSON'];
-            Log::info('JsonFieldMapper: Mapped JSON field', [
+            Log::channel('robaws')->info('JsonFieldMapper: Mapped JSON field', [
                 'json_length' => strlen($extractedData['JSON'])
             ]);
         } elseif (isset($extractedData['raw_json'])) {
@@ -130,7 +133,7 @@ class JsonFieldMapper
                 'source' => 'bconnect_fallback_json'
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
             
-            Log::info('JsonFieldMapper: Created fallback JSON field', [
+            Log::channel('robaws')->info('JsonFieldMapper: Created fallback JSON field', [
                 'json_length' => strlen($result['JSON'])
             ]);
         }
@@ -139,50 +142,47 @@ class JsonFieldMapper
     }
     
     /**
-     * Extract field value based on configuration
+     * Extract field value based on configuration - sources first, then templates
      */
     private function extractFieldValue(array $data, array $config): mixed
     {
-        // Handle template-based fields
-        if (isset($config['template'])) {
-            return $this->processTemplate($data, $config);
-        }
-        
-        // Handle direct source mapping
+        // 1) Try sources first
         if (isset($config['sources'])) {
-            $value = null;
+            $value = $this->findValueFromSources($data, $config['sources']);
 
-            // Composite sources object with nested keys
-            if (is_array($config['sources']) && array_is_list($config['sources']) === false && isset($config['transform'])) {
-                $composite = [];
-                foreach ($config['sources'] as $ck => $csrc) {
-                    if (is_array($csrc) && isset($csrc['sources'])) {
-                        $val = $this->findValueFromSources($data, $csrc['sources']);
-                        $composite[$ck] = $val ?? ($csrc['default'] ?? null);
-                    } else {
-                        $composite[$ck] = $this->findValueFromSources($data, $csrc);
-                    }
-                }
-                $value = $this->applyTransformation($composite, $config['transform'], $data);
-            } else {
-                // Simple list/string
-                $value = $this->findValueFromSources($data, $config['sources']);
+            if (!$this->isBlank($value) && isset($config['transform'])) {
+                $value = $this->applyTransformation($value, $config['transform'], $data);
+            }
 
-                if ($value === null && isset($config['fallback'])) {
-                    $value = $this->applyFallback($data, $config['fallback']);
+            // If we got something non-blank, validate (if any) and return
+            if (!$this->isBlank($value)) {
+                if (isset($config['validate']) && !$this->validateValue($value, $config['validate'])) {
+                    $value = null;
                 }
-                if ($value !== null && isset($config['transform'])) {
-                    $value = $this->applyTransformation($value, $config['transform'], $data);
+                if (!$this->isBlank($value)) {
+                    return $value;
                 }
             }
 
-            if ($value !== null && isset($config['validate'])) {
-                $value = $this->validateValue($value, $config['validate']) ? $value : null;
+            // 2) Sources failed → use fallback template (or template)
+            if (isset($config['fallback_template']) || isset($config['template'])) {
+                $tplCfg = $config;
+                if (isset($config['fallback_template'])) {
+                    $tplCfg['template'] = $config['fallback_template'];
+                }
+                $tplValue = $this->processTemplate($data, $tplCfg);
+                return !$this->isBlank($tplValue) ? $tplValue : ($config['default'] ?? null);
             }
 
-            return $value ?? ($config['default'] ?? null);
+            return $config['default'] ?? null;
         }
-        
+
+        // 3) No sources → template-only fields
+        if (isset($config['template'])) {
+            $v = $this->processTemplate($data, $config);
+            return !$this->isBlank($v) ? $v : ($config['default'] ?? null);
+        }
+
         return $config['default'] ?? null;
     }
     
@@ -223,7 +223,8 @@ class JsonFieldMapper
 
                 // Simple component
                 $val = $this->extractFieldValue($data, $componentConfig);
-                if (isset($componentConfig['transform'])) {
+                // Only apply here if the component did NOT use sources (extractFieldValue already applied it for sources)
+                if (isset($componentConfig['transform']) && !isset($componentConfig['sources'])) {
                     $val = $this->applyTransformation($val, $componentConfig['transform'], $data);
                 }
                 if (isset($componentConfig['validate']) && !$this->validateValue($val, $componentConfig['validate'])) {
@@ -245,6 +246,10 @@ class JsonFieldMapper
         
         // Replace template variables
         foreach ($components as $key => $value) {
+            // Handle array values properly
+            if (is_array($value)) {
+                $value = json_encode($value);
+            }
             $template = str_replace('{' . $key . '}', (string)($value ?? ''), $template);
         }
         
@@ -275,6 +280,17 @@ class JsonFieldMapper
         $template = rtrim($template, ' -x');
         
         return $template;
+    }
+    
+    /**
+     * Check if a value is considered blank/empty
+     */
+    private function isBlank(mixed $v): bool
+    {
+        if ($v === null) return true;
+        if (is_string($v)) return trim($v) === '' || strtoupper(trim($v)) === 'NULL';
+        if (is_array($v)) return count($v) === 0;
+        return false;
     }
     
     /**
@@ -333,7 +349,8 @@ class JsonFieldMapper
                 
             case 'city_to_code':
                 if (!is_string($value) || $value === '') return $value;
-                return $this->transformations['city_to_code'][$value] ?? $this->extractCodeFromCity($value);
+                $map = $this->transformations['city_to_code'] ?? [];
+                return $map[$value] ?? $this->extractCodeFromCity($value);
                 
             case 'city_to_port':
                 if (!is_string($value) || $value === '') return $value;
@@ -396,6 +413,9 @@ class JsonFieldMapper
                 
             case 'normalize_city':
                 return $this->transform_normalize_city($value);
+                
+            case 'normalize_customer_reference':
+                return $this->transform_normalize_customer_reference($value, $fullData);
                 
             case 'ensure_upper':
                 return is_string($value) ? strtoupper($value) : $value;
@@ -480,7 +500,8 @@ class JsonFieldMapper
     private function extractCodeFromCity(string $city): string
     {
         // Try to extract from existing mappings using partial matches
-        foreach ($this->transformations['city_to_code'] as $fullName => $code) {
+        $map = $this->transformations['city_to_code'] ?? [];
+        foreach ($map as $fullName => $code) {
             if (stripos($fullName, $city) !== false || stripos($city, explode(',', $fullName)[0]) !== false) {
                 return $code;
             }
@@ -842,16 +863,32 @@ class JsonFieldMapper
             data_get($value, 'dimensions.height_m'),
         ]);
 
-        // Convert to meters if values look like cm/mm
-        $toMeters = function ($v) {
-            if ($v === null) return null;
-            $v = floatval($v);
-            if ($v > 100) return $v / 1000;   // assume mm
-            if ($v > 10)  return $v / 100;    // assume cm
-            return $v;                         // already meters
+        $inferUnit = function ($raw) {
+            if (is_string($raw)) {
+                if (stripos($raw, 'mm') !== false) return 'mm';
+                if (stripos($raw, 'cm') !== false) return 'cm';
+                if (preg_match('/\bm(?!m)\b|meters?|meter/i', $raw)) return 'm';
+            }
+            return 'm'; // default to meters if unitless
         };
 
-        $len = $toMeters($len); $wid = $toMeters($wid); $hei = $toMeters($hei);
+        $scale = function ($v, $unit) {
+            if ($v === null) return null;
+            $v = (float)$v;
+            return match ($unit) {
+                'mm' => $v / 1000,
+                'cm' => $v / 100,
+                default => $v, // meters
+            };
+        };
+
+        $ulen = $inferUnit($value['length'] ?? ($value['length_m'] ?? ''));
+        $uwid = $inferUnit($value['width']  ?? ($value['width_m']  ?? ''));
+        $uhei = $inferUnit($value['height'] ?? ($value['height_m'] ?? ''));
+
+        $len = $scale($len, $ulen);
+        $wid = $scale($wid, $uwid);
+        $hei = $scale($hei, $uhei);
         if ($len && $wid && $hei) {
             return sprintf('%.3f x %.3f x %.3f m', $len, $wid, $hei);
         }
@@ -877,6 +914,27 @@ class JsonFieldMapper
             'Dubai, UAE' => 'Dubai',
         ];
         return $map[$v] ?? $v;
+    }
+
+    /**
+     * Normalize customer reference - keep existing reference if it already has codes
+     */
+    private function transform_normalize_customer_reference($value, array $fullData): ?string
+    {
+        if (!is_string($value)) return null;
+        $v = trim(preg_replace('/\s+/', ' ', $value));
+
+        // Keep if it already has at least two 3-letter codes
+        if (preg_match_all('/\b[A-Z]{3}\b/', strtoupper($v), $m) && count($m[0]) >= 2) {
+            return $v;
+        }
+
+        // If it's only the bare prefix (e.g. "EXP RORO"), make it blank → triggers template fallback
+        if (preg_match('/^EXP\s+RORO\b/i', $v)) {
+            return '';
+        }
+
+        return $v !== '' ? $v : null;
     }
 
     /**

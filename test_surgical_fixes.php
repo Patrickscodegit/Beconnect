@@ -1,125 +1,75 @@
 <?php
 
-require_once __DIR__ . '/vendor/autoload.php';
+require_once 'vendor/autoload.php';
 
-$app = require_once __DIR__ . '/bootstrap/app.php';
-$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
-$kernel->bootstrap();
+$app = require_once 'bootstrap/app.php';
+$app->boot();
 
-use App\Services\Extraction\HybridExtractionPipeline;
+use App\Models\Document;
+use App\Services\RobawsIntegration\EnhancedRobawsIntegrationService;
 
-echo "=== TESTING SURGICAL FIXES WITH REAL BMW EMAIL ===\n\n";
+echo "🚀 Testing surgical fixes for routing persistence...\n\n";
 
-// Test with the real BMW email
-$content = file_get_contents('real_bmw_serie7.eml');
+// Find BMW document with customer reference
+$document = Document::whereNotNull('robaws_quotation_data')
+    ->whereJsonContains('robaws_quotation_data->customer_reference', 'EXP RORO')
+    ->first();
 
-if (preg_match('/Content-Transfer-Encoding: quoted-printable\s*\n\s*\n(.+?)\n--/s', $content, $matches)) {
-    $plainText = quoted_printable_decode($matches[1]);
-    
-    echo "Real BMW email content extracted (" . strlen($plainText) . " chars)\n\n";
-    
-    $pipeline = app(HybridExtractionPipeline::class);
-    $result = $pipeline->extract($plainText, 'email');
-    $data = $result['data'] ?? [];
-    
-    echo "=== CRITICAL FIELDS CHECK ===\n";
-    
-    // Vehicle information
-    echo "Vehicle:\n";
-    echo "  - Brand: " . ($data['vehicle']['brand'] ?? 'MISSING') . "\n";
-    echo "  - Model: " . ($data['vehicle']['model'] ?? 'MISSING') . "\n";
-    echo "  - Dimensions present: " . (isset($data['vehicle']['dimensions']) ? 'YES' : 'NO') . "\n";
-    echo "  - Needs dimension lookup: " . ($data['vehicle']['needs_dimension_lookup'] ?? 'true') . "\n\n";
-    
-    // Legacy vs Modern shipping comparison
-    echo "Legacy shipment structure:\n";
-    echo "  - Origin: " . ($data['shipment']['origin'] ?? 'MISSING') . "\n";
-    echo "  - Destination: " . ($data['shipment']['destination'] ?? 'MISSING') . "\n";
-    echo "  - Shipping type: " . ($data['shipment']['shipping_type'] ?? 'MISSING') . "\n\n";
-    
-    echo "Modern shipping structure:\n";
-    if (isset($data['shipping']['route'])) {
-        echo "  - Origin: " . ($data['shipping']['route']['origin']['city'] ?? 'MISSING') . "\n";
-        echo "  - Destination: " . ($data['shipping']['route']['destination']['city'] ?? 'MISSING') . "\n";
-        echo "  - Method: " . ($data['shipping']['method'] ?? 'MISSING') . "\n";
-    } else {
-        echo "  - Structure: MISSING\n";
-    }
-    echo "\n";
-    
-    // Contact information
-    echo "Contact information:\n";
-    echo "  - Name: " . ($data['contact']['name'] ?? 'MISSING') . "\n";
-    echo "  - Email: " . ($data['contact']['email'] ?? 'MISSING') . "\n";
-    echo "  - Phone: " . ($data['contact']['phone'] ?? 'MISSING') . "\n\n";
-    
-    // Check if shipping contact exists
-    if (isset($data['shipping']['contact'])) {
-        echo "Shipping contact (should be backfilled to main contact):\n";
-        echo "  - Name: " . ($data['shipping']['contact']['name'] ?? 'MISSING') . "\n";
-        echo "  - Email: " . ($data['shipping']['contact']['email'] ?? 'MISSING') . "\n";
-        echo "  - Phone: " . ($data['shipping']['contact']['phone'] ?? 'MISSING') . "\n\n";
-    }
-    
-    // Check consistency
-    $shipmentOrigin = $data['shipment']['origin'] ?? null;
-    $shipmentDestination = $data['shipment']['destination'] ?? null;
-    $shippingOrigin = $data['shipping']['route']['origin']['city'] ?? null;
-    $shippingDestination = $data['shipping']['route']['destination']['city'] ?? null;
-    
-    $isConsistent = ($shipmentOrigin === $shippingOrigin) && ($shipmentDestination === $shippingDestination);
-    
-    if ($isConsistent && $shipmentOrigin && $shipmentDestination) {
-        echo "✅ SUCCESS: Data mapping is CONSISTENT!\n";
-        echo "   - Both structures show: $shipmentOrigin → $shipmentDestination\n";
-    } else {
-        echo "❌ ISSUE: Data mapping inconsistency detected\n";
-        echo "   - Legacy: " . ($shipmentOrigin ?: 'MISSING') . " → " . ($shipmentDestination ?: 'MISSING') . "\n";
-        echo "   - Modern: " . ($shippingOrigin ?: 'MISSING') . " → " . ($shippingDestination ?: 'MISSING') . "\n";
-    }
-    
-    // Check if contact name is properly separated from locations
-    $contactName = $data['contact']['name'] ?? null;
-    if ($contactName) {
-        $nameTokens = preg_split('/[\s\-]+/', strtolower($contactName));
-        $nameInOrigin = $shipmentOrigin && in_array(strtolower($shipmentOrigin), $nameTokens);
-        $nameInDest = $shipmentDestination && in_array(strtolower($shipmentDestination), $nameTokens);
+if (!$document) {
+    echo "❌ No BMW test document found\n";
+    exit;
+}
+
+echo "📄 Working with document: {$document->filename}\n";
+
+// Check original data
+$original = $document->robaws_quotation_data;
+echo "   Original routing:\n";
+echo "     customer_reference: " . ($original['customer_reference'] ?? 'NULL') . "\n";
+echo "     POR: " . ($original['por'] ?? 'NULL') . "\n";
+echo "     POL: " . ($original['pol'] ?? 'NULL') . "\n";
+echo "     POD: " . ($original['pod'] ?? 'NULL') . "\n";
+echo "     robaws_quotation_id: " . ($document->robaws_quotation_id ?? 'NULL') . "\n";
+
+// Clear routing to test backfill
+$testData = $original;
+$testData['por'] = null;
+$testData['pol'] = null;
+$testData['pod'] = null;
+
+// Also clear robaws_quotation_id to allow reprocessing
+$document->update([
+    'robaws_quotation_data' => $testData,
+    'robaws_quotation_id' => null,
+    'robaws_sync_status' => 'needs_review'
+]);
+
+echo "\n🔄 Cleared routing & quotation ID, testing service...";
+
+// Test service with extraction data
+$extraction = $document->extractions()->latest()->first();
+if ($extraction && $extraction->extracted_data) {
+    $extractedData = is_array($extraction->extracted_data) 
+        ? $extraction->extracted_data 
+        : json_decode($extraction->extracted_data, true);
         
-        if (!$nameInOrigin && !$nameInDest) {
-            echo "✅ Contact name properly separated from location data\n";
-        } else {
-            echo "⚠️  Contact name tokens still found in location fields\n";
-        }
-    }
+    $service = app(EnhancedRobawsIntegrationService::class);
+    $result = $service->processDocument($document, $extractedData);
     
-    echo "\n=== ROBAWS PAYLOAD PREVIEW ===\n";
-    echo "Expected Robaws fields:\n";
-    echo "  - POR: " . ($data['shipment']['origin'] ?? 'EMPTY') . "\n";
-    echo "  - POL: " . ($data['shipment']['origin'] ?? 'EMPTY') . "\n";
-    echo "  - POD: " . ($data['shipment']['destination'] ?? 'EMPTY') . "\n";
-    echo "  - CARGO: " . trim(($data['vehicle']['brand'] ?? '') . ' ' . ($data['vehicle']['model'] ?? '')) . "\n";
+    echo ' ' . ($result ? '✅ SUCCESS' : '❌ FAILED') . "\n";
     
-    if (isset($data['vehicle']['dimensions'])) {
-        $dims = $data['vehicle']['dimensions'];
-        echo "  - DIM_BEF_DELIVERY: " . sprintf('%s x %s x %s m',
-            $dims['length_m'] ?? 'N/A',
-            $dims['width_m'] ?? 'N/A', 
-            $dims['height_m'] ?? 'N/A'
-        ) . "\n";
-    }
-    
-    echo "  - Customer: " . ($data['contact']['name'] ?? 'EMPTY') . "\n";
-    echo "  - Contact: " . ($data['contact']['email'] ?? 'EMPTY') . "\n\n";
-    
-    // Show any validation warnings
-    if (!empty($data['final_validation']['warnings'])) {
-        echo "=== VALIDATION WARNINGS ===\n";
-        foreach ($data['final_validation']['warnings'] as $warning) {
-            echo "⚠️  $warning\n";
-        }
-        echo "\n";
-    }
+    // Check final data
+    $document->refresh();
+    $final = $document->robaws_quotation_data;
+    echo "\n📊 Final routing after service:\n";
+    echo "     customer_reference: " . ($final['customer_reference'] ?? 'NULL') . "\n";
+    echo "     POR: " . ($final['por'] ?? 'NULL') . "\n";
+    echo "     POL: " . ($final['pol'] ?? 'NULL') . "\n";
+    echo "     POD: " . ($final['pod'] ?? 'NULL') . "\n";
+    echo "     sync_status: " . $document->robaws_sync_status . "\n";
     
 } else {
-    echo "Failed to extract email content from real BMW email\n";
+    echo " ❌ No extraction data found\n";
 }
+
+echo "\n✅ Test completed!\n";

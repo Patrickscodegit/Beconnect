@@ -72,9 +72,17 @@ return [
         'path' => env('POPPLER_PATH', '/opt/homebrew/bin'),
     ],
 
-    'pdf' => [
-        'dpi' => env('PDF_DPI', 300),
+        'pdf' => [
+        'dpi' => env('PDF_OCR_DPI', 300),
         'max_pages' => env('PDF_MAX_PAGES', 100),
+    ],
+
+    'imagemagick' => [
+        'convert' => env('IMAGEMAGICK_CONVERT_CMD', 'convert'),
+    ],
+
+    'images' => [
+        'jpeg_quality' => (int) env('JPEG_QUALITY', 85),
     ],
 
     'ocr' => [
@@ -96,6 +104,25 @@ return [
         'timeout' => env('ROBAWS_TIMEOUT', 30),
         'auto_create_quotations' => env('ROBAWS_AUTO_CREATE_QUOTATIONS', false),
         'default_client_id' => env('ROBAWS_DEFAULT_CLIENT_ID', 1),
+        'default_company_id' => env('ROBAWS_DEFAULT_COMPANY_ID', env('ROBAWS_COMPANY_ID', 1)),
+        'convert_images_to_pdf' => env('ROBAWS_CONVERT_IMAGES_TO_PDF', true),
+        'upload_max_mb' => env('ROBAWS_UPLOAD_MAX_MB', 25),
+        'upload_retries' => env('ROBAWS_UPLOAD_RETRIES', 2),
+        'upload_backoff_ms' => env('ROBAWS_UPLOAD_BACKOFF_MS', 800),
+        'labels' => [
+            'customer' => 'Customer',
+            'contact' => 'Contact',
+            'endcustomer' => 'Endcustomer',
+            'customer_reference' => 'Customer reference',
+            'por' => 'POR',
+            'pol' => 'POL', 
+            'pot' => 'POT',
+            'pod' => 'POD',
+            'fdest' => 'FDEST',
+            'cargo' => 'CARGO',
+            'dim_bef_delivery' => 'DIM_BEF_DELIVERY',
+            'json' => 'JSON',
+        ],
     ],
 
 ];

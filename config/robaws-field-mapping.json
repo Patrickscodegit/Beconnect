@@ -9,24 +9,32 @@
         "transform": "extract_name"
       },
       "customer_reference": {
-        "template": "EXP RORO - {origin_code} - {destination_code} - {cargo_description}",
+        "sources": [
+          "customer_reference",
+          "document_data.customer_reference",
+          "email_metadata.subject",
+          "concerning",
+          "title",
+          "description"
+        ],
+        "transform": "normalize_customer_reference",
+        "fallback_template": "EXP RORO - {origin_code} - {destination_code} - {cargo_description}",
         "components": {
           "origin_code": {
-            "transform": "city_to_code",
-            "sources": ["origin","shipment.origin","routing.origin","document_data.shipment.origin","document_data.routing.por"]
+            "sources": ["origin", "shipment.origin", "routing.origin", "document_data.shipment.origin", "shipping.route.origin.city"],
+            "transform": "city_to_code"
           },
           "destination_code": {
-            "transform": "city_to_code",
-            "sources": ["destination","shipment.destination","routing.destination","document_data.shipment.destination","document_data.routing.pod"]
+            "sources": ["destination", "shipment.destination", "routing.destination", "document_data.shipment.destination", "shipping.route.destination.city"],
+            "transform": "city_to_code"
           },
           "cargo_description": {
-            "transform": "format_cargo_core",
+            "template": "{quantity} x {condition} {brand} {model}",
             "sources": {
-              "quantity": { "sources": ["vehicle.quantity","cargo.quantity"], "default": "1" },
-              "condition": ["vehicle_condition","vehicle.condition","vehicle_details.condition","vehicle.status","document_data.vehicle.condition"],
-              "brand": ["vehicle_make","vehicle.brand","vehicle.make","vehicle_details.brand","document_data.vehicle.brand"],
-              "model": ["vehicle_model","vehicle.model","vehicle_details.model","document_data.vehicle.model"],
-              "year": ["vehicle_year","vehicle.year","vehicle_details.year","document_data.vehicle.year"]
+              "quantity": { "sources": ["vehicle.quantity", "cargo.quantity"], "default": "1" },
+              "condition": ["vehicle_condition", "vehicle.condition", "vehicle_details.condition", "document_data.vehicle.condition"],
+              "brand": ["vehicle_make", "vehicle.brand", "vehicle.make", "vehicle_details.brand", "document_data.vehicle.brand"],
+              "model": ["vehicle_model", "vehicle.model", "vehicle_details.model", "document_data.vehicle.model"]
             }
           }
         }

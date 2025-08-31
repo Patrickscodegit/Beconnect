@@ -39,6 +39,12 @@ class AppServiceProvider extends ServiceProvider
         // Bind the enhanced integration service
         $this->app->singleton(\App\Services\RobawsIntegration\EnhancedRobawsIntegrationService::class);
 
+        // Container alias: redirect old RobawsIntegrationService to new EnhancedRobawsIntegrationService
+        $this->app->singleton(
+            \App\Services\RobawsIntegrationService::class,
+            \App\Services\RobawsIntegration\EnhancedRobawsIntegrationService::class
+        );
+
         // Bind the payload builder
         $this->app->singleton(\App\Services\Robaws\RobawsPayloadBuilder::class);
 

@@ -204,13 +204,11 @@ class MultiDocumentUploadService
         
         while ($attempt <= $maxRetries) {
             try {
-                $result = $this->robawsClient->uploadDocument(
+                $result = $this->robawsClient->uploadDocumentToOffer(
                     $quotationId,
-                    [
-                        'file' => $filePath,
-                        'filename' => $filename,
-                        'mime_type' => $contentType,
-                    ]
+                    $filePath,
+                    $filename,
+                    $contentType
                 );
                 
                 Log::info('Document upload successful', [

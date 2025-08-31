@@ -6,7 +6,7 @@ use App\Filament\Resources\IntakeResource\Pages;
 use App\Models\Intake;
 use App\Models\Document;
 use App\Models\Extraction;
-use App\Services\RobawsIntegrationService;
+use App\Services\RobawsIntegration\EnhancedRobawsIntegrationService;
 use App\Services\RobawsExportService;
 use App\Jobs\ProcessIntake;
 use Filament\Forms;
