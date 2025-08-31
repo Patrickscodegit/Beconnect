@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Services\RobawsClient;
 use App\Services\RobawsIntegrationService;
 use App\Services\MultiDocumentUploadService;
+use App\Services\RobawsIntegration\JsonFieldMapper;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
@@ -16,11 +17,12 @@ class RobawsOfferController extends Controller
     public function __construct(
         private RobawsIntegrationService $robawsService,
         private RobawsClient $robawsClient,
-        private MultiDocumentUploadService $uploadService
+        private MultiDocumentUploadService $uploadService,
+        private JsonFieldMapper $fieldMapper
     ) {}
 
     /**
-     * Create an offer in Robaws with extracted JSON data
+     * Create an offer in Robaws with extracted JSON data using CREATE → GET → PUT pattern
      */
     public function store(Request $request): JsonResponse
     {
@@ -44,12 +46,15 @@ class RobawsOfferController extends Controller
         try {
             $extractedData = json_decode($request->extracted_json, true);
             
-            // Create offer using the RobawsClient directly
+            // 1) Map with our JSON Field Mapper
+            $mapped = $this->fieldMapper->mapFields($extractedData);
+
+            // Create offer using the two-step pattern
             $clientData = $this->extractClientData($extractedData, $request->client_data ?? []);
             $client = $this->robawsClient->findOrCreateClient($clientData);
             
-            // Prepare offer data with extracted JSON in extraFields
-            $offerData = [
+            // 2) Minimal create (do NOT send extraFields here)
+            $createPayload = [
                 'title' => $request->title ?? 
                           $extractedData['title'] ?? 
                           $extractedData['description'] ?? 
@@ -63,26 +68,40 @@ class RobawsOfferController extends Controller
                              'EUR',
                 'companyId' => $request->companyId ?? config('services.robaws.default_company_id'),
                 'status' => 'Draft',
-                'extraFields' => [
-                    'extracted_json' => [
-                        'value' => json_encode($extractedData, JSON_PRETTY_PRINT),
-                        'type' => 'LONG_TEXT'
-                    ]
-                ]
             ];
             
-            $offer = $this->robawsClient->createOffer($offerData);
+            Log::info('Robaws API Request - Create Offer (store)', ['payload' => $createPayload]);
+            $offer = $this->robawsClient->createOffer($createPayload);
+            $offerId = $offer['id'] ?? null;
+            if (!$offerId) {
+                throw new \RuntimeException('Robaws createOffer returned no id');
+            }
+
+            // 3) GET → merge extraFields → PUT
+            $remote = $this->robawsClient->getOffer($offerId);
+            $payload = $this->stripOfferReadOnly($remote);
+            $payload['extraFields'] = array_merge(
+                $remote['extraFields'] ?? [],
+                $this->buildExtraFieldsFromMapped($mapped)
+            );
+
+            Log::info('Robaws API Request - Update Offer (store)', [
+                'offer_id' => $offerId,
+                'labels'   => array_keys($payload['extraFields']),
+            ]);
+
+            $this->robawsClient->updateOffer($offerId, $payload);
             
-            Log::info('Robaws offer created successfully via API', [
-                'offer_id' => $offer['id'],
+            Log::info('Robaws offer created successfully via API store endpoint', [
+                'offer_id' => $offerId,
                 'client_id' => $client['id']
             ]);
             
             return response()->json([
                 'success' => true,
-                'message' => 'Offer created successfully in Robaws',
+                'message' => 'Offer created successfully in Robaws with custom fields',
                 'data' => [
-                    'offer' => $offer,
+                    'offer' => ['id' => $offerId],
                     'client' => $client
                 ]
             ]);
@@ -101,7 +120,7 @@ class RobawsOfferController extends Controller
     }
 
     /**
-     * Create a Robaws offer from a document
+     * Create a Robaws offer from a document using CREATE → GET → PUT pattern
      */
     public function createFromDocument(Request $request, Document $document)
     {
@@ -122,146 +141,109 @@ class RobawsOfferController extends Controller
                 ], 409);
             }
             
-            // Check if document has extraction data (prefer extraction.raw_json for JSON field support)
+            // Get extraction data
             $extraction = $document->extractions()->first();
-            $extractionDataSource = null;
-            $dataSource = 'unknown';
+            $extractedData = null;
             
             if ($extraction && $extraction->raw_json) {
-                $extractionDataSource = $extraction->raw_json;
-                $dataSource = 'extraction.raw_json';
+                $extractedData = json_decode($extraction->raw_json, true);
             } elseif ($document->raw_json) {
-                $extractionDataSource = $document->raw_json;
-                $dataSource = 'document.raw_json';
+                $extractedData = json_decode($document->raw_json, true);
             } else {
-                $extractionDataSource = $document->extraction_data;
-                $dataSource = 'document.extraction_data';
+                $extractedData = $document->extraction_data;
             }
             
-            if (empty($extractionDataSource)) {
+            if (empty($extractedData)) {
                 return response()->json([
                     'message' => 'Document has no extraction data. Please wait for AI processing to complete.'
                 ], 400);
             }
-            
-            // Try using the RobawsClient first, fallback to RobawsIntegrationService
+
+            // Ensure data is array format
+            if (is_string($extractedData)) {
+                $extractedData = json_decode($extractedData, true);
+            }
+
+            Log::info('RobawsOfferController: Processing document with field mapper', [
+                'document_id' => $document->id,
+                'extraction_data_keys' => array_keys($extractedData)
+            ]);
+
+            // 1) Map with our JSON Field Mapper
+            $mapped = $this->fieldMapper->mapFields($extractedData);
+
+            Log::info('RobawsOfferController: Field mapping completed', [
+                'document_id' => $document->id,
+                'mapped_fields' => array_keys($mapped),
+                'has_routing' => !empty($mapped['por']) || !empty($mapped['pol']) || !empty($mapped['pod']),
+                'has_cargo' => !empty($mapped['cargo'])
+            ]);
+
+            // Create client
+            $clientData = $this->extractClientData($extractedData);
+            $client = $this->robawsClient->findOrCreateClient($clientData);
+
+            // 2) Minimal create (do NOT send extraFields here)
+            $createPayload = [
+                'title'     => $extractedData['title'] ?? "Offer from {$document->original_filename}",
+                'date'      => $extractedData['date'] ?? $document->created_at->format('Y-m-d'),
+                'clientId'  => $client['id'],
+                'currency'  => $extractedData['currency'] ?? 'EUR',
+                'companyId' => config('services.robaws.default_company_id'),
+                'status'    => 'Draft',
+            ];
+
+            Log::info('RobawsOfferController: Create offer (minimal)', ['payload' => $createPayload]);
+
+            $offer = $this->robawsClient->createOffer($createPayload);
+            $offerId = $offer['id'] ?? null;
+            if (!$offerId) {
+                throw new \RuntimeException('Robaws createOffer returned no id');
+            }
+
+            // 3) GET → merge extraFields → PUT (this makes custom fields stick)
+            $remote = $this->robawsClient->getOffer($offerId);
+            $payload = $this->stripOfferReadOnly($remote);
+            $payload['extraFields'] = array_merge(
+                $remote['extraFields'] ?? [],
+                $this->buildExtraFieldsFromMapped($mapped)
+            );
+
+            Log::info('RobawsOfferController: Update offer with extraFields', [
+                'offer_id' => $offerId,
+                'labels'   => array_keys($payload['extraFields']),
+            ]);
+
+            $this->robawsClient->updateOffer($offerId, $payload); // 200/204 on success
+
+            // 4) Save refs + upload file
+            $document->update([
+                'robaws_quotation_id' => $offerId,
+                'robaws_client_id'    => $client['id'] ?? null,
+            ]);
+
+            // Upload the document file to Robaws
+            $fileUploadResult = null;
             try {
-                $extractedData = is_string($extractionDataSource) 
-                    ? json_decode($extractionDataSource, true)
-                    : $extractionDataSource;
-                
-                Log::info('RobawsOfferController: Creating offer with enhanced data', [
-                    'document_id' => $document->id,
-                    'data_source' => $dataSource,
-                    'has_json_field' => isset($extractedData['JSON']),
-                    'json_field_length' => strlen($extractedData['JSON'] ?? ''),
-                    'field_count' => count($extractedData ?? [])
+                $fileUploadResult = $this->uploadService->uploadDocumentToQuotation($document);
+                Log::info('Document file uploaded to Robaws', [
+                    'document_id'   => $document->id,
+                    'upload_result' => $fileUploadResult
                 ]);
-                
-                $clientData = $this->extractClientData($extractedData);
-                $client = $this->robawsClient->findOrCreateClient($clientData);
-                
-                $offerData = [
-                    'title' => $extractedData['title'] ?? "Offer from {$document->original_filename}",
-                    'date' => $extractedData['date'] ?? $document->created_at->format('Y-m-d'),
-                    'clientId' => $client['id'],
-                    'currency' => $extractedData['currency'] ?? 'EUR',
-                    'companyId' => config('services.robaws.default_company_id'),
-                    'extraFields' => [
-                        'source_document' => [
-                            'value' => $document->original_filename,
-                            'type' => 'TEXT'
-                        ],
-                        'JSON' => [
-                            'value' => $extractedData['JSON'] ?? '',
-                            'type' => 'LONG_TEXT'
-                        ],
-                        'extracted_json' => [
-                            'value' => json_encode($extractedData, JSON_PRETTY_PRINT),
-                            'type' => 'LONG_TEXT'
-                        ]
-                    ]
-                ];
-                
-                Log::info('RobawsOfferController: Sending offer data to API', [
-                    'document_id' => $document->id,
-                    'has_json_in_extrafields' => !empty($offerData['extraFields']['JSON']['value']),
-                    'json_field_length_in_payload' => strlen($offerData['extraFields']['JSON']['value'] ?? ''),
-                    'extrafields_count' => count($offerData['extraFields'])
-                ]);
-                
-                $offerData = [
-                    'title' => $extractedData['title'] ?? "Offer from {$document->original_filename}",
-                    'date' => $extractedData['date'] ?? $document->created_at->format('Y-m-d'),
-                    'clientId' => $client['id'],
-                    'currency' => $extractedData['currency'] ?? 'EUR',
-                    'companyId' => config('services.robaws.default_company_id'),
-                    'extraFields' => [
-                        'source_document' => [
-                            'value' => $document->original_filename,
-                            'type' => 'TEXT'
-                        ],
-                        'JSON' => [
-                            'value' => $extractedData['JSON'] ?? '',
-                            'type' => 'LONG_TEXT'
-                        ],
-                        'extracted_json' => [
-                            'value' => json_encode($extractedData, JSON_PRETTY_PRINT),
-                            'type' => 'LONG_TEXT'
-                        ]
-                    ]
-                ];
-                
-                $offer = $this->robawsClient->createOffer($offerData);
-                
-                // Update document with Robaws reference
-                $document->update([
-                    'robaws_quotation_id' => $offer['id'],
-                    'robaws_client_id' => $client['id'] ?? null,
-                ]);
-                
-                // NEW: Upload the document file to Robaws
-                $fileUploadResult = null;
-                try {
-                    $fileUploadResult = $this->uploadService->uploadDocumentToQuotation($document);
-                    Log::info('Document file uploaded to Robaws', [
-                        'document_id' => $document->id,
-                        'upload_result' => $fileUploadResult
-                    ]);
-                } catch (\Exception $uploadException) {
-                    Log::warning('File upload failed, but quotation created successfully', [
-                        'document_id' => $document->id,
-                        'upload_error' => $uploadException->getMessage()
-                    ]);
-                    // Don't fail the entire request if file upload fails
-                }
-                
-                return response()->json([
-                    'message' => 'Robaws offer created successfully via API' . 
-                               ($fileUploadResult && $fileUploadResult['status'] === 'success' ? ' with file attachment' : ''),
-                    'offer' => $offer,
-                    'file_upload' => $fileUploadResult,
-                    'robaws_url' => config('services.robaws.base_url') . '/offers/' . $offer['id']
-                ]);
-                
-            } catch (\Exception $apiException) {
-                Log::warning('API approach failed, trying fallback service', [
-                    'api_error' => $apiException->getMessage()
-                ]);
-                
-                // Fallback to original service
-                $offer = $this->robawsService->createOfferFromDocument($document);
-                
-                if (!$offer) {
-                    throw new \Exception('Both API and service approaches failed');
-                }
-                
-                return response()->json([
-                    'message' => 'Robaws offer created successfully via service',
-                    'offer' => $offer,
-                    'robaws_url' => config('services.robaws.base_url') . '/offers/' . $offer['id']
+            } catch (\Exception $uploadException) {
+                Log::warning('File upload failed, but quotation created successfully', [
+                    'document_id'  => $document->id,
+                    'upload_error' => $uploadException->getMessage()
                 ]);
             }
+
+            return response()->json([
+                'message'    => 'Robaws offer created and updated with custom fields' . 
+                               ($fileUploadResult && $fileUploadResult['status'] === 'success' ? ' with file attachment' : ''),
+                'offer'      => ['id' => $offerId],
+                'file_upload' => $fileUploadResult,
+                'robaws_url' => rtrim(config('services.robaws.base_url'), '/') . '/offers/' . $offerId
+            ]);
             
         } catch (\Exception $e) {
             Log::error('Error in createFromDocument', [
@@ -273,6 +255,51 @@ class RobawsOfferController extends Controller
                 'message' => 'An error occurred while creating the Robaws offer: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Build extraFields from the mapper output
+     */
+    private function buildExtraFieldsFromMapped(array $m): array
+    {
+        $xf = [];
+        $put = function (string $label, $value, string $type = 'stringValue') use (&$xf) {
+            if ($value === null || $value === '') return;
+            $xf[$label] = [$type => (string)$value];
+        };
+
+        // Quotation info
+        $put('Customer', $m['customer'] ?? null);
+        $put('Contact', $m['contact'] ?? null);
+        $put('Endcustomer', $m['endcustomer'] ?? null);
+        $put('Customer reference', $m['customer_reference'] ?? null);
+
+        // Routing
+        $put('POR', $m['por'] ?? null);
+        $put('POL', $m['pol'] ?? null);
+        $put('POT', $m['pot'] ?? null);
+        $put('POD', $m['pod'] ?? null);
+        $put('FDEST', $m['fdest'] ?? null);
+
+        // Cargo
+        $put('CARGO', $m['cargo'] ?? null);
+        $put('DIM_BEF_DELIVERY', $m['dim_bef_delivery'] ?? null);
+
+        // JSON (use a slim version to avoid nested JSON-in-JSON)
+        if (!empty($m['JSON'])) {
+            $xf['JSON'] = ['stringValue' => $m['JSON']]; // correct format
+        }
+
+        return $xf;
+    }
+
+    /**
+     * Strip read-only fields from offer for PUT request
+     */
+    private function stripOfferReadOnly(array $offer): array
+    {
+        unset($offer['id'], $offer['createdAt'], $offer['updatedAt'], $offer['links'], $offer['number']);
+        return $offer;
     }
 
     /**

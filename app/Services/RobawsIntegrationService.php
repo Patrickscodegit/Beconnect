@@ -19,109 +19,91 @@ class RobawsIntegrationService
     public function createOfferFromDocument(Document $document): ?array
     {
         try {
-            // Get the extraction record to access raw_json
-            $extraction = $document->extractions()->first();
-            
-            Log::info('RobawsIntegrationService: Looking for extraction data', [
-                'document_id' => $document->id,
-                'extraction_found' => $extraction ? 'YES' : 'NO',
-                'extraction_id' => $extraction ? $extraction->id : null,
-                'has_raw_json' => $extraction && $extraction->raw_json ? 'YES' : 'NO',
-                'raw_json_length' => $extraction && $extraction->raw_json ? strlen($extraction->raw_json) : 0,
-                'has_document_raw_json' => $document->raw_json ? 'YES' : 'NO',
-                'has_document_extraction_data' => $document->extraction_data ? 'YES' : 'NO',
-            ]);
-            
-            // Prefer raw_json from extraction, then document raw_json, then extraction_data
-            $extractedData = null;
-            $dataSource = 'unknown';
-            
-            if ($extraction && $extraction->raw_json) {
-                $extractedData = $extraction->raw_json;
-                $dataSource = 'extraction.raw_json';
-            } elseif ($document->raw_json) {
-                $extractedData = $document->raw_json;
-                $dataSource = 'document.raw_json';
-            } else {
-                $extractedData = $document->extraction_data;
-                $dataSource = 'document.extraction_data';
-            }
-            
-            if (empty($extractedData)) {
-                Log::warning('No extraction data available for document', [
-                    'document_id' => $document->id,
-                    'checked_sources' => [
-                        'extraction.raw_json' => $extraction && $extraction->raw_json ? 'available' : 'empty',
-                        'document.raw_json' => $document->raw_json ? 'available' : 'empty',
-                        'document.extraction_data' => $document->extraction_data ? 'available' : 'empty'
-                    ]
-                ]);
-                return null;
+            // 1) Ensure we have mapped data
+            $mapped = $document->robaws_quotation_data ?? [];
+            if (empty($mapped)) {
+                // Process document to get mapped data
+                $this->processDocumentFromExtraction($document);
+                $mapped = $document->fresh()->robaws_quotation_data ?? [];
             }
 
-            // Ensure data is array format
-            if (is_string($extractedData)) {
-                $extractedData = json_decode($extractedData, true);
-            }
-
-            Log::info('Creating Robaws offer with enhanced data', [
-                'document_id' => $document->id,
-                'data_source' => $dataSource,
-                'has_json_field' => isset($extractedData['JSON']),
-                'json_field_length' => strlen($extractedData['JSON'] ?? ''),
-                'field_count' => count($extractedData ?? [])
-            ]);
-
-            // Get the extraction record if available
-            $extraction = $document->extractions()->first();
-
-            // First, find or create the client in Robaws
-            $client = $this->findOrCreateClientFromExtraction($extractedData);
-            
-            if (!$client) {
-                Log::error('Failed to create/find client in Robaws');
-                return null;
-            }
-
-            // Prepare the offer payload with extraction record
-            $offerPayload = $this->buildOfferPayload($extractedData, $client['id'], $extraction);
-            
-            // Create the offer in Robaws
-            $offer = $this->robawsClient->createOffer($offerPayload);
-            
-            // CRITICAL FIX: Update the offer with custom fields using PUT method
-            if ($offer && isset($offer['id'])) {
-                Log::info('Updating offer with custom fields', [
-                    'offer_id' => $offer['id'],
-                    'document_id' => $document->id
-                ]);
+            // If still no mapped data, fall back to extraction data
+            if (empty($mapped)) {
+                $extraction = $document->extractions()->first();
+                $extractedData = null;
                 
-                try {
-                    $updatedOffer = $this->updateOfferWithCustomFields($offer['id'], $extractedData, $extraction);
-                    if ($updatedOffer) {
-                        $offer = $updatedOffer; // Use the updated offer data
-                        Log::info('Successfully updated offer with custom fields', [
-                            'offer_id' => $offer['id']
-                        ]);
-                    }
-                } catch (\Exception $e) {
-                    Log::error('Failed to update offer with custom fields', [
-                        'offer_id' => $offer['id'],
-                        'error' => $e->getMessage()
-                    ]);
-                    // Continue with the original offer even if update fails
+                if ($extraction && $extraction->raw_json) {
+                    $extractedData = json_decode($extraction->raw_json, true);
+                } elseif ($document->raw_json) {
+                    $extractedData = json_decode($document->raw_json, true);
+                } else {
+                    $extractedData = $document->extraction_data;
                 }
+                
+                if (empty($extractedData)) {
+                    Log::warning('No extraction data available for document', [
+                        'document_id' => $document->id
+                    ]);
+                    return null;
+                }
+                
+                // Use extracted data as mapped data
+                $mapped = $extractedData;
             }
-            
-            // Save the Robaws offer ID back to our database
-            $this->saveRobawsOffer($document, $offer);
-            
-            Log::info('Successfully created Robaws offer', [
+
+            Log::info('Creating Robaws offer with mapped data', [
                 'document_id' => $document->id,
-                'robaws_offer_id' => $offer['id'] ?? null
+                'mapped_fields' => array_keys($mapped),
+                'has_customer' => !empty($mapped['customer']),
+                'has_routing' => !empty($mapped['por']) || !empty($mapped['pol']) || !empty($mapped['pod'])
             ]);
-            
-            return $offer;
+
+            // 2) Minimal create (no custom fields)
+            $clientId = $this->resolveClientId($mapped['customer'] ?? null, $mapped['client_email'] ?? null);
+            $create = [
+                'title' => $mapped['customer_reference'] ?? ('Offer - ' . ($mapped['customer'] ?? 'Unknown')),
+                'date' => now()->toDateString(),
+                'clientId' => $clientId,
+                'currency' => 'EUR',
+                'companyId' => config('services.robaws.company_id'),
+                // DO NOT send custom fields here
+            ];
+
+            Log::info('Robaws API Request - Create Offer', ['payload' => $create]);
+            $created = $this->robawsClient->createOffer($create);
+            $offerId = $created['id'] ?? null;
+            if (!$offerId) {
+                throw new \RuntimeException('Robaws createOffer returned no id');
+            }
+
+            // 3) GET → merge → PUT full model with extraFields
+            $offer = $this->robawsClient->getOffer($offerId);
+            $payload = collect($offer)->except(['id', 'createdAt', 'updatedAt', 'number', 'links'])->toArray();
+            $payload['extraFields'] = array_merge(
+                $offer['extraFields'] ?? [], 
+                $this->buildExtraFieldsFromMapped($mapped)
+            );
+
+            Log::info('Robaws API Request - Update Offer', [
+                'offer_id' => $offerId,
+                'extraFields_labels' => array_keys($payload['extraFields'] ?? []),
+            ]);
+
+            $this->robawsClient->updateOffer($offerId, $payload);
+
+            // 4) Persist + mark synced
+            $document->update([
+                'robaws_quotation_id' => $offerId,
+                'robaws_sync_status' => 'synced',
+                'robaws_synced_at' => now(),
+            ]);
+
+            Log::info('Successfully created Robaws offer with extraFields', [
+                'document_id' => $document->id,
+                'offer_id' => $offerId
+            ]);
+
+            return ['id' => $offerId];
             
         } catch (\Exception $e) {
             Log::error('Error creating Robaws offer', [
@@ -129,6 +111,98 @@ class RobawsIntegrationService
                 'error' => $e->getMessage()
             ]);
             return null;
+        }
+    }
+
+    /**
+     * Build extraFields from the mapper output
+     */
+    private function buildExtraFieldsFromMapped(array $m): array
+    {
+        $xf = [];
+        $add = function (string $label, $value, string $type = 'stringValue') use (&$xf) {
+            if ($value === null || $value === '') return;
+            $xf[$label] = [$type => is_bool($value) ? (bool) $value : (string) $value];
+        };
+
+        // Quotation info
+        $add('Customer', $m['customer'] ?? null);
+        $add('Contact', $m['contact'] ?? null);
+        $add('Endcustomer', $m['endcustomer'] ?? null);
+        $add('Customer reference', $m['customer_reference'] ?? null);
+
+        // Routing
+        $add('POR', $m['por'] ?? null);
+        $add('POL', $m['pol'] ?? null);
+        $add('POT', $m['pot'] ?? null);
+        $add('POD', $m['pod'] ?? null);
+        $add('FDEST', $m['fdest'] ?? null);
+
+        // Cargo details
+        $add('CARGO', $m['cargo'] ?? null);
+        $add('DIM_BEF_DELIVERY', $m['dim_bef_delivery'] ?? null);
+
+        // Keep the full extraction JSON for the JSON field in Robaws
+        if (!empty($m['JSON'])) {
+            $xf['JSON'] = ['stringValue' => $m['JSON']];
+        }
+
+        return $xf;
+    }
+
+    /**
+     * Resolve client ID from customer data
+     */
+    private function resolveClientId(?string $customer, ?string $clientEmail): int
+    {
+        if (!$customer && !$clientEmail) {
+            // Return default client ID from config or create a default client
+            return config('services.robaws.default_client_id', 1);
+        }
+
+        $clientData = [
+            'name' => $customer ?? 'Unknown Client',
+            'email' => $clientEmail,
+        ];
+
+        try {
+            $client = $this->robawsClient->findOrCreateClient($clientData);
+            return $client['id'];
+        } catch (\Exception $e) {
+            Log::error('Failed to resolve client ID', [
+                'customer' => $customer,
+                'email' => $clientEmail,
+                'error' => $e->getMessage()
+            ]);
+            
+            // Return default client ID as fallback
+            return config('services.robaws.default_client_id', 1);
+        }
+    }
+
+    /**
+     * Process document from extraction to create mapped data
+     */
+    private function processDocumentFromExtraction(Document $document): void
+    {
+        // This method should trigger the JsonFieldMapper to process the document
+        // and populate robaws_quotation_data
+        
+        $extraction = $document->extractions()->first();
+        if (!$extraction) {
+            Log::warning('No extraction found for document', ['document_id' => $document->id]);
+            return;
+        }
+
+        try {
+            // Use the enhanced integration service to process the document
+            $enhancedService = app(\App\Services\RobawsIntegration\EnhancedRobawsIntegrationService::class);
+            $enhancedService->processDocumentFromExtraction($document);
+        } catch (\Exception $e) {
+            Log::error('Failed to process document from extraction', [
+                'document_id' => $document->id,
+                'error' => $e->getMessage()
+            ]);
         }
     }
 

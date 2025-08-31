@@ -272,7 +272,7 @@ class RobawsClient
     /**
      * Get offer from Robaws
      */
-    public function getOffer(string $offerId): ?array
+    public function getOffer(string $offerId): array
     {
         try {
             $response = $this->makeRequest()
@@ -291,13 +291,47 @@ class RobawsClient
                 'offer_id' => $offerId,
                 'error' => $result['error'] ?? 'Unknown error'
             ]);
-            return null;
+            
+            throw new RobawsException('Failed to get offer: ' . ($result['error'] ?? 'Unknown error'));
+        } catch (RobawsException $e) {
+            throw $e;
         } catch (\Exception $e) {
             Log::error('Failed to get offer', [
                 'offer_id' => $offerId,
                 'error' => $e->getMessage()
             ]);
-            return null;
+            
+            throw new RobawsException('Failed to get offer: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Update offer in Robaws 
+     */
+    public function updateOffer(string $offerId, array $payload): void
+    {
+        try {
+            $response = $this->makeRequest()
+                ->asJson()
+                ->put($this->baseUrl . '/api/v2/offers/' . $offerId, $payload);
+
+            if (!in_array($response->status(), [200, 204], true)) {
+                throw new RobawsException("Robaws PUT offers/{$offerId} failed: " . $response->status());
+            }
+
+            Log::info('Successfully updated Robaws offer', [
+                'offer_id' => $offerId,
+                'status' => $response->status()
+            ]);
+        } catch (RobawsException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            Log::error('Failed to update offer', [
+                'offer_id' => $offerId,
+                'error' => $e->getMessage()
+            ]);
+            
+            throw new RobawsException('Failed to update offer: ' . $e->getMessage());
         }
     }
 
