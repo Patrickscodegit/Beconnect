@@ -2,6 +2,7 @@
 
 namespace App\Helpers;
 
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 
@@ -12,10 +13,11 @@ class FileInput
      * 
      * @param string $path The file path in storage
      * @param string $mime The MIME type of the file
-     * @return array Either ['url' => $url, 'mime' => $mime] or ['bytes' => $base64bytes, 'mime' => $mime]
+     * @return array{bytes?:string,url?:string,mime:string} Either ['url' => $url, 'mime' => $mime] or ['bytes' => $base64bytes, 'mime' => $mime]
      */
     public static function forExtractor(string $path, string $mime): array
     {
+        /** @var FilesystemAdapter $disk */
         $disk = Storage::disk(config('filesystems.default', 'local'));
         
         // For local development, always use bytes

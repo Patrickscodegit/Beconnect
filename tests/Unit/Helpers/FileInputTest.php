@@ -3,6 +3,7 @@
 namespace Tests\Unit\Helpers;
 
 use App\Helpers\FileInput;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -42,24 +43,35 @@ class FileInputTest extends TestCase
     
     public function test_returns_url_for_s3_storage()
     {
-        // Mock S3 storage
-        config(['filesystems.default' => 's3']);
-        
-        // Mock the Storage facade
+        // Mock the FilesystemAdapter, not the manager
+        $adapter = \Mockery::mock(FilesystemAdapter::class);
+
+        $path = 'test/file.png';
+        $url = 'https://s3.example.com/bucket/test/file.png';
+
+        // Mock the adapter methods that are actually called
+        $adapter->shouldReceive('temporaryUrl')
+            ->once()
+            ->with($path, \Mockery::any())
+            ->andReturn($url);
+
+        // IMPORTANT: Storage::disk() must return the *adapter*
         Storage::shouldReceive('disk')
+            ->once()
             ->with('s3')
-            ->andReturnSelf();
-        Storage::shouldReceive('temporaryUrl')
-            ->with('test/file.png', \Mockery::any())
-            ->andReturn('https://example.com/signed-url');
-        
-        // Get file input
-        $result = FileInput::forExtractor('test/file.png', 'image/png');
-        
+            ->andReturn($adapter);
+
+        // Set config to use s3 (production mode)
+        config(['filesystems.default' => 's3']);
+        config(['app.env' => 'production']);
+
+        // Call the helper
+        $result = FileInput::forExtractor($path, 'image/png');
+
         // Assert URL format
         $this->assertArrayHasKey('url', $result);
         $this->assertArrayHasKey('mime', $result);
-        $this->assertEquals('https://example.com/signed-url', $result['url']);
+        $this->assertEquals($url, $result['url']);
         $this->assertEquals('image/png', $result['mime']);
     }
 }
