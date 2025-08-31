@@ -283,29 +283,56 @@ class IntakeResource extends Resource
                     ->modalDescription('This will create a new quotation in Robaws using the extracted data from this intake and attach the uploaded file to the offer.')
                     ->action(function (Intake $record) {
                         try {
-                            // Use the new RobawsExportService for reliable exports
-                            $exportService = app(RobawsExportService::class);
-                            $results = $exportService->exportIntake($record);
+                            // Use the canonical RobawsExportService
+                            $results = app(\App\Services\Robaws\RobawsExportService::class)->exportIntake($record);
                             
-                            if ($results['failed'] === 0 && $results['success'] > 0) {
+                            // Prevent "Undefined array key" by using null coalescing:
+                            $failed   = $results['failed']   ?? [];
+                            $success  = $results['success']  ?? [];
+                            $uploaded = $results['uploaded'] ?? [];
+                            $exists   = $results['exists']   ?? [];
+                            $skipped  = $results['skipped']  ?? [];
+                            $stats    = $results['stats']    ?? [
+                                'success' => count($success),
+                                'failed'  => count($failed),
+                                'uploaded'=> count($uploaded),
+                                'exists'  => count($exists),
+                                'skipped' => count($skipped),
+                            ];
+                            
+                            $summary = sprintf(
+                                'Exported: %d • Failed: %d • Uploaded: %d • Exists: %d • Skipped: %d',
+                                $stats['success'], $stats['failed'], $stats['uploaded'], $stats['exists'], $stats['skipped']
+                            );
+                            
+                            if ($stats['failed'] === 0 && $stats['success'] > 0) {
                                 // Update the intake with success status
                                 $record->update(['status' => 'exported']);
                                 
                                 Notification::make()
-                                    ->title('Export Successful')
-                                    ->body("Successfully exported {$results['success']} document(s) to Robaws with file uploads")
+                                    ->title('Robaws Export Successful')
+                                    ->body($summary)
                                     ->success()
                                     ->send();
-                            } else if ($results['success'] > 0) {
+                            } else if ($stats['success'] > 0) {
                                 Notification::make()
-                                    ->title('Export Partially Successful')
-                                    ->body("Exported {$results['success']} document(s), {$results['failed']} failed. Check logs for details.")
+                                    ->title('Robaws Export Partially Successful')
+                                    ->body($summary)
                                     ->warning()
                                     ->send();
                             } else {
                                 Notification::make()
-                                    ->title('Export Failed')
-                                    ->body('No documents could be exported. ' . implode(' ', $results['errors']))
+                                    ->title('Robaws Export Failed')
+                                    ->body($summary)
+                                    ->danger()
+                                    ->send();
+                            }
+                            
+                            // Show failure details if any
+                            if ($failed) {
+                                Notification::make()
+                                    ->title('Some items failed to export')
+                                    ->body(collect($failed)->map(fn ($f) => $f['message'] ?? 'Unknown error')->take(3)->implode("\n"))
                                     ->danger()
                                     ->send();
                             }
@@ -314,7 +341,8 @@ class IntakeResource extends Resource
                             Log::error('Export to Robaws failed', [
                                 'intake_id' => $record->id,
                                 'error' => $e->getMessage(),
-                                'trace' => $e->getTraceAsString()
+                                'trace' => $e->getTraceAsString(),
+                                'trace_id' => uniqid('filament_', true)
                             ]);
                             
                             Notification::make()
@@ -388,40 +416,53 @@ class IntakeResource extends Resource
                         ->modalHeading('Bulk Export to Robaws')
                         ->modalDescription('This will create quotations in Robaws for all extracted data in the selected intakes.')
                         ->action(function (Collection $records) {
-                            $exportService = app(RobawsExportService::class);
-                            $totalSuccess = 0;
-                            $totalFailed = 0;
-                            $allErrors = [];
+                            $overall = [
+                                'success'  => [],
+                                'failed'   => [],
+                                'uploaded' => [],
+                                'exists'   => [],
+                                'skipped'  => [],
+                            ];
                             
                             foreach ($records as $record) {
                                 if ($record->extraction()->exists()) {
-                                    $results = $exportService->exportIntake($record);
-                                    $totalSuccess += $results['success'];
-                                    $totalFailed += $results['failed'];
-                                    $allErrors = array_merge($allErrors, $results['errors']);
+                                    $res = app(\App\Services\Robaws\RobawsExportService::class)->exportIntake($record);
+
+                                    $overall['success']  = array_merge($overall['success'],  $res['success']  ?? []);
+                                    $overall['failed']   = array_merge($overall['failed'],   $res['failed']   ?? []);
+                                    $overall['uploaded'] = array_merge($overall['uploaded'], $res['uploaded'] ?? []);
+                                    $overall['exists']   = array_merge($overall['exists'],   $res['exists']   ?? []);
+                                    $overall['skipped']  = array_merge($overall['skipped'],  $res['skipped']  ?? []);
                                     
-                                    if ($results['success'] > 0) {
+                                    // Update record status if any success
+                                    $stats = $res['stats'] ?? [];
+                                    if (($stats['success'] ?? 0) > 0) {
                                         $record->update(['status' => 'exported']);
                                     }
                                 }
                             }
-                            
-                            if ($totalFailed === 0 && $totalSuccess > 0) {
+
+                            $stats = [
+                                'success'  => count($overall['success']),
+                                'failed'   => count($overall['failed']),
+                                'uploaded' => count($overall['uploaded']),
+                                'exists'   => count($overall['exists']),
+                                'skipped'  => count($overall['skipped']),
+                            ];
+
+                            Notification::make()
+                                ->title('Robaws Bulk Export')
+                                ->body(sprintf(
+                                    'Exported: %d • Failed: %d • Uploaded: %d • Exists: %d • Skipped: %d',
+                                    $stats['success'], $stats['failed'], $stats['uploaded'], $stats['exists'], $stats['skipped']
+                                ))
+                                ->success()
+                                ->send();
+
+                            if ($overall['failed']) {
                                 Notification::make()
-                                    ->title('Bulk Export Successful')
-                                    ->body("Successfully exported {$totalSuccess} document(s) to Robaws with file uploads")
-                                    ->success()
-                                    ->send();
-                            } else if ($totalSuccess > 0) {
-                                Notification::make()
-                                    ->title('Bulk Export Partially Successful')
-                                    ->body("Exported {$totalSuccess} document(s), {$totalFailed} failed. Check logs for details.")
-                                    ->warning()
-                                    ->send();
-                            } else {
-                                Notification::make()
-                                    ->title('Bulk Export Failed')
-                                    ->body('No documents could be exported. Check logs for details.')
+                                    ->title('Some items failed')
+                                    ->body(collect($overall['failed'])->map(fn ($f) => $f['message'] ?? 'Unknown error')->take(3)->implode("\n"))
                                     ->danger()
                                     ->send();
                             }

@@ -95,6 +95,7 @@ return [
         'api_secret' => env('ROBAWS_API_SECRET'),
         'timeout' => env('ROBAWS_TIMEOUT', 30),
         'auto_create_quotations' => env('ROBAWS_AUTO_CREATE_QUOTATIONS', false),
+        'default_client_id' => env('ROBAWS_DEFAULT_CLIENT_ID', 1),
     ],
 
 ];

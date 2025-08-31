@@ -16,6 +16,7 @@ final class RobawsExportService
     public function __construct(
         private readonly RobawsClient $client,
         private readonly StreamHasher $streamHasher,
+        private readonly Files $files,
     ) {}
 
     /**
@@ -170,16 +171,11 @@ final class RobawsExportService
 
         // Create a new offer if none exists
         $extraction = $intake->extraction;
-        if (!$extraction) {
-            throw new \RuntimeException("No extraction found for intake {$intake->id}");
-        }
-
-        $payload = $extraction->extracted_data ?? $extraction->raw_json ?? null;
-        if (!$payload || !is_array($payload)) {
+        if (!$extraction || !$extraction->extracted_data) {
             throw new \RuntimeException("No extraction data found for intake {$intake->id}");
         }
 
-        $robawsData = $this->mapExtractionToRobaws($payload);
+        $robawsData = $this->mapExtractionToRobaws($extraction->extracted_data);
         $offer = $this->client->createOffer($robawsData);
         
         if (!isset($offer['id'])) {
@@ -211,7 +207,7 @@ final class RobawsExportService
     public function uploadDocumentByPath(int|string $offerId, string $dbPath): array
     {
         try {
-            $doc = Files::openDocumentStream($dbPath);
+            $doc = $this->files->resolve($dbPath);
         } catch (\RuntimeException $e) {
             return [
                 'status' => 'error',
@@ -268,13 +264,11 @@ final class RobawsExportService
 
         // 2) Not in ledger → upload
         $fileData = [
-            'filename'  => $filename,
-            'mime'      => $doc['mime'],          // for future callers
-            'mime_type' => $doc['mime'],          // for current client
-            'stream'    => $hashed['stream'],
-            'size'      => $size,                 // for future callers
-            'file_size' => $size,                 // for current client
-            'sha256'    => $sha256,
+            'filename' => $filename,
+            'mime' => $doc['mime'],
+            'stream' => $hashed['stream'],
+            'size' => $size,
+            'sha256' => $sha256,
         ];
 
         try {
@@ -338,115 +332,27 @@ final class RobawsExportService
     }
 
     /**
-     * Backward compatibility alias for tests
-     */
-    public function uploadDocumentToOffer(int|string $offerId, string $dbPath): array
-    {
-        return $this->uploadDocumentByPath($offerId, $dbPath);
-    }
-
-    /**
      * Upload a document to Robaws with idempotency
      */
     protected function uploadDocumentToRobaws(Document $document, string $robawsOfferId): array
     {
-        $dbPath = $document->filepath ?? $document->path ?? $document->storage_path ?? null;
-        if (!$dbPath) {
-            return [
-                'status' => 'error',
-                'error'  => 'Missing document path on model',
-                'document' => [
-                    'id'   => null,
-                    'name' => $document->name ?? $document->original_filename ?? 'unknown',
-                    'mime' => null,
-                    'size' => null
-                ],
-            ];
-        }
-        return $this->uploadDocumentByPath($robawsOfferId, $dbPath);
+        return $this->uploadDocumentByPath($robawsOfferId, $document->filepath);
     }
 
     /**
-     * Map extraction data to Robaws format with smart client ID resolution
+     * Map extraction data to Robaws format
      */
     protected function mapExtractionToRobaws(array $extractedData): array
     {
-        // 1) Prefer an explicit client id if present on the extraction/intake
-        $clientId = $extractedData['clientId'] 
-            ?? $extractedData['client_id'] 
-            ?? null;
-
-        // 2) If missing, try to find/create via client data
-        if (!$clientId) {
-            $clientData = [
-                'name'       => $extractedData['client']['name']       ?? $extractedData['company']     ?? $extractedData['contact_name'] ?? null,
-                'email'      => $extractedData['client']['email']      ?? $extractedData['email']       ?? null,
-                'tel'        => $extractedData['client']['tel']        ?? $extractedData['phone']       ?? null,
-                'address'    => $extractedData['client']['address']    ?? $extractedData['address']     ?? null,
-                'postalCode' => $extractedData['client']['postalCode'] ?? $extractedData['postalCode']  ?? null,
-                'city'       => $extractedData['client']['city']       ?? $extractedData['city']        ?? null,
-                'country'    => $extractedData['client']['country']    ?? $extractedData['country']     ?? 'BE',
-            ];
-
-            // If we have enough data to identify a client, try find/create
-            if (!empty($clientData['name']) || !empty($clientData['email'])) {
-                try {
-                    $client = $this->client->findOrCreateClient($clientData);
-                    $clientId = $client['id'] ?? null;
-                } catch (\Throwable $e) {
-                    Log::warning('Failed to find/create client, falling back to default', [
-                        'client_data' => $clientData,
-                        'error' => $e->getMessage()
-                    ]);
-                }
-            }
-        }
-
-        // 3) Fallback to default client id (config)
-        $clientId = $clientId ?: (int) config('services.robaws.default_client_id');
-
-        // Final guard (fail fast with a clear error if still missing)
-        if (!$clientId) {
-            throw new \RuntimeException(
-                'Missing clientId for offer creation. Provide clientId on the record or configure ROBAWS_DEFAULT_CLIENT_ID.'
-            );
-        }
-
-        Log::debug('Mapped extraction to Robaws offer', [
-            'resolved_client_id' => $clientId,
-            'extraction_keys' => array_keys($extractedData)
-        ]);
-
-        // Build offer payload in Robaws format
+        // Simplified mapping - adjust based on your actual Robaws API requirements
         return [
-            'clientId'            => $clientId,
-            'title'               => $extractedData['title']               ?? 'Vehicle Transport Quotation',
-            'description'         => $extractedData['description']         ?? null,
-            'reference'           => $extractedData['reference']           ?? ($extractedData['file_ref'] ?? 'AUTO-' . uniqid()),
-            'customer_reference'  => $extractedData['customer_reference']  ?? ($extractedData['reference'] ?? null),
-            'origin'              => $extractedData['shipment']['origin']  ?? $extractedData['origin'] ?? null,
-            'destination'         => $extractedData['shipment']['destination'] ?? $extractedData['destination'] ?? null,
-            'cargo_description'   => $extractedData['cargo']['description'] ?? $extractedData['cargo_description'] ?? null,
-            'vehicle_count'       => count($extractedData['vehicles'] ?? []),
-            'lines'               => $this->mapLines($extractedData['lines'] ?? $extractedData['vehicles'] ?? []),
+            'customer_reference' => $extractedData['reference'] ?? 'AUTO-' . uniqid(),
+            'origin' => $extractedData['shipment']['origin'] ?? null,
+            'destination' => $extractedData['shipment']['destination'] ?? null,
+            'cargo_description' => $extractedData['cargo']['description'] ?? null,
+            'vehicle_count' => count($extractedData['vehicles'] ?? []),
             'extraction_metadata' => $extractedData['metadata'] ?? []
         ];
-    }
-
-    /**
-     * Map extraction lines/vehicles to Robaws line items
-     */
-    private function mapLines(array $lines): array
-    {
-        return array_map(function ($line) {
-            return [
-                'description' => $line['description'] ?? $line['name'] ?? $line['make_model'] ?? 'Vehicle Transport',
-                'quantity'    => (float) ($line['qty'] ?? $line['quantity'] ?? 1),
-                'price'       => (float) ($line['price'] ?? $line['cost'] ?? 0),
-                'unit'        => $line['unit'] ?? 'pcs',
-                'reference'   => $line['reference'] ?? $line['vin'] ?? null,
-            ];
-        }, $lines);
     }
 
     /**

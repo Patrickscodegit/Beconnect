@@ -232,10 +232,16 @@ class RobawsClient
     }
 
     /**
-     * Create offer in Robaws
+     * Create offer in Robaws with robust clientId validation
      */
     public function createOffer(array $offerData): array
     {
+        // Guard: fail early with a clear message
+        if (!array_key_exists('clientId', $offerData) || empty($offerData['clientId'])) {
+            Log::error('createOffer(): missing clientId', ['offer_data_keys' => array_keys($offerData)]);
+            throw new RobawsException('createOffer(): "clientId" is required but missing.');
+        }
+
         try {
             $response = $this->makeRequest()
                 ->post($this->baseUrl . '/api/v2/offers', $offerData);
@@ -244,17 +250,19 @@ class RobawsClient
             
             if ($result['success']) {
                 Log::info('Created Robaws offer', [
-                    'offer_id' => $result['data']['id'],
-                    'client_id' => $offerData['clientId']
+                    'offer_id' => $result['data']['id'] ?? null,
+                    'client_id' => $offerData['clientId'] ?? null, // safe access
                 ]);
                 return $result['data'];
             }
 
             throw new RobawsException('Failed to create offer: ' . ($result['error'] ?? 'Unknown error'));
+        } catch (RobawsException $e) {
+            throw $e;
         } catch (\Exception $e) {
             Log::error('Failed to create offer', [
-                'offer_data' => $offerData,
-                'error' => $e->getMessage()
+                'offer_data_keys' => array_keys($offerData),
+                'error' => $e->getMessage(),
             ]);
             
             throw new RobawsException('Failed to create offer: ' . $e->getMessage());
@@ -352,9 +360,14 @@ class RobawsClient
             // Handle stream data for cloud storage compatibility
             if (isset($fileData['stream'])) {
                 $fileContent = stream_get_contents($fileData['stream']);
-                $fileName = $fileData['filename'];
-                $mimeType = $fileData['mime_type'];
-                $fileSize = $fileData['file_size'];
+                $fileName = $fileData['filename'] ?? 'upload.bin';
+                $mimeType = $fileData['mime_type'] ?? $fileData['mime'] ?? 'application/octet-stream';
+                $fileSize = $fileData['file_size'] ?? $fileData['size'] ?? null;
+                
+                // If size wasn't provided, compute it from content
+                if ($fileSize === null && $fileContent !== false) {
+                    $fileSize = strlen($fileContent);
+                }
             } else {
                 // Fallback to file path handling
                 $file = $fileData['file'];
