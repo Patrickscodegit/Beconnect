@@ -27,6 +27,19 @@ class Document extends Model
         'has_text_layer',
         'document_type',
         'page_count',
+        // Email deduplication fields
+        'source_message_id',
+        'source_content_sha',
+        // Robaws deduplication fields
+        'robaws_last_upload_sha',
+        'robaws_quotation_id',
+        'processing_status',
+        // Sync tracking
+        'last_sync_at',
+        'sync_error',
+        'robaws_document_id',
+        'extraction_data',
+        'source_content_sha',
         // AI Extraction fields
         'extraction_data',
         'extraction_confidence',
@@ -65,6 +78,31 @@ class Document extends Model
         'robaws_upload_attempted_at' => 'datetime',
         'robaws_last_sync_at' => 'datetime',
     ];
+
+        /**
+     * Backward compatibility accessor for filepath
+     * Maps to the canonical file_path field - NO recursion
+     */
+    public function getFilepathAttribute(): ?string
+    {
+        // Prefer the in-memory attribute if present (also works for unsaved models)
+        if (array_key_exists('file_path', $this->attributes)) {
+            return $this->attributes['file_path'];
+        }
+
+        // Fall back to the raw db value to avoid any mutators/accessors
+        return $this->getRawOriginal('file_path');
+    }
+
+    /**
+     * Backward compatibility mutator for filepath
+     * Maps to the canonical file_path field - NO recursion
+     */
+    public function setFilepathAttribute($value): void
+    {
+        // Write directly to the underlying attribute to avoid recursion
+        $this->attributes['file_path'] = $value;
+    }
 
     /**
      * Get the appropriate storage disk based on environment

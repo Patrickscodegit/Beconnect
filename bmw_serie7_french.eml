@@ -1,0 +1,42 @@
+Date: Tue, 30 Aug 2025 14:20:00 +0100
+From: "Badr Algothami" <badr.algothami@example.com>
+To: transport@belgaco.be
+Subject: Demande de transport véhicule - BMW Série 7 Bruxelles vers Djeddah
+Message-ID: <bmw-serie7-test@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="boundary123"
+
+--boundary123
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+Bonjour,
+
+Je souhaite obtenir un devis pour le transport de mon véhicule.
+
+DÉTAILS DU VÉHICULE:
+- Marque: BMW
+- Modèle: Série 7
+- Année: 2019
+- Couleur: Noir métallisé
+- État: Occasion (Très bon état)
+- VIN: WBAJA51040WX12345
+- Moteur: 3.0L Diesel
+- Poids: 1,985 kg
+
+ITINÉRAIRE DE TRANSPORT:
+De: Bruxelles, Belgique
+Vers: Djeddah, Arabie Saoudite
+
+INFORMATIONS DE CONTACT:
+Nom: Badr Algothami
+Téléphone: +966 50 123 4567
+Email: badr.algothami@example.com
+Adresse: Rue de la Paix 45, 1000 Bruxelles, Belgique
+
+Merci de me faire parvenir votre meilleure offre.
+
+Cordialement,
+Badr Algothami
+
+--boundary123--

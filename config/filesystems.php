@@ -60,6 +60,35 @@ return [
             'report' => false,
         ],
 
+        'documents' => (function () {
+            $driver = env('DOCUMENTS_DRIVER', env('FILESYSTEM_DISK', 'local'));
+
+            if ($driver === 's3') {
+                // DigitalOcean Spaces (S3 compatible)
+                return [
+                    'driver' => 's3',
+                    'key' => env('SPACES_KEY'),
+                    'secret' => env('SPACES_SECRET'),
+                    'region' => env('SPACES_REGION', 'ams3'),
+                    'bucket' => env('SPACES_BUCKET'),
+                    'endpoint' => env('SPACES_ENDPOINT', 'https://ams3.digitaloceanspaces.com'),
+                    'use_path_style_endpoint' => false,
+                    'visibility' => 'private',
+                    // Prefix inside the bucket for your app's docs
+                    'root' => env('DOCUMENTS_ROOT', 'documents'),
+                    'throw' => true,
+                ];
+            }
+
+            // Local/dev
+            return [
+                'driver' => 'local',
+                'root' => storage_path('app/documents'),
+                'visibility' => 'private',
+                'throw' => true,
+            ];
+        })(),
+
         'minio' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

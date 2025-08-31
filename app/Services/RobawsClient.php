@@ -410,6 +410,41 @@ class RobawsClient
     }
 
     /**
+     * List documents attached to an offer
+     */
+    public function listOfferDocuments(string $offerId): array
+    {
+        try {
+            $token = $this->authenticate();
+
+            $response = Http::withToken($token)
+                ->timeout($this->timeout)
+                ->get("{$this->baseUrl}/api/v2/offers/{$offerId}/documents");
+
+            $result = $this->handleResponse($response);
+            
+            if ($result['success']) {
+                return $result['data'] ?? [];
+            }
+
+            Log::warning('Failed to list offer documents', [
+                'offer_id' => $offerId,
+                'message' => $result['message'] ?? 'Unknown error'
+            ]);
+            
+            return [];
+
+        } catch (\Exception $e) {
+            Log::error('List offer documents failed', [
+                'offer_id' => $offerId,
+                'error' => $e->getMessage()
+            ]);
+            
+            return [];
+        }
+    }
+
+    /**
      * Upload small file directly to entity (≤6MB)
      */
     public function uploadDirectToEntity(string $entityType, string $entityId, $file): array

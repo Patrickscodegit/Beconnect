@@ -16,6 +16,8 @@ class Intake extends Model
         'source',
         'notes',
         'priority',
+        'robaws_offer_id',
+        'robaws_offer_number',
     ];
 
     protected $casts = [

@@ -81,6 +81,7 @@ class PatternExtractor
         
         $this->shippingPatterns = [
             'route_from_to' => '/from\s+([A-Za-z\s,\-\.]+?)\s+to\s+([A-Za-z\s,\-\.]+?)(?:[.,;]|\s|$)/i',
+            'route_french' => '/de\s+([A-Za-zÀ-ÿ\s,\-\.]+?)\s+vers\s+([A-Za-zÀ-ÿ\s,\-\.]+?)(?:[.,;]|\s|par|$)/i',
             'route_arrow' => '/([A-Za-z\s,\-\.]+?)\s*[-–—→>\s]+\s*([A-Za-z\s,\-\.]+?)(?:[.,;]|\s|$)/',
             'origin' => '/(?:origin|from|loading|pickup|departure):\s*([A-Za-z\s,\-\.]+?)(?:[.,;\n]|$)/i',
             'destination' => '/(?:destination|to|delivery|discharge|arrival):\s*([A-Za-z\s,\-\.]+?)(?:[.,;\n]|$)/i',
@@ -97,6 +98,8 @@ class PatternExtractor
             'phone_international' => '/\+?\d{1,3}[\s\-\.]?\(?\d{2,4}\)?[\s\-\.]?\d{3,4}[\s\-\.]?\d{3,4}/',
             'phone_us' => '/\b\d{3}[\s\-\.]\d{3}[\s\-\.]\d{4}\b/',
             'name_from_email' => '/^(.+?)\s*<(.+?)>$/',
+            'signature_name' => '/\n\s*([A-Za-zÀ-ÿ]{2,}(?:\s+[A-Za-zÀ-ÿ]{2,}){1,2})\s*\n?(?:\s*$|(?=\s*(?:email|tel|phone|@|\+)))/i',
+            'french_je_suis' => '/\b(?:je\s+suis|moi\s+c\'est)\s+([A-ZÉÈÊÂÀÔÎÛÄËÏÖÜÇ][\p{L}\'\-]+(?:\s+[A-ZÉÈÊÂÀÔÎÛÄËÏÖÜÇ]?[a-zà-ÿ\'\-]+){0,2})(?=\s+(?:et|de|du|des|le|la|les|un|une|à|dans|pour|avec|sur|par|que|qui|comme|très|bien|mais|ou|car|donc|alors)\b|[.,;:]|$)/iu',
             'company_domain' => '/@([a-zA-Z0-9.-]+)\./'
         ];
         
@@ -149,7 +152,14 @@ class PatternExtractor
             foreach ($commonPatterns as $pattern) {
                 if (preg_match($pattern['regex'], $content, $matches)) {
                     $vehicle['brand'] = $pattern['brand'];
-                    $vehicle['model'] = $pattern['model'];
+                    
+                    // If the pattern captured a model, use it; otherwise use the default
+                    if (isset($matches[1]) && !empty(trim($matches[1]))) {
+                        $vehicle['model'] = trim($matches[1]);
+                    } else {
+                        $vehicle['model'] = $pattern['model'];
+                    }
+                    
                     $vehicle['extraction_pattern'] = $pattern['pattern'];
                     $vehicle['extraction_source'] = 'fallback_patterns';
                     break; // Use first match
@@ -231,6 +241,9 @@ class PatternExtractor
         if (preg_match($this->shippingPatterns['route_from_to'], $content, $matches)) {
             $shipping['origin'] = trim($matches[1]);
             $shipping['destination'] = trim($matches[2]);
+        } elseif (preg_match($this->shippingPatterns['route_french'], $content, $matches)) {
+            $shipping['origin'] = trim($matches[1]);
+            $shipping['destination'] = trim($matches[2]);
         } elseif (preg_match($this->shippingPatterns['route_arrow'], $content, $matches)) {
             $shipping['origin'] = trim($matches[1]);
             $shipping['destination'] = trim($matches[2]);
@@ -301,6 +314,34 @@ class PatternExtractor
             $contact['phone'] = preg_replace('/[\s\-\(\)]/', '', $matches[0]);
         } elseif (preg_match($this->contactPatterns['phone_us'], $content, $matches)) {
             $contact['phone'] = preg_replace('/[\s\-\.]/', '', $matches[0]);
+        }
+        
+        // Extract name from signature (if not already found from email)
+        if (empty($contact['name']) && preg_match($this->contactPatterns['signature_name'], $content, $matches)) {
+            $name = trim($matches[1]);
+            // Validate that it looks like a real name (not common words)
+            $commonWords = ['merci', 'cordialement', 'regards', 'best', 'sincerely', 'thanks'];
+            if (!in_array(strtolower($name), $commonWords)) {
+                $contact['name'] = $name;
+            }
+        }
+        
+        // Extract name from French "je suis" pattern
+        if (empty($contact['name']) && preg_match($this->contactPatterns['french_je_suis'], $content, $matches)) {
+            $name = trim($matches[1]);
+            // Validate that it looks like a real name (not common words)
+            $commonWords = ['merci', 'cordialement', 'regards', 'best', 'sincerely', 'thanks', 'content', 'heureux'];
+            if (!in_array(strtolower($name), $commonWords) && strlen($name) >= 3) {
+                $contact['name'] = $name;
+            }
+        }
+        
+        // Post-processing normalization for names
+        if (!empty($contact['name'])) {
+            // Collapse multiple spaces
+            $contact['name'] = preg_replace('/\s+/', ' ', trim($contact['name']));
+            // Uppercase first letters, lowercase rest
+            $contact['name'] = mb_convert_case($contact['name'], MB_CASE_TITLE, "UTF-8");
         }
         
         return array_filter($contact);
@@ -679,7 +720,7 @@ class PatternExtractor
                 'pattern' => 'BMW',
                 'brand' => 'BMW',
                 'model' => 'UNKNOWN',
-                'regex' => '/\bBMW\s+([A-Z0-9]+)/i'
+                'regex' => '/\bBMW\s+([\wÀ-ÿ]+(?:\s+[\wÀ-ÿ]*)?)\s*(?:\b(?:de|from|to|vers|for|in|on|at|with|and|et|&)\b|$)/i'
             ],
             [
                 'pattern' => 'AUDI',

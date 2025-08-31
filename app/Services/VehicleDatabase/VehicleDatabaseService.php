@@ -12,6 +12,37 @@ use Illuminate\Support\Facades\Log;
 class VehicleDatabaseService
 {
     /**
+     * Brand aliases for better matching
+     */
+    private array $brandAliases = [
+        'b m w' => 'bmw',
+        'bayerische motoren werke' => 'bmw',
+        'mercedes-benz' => 'mercedes',
+        'rolls royce' => 'rolls-royce',
+        'volkswagen' => 'vw',
+        'range rover' => 'land rover',
+    ];
+
+    /**
+     * Normalize string for database matching
+     */
+    private function norm(string $s): string
+    {
+        $s = mb_strtolower(trim($s));
+        $s = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $s) ?: $s; // Série -> Serie
+        return preg_replace('/\s+/', ' ', $s);
+    }
+
+    /**
+     * Apply brand aliases for better matching
+     */
+    private function aliasBrand(string $brand): string
+    {
+        $n = $this->norm($brand);
+        return $this->brandAliases[$n] ?? $n;
+    }
+
+    /**
      * Find vehicle in database using multiple matching strategies
      */
     public function findVehicle(array $vehicleData): ?VehicleSpec
@@ -87,10 +118,14 @@ class VehicleDatabaseService
         $brand = $data['brand'] ?? $data['make'];
         $model = $data['model'] ?? '';
         
-        $query = VehicleSpec::whereRaw('LOWER(make) LIKE ?', [strtolower($brand)]);
+        // Apply normalization and aliases
+        $normalizedBrand = $this->aliasBrand($brand);
+        $normalizedModel = $this->norm($model);
+        
+        $query = VehicleSpec::whereRaw('LOWER(REPLACE(make, " ", "")) LIKE ?', [str_replace(' ', '', $normalizedBrand)]);
         
         if (!empty($model)) {
-            $query->whereRaw('LOWER(model) LIKE ?', [strtolower($model)]);
+            $query->whereRaw('LOWER(REPLACE(model, " ", "")) LIKE ?', [str_replace(' ', '', $normalizedModel)]);
         }
         
         if (!empty($data['year'])) {

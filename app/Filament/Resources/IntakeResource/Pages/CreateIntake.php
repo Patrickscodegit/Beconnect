@@ -6,6 +6,7 @@ use App\Filament\Resources\IntakeResource;
 use App\Models\Intake;
 use App\Models\Document;
 use App\Services\DocumentService;
+use App\Services\EmailDocumentService;
 use Filament\Actions;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Notifications\Notification;
@@ -124,21 +125,88 @@ class CreateIntake extends CreateRecord
                         ]);
                     }
                     
-                    // Create document record
-                    $document = Document::create([
-                        'intake_id' => $intake->id,
-                        'filename' => $originalName,
-                        'file_path' => $storagePath,
-                        'mime_type' => $mimeType,
-                        'file_size' => $fileSize,
-                        'document_type' => 'freight_document',
-                        'has_text_layer' => false, // Will be determined during processing
-                    ]);
-                    
-                    \Log::info('ProcessUploadedFiles: Document created', [
-                        'document_id' => $document->id,
-                        'storage_disk' => $storageDisk
-                    ]);
+                    // Check if this is an email file and use EmailDocumentService for deduplication
+                    if (str_ends_with(strtolower($originalName), '.eml')) {
+                        try {
+                            $emailService = app(EmailDocumentService::class);
+                            $result = $emailService->ingestStoredEmail($storageDisk, $storagePath, $intake->id, $originalName);
+                            
+                            if ($result['skipped_as_duplicate']) {
+                                \Log::info('ProcessUploadedFiles: Email duplicate detected, cleaning up storage', [
+                                    'filename' => $originalName,
+                                    'existing_document_id' => $result['document_id'] ?? null,
+                                    'storage_path' => $storagePath,
+                                    'storage_disk' => $storageDisk
+                                ]);
+                                
+                                // Clean up the duplicate file from storage
+                                try {
+                                    Storage::disk($storageDisk)->delete($storagePath);
+                                    \Log::info('ProcessUploadedFiles: Duplicate file cleaned from storage', [
+                                        'path' => $storagePath,
+                                        'disk' => $storageDisk
+                                    ]);
+                                } catch (\Exception $cleanupError) {
+                                    \Log::error('ProcessUploadedFiles: Failed to cleanup duplicate file', [
+                                        'error' => $cleanupError->getMessage(),
+                                        'path' => $storagePath
+                                    ]);
+                                }
+                                
+                                unlink($tempPath);
+                                continue; // Skip processing this duplicate
+                            }
+                            
+                            \Log::info('ProcessUploadedFiles: Email document created with deduplication', [
+                                'document_id' => $result['document']->id,
+                                'storage_disk' => $storageDisk,
+                                'fingerprint_type' => isset($result['fingerprint']['message_id']) ? 'message-id' : 'content-hash',
+                                'extraction_completed' => !empty($result['extraction_data'])
+                            ]);
+                            
+                        } catch (\Exception $e) {
+                            \Log::error('ProcessUploadedFiles: Email ingestion failed, falling back to standard creation', [
+                                'error' => $e->getMessage(),
+                                'filename' => $originalName,
+                                'trace' => $e->getTraceAsString()
+                            ]);
+                            
+                            // Create standard document record as fallback
+                            $document = Document::create([
+                                'intake_id' => $intake->id,
+                                'filename' => $originalName,
+                                'file_path' => $storagePath,
+                                'mime_type' => $mimeType,
+                                'file_size' => $fileSize,
+                                'document_type' => 'freight_document',
+                                'has_text_layer' => false,
+                                'storage_disk' => $storageDisk,
+                                'processing_status' => 'failed',
+                            ]);
+                            
+                            \Log::info('ProcessUploadedFiles: Fallback document created', [
+                                'document_id' => $document->id,
+                                'storage_disk' => $storageDisk
+                            ]);
+                        }
+                    } else {
+                        // Create document record for non-email files
+                        $document = Document::create([
+                            'intake_id' => $intake->id,
+                            'filename' => $originalName,
+                            'file_path' => $storagePath,
+                            'mime_type' => $mimeType,
+                            'file_size' => $fileSize,
+                            'document_type' => 'freight_document',
+                            'has_text_layer' => false, // Will be determined during processing
+                            'storage_disk' => $storageDisk,
+                        ]);
+                        
+                        \Log::info('ProcessUploadedFiles: Standard document created', [
+                            'document_id' => $document->id,
+                            'storage_disk' => $storageDisk
+                        ]);
+                    }
                     
                     // Clean up temporary file
                     unlink($tempPath);
