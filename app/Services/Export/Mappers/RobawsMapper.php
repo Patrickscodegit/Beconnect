@@ -9,6 +9,12 @@ use Illuminate\Support\Facades\Log;
 
 class RobawsMapper
 {
+    private $apiClient;
+
+    public function __construct(\App\Services\Export\Clients\RobawsApiClient $apiClient = null)
+    {
+        $this->apiClient = $apiClient;
+    }
     /**
      * Schema defining the exact field codes and types expected by Robaws
      */
@@ -22,7 +28,7 @@ class RobawsMapper
         // Cargo
         'CARGO'                => 'TEXT',
         'CONTAINER_NR'         => 'TEXT',
-        'DIM_BEFORE_DELIVERY'  => 'TEXT',
+        'DIM_BEF_DELIVERY'     => 'TEXT',
 
         // Shipping
         'TRANSPORT_COMPANY' => 'TEXT',
@@ -131,8 +137,8 @@ class RobawsMapper
 
         // Map to Robaws structure
         return [
-            'quotation_info' => $this->mapQuotationInfo($intake, $contact, $vehicle, $shipping),
-            'routing' => $this->mapRouting($shipping, $shipment),
+            'quotation_info' => $this->mapQuotationInfo($intake, $contact, $vehicle, $shipping, $extractionData),
+            'routing' => $this->mapRouting($shipping, $shipment, $extractionData),
             'cargo_details' => $this->mapCargoDetails($vehicle, $extractionData),
             'internal_remarks' => $this->mapInternalRemarks($intake, $extractionData),
             'automation' => $this->mapAutomation($extractionData),
@@ -154,11 +160,21 @@ class RobawsMapper
         $p  = $mapped['payments'] ?? [];
         $au = $mapped['automation'] ?? [];
 
+        // Use passed customer ID or fallback to API resolution
+        $customerId = $mapped['customer_id'] ?? null;
+        if (!$customerId && $this->apiClient) {
+            $customerId = $this->apiClient->findCustomerId(
+                $q['contact_email'] ?? null,
+                $q['customer'] ?? null
+            );
+        }
+
         $payload = [
             'title'           => $q['concerning'] ?? ($q['project'] ?? null),
             'project'         => $q['project'] ?? null,
             'clientReference' => $q['customer_reference'] ?? null,
             'contactEmail'    => $q['contact_email'] ?? null,
+            'customerId'      => $customerId, // This makes the customer picker work!
         ];
 
         $xf = [];
@@ -172,7 +188,7 @@ class RobawsMapper
         // --- Cargo ---
         $xf['CARGO']               = $this->wrapExtra('CARGO', $c['cargo'] ?? null);
         $xf['CONTAINER_NR']        = $this->wrapExtra('CONTAINER_NR', $c['container_nr'] ?? null);
-        $xf['DIM_BEFORE_DELIVERY'] = $this->wrapExtra('DIM_BEFORE_DELIVERY', $c['dimensions_text'] ?? ($c['dim_bef_delive_ry'] ?? null));
+        $xf['DIM_BEF_DELIVERY']    = $this->wrapExtra('DIM_BEF_DELIVERY', $c['dimensions_text'] ?? null);
 
         // --- Shipping ---
         $xf['TRANSPORT_COMPANY'] = $this->wrapExtra('TRANSPORT_COMPANY', $s['transport_company'] ?? null);
@@ -329,7 +345,7 @@ class RobawsMapper
     /**
      * Map quotation info section
      */
-    private function mapQuotationInfo(Intake $intake, array $contact, array $vehicle, array $shipping): array
+    private function mapQuotationInfo(Intake $intake, array $contact, array $vehicle, array $shipping, array $extractionData = []): array
     {
         return [
             'date' => Carbon::now()->toDateString(), // ISO format internally
@@ -339,7 +355,7 @@ class RobawsMapper
             'endcustomer' => $contact['company'] ?? '',
             'contact_email' => $contact['email'] ?? $intake->customer_email ?? '',
             'customer_reference' => $intake->customer_reference ?? '',
-            'concerning' => $this->generateConcerning($vehicle, $shipping),
+            'concerning' => $this->generateConcerning($vehicle, $shipping, $extractionData),
             'status' => 'pending',
             'assignee' => $contact['email'] ?? 'sales@truck-time.com',
             'winst' => '',
@@ -349,18 +365,38 @@ class RobawsMapper
     /**
      * Map routing section
      */
-    private function mapRouting(array $shipping, array $shipment): array
+    private function mapRouting(array $shipping, array $shipment, array $extractionData = []): array
     {
         $route = $shipping['route'] ?? [];
         $origin = $route['origin'] ?? [];
         $destination = $route['destination'] ?? [];
 
+        // Top-level fields take precedence over nested data
+        $topLevelOrigin = $extractionData['origin'] ?? null;
+        $topLevelDestination = $extractionData['destination'] ?? null;
+
+        // For POL, default to Antwerp for Belgian origins, otherwise use origin
+        $polValue = $topLevelOrigin ?: ($this->formatLocation($origin) ?: ($shipment['origin'] ?? ''));
+        if ($polValue && (stripos($polValue, 'bruxelles') !== false || stripos($polValue, 'brussels') !== false || stripos($polValue, 'belgium') !== false)) {
+            $polValue = 'Antwerp, Belgium';
+        }
+
+        // Get POD value and normalize spellings
+        $podValue = $topLevelDestination ?: ($this->formatLocation($destination) ?: ($shipment['destination'] ?? ''));
+        $podValue = $this->normalizePortNames($podValue);
+
+        // FDEST should be empty for port destinations (no oncarriage specified)
+        $fDestValue = '';
+        if ($podValue && !$this->isPortDestination($podValue)) {
+            $fDestValue = $podValue;
+        }
+
         return [
-            'por' => $this->formatLocation($origin) ?: ($shipment['origin'] ?? ''),
-            'pol' => $this->formatLocation($origin) ?: ($shipment['origin'] ?? ''),
+            'por' => $topLevelOrigin ?: ($this->formatLocation($origin) ?: ($shipment['origin'] ?? '')),
+            'pol' => $polValue,
             'pot' => '', // Transit port if available
-            'pod' => $this->formatLocation($destination) ?: ($shipment['destination'] ?? ''),
-            'fdest' => $this->formatLocation($destination) ?: ($shipment['destination'] ?? ''),
+            'pod' => $podValue,
+            'fdest' => $fDestValue,
             'in_transit_to' => '',
         ];
     }
@@ -374,8 +410,13 @@ class RobawsMapper
         [$L, $W, $H] = $this->normalizeDimensions($dimensions);
         $dimString = ($L && $W && $H) ? sprintf("L: %.2fm x W: %.2fm x H: %.2fm", $L, $W, $H) : '';
 
+        // Check for cargo description in nested data first, then generate from vehicle
+        $cargoDescription = $extractionData['document_data']['cargo']['description'] ?? 
+                            $extractionData['cargo']['description'] ?? 
+                            $this->generateCargoDescription($vehicle);
+
         return [
-            'cargo' => $this->generateCargoDescription($vehicle),
+            'cargo' => $cargoDescription,
             'dimensions_text' => $dimString, // Fixed field name
             'container_nr' => $extractionData['container_number'] ?? '',
         ];
@@ -491,30 +532,105 @@ class RobawsMapper
 
     /**
      * Generate stable concerning field with route summary
+     * Format: EXP RORO - BRUSSEL - ANR - JEDDAH - 1 x BMW Série 7
      */
-    private function generateConcerning(array $vehicle, array $shipping): string
+    private function generateConcerning(array $vehicle, array $shipping, array $extractionData = []): string
     {
         $parts = [];
         
-        // Vehicle info
-        if (!empty($vehicle['brand']) || !empty($vehicle['model'])) {
-            $parts[] = trim(($vehicle['brand'] ?? '') . ' ' . ($vehicle['model'] ?? ''));
+        // Start with "EXP"
+        $parts[] = 'EXP';
+        
+        // Add shipping method (e.g., RORO)
+        $method = $shipping['method'] ?? '';
+        if ($method) {
+            $parts[] = strtoupper($method);
         }
         
-        // Shipping method
-        if (!empty($shipping['method'])) {
-            $parts[] = strtoupper($shipping['method']);
-        }
-        
-        // Route
+        // Get origin and destination from multiple sources
+        $documentData = $extractionData['document_data'] ?? [];
+        $shipment = $documentData['shipment'] ?? $extractionData['shipment'] ?? [];
         $route = $shipping['route'] ?? [];
-        $origin = $this->formatLocation($route['origin'] ?? []);
-        $destination = $this->formatLocation($route['destination'] ?? []);
-        if ($origin || $destination) {
-            $parts[] = "$origin → $destination";
+        
+        // Priority: top-level extraction -> document_data.shipment -> shipping.route
+        $originStr = $extractionData['origin'] ?? 
+                     $shipment['origin'] ?? 
+                     $this->formatLocation($route['origin'] ?? []);
+        
+        $destinationStr = $extractionData['destination'] ?? 
+                          $shipment['destination'] ?? 
+                          $this->formatLocation($route['destination'] ?? []);
+        
+        // Normalize origin (Brussels -> BRUSSEL, Antwerp -> ANR for ports)
+        if ($originStr) {
+            if (stripos($originStr, 'bruxelles') !== false || stripos($originStr, 'brussels') !== false) {
+                $parts[] = 'BRUSSEL';
+                $parts[] = 'ANR'; // Port of Loading (Antwerp)
+            } else {
+                $parts[] = strtoupper($this->shortenLocation($originStr));
+            }
         }
         
-        return implode(' • ', array_filter($parts));
+        // Add destination
+        if ($destinationStr) {
+            $parts[] = strtoupper($this->shortenLocation($this->normalizePortNames($destinationStr)));
+        }
+        
+        // Add vehicle description (e.g., "1 x BMW Série 7")
+        $vehicleDesc = $this->generateVehicleDescription($vehicle);
+        if ($vehicleDesc) {
+            $parts[] = $vehicleDesc;
+        }
+        
+        return implode(' - ', array_filter($parts));
+    }
+
+    /**
+     * Shorten location names for concerning field
+     */
+    private function shortenLocation(string $location): string
+    {
+        $shortenings = [
+            'jeddah' => 'JEDDAH',
+            'riyadh' => 'RIYADH',
+            'dubai' => 'DUBAI',
+            'antwerp' => 'ANR',
+            'hamburg' => 'HAM',
+            'rotterdam' => 'RTM',
+            'le havre' => 'HAV',
+        ];
+        
+        $lower = strtolower(trim($location));
+        
+        foreach ($shortenings as $full => $short) {
+            if (stripos($lower, $full) !== false) {
+                return $short;
+            }
+        }
+        
+        // Default: take first word and uppercase
+        $words = explode(' ', $location);
+        return strtoupper($words[0] ?? '');
+    }
+
+    /**
+     * Generate vehicle description for concerning field
+     */
+    private function generateVehicleDescription(array $vehicle): string
+    {
+        if (empty($vehicle['brand']) && empty($vehicle['model'])) {
+            return '1 x Vehicle';
+        }
+        
+        $desc = '1 x';
+        if (!empty($vehicle['brand'])) {
+            $desc .= ' ' . $vehicle['brand'];
+        }
+        if (!empty($vehicle['model'])) {
+            $desc .= ' ' . $vehicle['model'];
+        }
+        
+        return $desc;
     }
 
     private function formatLocation(array $location): string
@@ -664,5 +780,62 @@ class RobawsMapper
         }
         
         return implode("\n", $info);
+    }
+
+    /**
+     * Normalize port names (e.g., Djeddah -> Jeddah)
+     */
+    private function normalizePortNames(string $portName): string
+    {
+        $normalizations = [
+            'djeddah' => 'Jeddah',
+            'djidda' => 'Jeddah',
+            'jiddah' => 'Jeddah',
+        ];
+
+        $lowerPort = strtolower(trim($portName));
+        
+        foreach ($normalizations as $variant => $normalized) {
+            if (stripos($lowerPort, $variant) !== false) {
+                return str_ireplace($variant, $normalized, $portName);
+            }
+        }
+
+        return $portName;
+    }
+
+    /**
+     * Check if a destination is a port (no oncarriage needed)
+     */
+    private function isPortDestination(string $destination): bool
+    {
+        $ports = [
+            'jeddah',
+            'antwerp',
+            'hamburg',
+            'rotterdam',
+            'le havre',
+            'felixstowe',
+            'genoa',
+            'valencia',
+            'algeciras',
+            'barcelona',
+            'dubai',
+            'abu dhabi',
+            'doha',
+            'kuwait',
+            'dammam',
+            'riyadh port', // Special case if mentioned as port
+        ];
+
+        $lowerDest = strtolower(trim($destination));
+        
+        foreach ($ports as $port) {
+            if (stripos($lowerDest, $port) !== false) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
