@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Document extends Model
 {
@@ -114,5 +115,11 @@ class Document extends Model
     public function extractions(): HasMany
     {
         return $this->hasMany(Extraction::class);
+    }
+
+    /** The latest/primary extraction for this document. */
+    public function extraction(): HasOne
+    {
+        return $this->hasOne(Extraction::class)->latestOfMany();
     }
 }

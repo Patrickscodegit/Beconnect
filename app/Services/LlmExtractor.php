@@ -32,7 +32,7 @@ class LlmExtractor
         $prompt = file_get_contents($promptPath) ?: '';
 
         // Build user content (JSON string of payload)
-        $userContent = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $userContent = json_encode($payload, \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES);
         if ($userContent === false) {
             throw new RuntimeException('Failed to JSON-encode extractor payload.');
         }
@@ -41,7 +41,7 @@ class LlmExtractor
         if (mb_strlen($userContent, '8bit') > self::MAX_PAYLOAD_CHARS) {
             // Truncate the longest document texts to fit
             $payload = $this->truncatePayload($payload, self::MAX_PAYLOAD_CHARS);
-            $userContent = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $userContent = json_encode($payload, \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES);
         }
 
         // Simple per-app rate limit: 30 extractions per minute

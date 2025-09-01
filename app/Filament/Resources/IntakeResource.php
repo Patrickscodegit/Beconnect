@@ -331,9 +331,18 @@ class IntakeResource extends Resource
                                     ->success()
                                     ->persistent()
                                     ->actions([
-                                        \Filament\Notifications\Actions\Action::make('view_audit')
-                                            ->label('View Audit')
-                                            ->url(route('filament.admin.resources.intakes.audit', $record)),
+                                        \Filament\Notifications\Actions\Action::make('view_details')
+                                            ->label('View Export Details')
+                                            ->action(function () use ($record, $result) {
+                                                Notification::make()
+                                                    ->title('Export Success Details')
+                                                    ->body('Quotation ID: ' . ($result['quotation_id'] ?? 'N/A') . 
+                                                          ', Duration: ' . ($result['duration_ms'] ?? 'N/A') . 'ms' .
+                                                          ', Idempotency Key: ' . ($result['idempotency_key'] ?? 'N/A'))
+                                                    ->success()
+                                                    ->persistent()
+                                                    ->send();
+                                            }),
                                     ])
                                     ->send();
                             } else {
@@ -343,9 +352,18 @@ class IntakeResource extends Resource
                                     ->danger()
                                     ->persistent()
                                     ->actions([
-                                        \Filament\Notifications\Actions\Action::make('view_audit')
-                                            ->label('View Audit')
-                                            ->url(route('filament.admin.resources.intakes.audit', $record)),
+                                        \Filament\Notifications\Actions\Action::make('view_details')
+                                            ->label('View Details')
+                                            ->action(function () use ($record, $result) {
+                                                Notification::make()
+                                                    ->title('Export Details')
+                                                    ->body('Status: ' . ($result['status'] ?? 'N/A') . 
+                                                          ', Error: ' . $result['error'] . 
+                                                          (isset($result['data']) ? ', Response: ' . json_encode($result['data']) : ''))
+                                                    ->info()
+                                                    ->persistent()
+                                                    ->send();
+                                            }),
                                     ])
                                     ->send();
                             }

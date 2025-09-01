@@ -24,10 +24,20 @@ class Extraction extends Model
     ];
 
     protected $casts = [
-        'extracted_data' => 'array',
+        'data' => 'array',            // if the column is named `data`
+        'extracted_data' => 'array',  // if the column is named `extracted_data`
         'confidence' => 'float',
         'verified_at' => 'datetime',
     ];
+
+    /**
+     * Accessor so $extraction->data works even if DB column is `extracted_data`
+     */
+    public function getDataAttribute($value)
+    {
+        if (!is_null($value)) return $value;
+        return $this->attributes['extracted_data'] ?? null;
+    }
 
     /**
      * Get the document that owns the extraction.

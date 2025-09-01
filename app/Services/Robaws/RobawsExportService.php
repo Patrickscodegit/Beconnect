@@ -36,6 +36,9 @@ class RobawsExportService
                 'options' => $options,
             ]);
 
+            // Ensure relations are loaded
+            $intake->loadMissing(['extraction', 'documents.extraction', 'documents.extractions']);
+
             // Check if already exported recently (unless forced)
             if (!($options['force'] ?? false) && $this->wasRecentlyExported($intake)) {
                 return [
@@ -58,18 +61,32 @@ class RobawsExportService
             ]);
 
             // Map to Robaws format
-            $payload = $this->mapper->mapIntakeToRobaws($intake, $extractionData);
+            $mapped = $this->mapper->mapIntakeToRobaws($intake, $extractionData);
+            $payload = $this->mapper->toRobawsApiPayload($mapped);   // <-- NEW API FORMAT
             
-            Log::info('Mapped payload structure', [
+            // Block export if payload is empty
+            if (empty($payload)) {
+                return [
+                    'success' => false,
+                    'status' => 422,
+                    'error' => 'Mapped payload is empty - no data to export',
+                ];
+            }
+            
+            // Generate payload hash for idempotency
+            $payloadHash = hash('sha256', json_encode($payload, \JSON_PARTIAL_OUTPUT_ON_ERROR|\JSON_UNESCAPED_UNICODE));
+            
+            Log::info('Robaws payload (api shape)', [
                 'export_id' => $exportId,
                 'intake_id' => $intake->id,
-                'sections' => array_keys($payload),
+                'top' => array_keys($payload),
+                'xf_keys' => isset($payload['extraFields']) ? array_keys($payload['extraFields']) : [],
                 'payload_size' => strlen(json_encode($payload)),
-                'has_json_field' => !empty($payload['automation']['json']),
+                'payload_hash' => substr($payloadHash, 0, 16),
             ]);
 
             // Generate idempotency key
-            $idempotencyKey = $options['idempotency_key'] ?? $this->generateIdempotencyKey($intake, $extractionData);
+            $idempotencyKey = $options['idempotency_key'] ?? $this->generateIdempotencyKey($intake, $payloadHash);
 
             // Export to Robaws
             if ($intake->robaws_quotation_id && !($options['create_new'] ?? false)) {
@@ -89,6 +106,31 @@ class RobawsExportService
             $duration = round((microtime(true) - $startTime) * 1000, 2);
 
             if ($result['success']) {
+                // Verify the offer was stored correctly
+                if ($id = $result['quotation_id'] ?? null) {
+                    $verify = $this->apiClient->getOffer($id);
+                    
+                    $stored = [];
+                    if (!empty($verify['data']['extraFields'])) {
+                        // Pull key fields from extraFields
+                        foreach (['POR','POL','POD','FDEST','CARGO','DIM_BEFORE_DELIVERY','METHOD','VESSEL','ETA','JSON'] as $code) {
+                            if (isset($verify['data']['extraFields'][$code])) {
+                                $node = $verify['data']['extraFields'][$code];
+                                $stored[$code] = $node['stringValue'] ?? ($node['booleanValue'] ?? null);
+                            }
+                        }
+                    }
+                    
+                    Log::info('Robaws offer verification', [
+                        'export_id' => $exportId,
+                        'intake_id' => $intake->id,
+                        'offer_id' => $id,
+                        'verification_success' => $verify['success'] ?? false,
+                        'top' => array_intersect_key($verify['data'] ?? [], array_flip(['title','project','clientReference','contactEmail'])),
+                        'xf' => $stored,
+                    ]);
+                }
+
                 // Update intake with export info
                 $updateData = [
                     'robaws_quotation_id' => $result['quotation_id'],
@@ -121,6 +163,14 @@ class RobawsExportService
             // Handle API failure
             $intake->increment('export_attempt_count');
             $intake->update(['last_export_error' => $result['error']]);
+
+            Log::error('Robaws API failure', [
+                'intake_id' => $intake->id,
+                'status' => $result['status'] ?? null,
+                'error' => $result['error'] ?? 'unknown',
+                'request_id' => $result['request_id'] ?? null,
+                'headers' => array_intersect_key(($result['headers'] ?? []), ['x-ratelimit-remaining'=>1,'retry-after'=>1]),
+            ]);
 
             Log::error('Robaws export failed', [
                 'export_id' => $exportId,
@@ -288,11 +338,22 @@ class RobawsExportService
 
     private function getExtractionData(Intake $intake): array
     {
-        $base = $intake->extraction?->data ?? [];
+        // Normalize to array even if DB stores a JSON string
+        $normalize = function ($raw) {
+            if (is_string($raw)) {
+                $decoded = json_decode($raw, true);
+                return is_array($decoded) ? $decoded : [];
+            }
+            return is_array($raw) ? $raw : [];
+        };
+
+        $base = $normalize($intake->extraction?->data ?? []);
 
         foreach ($intake->documents as $doc) {
-            $docData = $doc->extraction?->data ?? [];
-            $base = array_replace_recursive($base, $docData);
+            // Prefer singular extraction (latest) but fall back to last of extractions
+            $docExtraction = $doc->extraction ?? $doc->extractions->last();
+            $raw = $docExtraction?->data ?? $docExtraction?->extracted_data ?? null;
+            $base = array_replace_recursive($base, $normalize($raw));
         }
 
         return $base;
@@ -308,17 +369,9 @@ class RobawsExportService
         return now()->lt($threshold);
     }
 
-    private function generateIdempotencyKey(Intake $intake, array $extractionData): string
+    private function generateIdempotencyKey(Intake $intake, string $payloadHash): string
     {
-        $data = [
-            'intake_id' => $intake->id,
-            'customer' => $intake->customer_name,
-            'vehicle' => $extractionData['vehicle']['vin'] ?? $extractionData['vehicle']['brand'] ?? '',
-            'timestamp' => $intake->updated_at->timestamp,
-        ];
-        
-        $hash = hash('sha256', json_encode($data, JSON_SORT_KEYS));
-        return 'bconnect_' . $intake->id . '_' . substr($hash, 0, 16);
+        return sprintf('bconnect_%d_%s', $intake->id, substr($payloadHash, 0, 16));
     }
 
     private function analyzeMapping(array $payload): array

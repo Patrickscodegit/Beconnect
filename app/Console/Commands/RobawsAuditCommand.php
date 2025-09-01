@@ -17,7 +17,7 @@ class RobawsAuditCommand extends Command
                             {--recent=24 : Audit intakes from last X hours}
                             {--dump : Show detailed payload dumps}
                             {--missing : Only show intakes with missing mappings}
-                            {--verbose : Show detailed analysis}';
+                            {--detailed : Show detailed analysis}';
 
     /**
      * The console command description.
@@ -137,7 +137,7 @@ class RobawsAuditCommand extends Command
         $this->line("   <fg=blue>Extraction:</> {$extractionSize} across " . 
                    count($audit['extraction_summary']['sections']) . " sections");
 
-        if ($this->option('verbose')) {
+        if ($this->option('detailed')) {
             $this->displayExtractionDetails($audit['extraction_summary']);
         }
 

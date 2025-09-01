@@ -10,6 +10,107 @@ use Illuminate\Support\Facades\Log;
 class RobawsMapper
 {
     /**
+     * Schema defining the exact field codes and types expected by Robaws
+     */
+    private const EXTRA_SCHEMA = [
+        // Routing
+        'POR'   => 'TEXT',
+        'POL'   => 'TEXT',
+        'POD'   => 'TEXT',
+        'FDEST' => 'TEXT',
+
+        // Cargo
+        'CARGO'                => 'TEXT',
+        'CONTAINER_NR'         => 'TEXT',
+        'DIM_BEFORE_DELIVERY'  => 'TEXT',
+
+        // Shipping
+        'TRANSPORT_COMPANY' => 'TEXT',
+        'SHIPPING_LINE'     => 'TEXT',
+        'METHOD'            => 'SELECT',
+        'TRANSIT_TIME'      => 'TEXT',
+        'VESSEL'            => 'TEXT',
+        'VOYAGE'            => 'TEXT',
+        'ETC'               => 'DATE',
+        'ETS'               => 'DATE',
+        'ETA'               => 'DATE',
+
+        // Prices
+        'SEAFREIGHT'        => 'NUMBER',
+        'PRE_CARRIAGE'      => 'NUMBER',
+        'CUSTOMS_ORIGIN'    => 'NUMBER',
+        'DESTINATION'       => 'NUMBER',
+        'CUSTOMS_DEST'      => 'NUMBER',
+        'ONCARRIAGE'        => 'NUMBER',
+        'INSURANCE'         => 'NUMBER',
+
+        // Automation / notes
+        'JSON'                   => 'TEXT',      // Important: JSON should be TEXT not TEXTAREA
+        'EXTRACTED_INFORMATION'  => 'TEXTAREA',
+
+        // Flags
+        'URGENT'  => 'CHECKBOX',
+        'FOLLOW'  => 'CHECKBOX',
+
+        // Optional mirrors for convenience
+        'CUSTOMER'       => 'TEXT',
+        'CONTACT'        => 'TEXT',
+        'CONTACT_EMAIL'  => 'TEXT',
+        'CONCERNING'     => 'TEXT',
+    ];
+
+    /**
+     * Wraps a scalar into the typed Robaws extraFields entry.
+     * Returns null when value is empty/invalid for the type.
+     */
+    private function wrapExtra(string $code, $value): ?array
+    {
+        $type = self::EXTRA_SCHEMA[$code] ?? 'TEXT';
+        if ($value === null) return null;
+
+        // Normalize scalars
+        if (is_array($value) || is_object($value)) {
+            // Only JSON field may receive arrays/objects — encode to string
+            if ($code !== 'JSON') return null;
+            $value = json_encode($value, \JSON_UNESCAPED_UNICODE|\JSON_PARTIAL_OUTPUT_ON_ERROR);
+        }
+
+        // Trim strings
+        if (is_string($value)) {
+            $value = trim($value);
+            if ($value === '') return null;
+        }
+
+        switch ($type) {
+            case 'TEXT':
+            case 'TEXTAREA':
+            case 'SELECT':   // still sent as stringValue
+                return ['type' => $type, 'stringValue' => (string) $value];
+
+            case 'DATE':     // Convert to dd/MM/YYYY format
+                try {
+                    $date = \Carbon\Carbon::parse($value)->format('d/m/Y');
+                    return ['type' => $type, 'stringValue' => $date];
+                } catch (\Exception $e) {
+                    // If parsing fails, pass through as-is
+                    return ['type' => $type, 'stringValue' => (string) $value];
+                }
+
+            case 'NUMBER':
+                if (!is_numeric($value)) return null;
+                return ['type' => $type, 'stringValue' => (string) $value];
+
+            case 'CHECKBOX':
+                // Accept truthy/falsy; cast to bool, use booleanValue
+                return ['type' => $type, 'booleanValue' => (bool) $value];
+
+            default:
+                // Fallback to TEXT
+                return ['type' => 'TEXT', 'stringValue' => (string) $value];
+        }
+    }
+
+    /**
      * Map intake data to Robaws format
      */
     public function mapIntakeToRobaws(Intake $intake, array $extractionData = []): array
@@ -19,11 +120,12 @@ class RobawsMapper
             $extractionData = $this->getExtractionData($intake);
         }
 
-        // Extract nested data structures
-        $vehicle = $extractionData['vehicle'] ?? [];
-        $shipping = $extractionData['shipping'] ?? [];
-        $contact = $extractionData['contact'] ?? [];
-        $shipment = $extractionData['shipment'] ?? [];
+        // Extract nested data structures from actual extraction format
+        $documentData = $extractionData['document_data'] ?? [];
+        $vehicle = $documentData['vehicle'] ?? $extractionData['vehicle'] ?? [];
+        $shipping = $documentData['shipping'] ?? $extractionData['shipping'] ?? [];
+        $contact = $documentData['contact'] ?? $extractionData['contact'] ?? [];
+        $shipment = $documentData['shipment'] ?? $extractionData['shipment'] ?? [];
         $dates = $extractionData['dates'] ?? [];
         $pricing = $extractionData['pricing'] ?? [];
 
@@ -41,14 +143,183 @@ class RobawsMapper
     }
 
     /**
+     * Convert sectioned payload to Robaws API format with extraFields structure
+     */
+    public function toRobawsApiPayload(array $mapped): array
+    {
+        $q  = $mapped['quotation_info'] ?? [];
+        $r  = $mapped['routing'] ?? [];
+        $c  = $mapped['cargo_details'] ?? [];
+        $s  = $mapped['shipping'] ?? [];
+        $p  = $mapped['payments'] ?? [];
+        $au = $mapped['automation'] ?? [];
+
+        $payload = [
+            'title'           => $q['concerning'] ?? ($q['project'] ?? null),
+            'project'         => $q['project'] ?? null,
+            'clientReference' => $q['customer_reference'] ?? null,
+            'contactEmail'    => $q['contact_email'] ?? null,
+        ];
+
+        $xf = [];
+
+        // --- Routing ---
+        $xf['POR']   = $this->wrapExtra('POR',   $r['por']   ?? null);
+        $xf['POL']   = $this->wrapExtra('POL',   $r['pol']   ?? null);
+        $xf['POD']   = $this->wrapExtra('POD',   $r['pod']   ?? null);
+        $xf['FDEST'] = $this->wrapExtra('FDEST', $r['fdest'] ?? null);
+
+        // --- Cargo ---
+        $xf['CARGO']               = $this->wrapExtra('CARGO', $c['cargo'] ?? null);
+        $xf['CONTAINER_NR']        = $this->wrapExtra('CONTAINER_NR', $c['container_nr'] ?? null);
+        $xf['DIM_BEFORE_DELIVERY'] = $this->wrapExtra('DIM_BEFORE_DELIVERY', $c['dimensions_text'] ?? ($c['dim_bef_delive_ry'] ?? null));
+
+        // --- Shipping ---
+        $xf['TRANSPORT_COMPANY'] = $this->wrapExtra('TRANSPORT_COMPANY', $s['transport_company'] ?? null);
+        $xf['SHIPPING_LINE']     = $this->wrapExtra('SHIPPING_LINE',     $s['shipping_line'] ?? null);
+        $xf['METHOD']            = $this->wrapExtra('METHOD',            $s['method'] ?? null);
+        $xf['TRANSIT_TIME']      = $this->wrapExtra('TRANSIT_TIME',      $s['transit_time'] ?? null);
+        $xf['VESSEL']            = $this->wrapExtra('VESSEL',            $s['vessel'] ?? null);
+        $xf['VOYAGE']            = $this->wrapExtra('VOYAGE',            $s['voyage'] ?? null);
+        $xf['ETC']               = $this->wrapExtra('ETC',               $s['etc'] ?? null);
+        $xf['ETS']               = $this->wrapExtra('ETS',               $s['ets'] ?? null);
+        $xf['ETA']               = $this->wrapExtra('ETA',               $s['eta'] ?? null);
+
+        // --- Payments ---
+        $amt = fn($v) => is_array($v) ? ($v['amount'] ?? null) : $v;
+        $xf['SEAFREIGHT']      = $this->wrapExtra('SEAFREIGHT',      $amt($p['seafreight'] ?? null));
+        $xf['PRE_CARRIAGE']    = $this->wrapExtra('PRE_CARRIAGE',    $amt($p['pre_carriage'] ?? null));
+        $xf['CUSTOMS_ORIGIN']  = $this->wrapExtra('CUSTOMS_ORIGIN',  $amt($p['customs_origin'] ?? null));
+        $xf['DESTINATION']     = $this->wrapExtra('DESTINATION',     $amt($p['destination_charges'] ?? null));
+        $xf['CUSTOMS_DEST']    = $this->wrapExtra('CUSTOMS_DEST',    $amt($p['customs_destination'] ?? null));
+        $xf['ONCARRIAGE']      = $this->wrapExtra('ONCARRIAGE',      $amt($p['oncarriage'] ?? null));
+        $xf['INSURANCE']       = $this->wrapExtra('INSURANCE',       $amt($p['insurance'] ?? null));
+
+        // --- Automation / notes ---
+        // Truncate JSON if too large to avoid API limits
+        $jsonData = $au['json'] ?? null;
+        if ($jsonData && strlen($jsonData) > 60000) {
+            $jsonData = substr($jsonData, 0, 60000) . '… [truncated]';
+        }
+        $xf['JSON']                  = $this->wrapExtra('JSON',                  $jsonData);
+        $xf['EXTRACTED_INFORMATION'] = $this->wrapExtra('EXTRACTED_INFORMATION', $au['extracted_information'] ?? null);
+
+        // --- Flags ---
+        $xf['URGENT'] = $this->wrapExtra('URGENT', false);
+        $xf['FOLLOW'] = $this->wrapExtra('FOLLOW', false);
+
+        // Optional mirrors
+        $xf['CUSTOMER']      = $this->wrapExtra('CUSTOMER',      $q['customer'] ?? null);
+        $xf['CONTACT']       = $this->wrapExtra('CONTACT',       $q['contact'] ?? null);
+        $xf['CONTACT_EMAIL'] = $this->wrapExtra('CONTACT_EMAIL', $q['contact_email'] ?? null);
+        $xf['CONCERNING']    = $this->wrapExtra('CONCERNING',    $q['concerning'] ?? null);
+
+        // Strip nulls (unknown/missing)
+        $xf = array_filter($xf);
+
+        if (!empty($xf)) {
+            $payload['extraFields'] = $xf;
+        }
+
+        // Remove null top-levels
+        return array_filter($payload, fn($v) => !is_null($v) && $v !== '');
+    }
+
+    /**
+     * Convert nested/sectioned payload to flat Robaws field names (LEGACY)
+     */
+    public function toRobawsPayloadFlat(array $mapped): array
+    {
+        $q  = $mapped['quotation_info'] ?? [];
+        $r  = $mapped['routing'] ?? [];
+        $c  = $mapped['cargo_details'] ?? [];
+        $s  = $mapped['shipping'] ?? [];
+        $p  = $mapped['payments'] ?? [];
+        $au = $mapped['automation'] ?? [];
+        $ir = $mapped['internal_remarks'] ?? [];
+        $oe = $mapped['offer_extra_info'] ?? [];
+
+        return array_filter([
+            // Quotation / customer fields
+            'date'            => $q['date'] ?? null,
+            'project'         => $q['project'] ?? null,
+            'customer'        => $q['customer'] ?? null,
+            'contact'         => $q['contact'] ?? null,
+            'contact_email'   => $q['contact_email'] ?? null,
+            'customer_reference' => $q['customer_reference'] ?? null,
+            'concerning'      => $q['concerning'] ?? null,
+            'status'          => $q['status'] ?? null,
+            'assignee'        => $q['assignee'] ?? null,
+            'endcustomer'     => $q['endcustomer'] ?? null,
+
+            // Routing fields
+            'por'             => $r['por'] ?? null,
+            'pol'             => $r['pol'] ?? null,
+            'pot'             => $r['pot'] ?? null,
+            'pod'             => $r['pod'] ?? null,
+            'fdest'           => $r['fdest'] ?? null,
+            'in_transit_to'   => $r['in_transit_to'] ?? null,
+
+            // Cargo fields
+            'cargo'           => $c['cargo'] ?? null,
+            'dimensions_text' => $c['dimensions_text'] ?? $c['dim_bef_delivery'] ?? null,
+            'container_nr'    => $c['container_nr'] ?? null,
+
+            // Shipping fields
+            'shipping_line'   => $s['shipping_line'] ?? null,
+            'transport_company' => $s['transport_company'] ?? null,
+            'warehouse'       => $s['warehouse'] ?? null,
+            'vessel'          => $s['vessel'] ?? null,
+            'voyage'          => $s['voyage'] ?? null,
+            'ets'             => $s['ets'] ?? null,
+            'etc'             => $s['etc'] ?? null,
+            'eta'             => $s['eta'] ?? null,
+            'transit_time'    => $s['transit_time'] ?? null,
+            'next_sailings'   => $s['next_sailings'] ?? null,
+            'pol_forwarder'   => $s['pol_forwarder'] ?? null,
+            'pod_forwarder_dropdown' => $s['pod_forwarder_dropdown'] ?? null,
+            'booking_pol_and_ref' => $s['booking_pol_and_ref'] ?? null,
+
+            // Payment fields (extract amount if array)
+            'seafreight'      => is_array($p['seafreight'] ?? null) ? ($p['seafreight']['amount'] ?? null) : ($p['seafreight'] ?? null),
+            'pre_carriage'    => is_array($p['pre_carriage'] ?? null) ? ($p['pre_carriage']['amount'] ?? null) : ($p['pre_carriage'] ?? null),
+            'customs_origin'  => is_array($p['customs_origin'] ?? null) ? ($p['customs_origin']['amount'] ?? null) : ($p['customs_origin'] ?? null),
+            'customs_destination' => is_array($p['customs_destination'] ?? null) ? ($p['customs_destination']['amount'] ?? null) : ($p['customs_destination'] ?? null),
+            'destination_charges' => is_array($p['destination_charges'] ?? null) ? ($p['destination_charges']['amount'] ?? null) : ($p['destination_charges'] ?? null),
+            'fob_charges'     => is_array($p['fob_charges'] ?? null) ? ($p['fob_charges']['amount'] ?? null) : ($p['fob_charges'] ?? null),
+            'insurance'       => is_array($p['insurance'] ?? null) ? ($p['insurance']['amount'] ?? null) : ($p['insurance'] ?? null),
+            'oncarriage'      => is_array($p['oncarriage'] ?? null) ? ($p['oncarriage']['amount'] ?? null) : ($p['oncarriage'] ?? null),
+
+            // Internal remarks
+            'urgent'          => $ir['urgent'] ?? null,
+            'follow'          => $ir['follow'] ?? null,
+            'followed_by'     => $ir['followed_by'] ?? null,
+            'follow_up'       => $ir['follow_up'] ?? null,
+            'calculation'     => $ir['calculation'] ?? null,
+            'inspection_call' => $ir['inspection_call'] ?? null,
+            'weblink'         => $ir['weblink'] ?? null,
+            'external_sales_person' => $ir['external_sales_person'] ?? null,
+
+            // Offer extra info
+            'payment_conditions' => $oe['payment_conditions'] ?? null,
+            'remarks'         => $oe['remarks'] ?? null,
+            'remarks_drop_down' => $oe['remarks_drop_down'] ?? null,
+
+            // Automation fields (JSON data)
+            'extracted_information' => $au['extracted_information'] ?? null,
+            'json'            => $au['json'] ?? null,
+        ], fn($v) => !is_null($v) && $v !== '');
+    }
+
+    /**
      * Get extraction data from intake or its documents - using recursive merge
      */
     private function getExtractionData(Intake $intake): array
     {
-        $base = $intake->extraction?->data ?? [];
+        $base = $intake->extraction?->extracted_data ?? [];
 
         foreach ($intake->documents as $doc) {
-            $docData = $doc->extraction?->data ?? [];
+            $docData = $doc->extraction?->extracted_data ?? [];
             $base = array_replace_recursive($base, $docData);
         }
 
@@ -134,7 +405,7 @@ class RobawsMapper
     {
         return [
             'extracted_information' => $this->generateExtractedInfo($extractionData),
-            'json' => json_encode($extractionData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
+            'json' => json_encode($extractionData, \JSON_PRETTY_PRINT | \JSON_UNESCAPED_UNICODE),
         ];
     }
 

@@ -16,9 +16,18 @@ class RobawsApiClient
 
     public function __construct()
     {
-        $this->baseUrl = rtrim(config('services.robaws.url'), '/');
+        $this->baseUrl = rtrim(config('services.robaws.base_url'), '/');
         $this->apiKey = config('services.robaws.api_key');
         $this->config = config('services.robaws', []);
+        
+        // Validate required configuration
+        if (empty($this->apiKey)) {
+            throw new \InvalidArgumentException('Robaws API key is not configured. Set ROBAWS_API_KEY in your .env file.');
+        }
+        
+        if (empty($this->baseUrl)) {
+            throw new \InvalidArgumentException('Robaws base URL is not configured. Set ROBAWS_BASE_URL in your .env file.');
+        }
     }
 
     /**
@@ -28,36 +37,61 @@ class RobawsApiClient
     {
         $idempotencyKey = $idempotencyKey ?? $this->generateIdempotencyKey($payload);
         
-        $response = $this->makeRequest('POST', '/quotations', $payload, [
+        $response = $this->makeRequest('POST', '/api/v2/offers', $payload, [
             'Idempotency-Key' => $idempotencyKey,
         ]);
 
-        if ($response->successful()) {
+        // Success path
+        if ($response->successful() || in_array($response->status(), [200, 201, 202])) {
+            $data = $response->json();
             return [
                 'success' => true,
-                'data' => $response->json(),
-                'quotation_id' => $response->json()['id'] ?? null,
+                'status' => $response->status(),
+                'quotation_id' => $data['id'] ?? $data['offer_id'] ?? null,
                 'idempotency_key' => $idempotencyKey,
+                'data' => $data,
             ];
         }
 
         // Handle specific error codes
         if ($response->status() === 409) {
             // Conflict - resource already exists with this idempotency key
+            $data = $response->json();
             return [
                 'success' => true,
-                'data' => $response->json(),
-                'quotation_id' => $response->json()['id'] ?? null,
+                'status' => $response->status(),
+                'quotation_id' => $data['id'] ?? $data['offer_id'] ?? null,
                 'idempotency_key' => $idempotencyKey,
                 'note' => 'Resource already exists (idempotent)',
+                'data' => $data,
             ];
         }
 
+        // Failure path with visibility
+        Log::warning('Robaws API error', [
+            'method' => 'POST',
+            'url' => '/api/v2/offers',
+            'status' => $response->status(),
+            'reason' => $response->reason(),
+            'error' => $response->json('message') ?? $response->json('error') ?? Str::limit($response->body(), 240),
+            'req_id' => $response->header('X-Request-Id') ?: $response->header('X-Correlation-Id'),
+            'auth' => config('services.robaws.auth'),
+            'has_basic' => (bool) config('services.robaws.username'),
+            'has_token' => (bool) config('services.robaws.token'),
+            'idempotency_key' => $idempotencyKey,
+        ]);
+
         return [
             'success' => false,
-            'error' => $response->json()['message'] ?? 'Unknown error',
             'status' => $response->status(),
-            'data' => $response->json(),
+            'error' => $response->json('message')
+                        ?? $response->json('error')
+                        ?? $response->reason()
+                        ?? 'HTTP '.$response->status(),
+            'data' => $response->json() ?: ['body' => $response->body()],
+            'request_id' => $response->header('X-Request-Id')
+                            ?? $response->header('X-Correlation-Id'),
+            'headers' => $response->headers(),
         ];
     }
 
@@ -68,24 +102,34 @@ class RobawsApiClient
     {
         $idempotencyKey = $idempotencyKey ?? $this->generateIdempotencyKey($payload);
         
-        $response = $this->makeRequest('PUT', "/quotations/{$quotationId}", $payload, [
+        $response = $this->makeRequest('PATCH', "/api/v2/offers/{$quotationId}", $payload, [
             'Idempotency-Key' => $idempotencyKey,
         ]);
 
-        if ($response->successful()) {
+        // Success path
+        if ($response->successful() || in_array($response->status(), [200, 201, 202])) {
+            $data = $response->json();
             return [
                 'success' => true,
-                'data' => $response->json(),
+                'status' => $response->status(),
                 'quotation_id' => $quotationId,
                 'idempotency_key' => $idempotencyKey,
+                'data' => $data,
             ];
         }
 
+        // Failure path with visibility
         return [
             'success' => false,
-            'error' => $response->json()['message'] ?? 'Unknown error',
             'status' => $response->status(),
-            'data' => $response->json(),
+            'error' => $response->json('message')
+                        ?? $response->json('error')
+                        ?? $response->reason()
+                        ?? 'HTTP '.$response->status(),
+            'data' => $response->json() ?: ['body' => $response->body()],
+            'request_id' => $response->header('X-Request-Id')
+                            ?? $response->header('X-Correlation-Id'),
+            'headers' => $response->headers(),
         ];
     }
 
@@ -94,7 +138,7 @@ class RobawsApiClient
      */
     public function getQuotation(string $quotationId): array
     {
-        $response = $this->makeRequest('GET', "/quotations/{$quotationId}");
+        $response = $this->makeRequest('GET', "/api/v2/offers/{$quotationId}");
 
         if ($response->successful()) {
             return [
@@ -108,6 +152,14 @@ class RobawsApiClient
             'error' => $response->json()['message'] ?? 'Quotation not found',
             'status' => $response->status(),
         ];
+    }
+
+    /**
+     * Get offer by ID (alias for getQuotation)
+     */
+    public function getOffer(string $id): array
+    {
+        return $this->getQuotation($id);
     }
 
     /**
@@ -158,10 +210,11 @@ class RobawsApiClient
                 ]);
 
                 $response = match (strtoupper($method)) {
-                    'GET' => $client->get($this->baseUrl . $endpoint),
-                    'POST' => $client->post($this->baseUrl . $endpoint, $payload),
-                    'PUT' => $client->put($this->baseUrl . $endpoint, $payload),
-                    'DELETE' => $client->delete($this->baseUrl . $endpoint),
+                    'GET' => $client->get($endpoint),
+                    'POST' => $client->post($endpoint, $payload),
+                    'PUT' => $client->put($endpoint, $payload),
+                    'PATCH' => $client->patch($endpoint, $payload),
+                    'DELETE' => $client->delete($endpoint),
                     default => throw new \InvalidArgumentException("Unsupported HTTP method: {$method}")
                 };
 
@@ -215,20 +268,36 @@ class RobawsApiClient
     private function getHttpClient(array $extraHeaders = []): PendingRequest
     {
         $headers = array_merge([
-            'Authorization' => 'Bearer ' . $this->apiKey,
             'Content-Type' => 'application/json',
             'Accept' => 'application/json',
             'User-Agent' => 'Bconnect/1.0 (Laravel)',
             'X-Request-ID' => Str::uuid()->toString(),
         ], $extraHeaders);
 
-        return Http::withHeaders($headers)
+        $http = Http::baseUrl($this->baseUrl)
+            ->withHeaders($headers)
             ->timeout($this->config['timeout'] ?? 30)
             ->connectTimeout($this->config['connect_timeout'] ?? 10)
             ->retry(1, 0) // Handle retries manually for better control
             ->withOptions([
                 'verify' => $this->config['verify_ssl'] ?? true,
             ]);
+
+        // Configure authentication based on config
+        if (config('services.robaws.auth') === 'basic') {
+            $http = $http->withBasicAuth(
+                config('services.robaws.username'),
+                config('services.robaws.password')
+            );
+        } else {
+            // Bearer token authentication
+            $token = config('services.robaws.token') ?? config('services.robaws.api_key');
+            if ($token) {
+                $http = $http->withToken($token);
+            }
+        }
+
+        return $http;
     }
 
     /**
@@ -266,7 +335,7 @@ class RobawsApiClient
             'pod' => $payload['routing']['pod'] ?? '',
         ];
         
-        $hash = hash('sha256', json_encode($critical, JSON_SORT_KEYS));
+        $hash = hash('sha256', json_encode($critical, \JSON_SORT_KEYS|\JSON_UNESCAPED_UNICODE));
         return 'bconnect_' . substr($hash, 0, 32);
     }
 

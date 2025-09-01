@@ -378,13 +378,13 @@ class AiRouter
             $s = preg_replace('/^```[a-zA-Z]*\n|\n```$/', '', $s);
         }
         $decoded = json_decode($s, true);
-        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+        if (json_last_error() === \JSON_ERROR_NONE && is_array($decoded)) {
             return $decoded;
         }
         // try to extract the first {...} block
         if (preg_match('/\{[\s\S]*\}/', $s, $m)) {
             $decoded = json_decode($m[0], true);
-            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            if (json_last_error() === \JSON_ERROR_NONE && is_array($decoded)) {
                 return $decoded;
             }
         }

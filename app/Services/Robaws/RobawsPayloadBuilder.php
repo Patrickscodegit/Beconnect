@@ -46,7 +46,7 @@ class RobawsPayloadBuilder
             ],
 
             // Raw JSON for traceability in Robaws
-            'JSON' => json_encode($ex, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
+            'JSON' => json_encode($ex, \JSON_PRETTY_PRINT | \JSON_UNESCAPED_UNICODE),
         ];
     }
 
