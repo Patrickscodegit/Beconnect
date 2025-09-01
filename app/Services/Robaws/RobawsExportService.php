@@ -99,13 +99,28 @@ class RobawsExportService
                 'name' => $customerName,
                 'email' => $customerEmail,
                 'clientId' => $clientId,
+                'binding_status' => $clientId ? 'will_bind_to_client' : 'no_client_binding',
             ]);
 
             // Map to Robaws format
             $mapped = $this->mapper->mapIntakeToRobaws($intake, $extractionData);
             
-            // Inject the numeric ID and make sure top-level contact email is available
-            $mapped['client_id'] = $clientId;  // Critical for binding the UI Customer
+            // SAFEGUARD: Only inject clientId if we found a confident match
+            if ($clientId) {
+                $mapped['client_id'] = $clientId;  // Critical for binding the UI Customer
+                Log::info('Client ID injected into payload', [
+                    'export_id' => $exportId,
+                    'client_id' => $clientId,
+                    'customer_name' => $customerName,
+                ]);
+            } else {
+                Log::warning('No unique client match found - export will proceed without client binding', [
+                    'export_id' => $exportId,
+                    'customer_name' => $customerName,
+                    'customer_email' => $customerEmail,
+                ]);
+            }
+            
             if ($customerEmail) {
                 $mapped['quotation_info']['contact_email'] = $customerEmail;
             }

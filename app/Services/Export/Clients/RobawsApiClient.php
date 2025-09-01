@@ -480,8 +480,8 @@ class RobawsApiClient
                 }
             }
 
-            // 3) Fallback: generic query parameter with client-side filtering
-            Log::info('Attempting generic client lookup', ['name' => $name]);
+            // 3) Fallback: generic query parameter with strict client-side filtering ONLY
+            Log::info('Attempting generic client lookup with strict filtering', ['name' => $name]);
             $response2 = $this->makeRequest('GET', '/api/v2/clients', [
                 'q' => $name, 
                 'pageSize' => 25
@@ -491,14 +491,14 @@ class RobawsApiClient
                 $data2 = $response2->json();
                 $clients2 = $data2['items'] ?? []; // Use 'items' not 'data'
                 
-                // Use collect for better filtering
+                // STRICT filtering - only exact normalized matches
                 $hit = collect($clients2)->first(function($client) use ($normalize, $normalizedSearchName) {
                     return $normalize($client['name'] ?? '') === $normalizedSearchName;
                 });
                 
                 if ($hit && isset($hit['id'])) {
                     $clientId = (int) $hit['id'];
-                    Log::info('Client found by generic query with normalized filtering', [
+                    Log::info('Client found by generic query with strict normalized filtering', [
                         'client_id' => $clientId,
                         'client_name' => $hit['name'] ?? 'N/A',
                         'client_email' => $hit['email'] ?? 'N/A',
@@ -507,21 +507,12 @@ class RobawsApiClient
                     return $clientId;
                 }
                 
-                // Last resort: take first match if no normalized match found
-                if (!empty($clients2)) {
-                    $firstMatch = $clients2[0];
-                    if (isset($firstMatch['id'])) {
-                        $clientId = (int) $firstMatch['id'];
-                        Log::info('Client found by generic query (first match fallback)', [
-                            'client_id' => $clientId,
-                            'client_name' => $firstMatch['name'] ?? 'N/A',
-                            'client_email' => $firstMatch['email'] ?? 'N/A',
-                            'search_name' => $name,
-                            'fallback_match' => true,
-                        ]);
-                        return $clientId;
-                    }
-                }
+                // NO MORE FALLBACK - if no exact match, return null
+                Log::info('No exact match found in generic query results', [
+                    'search_name' => $name,
+                    'results_count' => count($clients2),
+                    'sample_names' => collect($clients2)->take(3)->pluck('name')->toArray(),
+                ]);
             }
         }
 
