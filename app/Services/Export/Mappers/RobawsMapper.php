@@ -138,7 +138,7 @@ class RobawsMapper
         // Map to Robaws structure
         return [
             'quotation_info' => $this->mapQuotationInfo($intake, $contact, $vehicle, $shipping, $extractionData),
-            'routing' => $this->mapRouting($shipping, $shipment, $extractionData),
+            'routing' => $this->mapRouting($shipping, $shipment, $extractionData, $pricing),
             'cargo_details' => $this->mapCargoDetails($vehicle, $extractionData),
             'internal_remarks' => $this->mapInternalRemarks($intake, $extractionData),
             'automation' => $this->mapAutomation($extractionData),
@@ -365,7 +365,7 @@ class RobawsMapper
     /**
      * Map routing section
      */
-    private function mapRouting(array $shipping, array $shipment, array $extractionData = []): array
+    private function mapRouting(array $shipping, array $shipment, array $extractionData = [], array $pricing = []): array
     {
         $route = $shipping['route'] ?? [];
         $origin = $route['origin'] ?? [];
@@ -385,10 +385,16 @@ class RobawsMapper
         $podValue = $topLevelDestination ?: ($this->formatLocation($destination) ?: ($shipment['destination'] ?? ''));
         $podValue = $this->normalizePortNames($podValue);
 
-        // FDEST should be empty for port destinations (no oncarriage specified)
+        // FDEST logic: Check if oncarriage is requested or if destination is not a port
         $fDestValue = '';
-        if ($podValue && !$this->isPortDestination($podValue)) {
-            $fDestValue = $podValue;
+        if ($podValue) {
+            // Check if oncarriage is requested (has charges or explicitly mentioned)
+            $hasOncarriageRequest = $this->hasOncarriageRequest($pricing, $extractionData);
+            
+            // If oncarriage is requested OR destination is not a port, set FDEST
+            if ($hasOncarriageRequest || !$this->isPortDestination($podValue)) {
+                $fDestValue = $podValue;
+            }
         }
 
         return [
@@ -836,6 +842,55 @@ class RobawsMapper
             }
         }
 
+        return false;
+    }
+
+    /**
+     * Check if oncarriage is requested by the customer
+     */
+    private function hasOncarriageRequest(array $pricing, array $extractionData): bool
+    {
+        // Check if there are oncarriage charges specified
+        $oncarriageAmount = $pricing['oncarriage'] ?? null;
+        if (is_array($oncarriageAmount)) {
+            $oncarriageAmount = $oncarriageAmount['amount'] ?? null;
+        }
+        
+        // If there's a positive oncarriage amount, customer wants oncarriage
+        if ($oncarriageAmount && (float)$oncarriageAmount > 0) {
+            return true;
+        }
+        
+        // Check if FDEST is explicitly mentioned in the original data
+        if (!empty($extractionData['fdest'])) {
+            return true;
+        }
+        
+        // Check shipping data for final destination indicators
+        $shipping = $extractionData['shipping'] ?? [];
+        if (!empty($shipping['final_destination']) || !empty($shipping['fdest'])) {
+            return true;
+        }
+        
+        // Check if there are mentions of delivery, final destination, etc. in text data
+        $documentText = strtolower($extractionData['raw_text'] ?? '');
+        $oncarriageKeywords = [
+            'final destination',
+            'deliver to',
+            'delivery to',
+            'oncarriage',
+            'on-carriage',
+            'final delivery',
+            'door to door',
+            'door delivery'
+        ];
+        
+        foreach ($oncarriageKeywords as $keyword) {
+            if (stripos($documentText, $keyword) !== false) {
+                return true;
+            }
+        }
+        
         return false;
     }
 }
