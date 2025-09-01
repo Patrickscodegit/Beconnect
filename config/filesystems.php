@@ -104,13 +104,13 @@ return [
 
         'spaces' => [
             'driver' => 's3',
-            'key' => env('AWS_ACCESS_KEY_ID'),
-            'secret' => env('AWS_SECRET_ACCESS_KEY'),
-            'region' => env('AWS_DEFAULT_REGION'),
-            'bucket' => env('AWS_BUCKET'),
-            'url' => env('AWS_URL'),
-            'endpoint' => env('AWS_ENDPOINT'),
-            'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+            'key' => env('SPACES_KEY', env('AWS_ACCESS_KEY_ID')),
+            'secret' => env('SPACES_SECRET', env('AWS_SECRET_ACCESS_KEY')),
+            'region' => env('SPACES_REGION', env('AWS_DEFAULT_REGION', 'ams3')),
+            'bucket' => env('SPACES_BUCKET', env('AWS_BUCKET')),
+            'url' => env('SPACES_URL'),
+            'endpoint' => env('SPACES_ENDPOINT', env('AWS_ENDPOINT')),
+            'use_path_style_endpoint' => env('SPACES_USE_PATH_STYLE_ENDPOINT', env('AWS_USE_PATH_STYLE_ENDPOINT', false)),
             'visibility' => 'private',
             'throw' => false,
             'report' => false,
@@ -131,6 +131,21 @@ return [
 
     'links' => [
         public_path('storage') => storage_path('app/public'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Document Storage Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for document storage across environments
+    |
+    */
+
+    'documents_config' => [
+        'default_disk' => env('DOCUMENTS_DRIVER', env('FILESYSTEM_DISK', 'local')),
+        'local_fallback' => 'local',
+        'production_disk' => 'spaces',
     ],
 
 ];

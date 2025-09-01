@@ -104,20 +104,6 @@ class Document extends Model
     }
 
     /**
-     * Storage disk accessor:
-     * - Prefer the persisted DB value if present
-     * - Otherwise fallback to configured default (tests can override)
-     * - Do NOT override with env heuristics here (keeps tests deterministic)
-     */
-    public function getStorageDiskAttribute($value): string
-    {
-        if (!empty($value)) {
-            return $value;
-        }
-        return (string) config('files.documents_disk', 'documents');
-    }
-
-    /**
      * Relationships
      */
     public function intake(): BelongsTo

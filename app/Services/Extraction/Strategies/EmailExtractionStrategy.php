@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Services\AiRouter;
 use App\Services\Extraction\HybridExtractionPipeline;
 use App\Services\Extraction\Results\ExtractionResult;
+use App\Support\DocumentStorage;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 
@@ -246,71 +247,64 @@ class EmailExtractionStrategy implements ExtractionStrategy
     }
 
     /**
-     * Get email content from document
+     * Get email content from document with resilient cross-environment handling
      */
     private function getEmailContent(Document $document): string
     {
         try {
-            // First try using the storage_disk and file_path
-            if ($document->storage_disk && $document->file_path) {
-                if (Storage::disk($document->storage_disk)->exists($document->file_path)) {
-                    $content = Storage::disk($document->storage_disk)->get($document->file_path);
-                    return $content ?: '';
-                }
-            }
-
-            // Try file_path as absolute path
-            if ($document->file_path && file_exists($document->file_path)) {
-                $content = file_get_contents($document->file_path);
-                return $content !== false ? $content : '';
-            }
-
-            // Try default disk
-            $defaultDisk = config('filesystems.default');
-            if (Storage::disk($defaultDisk)->exists($document->file_path)) {
-                $content = Storage::disk($defaultDisk)->get($document->file_path);
-                return $content ?: '';
-            }
-
-            // Try alternative paths that might exist
-            $alternativePaths = [
-                'private/documents/' . basename($document->file_path),
-                'documents/' . basename($document->file_path),
-                $document->file_path
-            ];
-
-            foreach ($alternativePaths as $altPath) {
-                if (Storage::disk('local')->exists($altPath)) {
-                    $content = Storage::disk('local')->get($altPath);
-                    Log::info('Found email file at alternative path', [
-                        'document_id' => $document->id,
-                        'found_path' => $altPath,
-                        'original_path' => $document->file_path
-                    ]);
-                    return $content ?: '';
-                }
-            }
-
-            Log::error('Could not find email file in any location', [
+            Log::info('Attempting to retrieve email content via DocumentStorage gateway', [
                 'document_id' => $document->id,
                 'storage_disk' => $document->storage_disk,
                 'file_path' => $document->file_path,
-                'file_exists_absolute' => file_exists($document->file_path ?? ''),
-                'default_disk' => $defaultDisk,
-                'checked_alternatives' => $alternativePaths
+                'environment' => app()->environment()
             ]);
 
-            // Return empty string instead of null to satisfy return type
-            return '';
+            $content = DocumentStorage::getContent($document);
+            
+            if ($content === null) {
+                $guidance = $this->getEnvironmentSpecificGuidance($document);
+                throw new \RuntimeException("source_unavailable: cannot read document from storage (disk={$document->storage_disk}, path={$document->file_path}). {$guidance}");
+            }
+
+            Log::info('Successfully retrieved email content', [
+                'document_id' => $document->id,
+                'content_length' => strlen($content),
+                'strategy' => 'DocumentStorage gateway'
+            ]);
+
+            return $content;
 
         } catch (\Exception $e) {
-            Log::error('Could not read email file', [
+            Log::error('Email content retrieval failed', [
                 'document_id' => $document->id,
-                'error' => $e->getMessage()
+                'storage_disk' => $document->storage_disk,
+                'file_path' => $document->file_path,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
-            // Return empty string instead of null to satisfy return type
+            
+            // Return empty string to satisfy return type and let parsing handle the error gracefully
             return '';
         }
+    }
+
+    /**
+     * Get environment-specific guidance for storage issues
+     */
+    private function getEnvironmentSpecificGuidance(Document $document): string
+    {
+        $env = app()->environment();
+        $originalDisk = $document->storage_disk;
+
+        if ($env === 'local' && $originalDisk === 'spaces') {
+            return 'Document stored on DigitalOcean Spaces but running locally. Consider: 1) Configure DO Spaces credentials in .env, 2) Copy file to local storage, 3) Use storage:migrate command';
+        }
+
+        if ($env === 'production' && $originalDisk === 'local') {
+            return 'Document stored locally but running in production. Consider migrating to cloud storage.';
+        }
+
+        return 'Cross-environment storage mismatch detected. Check storage configuration and file locations.';
     }
 
     /**

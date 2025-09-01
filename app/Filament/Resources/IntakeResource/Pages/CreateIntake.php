@@ -6,6 +6,7 @@ use App\Filament\Resources\IntakeResource;
 use App\Models\Intake;
 use App\Models\Document;
 use App\Services\DocumentService;
+use App\Services\DocumentStorageConfig;
 use App\Services\EmailDocumentService;
 use Filament\Actions;
 use Filament\Resources\Pages\CreateRecord;
@@ -110,19 +111,37 @@ class CreateIntake extends CreateRecord
                     $fileContent = file_get_contents($tempPath);
                     $storagePath = 'documents/' . uniqid() . '_' . $originalName;
                     
+                    // Determine storage disk based on environment
+                    $storageDisk = DocumentStorageConfig::getStorageDisk();
+                    
                     try {
-                        // Try DigitalOcean Spaces first
-                        Storage::disk('spaces')->put($storagePath, $fileContent);
-                        $storageDisk = 'spaces';
-                        \Log::info('ProcessUploadedFiles: Stored in DigitalOcean Spaces', ['path' => $storagePath]);
-                    } catch (\Exception $e) {
-                        // Fallback to local storage
-                        Storage::disk('local')->put($storagePath, $fileContent);
-                        $storageDisk = 'local';
-                        \Log::warning('ProcessUploadedFiles: Spaces failed, using local storage', [
-                            'error' => $e->getMessage(),
+                        // Store file using the configured disk
+                        Storage::disk($storageDisk)->put($storagePath, $fileContent);
+                        \Log::info('ProcessUploadedFiles: File stored successfully', [
+                            'storage_disk' => $storageDisk,
                             'path' => $storagePath
                         ]);
+                    } catch (\Exception $e) {
+                        // If primary disk fails, try local as fallback
+                        if ($storageDisk !== 'local') {
+                            try {
+                                Storage::disk('local')->put($storagePath, $fileContent);
+                                $storageDisk = 'local';
+                                \Log::warning('ProcessUploadedFiles: Primary storage failed, using local fallback', [
+                                    'error' => $e->getMessage(),
+                                    'path' => $storagePath
+                                ]);
+                            } catch (\Exception $localE) {
+                                \Log::error('ProcessUploadedFiles: Both primary and local storage failed', [
+                                    'primary_error' => $e->getMessage(),
+                                    'local_error' => $localE->getMessage(),
+                                    'path' => $storagePath
+                                ]);
+                                throw $localE;
+                            }
+                        } else {
+                            throw $e;
+                        }
                     }
                     
                     // Check if this is an email file and use EmailDocumentService for deduplication
