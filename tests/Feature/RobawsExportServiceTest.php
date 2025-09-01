@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use Tests\TestCase;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\Test;
 use Mockery;
 use App\Services\RobawsClient;
 use App\Services\RobawsExportService;
@@ -14,7 +15,7 @@ class RobawsExportServiceTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** @test */
+    #[Test]
     public function it_uploads_new_document_and_normalizes_to_uploaded()
     {
         Storage::fake('documents');
@@ -55,7 +56,7 @@ class RobawsExportServiceTest extends TestCase
         $this->assertSame(hash('sha256', $body), $res['document']['sha256']);
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_exists_when_sha256_is_found_in_local_ledger()
     {
         Storage::fake('documents');
@@ -83,7 +84,7 @@ class RobawsExportServiceTest extends TestCase
         $this->assertSame($sha, $res['document']['sha256']);
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_error_when_file_missing()
     {
         $svc = app(RobawsExportService::class);
@@ -96,7 +97,7 @@ class RobawsExportServiceTest extends TestCase
         $this->assertNull($res['document']['sha256']);
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_error_when_client_throws_but_keeps_sha_and_size()
     {
         Storage::fake('documents');

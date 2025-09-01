@@ -160,21 +160,21 @@ class RobawsMapper
         $p  = $mapped['payments'] ?? [];
         $au = $mapped['automation'] ?? [];
 
-        // Use passed customer ID or fallback to API resolution
-        $customerId = $mapped['customer_id'] ?? null;
-        if (!$customerId && $this->apiClient) {
-            $customerId = $this->apiClient->findCustomerId(
-                $q['contact_email'] ?? null,
-                $q['customer'] ?? null
+        // Use passed client ID or fallback to API resolution (with backward compatibility)
+        $clientId = $mapped['client_id'] ?? $mapped['customer_id'] ?? null;
+        if (!$clientId && $this->apiClient) {
+            $clientId = $this->apiClient->findClientId(
+                $q['customer'] ?? null,
+                $q['contact_email'] ?? null
             );
         }
 
         $payload = [
             'title'           => $q['concerning'] ?? ($q['project'] ?? null),
             'project'         => $q['project'] ?? null,
-            'clientReference' => $q['customer_reference'] ?? null,
+            'clientReference' => $q['customer_reference'] ?? $q['client_reference'] ?? null,
             'contactEmail'    => $q['contact_email'] ?? null,
-            'customerId'      => $customerId, // This makes the customer picker work!
+            'clientId'        => $clientId !== null ? (int) $clientId : null, // Top-level for Customer binding
         ];
 
         $xf = [];
@@ -237,8 +237,8 @@ class RobawsMapper
             $payload['extraFields'] = $xf;
         }
 
-        // Remove null top-levels
-        return array_filter($payload, fn($v) => !is_null($v) && $v !== '');
+        // Only filter out NULL values, keep 0/false/empty string if they're valid
+        return array_filter($payload, static fn($v) => $v !== null);
     }
 
     /**

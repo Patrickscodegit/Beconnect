@@ -3,21 +3,41 @@
 namespace App\Services\Robaws;
 
 use App\Models\Intake;
+use App\Models\RobawsDocument;
 use App\Services\Export\Mappers\RobawsMapper;
 use App\Services\Export\Clients\RobawsApiClient;
+use App\Services\RobawsClient;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 class RobawsExportService
 {
     private RobawsMapper $mapper;
     private RobawsApiClient $apiClient;
+    private ?RobawsClient $legacyClient = null;
 
-    public function __construct(RobawsMapper $mapper, RobawsApiClient $apiClient)
-    {
+    public function __construct(
+        RobawsMapper $mapper,
+        RobawsApiClient $apiClient,
+        ?RobawsClient $legacyClient = null
+    ) {
         $this->mapper = $mapper;
         $this->apiClient = $apiClient;
+        $this->legacyClient = $legacyClient;
+    }
+
+    /**
+     * Prefer injected, but always re-check the container in case tests bind later.
+     */
+    private function legacy(): ?RobawsClient
+    {
+        if ($this->legacyClient instanceof RobawsClient) {
+            return $this->legacyClient;
+        }
+        return app()->bound(RobawsClient::class) ? app(RobawsClient::class) : null;
     }
 
     /**
@@ -60,9 +80,48 @@ class RobawsExportService
                 'data_size' => strlen(json_encode($extractionData)),
             ]);
 
+            // Resolve client ID before mapping
+            $customerName = data_get($extractionData, 'document_data.contact.name')
+                         ?? data_get($extractionData, 'contact.name')
+                         ?? $intake->customer_name
+                         ?? null;
+            $customerEmail = data_get($extractionData, 'document_data.contact.email')
+                         ?? data_get($extractionData, 'contact.email')
+                         ?? $intake->customer_email
+                         ?? null;
+
+            // Resolve Robaws client
+            $clientId = $this->apiClient->findClientId($customerName, $customerEmail);
+            
+            Log::info('Robaws client resolution', [
+                'export_id' => $exportId,
+                'intake_id' => $intake->id,
+                'name' => $customerName,
+                'email' => $customerEmail,
+                'clientId' => $clientId,
+            ]);
+
             // Map to Robaws format
             $mapped = $this->mapper->mapIntakeToRobaws($intake, $extractionData);
-            $payload = $this->mapper->toRobawsApiPayload($mapped);   // <-- NEW API FORMAT
+            
+            // Inject the numeric ID and make sure top-level contact email is available
+            $mapped['client_id'] = $clientId;  // Critical for binding the UI Customer
+            if ($customerEmail) {
+                $mapped['quotation_info']['contact_email'] = $customerEmail;
+            }
+            
+            // Build and log final payload for debugging
+            $payload = $this->mapper->toRobawsApiPayload($mapped);
+            
+            Log::info('Robaws payload (api shape)', [
+                'export_id' => $exportId,
+                'intake_id' => $intake->id,
+                'top' => array_keys($payload),
+                'client_id_debug' => $payload['clientId'] ?? null,
+                'contact_email_debug' => $payload['contactEmail'] ?? null,
+                'client_reference_debug' => $payload['clientReference'] ?? null,
+                'payload_size' => strlen(json_encode($payload)),
+            ]);
             
             // Block export if payload is empty
             if (empty($payload)) {
@@ -126,7 +185,11 @@ class RobawsExportService
                         'intake_id' => $intake->id,
                         'offer_id' => $id,
                         'verification_success' => $verify['success'] ?? false,
-                        'top' => array_intersect_key($verify['data'] ?? [], array_flip(['title','project','clientReference','contactEmail'])),
+                        'clientId' => data_get($verify, 'data.clientId'),
+                        'hasClientObj' => !empty(data_get($verify, 'data.client')),
+                        'top' => array_intersect_key($verify['data'] ?? [], array_flip([
+                            'clientId','clientReference','title','contactEmail'
+                        ])),
                         'xf' => $stored,
                     ]);
                 }
@@ -149,6 +212,10 @@ class RobawsExportService
                     'duration_ms' => $duration,
                     'idempotency_key' => $result['idempotency_key'],
                 ]);
+
+                // Attach documents after successful offer creation/update
+                $offerId = $result['quotation_id'];
+                $this->attachDocumentsToOffer($intake, $offerId, $exportId);
 
                 return [
                     'success' => true,
@@ -336,6 +403,83 @@ class RobawsExportService
 
     // Private helper methods
 
+    /**
+     * Enhanced extraction value resolver with database fallback + AI fallback
+     */
+    private function extractionValue(Intake $intake, string $path, ?string $regexHint = null): ?string
+    {
+        // A) document-level structured data first
+        foreach ($intake->documents as $doc) {
+            $data = $doc->extraction->extracted_data ?? $doc->extraction->data ?? null;
+            $val = data_get($data, $path);
+            if ($val) return is_string($val) ? trim($val) : $val;
+        }
+
+        // B) intake-level structured data
+        $val = data_get($intake->extraction->extracted_data ?? $intake->extraction->data ?? null, $path);
+        if ($val) return is_string($val) ? trim($val) : $val;
+
+        // C) heuristic (regex) on plain text as a last resort
+        if ($regexHint) {
+            foreach ($intake->documents as $doc) {
+                $txt = $doc->plain_text ?? '';
+                if ($txt && preg_match($regexHint, $txt, $m)) {
+                    return trim($m[1] ?? $m[0]);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Attach documents to Robaws offer
+     */
+    private function attachDocumentsToOffer(Intake $intake, int $offerId, string $exportId): void
+    {
+        // Pick "approved" docs (or sensible default if none approved yet)
+        $docs = $intake->documents()->where(function ($q) {
+            $q->where('status', 'approved')->orWhereNull('status');
+        })->get();
+
+        if ($docs->isEmpty()) {
+            Log::info('No documents to attach', ['export_id' => $exportId, 'offer_id' => $offerId]);
+            return;
+        }
+
+        foreach ($docs as $doc) {
+            $path = $doc->filepath ?? $doc->path ?? null;
+            if (!$path || !Storage::exists($path)) {
+                Log::warning('Doc path missing or not found', [
+                    'export_id' => $exportId,
+                    'doc_id' => $doc->id,
+                    'path' => $path
+                ]);
+                continue;
+            }
+
+            try {
+                $absolutePath = Storage::path($path);
+                $result = $this->apiClient->attachFileToOffer($offerId, $absolutePath);
+                
+                Log::info('Attached document to offer', [
+                    'export_id' => $exportId,
+                    'offer_id' => $offerId,
+                    'doc_id' => $doc->id,
+                    'path' => $path,
+                    'result' => $result
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('Attach failed', [
+                    'export_id' => $exportId,
+                    'offer_id' => $offerId,
+                    'doc_id' => $doc->id,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+    }
+
     private function getExtractionData(Intake $intake): array
     {
         // Normalize to array even if DB stores a JSON string
@@ -410,5 +554,244 @@ class RobawsExportService
             'empty_fields' => $empty,
             'completeness_percent' => $total > 0 ? round(($filled / $total) * 100, 1) : 0,
         ];
+    }
+
+    /**
+     * Backwards-compatible document upload used by tests and old callers.
+     * - Checks local ledger by SHA-256 first (returns "exists")
+     * - If not found, uses legacy client when available
+     * - Otherwise falls back to the new API flow
+     * Always returns a normalized shape expected by tests.
+     */
+    public function uploadDocumentToOffer(int $offerId, string $relativePath): array
+    {
+        // Resolve absolute file path and sanity-check
+        $abs = $this->resolveAbsolutePath($relativePath);
+        if (!$abs || !is_file($abs)) {
+            return [
+                'status'   => 'error',
+                'error'    => 'File not found',
+                'document' => ['id' => null, 'mime' => null, 'sha256' => null, 'size' => null],
+            ];
+        }
+
+        // Compute hash & size (tests assert we preserve these on errors)
+        [$sha256, $size, $mime] = $this->shaSizeMime($abs);
+
+        // 1) Local ledger: return "exists" if we've seen this file before
+        if ($ledger = RobawsDocument::where('sha256', $sha256)->first()) {
+            return [
+                'status'   => 'exists',
+                'reason'   => 'local ledger',
+                'document' => [
+                    'id'     => (int) $ledger->robaws_document_id,
+                    'mime'   => $ledger->mime_type ?? $mime,
+                    'sha256' => $sha256,
+                    'size'   => $size,
+                ],
+            ];
+        }
+
+        // 2) Try the legacy client if it exists (what the tests expect)
+        Log::debug('BC method debug', [
+            'has_legacy_client' => $this->legacy() !== null,
+            'legacy_client_class' => $this->legacy() ? get_class($this->legacy()) : null,
+            'app_bound_robaws_client' => app()->bound(RobawsClient::class),
+        ]);
+        
+        if ($client = $this->legacy()) {
+            $stream = fopen($abs, 'rb');
+            try {
+                $fileSpec = [
+                    'filename' => basename($relativePath),
+                    'mime'     => $mime ?: 'application/octet-stream',
+                    'size'     => $size,
+                    'stream'   => $stream,   // tests expect this
+                ];
+
+                $resp = $client->uploadDocument((string) $offerId, $fileSpec);
+
+                // STRICTLY pull the *remote* id from the legacy response:
+                $remoteId   = (int) (data_get($resp, 'document.id') ?? data_get($resp, 'id'));
+                $remoteMime = data_get($resp, 'document.mime') ?? data_get($resp, 'mime') ?? $mime;
+
+                Log::debug('Legacy upload debug', [
+                    'remote_id' => $remoteId,
+                    'resp' => $resp,
+                    'data_get_document_id' => data_get($resp, 'document.id'),
+                    'data_get_id' => data_get($resp, 'id'),
+                ]);
+
+                // Persist ledger entry but don't reuse the local model ID
+                $ledgerEntry = RobawsDocument::create([
+                    'robaws_offer_id'    => (string) $offerId,
+                    'robaws_document_id' => $remoteId,     // <- remote id (77)
+                    'sha256'             => $sha256,
+                    'filename'           => basename($relativePath),
+                    'filesize'           => $size,
+                ]);
+
+                Log::debug('Ledger entry created', [
+                    'ledger_id' => $ledgerEntry->id,
+                    'remote_id_stored' => $ledgerEntry->robaws_document_id,
+                ]);
+
+                return [
+                    'status'   => 'uploaded',
+                    'document' => [
+                        'id'     => $remoteId,   // <- return remote id (77)
+                        'mime'   => $remoteMime,
+                        'sha256' => $sha256,
+                        'size'   => $size,
+                    ],
+                    'meta'     => $resp,
+                ];
+            } catch (\Throwable $e) {
+                return [
+                    'status'   => 'error',
+                    'error'    => $e->getMessage(),
+                    'document' => [
+                        'id'     => null,
+                        'mime'   => null,
+                        'sha256' => $sha256,
+                        'size'   => $size,
+                    ],
+                ];
+            } finally {
+                if (is_resource($stream)) fclose($stream);
+            }
+        }
+
+        // 3) Fallback: use the new API flow (temp bucket + patch offer)
+        try {
+            $this->apiClient->attachFileToOffer($offerId, $abs, basename($relativePath));
+
+            // If your app keeps a local ledger, write it here too
+            RobawsDocument::create([
+                'robaws_offer_id'    => (string) $offerId,
+                'robaws_document_id' => null, // set if the new flow returns an id
+                'sha256'             => $sha256,
+                'filename'           => basename($relativePath),
+                'filesize'           => $size,
+            ]);
+
+            return [
+                'status'   => 'uploaded',
+                'document' => [
+                    'id'     => null, // set when your client returns the created doc id
+                    'mime'   => $mime,
+                    'sha256' => $sha256,
+                    'size'   => $size,
+                ],
+                'meta'     => ['flow' => 'new_api_temp_bucket'],
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'status'   => 'error',
+                'error'    => $e->getMessage(),
+                'document' => [
+                    'id'     => null,
+                    'mime'   => null,
+                    'sha256' => $sha256,
+                    'size'   => $size,
+                ],
+            ];
+        }
+    }
+
+    // === helpers ===========================================================
+
+    private function resolveAbsolutePath(string $path, ?string $hintDisk = null): ?string
+    {
+        // 1) Already absolute on the filesystem?
+        if (is_file($path)) {
+            return $path;
+        }
+
+        // 2) disk://relative or disk:relative
+        if (preg_match('/^([a-z0-9_]+):\/\/(.+)$/i', $path, $m) ||
+            preg_match('/^([a-z0-9_]+):(.+)$/i', $path, $m)) {
+            $disk = $m[1];
+            $rel  = ltrim($m[2], '/');
+            if (config("filesystems.disks.$disk") && Storage::disk($disk)->exists($rel)) {
+                return Storage::disk($disk)->path($rel);
+            }
+        }
+
+        $disksTried = [];
+
+        // 3) If the first path segment equals a configured disk, use it
+        if (str_contains($path, '/')) {
+            $first = strtok($path, '/');
+            if ($first && config("filesystems.disks.$first")) {
+                $rel = substr($path, strlen($first) + 1);
+                if (Storage::disk($first)->exists($rel)) {
+                    return Storage::disk($first)->path($rel);
+                }
+                $disksTried[] = $first;
+            }
+        }
+
+        // 4) Try hint disk, then default disk, then common disks
+        $candidates = [];
+        if ($hintDisk && config("filesystems.disks.$hintDisk")) $candidates[] = $hintDisk;
+
+        $default = config('filesystems.default', 'local');
+        if (!in_array($default, $disksTried, true)) $candidates[] = $default;
+
+        foreach (['documents','local','public'] as $d) {
+            if (!in_array($d, $candidates, true) && config("filesystems.disks.$d")) $candidates[] = $d;
+        }
+
+        foreach ($candidates as $disk) {
+            if (Storage::disk($disk)->exists($path)) {
+                return Storage::disk($disk)->path($path);
+            }
+        }
+
+        // 5) Last resort: storage_path
+        $fallback = storage_path('app/' . ltrim($path, '/'));
+        return is_file($fallback) ? $fallback : null;
+    }
+
+    private function shaSizeMime(string $absPath): array
+    {
+        $body = file_get_contents($absPath);
+        $sha  = hash('sha256', $body);
+        $size = strlen($body);
+
+        $mime = function_exists('mime_content_type') ? mime_content_type($absPath) : null;
+        if (!$mime || $mime === 'text/plain') {
+            $ext = strtolower(pathinfo($absPath, PATHINFO_EXTENSION));
+            $mime = match ($ext) {
+                'eml'        => 'message/rfc822',
+                'pdf'        => 'application/pdf',
+                'jpg','jpeg' => 'image/jpeg',
+                'png'        => 'image/png',
+                default      => $mime ?: 'application/octet-stream',
+            };
+        }
+
+        return [$sha, $size, $mime];
+    }
+
+    private function attachViaNewFlow(int $offerId, string $absPath, string $filename): void
+    {
+        // Reuse your new API client's "temp bucket + patch offer" flow.
+        // Assumes you already implemented something like attachFileToOffer().
+        $this->apiClient->attachFileToOffer($offerId, $absPath, $filename);
+    }
+
+    /**
+     * Detect MIME type of file
+     */
+    private function detectMime(string $file): ?string
+    {
+        if (!is_readable($file)) {
+            return null;
+        }
+        
+        $fi = new \finfo(FILEINFO_MIME_TYPE);
+        return $fi->file($file) ?: null;
     }
 }
