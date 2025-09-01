@@ -280,79 +280,92 @@ class IntakeResource extends Resource
                     ->color('success')
                     ->requiresConfirmation()
                     ->modalHeading('Export to Robaws')
-                    ->modalDescription('This will create a new quotation in Robaws using the extracted data from this intake and attach the uploaded file to the offer.')
-                    ->action(function (Intake $record) {
+                    ->modalDescription('This will create a new quotation in Robaws using the extracted data from this intake.')
+                    ->form([
+                        Forms\Components\Toggle::make('force')
+                            ->label('Force Re-export')
+                            ->helperText('Export even if recently exported')
+                            ->default(false)
+                            ->visible(fn (Intake $record): bool => $record->exported_at !== null),
+                        
+                        Forms\Components\Toggle::make('create_new')
+                            ->label('Create New Quotation')
+                            ->helperText('Create new quotation instead of updating existing')
+                            ->default(false)
+                            ->visible(fn (Intake $record): bool => $record->robaws_quotation_id !== null),
+                    ])
+                    ->action(function (Intake $record, array $data) {
                         try {
-                            // Use the canonical RobawsExportService
-                            $results = app(\App\Services\Robaws\RobawsExportService::class)->exportIntake($record);
+                            $exportService = app(\App\Services\Robaws\RobawsExportService::class);
                             
-                            // Prevent "Undefined array key" by using null coalescing:
-                            $failed   = $results['failed']   ?? [];
-                            $success  = $results['success']  ?? [];
-                            $uploaded = $results['uploaded'] ?? [];
-                            $exists   = $results['exists']   ?? [];
-                            $skipped  = $results['skipped']  ?? [];
-                            $stats    = $results['stats']    ?? [
-                                'success' => count($success),
-                                'failed'  => count($failed),
-                                'uploaded'=> count($uploaded),
-                                'exists'  => count($exists),
-                                'skipped' => count($skipped),
-                            ];
+                            // Add progress notification
+                            Notification::make()
+                                ->title('Starting Robaws Export')
+                                ->body('Processing intake data and mapping to Robaws format...')
+                                ->info()
+                                ->send();
                             
-                            $summary = sprintf(
-                                'Exported: %d • Failed: %d • Uploaded: %d • Exists: %d • Skipped: %d',
-                                $stats['success'], $stats['failed'], $stats['uploaded'], $stats['exists'], $stats['skipped']
-                            );
+                            $result = $exportService->exportIntake($record, [
+                                'force' => $data['force'] ?? false,
+                                'create_new' => $data['create_new'] ?? false,
+                            ]);
                             
-                            if ($stats['failed'] === 0 && $stats['success'] > 0) {
-                                // Update the intake with success status
+                            if ($result['success']) {
+                                // Update status for successful export
                                 $record->update(['status' => 'exported']);
                                 
+                                $title = $result['action'] === 'updated' ? 
+                                    'Robaws Quotation Updated' : 
+                                    'Robaws Export Successful';
+                                
+                                $body = sprintf(
+                                    'Quotation ID: %s | Duration: %sms | Action: %s',
+                                    $result['quotation_id'],
+                                    $result['duration_ms'],
+                                    ucfirst($result['action'])
+                                );
+                                
                                 Notification::make()
-                                    ->title('Robaws Export Successful')
-                                    ->body($summary)
+                                    ->title($title)
+                                    ->body($body)
                                     ->success()
-                                    ->send();
-                            } else if ($stats['success'] > 0) {
-                                Notification::make()
-                                    ->title('Robaws Export Partially Successful')
-                                    ->body($summary)
-                                    ->warning()
+                                    ->persistent()
+                                    ->actions([
+                                        \Filament\Notifications\Actions\Action::make('view_audit')
+                                            ->label('View Audit')
+                                            ->url(route('filament.admin.resources.intakes.audit', $record)),
+                                    ])
                                     ->send();
                             } else {
                                 Notification::make()
                                     ->title('Robaws Export Failed')
-                                    ->body($summary)
+                                    ->body($result['error'] . (isset($result['status']) ? " (HTTP {$result['status']})" : ''))
                                     ->danger()
-                                    ->send();
-                            }
-                            
-                            // Show failure details if any
-                            if ($failed) {
-                                Notification::make()
-                                    ->title('Some items failed to export')
-                                    ->body(collect($failed)->map(fn ($f) => $f['message'] ?? 'Unknown error')->take(3)->implode("\n"))
-                                    ->danger()
+                                    ->persistent()
+                                    ->actions([
+                                        \Filament\Notifications\Actions\Action::make('view_audit')
+                                            ->label('View Audit')
+                                            ->url(route('filament.admin.resources.intakes.audit', $record)),
+                                    ])
                                     ->send();
                             }
                             
                         } catch (\Exception $e) {
-                            Log::error('Export to Robaws failed', [
+                            Log::error('Filament Robaws export action failed', [
                                 'intake_id' => $record->id,
                                 'error' => $e->getMessage(),
                                 'trace' => $e->getTraceAsString(),
-                                'trace_id' => uniqid('filament_', true)
                             ]);
                             
                             Notification::make()
-                                ->title('Export Error')
-                                ->body('An error occurred: ' . $e->getMessage())
+                                ->title('Unexpected Export Error')
+                                ->body('An unexpected error occurred. Check logs for details.')
                                 ->danger()
+                                ->persistent()
                                 ->send();
                         }
                     })
-                    ->visible(fn (?Intake $record): bool => $record && $record->extraction()->exists()),
+                    ->visible(fn (?Intake $record): bool => $record && $record->extraction !== null),
                     
                 Tables\Actions\Action::make('view_extraction')
                     ->label('Extraction')

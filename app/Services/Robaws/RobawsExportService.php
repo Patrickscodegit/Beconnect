@@ -2,721 +2,360 @@
 
 namespace App\Services\Robaws;
 
-use App\Models\Document;
 use App\Models\Intake;
-use App\Models\RobawsDocument;
-use App\Services\RobawsClient;
-use App\Services\RobawsIntegration\JsonFieldMapper;
-use App\Support\Files;
-use App\Support\StreamHasher;
-use Illuminate\Support\Arr;
+use App\Services\Export\Mappers\RobawsMapper;
+use App\Services\Export\Clients\RobawsApiClient;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Carbon;
 
-final class RobawsExportService
+class RobawsExportService
 {
-    public function __construct(
-        private readonly RobawsClient $client,
-        private readonly StreamHasher $streamHasher,
-        private readonly ?JsonFieldMapper $fieldMapper = null, // ← inject if available
-    ) {}
+    private RobawsMapper $mapper;
+    private RobawsApiClient $apiClient;
 
-    /**
-     * Canonical export summary shape
-     */
-    private function emptySummary(): array
+    public function __construct(RobawsMapper $mapper, RobawsApiClient $apiClient)
     {
-        return [
-            'success'  => [],
-            'failed'   => [],
-            'uploaded' => [],
-            'exists'   => [],
-            'skipped'  => [],
-            'stats'    => ['success' => 0, 'failed' => 0, 'uploaded' => 0, 'exists' => 0, 'skipped' => 0],
-        ];
-    }
-
-    private function finalize(array $summary): array
-    {
-        // Ensure all keys exist (avoids "undefined key" if future edits forget a bucket)
-        $summary = array_merge($this->emptySummary(), $summary);
-
-        $summary['stats'] = [
-            'success'  => count($summary['success']),
-            'failed'   => count($summary['failed']),
-            'uploaded' => count($summary['uploaded']),
-            'exists'   => count($summary['exists']),
-            'skipped'  => count($summary['skipped']),
-        ];
-
-        return $summary;
+        $this->mapper = $mapper;
+        $this->apiClient = $apiClient;
     }
 
     /**
-     * Export an Intake to Robaws (quotation, files, …).
-     * Always returns the canonical shape.
+     * Export intake to Robaws with comprehensive error handling
      */
     public function exportIntake(Intake $intake, array $options = []): array
     {
-        $summary = $this->emptySummary();
-
+        $startTime = microtime(true);
+        $exportId = uniqid('export_', true);
+        
         try {
-            $robawsOfferId = $this->getRobawsOfferId($intake);
-            
-            $approvedDocuments = Document::where('intake_id', $intake->id)
-                ->where(function ($q) {
-                    $q->where('status', 'approved')
-                      ->orWhereNull('status');
-                })
-                ->get();
-
-            if ($approvedDocuments->isEmpty()) {
-                $summary['failed'][] = [
-                    'id'      => $intake->id,
-                    'type'    => 'intake',
-                    'message' => 'No approved documents found for intake',
-                    'meta'    => ['intake_id' => $intake->id],
-                ];
-                
-                return $this->finalize($summary);
-            }
-
-            foreach ($approvedDocuments as $document) {
-                try {
-                    $result = $this->uploadDocumentToRobaws($document, $robawsOfferId);
-                    
-                    // Log intake context for successful processing
-                    Log::info('Robaws export: document processed', [
-                        'intake_id' => $intake->id,
-                        'offer_id'  => (string) $robawsOfferId,
-                        'document_id' => $result['document']['id'] ?? null,
-                        'status' => $result['status'],
-                        'path'   => $document->filepath ?? $document->path ?? null,
-                    ]);
-                    
-                    // Map individual document result to canonical summary
-                    if ($result['status'] === 'uploaded') {
-                        $summary['uploaded'][] = [
-                            'id'        => $document->id,
-                            'path'      => $document->filepath,
-                            'remote_id' => $result['document']['id'] ?? null,
-                            'meta'      => $result,
-                        ];
-                        $summary['success'][] = [
-                            'id'      => $document->id,
-                            'type'    => 'document',
-                            'message' => 'Successfully uploaded to Robaws',
-                            'meta'    => $result,
-                        ];
-                    } elseif ($result['status'] === 'exists') {
-                        $summary['exists'][] = [
-                            'id'        => $document->id,
-                            'remote_id' => $result['document']['id'] ?? null,
-                            'meta'      => $result,
-                        ];
-                        $summary['success'][] = [
-                            'id'      => $document->id,
-                            'type'    => 'document', 
-                            'message' => 'Document already exists in Robaws',
-                            'meta'    => $result,
-                        ];
-                    } else {
-                        $summary['failed'][] = [
-                            'id'      => $document->id,
-                            'type'    => 'document',
-                            'message' => $result['error'] ?? ($result['reason'] ?? 'Unknown upload error'),
-                            'meta'    => $result,
-                        ];
-                    }
-                } catch (\Throwable $e) {
-                    $traceId = uniqid('robaws_', true);
-                    Log::error('Document upload failed during export', [
-                        'document_id' => $document->id,
-                        'intake_id' => $intake->id,
-                        'error' => $e->getMessage(),
-                        'trace_id' => $traceId,
-                    ]);
-                    
-                    $summary['failed'][] = [
-                        'id'      => $document->id,
-                        'type'    => 'document',
-                        'message' => $e->getMessage(),
-                        'meta'    => ['trace_id' => $traceId],
-                    ];
-                }
-            }
-
-        } catch (\Throwable $e) {
-            $traceId = uniqid('robaws_', true);
-            Log::error('Robaws exportIntake failed', [
+            Log::info('Starting Robaws export', [
+                'export_id' => $exportId,
                 'intake_id' => $intake->id,
-                'trace_id'  => $traceId,
-                'exception' => $e,
+                'customer' => $intake->customer_name,
+                'options' => $options,
             ]);
 
-            $summary['failed'][] = [
-                'id'      => $intake->id,
-                'type'    => 'intake',
-                'message' => $e->getMessage(),
-                'meta'    => ['trace_id' => $traceId],
-            ];
-        }
-
-        return $this->finalize($summary);
-    }
-
-    /**
-     * Export *documents* of an Intake to Robaws.
-     * Keep the same canonical shape.
-     */
-    public function exportIntakeDocuments(Intake $intake): array
-    {
-        return $this->exportIntake($intake);
-    }
-
-    /**
-     * Get or create Robaws offer ID for an intake
-     */
-    protected function getRobawsOfferId(Intake $intake): string
-    {
-        if ($intake->robaws_offer_id) {
-            return $intake->robaws_offer_id;
-        }
-
-        // Create a new offer if none exists
-        $extraction = $intake->extraction;
-        if (!$extraction) {
-            throw new \RuntimeException("No extraction found for intake {$intake->id}");
-        }
-
-        $payload = $extraction->extracted_data ?? $extraction->raw_json ?? null;
-        if (!$payload || !is_array($payload)) {
-            throw new \RuntimeException("No extraction data found for intake {$intake->id}");
-        }
-
-        $robawsData = $this->mapExtractionToRobaws($payload);
-        $offer = $this->client->createOffer($robawsData);
-        
-        if (!isset($offer['id'])) {
-            throw new \RuntimeException("Failed to create Robaws offer for intake {$intake->id}");
-        }
-
-        $offerId = $offer['id'];
-        $intake->update(['robaws_offer_id' => $offerId]);
-        
-        Log::info('Created new Robaws offer', [
-            'intake_id' => $intake->id,
-            'offer_id' => $offerId
-        ]);
-
-        return (string) $offerId;
-    }
-
-    /**
-     * Upload a document by path to a specific offer ID (for tests)
-     * 
-     * @param int|string $offerId The Robaws offer ID
-     * @param string $dbPath The document path (e.g., 'documents/file.eml')
-     * @return array{
-     *   status: string,
-     *   error?: string,
-     *   document: array{id: ?int, name: string, mime: string, size: ?int, sha256?: string}
-     * }
-     */
-    public function uploadDocumentByPath(int|string $offerId, string $dbPath): array
-    {
-        try {
-            $doc = Files::openDocumentStream($dbPath);
-        } catch (\RuntimeException $e) {
-            return [
-                'status' => 'error',
-                'error' => 'File not found: ' . $dbPath . ' — ' . $e->getMessage(),
-                'document' => [
-                    'id' => null,
-                    'name' => basename($dbPath),
-                    'mime' => null,
-                    'size' => null,
-                    'sha256' => null
-                ],
-                '_raw' => ['exception' => get_class($e)],
-            ];
-        }
-
-        $filename = $this->prettifyFilename($doc['filename']);
-        $hashed = $this->streamHasher->toTempHashedStream($doc['stream']);
-        if (is_resource($doc['stream'])) {
-            fclose($doc['stream']);
-        }
-
-        $sha256 = $hashed['sha256'];
-        $size = $doc['size'] ?? $hashed['size'];
-
-        // 1) Local ledger check
-        $existing = RobawsDocument::query()
-            ->where('robaws_offer_id', $offerId)
-            ->where('sha256', $sha256)
-            ->first();
-
-        if ($existing) {
-            if (isset($hashed['stream']) && is_resource($hashed['stream'])) {
-                fclose($hashed['stream']);
+            // Check if already exported recently (unless forced)
+            if (!($options['force'] ?? false) && $this->wasRecentlyExported($intake)) {
+                return [
+                    'success' => false,
+                    'error' => 'Intake was already exported recently. Use force=true to re-export.',
+                    'quotation_id' => $intake->robaws_quotation_id,
+                ];
             }
+
+            // Get extraction data
+            $extractionData = $this->getExtractionData($intake);
             
-            Log::info('Robaws upload: local ledger hit', [
-                'offer_id' => $offerId,
-                'filename' => $filename,
-                'sha256' => $sha256,
-                'status' => 'exists'
+            Log::info('Extraction data summary', [
+                'export_id' => $exportId,
+                'intake_id' => $intake->id,
+                'has_vehicle' => !empty($extractionData['vehicle']),
+                'has_shipping' => !empty($extractionData['shipping']),
+                'has_contact' => !empty($extractionData['contact']),
+                'data_size' => strlen(json_encode($extractionData)),
             ]);
+
+            // Map to Robaws format
+            $payload = $this->mapper->mapIntakeToRobaws($intake, $extractionData);
             
-            return [
-                'status' => 'exists',
-                'reason' => 'Found in local ledger',
-                'document' => [
-                    'id' => $existing->robaws_document_id,
-                    'name' => $existing->filename ?? $filename,
-                    'mime' => $existing->mime ?? $doc['mime'],
-                    'size' => $existing->filesize ?? $size,
-                    'sha256' => $existing->sha256,
-                ],
-                '_raw' => ['source' => 'local'],
-            ];
-        }
+            Log::info('Mapped payload structure', [
+                'export_id' => $exportId,
+                'intake_id' => $intake->id,
+                'sections' => array_keys($payload),
+                'payload_size' => strlen(json_encode($payload)),
+                'has_json_field' => !empty($payload['automation']['json']),
+            ]);
 
-        // 2) Not in ledger → upload
-        $fileData = [
-            'filename'  => $filename,
-            'mime'      => $doc['mime'],          // for future callers
-            'mime_type' => $doc['mime'],          // for current client
-            'stream'    => $hashed['stream'],
-            'size'      => $size,                 // for future callers
-            'file_size' => $size,                 // for current client
-            'sha256'    => $sha256,
-        ];
+            // Generate idempotency key
+            $idempotencyKey = $options['idempotency_key'] ?? $this->generateIdempotencyKey($intake, $extractionData);
 
-        try {
-            $res = $this->client->uploadDocument((string)$offerId, $fileData);
-        } catch (\Throwable $e) {
-            if (isset($hashed['stream']) && is_resource($hashed['stream'])) {
-                fclose($hashed['stream']);
+            // Export to Robaws
+            if ($intake->robaws_quotation_id && !($options['create_new'] ?? false)) {
+                // Update existing quotation
+                $result = $this->apiClient->updateQuotation(
+                    $intake->robaws_quotation_id, 
+                    $payload, 
+                    $idempotencyKey
+                );
+                $action = 'updated';
+            } else {
+                // Create new quotation
+                $result = $this->apiClient->createQuotation($payload, $idempotencyKey);
+                $action = 'created';
             }
-            
-            Log::error('Robaws upload: client error', [
-                'offer_id' => $offerId,
-                'filename' => $filename,
-                'sha256' => $sha256,
-                'error' => $e->getMessage(),
-                'status' => 'error'
-            ]);
-            
-            return [
-                'status' => 'error',
-                'error' => $e->getMessage(),
-                'document' => [
-                    'id' => null,
-                    'name' => $filename,
-                    'mime' => $doc['mime'],
-                    'size' => $size,
-                    'sha256' => $sha256
-                ],
-                '_raw' => ['exception' => get_class($e)],
-            ];
-        } finally {
-            if (isset($hashed['stream']) && is_resource($hashed['stream'])) {
-                fclose($hashed['stream']);
-            }
-        }
 
-        $normalized = $this->normalizeUploadResponse($res, $filename, ['mime' => $doc['mime'], 'size' => $size]);
-        $normalized['document']['sha256'] = $sha256;
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
 
-        // Log the successful upload
-        Log::info('Robaws upload: new upload successful', [
-            'offer_id' => (string) $offerId,
-            'filename' => $filename,
-            'sha256' => $sha256,
-            'robaws_doc_id' => $normalized['document']['id'],
-            'status' => $normalized['status']
-        ]);
+            if ($result['success']) {
+                // Update intake with export info
+                $updateData = [
+                    'robaws_quotation_id' => $result['quotation_id'],
+                    'exported_at' => now(),
+                    'export_payload_hash' => hash('sha256', json_encode($payload)),
+                    'export_attempt_count' => DB::raw('COALESCE(export_attempt_count, 0) + 1'),
+                ];
 
-        // 3) Persist to ledger (so next time it resolves to 'exists')
-        if ($normalized['status'] === 'uploaded' && class_exists(RobawsDocument::class)) {
-            RobawsDocument::create([
-                'robaws_offer_id' => $offerId,
-                'robaws_document_id' => $normalized['document']['id'],
-                'filename' => $filename,
-                'sha256' => $sha256,
-                'filesize' => $size,
-                'uploaded_at' => now()
-            ]);
-        }
+                $intake->update($updateData);
 
-        return $normalized;
-    }
-
-    /**
-     * Backward compatibility alias for tests
-     */
-    public function uploadDocumentToOffer(int|string $offerId, string $dbPath): array
-    {
-        if (app()->environment('local')) {
-            Log::warning('DEPRECATED: uploadDocumentToOffer() called. Use uploadDocumentByPath().', [
-                'offer_id' => (string) $offerId, 
-                'path' => $dbPath
-            ]);
-        }
-        return $this->uploadDocumentByPath($offerId, $dbPath);
-    }
-
-    /**
-     * Upload a document to Robaws with idempotency
-     */
-    protected function uploadDocumentToRobaws(Document $document, string $robawsOfferId): array
-    {
-        $dbPath = $document->filepath ?? $document->path ?? $document->storage_path ?? $document->full_path ?? null;
-        if (!$dbPath) {
-            return [
-                'status' => 'error',
-                'error'  => 'Missing document path on model',
-                'document' => [
-                    'id'   => null,
-                    'name' => $document->name ?? $document->original_filename ?? 'unknown',
-                    'mime' => null,
-                    'size' => null
-                ],
-            ];
-        }
-        return $this->uploadDocumentByPath($robawsOfferId, $dbPath);
-    }
-
-    /**
-     * Clean up cargo strings by removing empty parentheses and extra spaces
-     */
-    private function cleanLooseParens(?string $s): ?string
-    {
-        if ($s === null) return null;
-        $s = preg_replace('/\(\s*\)/', '', $s);        // remove empty ()
-        $s = preg_replace('/\s{2,}/', ' ', trim($s));  // collapse spaces
-        return $s;
-    }
-
-    /**
-     * Map extraction data to Robaws format with JsonFieldMapper-first logic + fallback
-     */
-    protected function mapExtractionToRobaws(array $extractedData): array
-    {
-        // Normalize weird shapes (extractions sometimes nest JSON under data.JSON)
-        if (!isset($extractedData['JSON']) && isset($extractedData['data']['JSON'])) {
-            $extractedData = $extractedData['data'];
-        }
-
-        // Merge document_data into the root so "vehicle.*" paths work either way
-        $root = $extractedData;
-        if (!empty($extractedData['document_data']) && is_array($extractedData['document_data'])) {
-            // document_data should not overwrite explicit top-level values
-            $root = array_replace_recursive($extractedData, $extractedData['document_data']);
-        }
-
-        Log::info('RobawsExportService: Starting mapping with JsonFieldMapper-first approach', [
-            'has_mapper' => $this->fieldMapper !== null,
-            'input_keys' => array_keys($root),
-            'has_document_data' => isset($extractedData['document_data'])
-        ]);
-
-        // Mapper-first path
-        if ($this->fieldMapper) {
-            try {
-                $mapped = $this->fieldMapper->mapFields($root);
-
-                // Minimal validation to keep old expectations intact
-                $required = ['customer', 'por', 'pod', 'cargo'];
-                $missing = array_filter($required, fn($k) => empty($mapped[$k] ?? null));
-
-                if ($missing) {
-                    Log::warning('JsonFieldMapper mapped data is missing required keys, falling back to legacy', [
-                        'missing' => $missing, 
-                        'mapped_keys' => array_keys($mapped),
-                        'sample_values' => array_intersect_key($mapped, array_flip(['customer', 'por', 'pod', 'cargo']))
-                    ]);
-                } else {
-                    Log::info('JsonFieldMapper successfully mapped all required fields', [
-                        'mapped_field_count' => count($mapped),
-                        'customer' => $mapped['customer'] ?? 'null',
-                        'routing' => ($mapped['por'] ?? 'null') . ' → ' . ($mapped['pod'] ?? 'null'),
-                        'cargo' => $mapped['cargo'] ?? 'null'
-                    ]);
-
-                    // Convert mapped data to Robaws offer format
-                    return $this->buildRobawsPayloadFromMapping($mapped, $root);
-                }
-            } catch (\Throwable $e) {
-                Log::error('JsonFieldMapper failed; falling back to legacy extraction', [
-                    'error' => $e->getMessage(),
-                    'file' => $e->getFile(),
-                    'line' => $e->getLine()
+                Log::info("Successfully {$action} Robaws quotation", [
+                    'export_id' => $exportId,
+                    'intake_id' => $intake->id,
+                    'quotation_id' => $result['quotation_id'],
+                    'action' => $action,
+                    'duration_ms' => $duration,
+                    'idempotency_key' => $result['idempotency_key'],
                 ]);
+
+                return [
+                    'success' => true,
+                    'action' => $action,
+                    'quotation_id' => $result['quotation_id'],
+                    'idempotency_key' => $result['idempotency_key'],
+                    'duration_ms' => $duration,
+                    'data' => $result['data'],
+                ];
             }
-        }
 
-        // Fallback: legacy/manual extraction to keep BC
-        Log::info('Using legacy fallback mapping');
-        return $this->buildLegacyRobawsPayload($root);
-    }
+            // Handle API failure
+            $intake->increment('export_attempt_count');
+            $intake->update(['last_export_error' => $result['error']]);
 
-    /**
-     * Build Robaws payload from JsonFieldMapper results
-     */
-    private function buildRobawsPayloadFromMapping(array $mapped, array $root): array
-    {
-        // Extract client information using mapped data + fallbacks
-        $clientId = $this->resolveClientId($mapped, $root);
+            Log::error('Robaws export failed', [
+                'export_id' => $exportId,
+                'intake_id' => $intake->id,
+                'error' => $result['error'],
+                'status' => $result['status'] ?? null,
+                'duration_ms' => $duration,
+                'attempt_count' => $intake->export_attempt_count + 1,
+            ]);
 
-        $payload = [
-            'clientId'            => $clientId,
-            'title'               => $mapped['customer_reference'] ?? 'Vehicle Transport Quotation',
-            'description'         => $this->buildDescription($mapped),
-            'reference'           => $mapped['customer_reference'] ?? ($root['file_ref'] ?? 'AUTO-' . uniqid()),
-            'customer_reference'  => $mapped['customer_reference'] ?? null,
-            'origin'              => $mapped['por'] ?? null,
-            'destination'         => $mapped['pod'] ?? null,
-            'cargo_description'   => $this->cleanLooseParens($mapped['cargo'] ?? 'Vehicle Transport'),
-            'vehicle_count'       => $this->extractVehicleCount($mapped, $root),
-            'lines'               => $this->mapLines($root['lines'] ?? $root['vehicles'] ?? []),
-            'extraction_metadata' => [
-                'mapping_version' => $mapped['mapping_version'] ?? '1.0',
-                'mapped_at' => $mapped['formatted_at'] ?? now()->toISOString(),
-                'source' => $mapped['source'] ?? 'bconnect_ai_extraction',
-                'pipeline' => 'JsonFieldMapper'
-            ]
-        ];
-
-        // Add additional Robaws fields from mapping
-        if (!empty($mapped['client_email'])) {
-            $payload['customer_email'] = $mapped['client_email'];
-        }
-        
-        if (!empty($mapped['contact'])) {
-            $payload['customer_phone'] = $mapped['contact'];
-        }
-
-        if (!empty($mapped['dim_bef_delivery'])) {
-            $payload['dimensions'] = $mapped['dim_bef_delivery'];
-        }
-
-        return $payload;
-    }
-
-    /**
-     * Build legacy Robaws payload for backward compatibility
-     */
-    private function buildLegacyRobawsPayload(array $root): array
-    {
-        // Legacy client ID resolution
-        $clientId = $root['clientId'] 
-            ?? $root['client_id'] 
-            ?? null;
-
-        if (!$clientId) {
-            $clientData = [
-                'name'       => $root['client']['name']       ?? $root['company']     ?? $root['contact_name'] ?? null,
-                'email'      => $root['client']['email']      ?? $root['email']       ?? null,
-                'tel'        => $root['client']['tel']        ?? $root['phone']       ?? null,
-                'address'    => $root['client']['address']    ?? $root['address']     ?? null,
-                'postalCode' => $root['client']['postalCode'] ?? $root['postalCode']  ?? null,
-                'city'       => $root['client']['city']       ?? $root['city']        ?? null,
-                'country'    => $root['client']['country']    ?? $root['country']     ?? 'BE',
-            ];
-
-            if (!empty($clientData['name']) || !empty($clientData['email'])) {
-                try {
-                    $client = $this->client->findOrCreateClient($clientData);
-                    $clientId = $client['id'] ?? null;
-                } catch (\Throwable $e) {
-                    Log::warning('Failed to find/create client, falling back to default', [
-                        'client_data' => $clientData,
-                        'error' => $e->getMessage()
-                    ]);
-                }
-            }
-        }
-
-        $clientId = $clientId ?: (int) config('services.robaws.default_client_id');
-
-        if (!$clientId) {
-            throw new \RuntimeException(
-                'Missing clientId for offer creation. Provide clientId on the record or configure ROBAWS_DEFAULT_CLIENT_ID.'
-            );
-        }
-
-        return [
-            'clientId'            => $clientId,
-            'title'               => $root['title']               ?? 'Vehicle Transport Quotation',
-            'description'         => $root['description']         ?? null,
-            'reference'           => $root['reference']           ?? ($root['file_ref'] ?? 'AUTO-' . uniqid()),
-            'customer_reference'  => $root['customer_reference']  ?? ($root['reference'] ?? null),
-            'origin'              => $root['shipment']['origin']  ?? $root['origin'] ?? null,
-            'destination'         => $root['shipment']['destination'] ?? $root['destination'] ?? null,
-            'cargo_description'   => $this->cleanLooseParens($root['cargo']['description'] ?? $root['cargo_description'] ?? null),
-            'vehicle_count'       => count($root['vehicles'] ?? []),
-            'lines'               => $this->mapLines($root['lines'] ?? $root['vehicles'] ?? []),
-            'extraction_metadata' => [
-                'mapping_version' => 'legacy-fallback',
-                'mapped_at' => now()->toISOString(),
-                'source' => 'bconnect_legacy_extraction',
-                'pipeline' => 'legacy'
-            ]
-        ];
-    }
-
-    /**
-     * Resolve client ID using mapped data and fallbacks (shared method)
-     */
-    private function resolveClientId(array $mappedData, array $root): int
-    {
-        // 1) Prefer an explicit client id if present on the extraction/intake
-        $clientId = $root['clientId'] 
-            ?? $root['client_id'] 
-            ?? null;
-
-        // 2) If missing, try to find/create via client data from mapping
-        if (!$clientId && !empty($mappedData['customer'])) {
-            $clientData = [
-                'name'       => $mappedData['customer'] ?? null,
-                'email'      => $mappedData['client_email'] ?? null,
-                'tel'        => $mappedData['contact'] ?? null,
-                'address'    => $root['address'] ?? null,
-                'postalCode' => $root['postalCode'] ?? null,
-                'city'       => $root['city'] ?? null,
-                'country'    => $root['country'] ?? 'BE',
-            ];
-
-            // If we have enough data to identify a client, try find/create
-            if (!empty($clientData['name']) || !empty($clientData['email'])) {
-                try {
-                    $client = $this->client->findOrCreateClient($clientData);
-                    $clientId = $client['id'] ?? null;
-                    
-                    Log::info('RobawsExportService: Created/found client via mapping data', [
-                        'client_data' => $clientData,
-                        'resolved_client_id' => $clientId
-                    ]);
-                } catch (\Throwable $e) {
-                    Log::warning('Failed to find/create client via mapping, falling back to default', [
-                        'client_data' => $clientData,
-                        'error' => $e->getMessage()
-                    ]);
-                }
-            }
-        }
-
-        // 3) Fallback to default client id (config)
-        $clientId = $clientId ?: (int) config('services.robaws.default_client_id');
-
-        // Final guard (fail fast with a clear error if still missing)
-        if (!$clientId) {
-            throw new \RuntimeException(
-                'Missing clientId for offer creation. Provide clientId on the record or configure ROBAWS_DEFAULT_CLIENT_ID.'
-            );
-        }
-
-        return $clientId;
-    }
-
-    /**
-     * Build description from mapped data
-     */
-    private function buildDescription(array $mappedData): ?string
-    {
-        $parts = [];
-        
-        if (!empty($mappedData['cargo'])) {
-            $parts[] = 'Cargo: ' . $mappedData['cargo'];
-        }
-        
-        if (!empty($mappedData['por']) && !empty($mappedData['pod'])) {
-            $parts[] = 'Route: ' . $mappedData['por'] . ' → ' . $mappedData['pod'];
-        }
-        
-        if (!empty($mappedData['vehicle_brand']) && !empty($mappedData['vehicle_model'])) {
-            $parts[] = 'Vehicle: ' . $mappedData['vehicle_brand'] . ' ' . $mappedData['vehicle_model'];
-        }
-
-        return !empty($parts) ? implode(' | ', $parts) : null;
-    }
-
-    /**
-     * Extract vehicle count from mapped data
-     */
-    private function extractVehicleCount(array $mappedData, array $root): int
-    {
-        // Try to extract from cargo description
-        if (!empty($mappedData['cargo'])) {
-            if (preg_match('/(\d+)\s*x/', $mappedData['cargo'], $matches)) {
-                return (int) $matches[1];
-            }
-        }
-
-        // Fallback to vehicles array count or 1
-        return count($root['vehicles'] ?? []) ?: 1;
-    }
-
-    /**
-     * Map extraction lines/vehicles to Robaws line items
-     */
-    private function mapLines(array $lines): array
-    {
-        return array_map(function ($line) {
             return [
-                'description' => $line['description'] ?? $line['name'] ?? $line['make_model'] ?? 'Vehicle Transport',
-                'quantity'    => (float) ($line['qty'] ?? $line['quantity'] ?? 1),
-                'price'       => (float) ($line['price'] ?? $line['cost'] ?? 0),
-                'unit'        => $line['unit'] ?? 'pcs',
-                'reference'   => $line['reference'] ?? $line['vin'] ?? null,
+                'success' => false,
+                'error' => $result['error'],
+                'status' => $result['status'] ?? null,
+                'duration_ms' => $duration,
+                'details' => $result['data'] ?? [],
             ];
-        }, $lines);
+
+        } catch (\Exception $e) {
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
+            $intake->increment('export_attempt_count');
+            $intake->update(['last_export_error' => $e->getMessage()]);
+
+            Log::error('Unexpected error during Robaws export', [
+                'export_id' => $exportId,
+                'intake_id' => $intake->id,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'duration_ms' => $duration,
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Unexpected error: ' . $e->getMessage(),
+                'duration_ms' => $duration,
+            ];
+        }
     }
 
     /**
-     * Normalize upload response from client to standard format
+     * Bulk export multiple intakes
      */
-    protected function normalizeUploadResponse(array $res, string $filename, array $docMeta = []): array
+    public function bulkExport(array $intakeIds, array $options = []): array
     {
-        $ok = isset($res['success']) && $res['success'] === true;
-        $code = $res['status_code'] ?? $res['code'] ?? null;
+        $results = [];
+        $successCount = 0;
+        $failureCount = 0;
+        $startTime = microtime(true);
 
-        if (is_int($code)) {
-            $ok = $ok || ($code >= 200 && $code < 300);
+        Log::info('Starting bulk Robaws export', [
+            'intake_count' => count($intakeIds),
+            'options' => $options,
+        ]);
+
+        foreach ($intakeIds as $intakeId) {
+            $intake = Intake::find($intakeId);
+            
+            if (!$intake) {
+                $results[$intakeId] = [
+                    'success' => false,
+                    'error' => 'Intake not found',
+                ];
+                $failureCount++;
+                continue;
+            }
+
+            $result = $this->exportIntake($intake, $options);
+            $results[$intakeId] = $result;
+
+            if ($result['success']) {
+                $successCount++;
+            } else {
+                $failureCount++;
+            }
+
+            // Add delay between requests to avoid rate limiting
+            if (count($intakeIds) > 1) {
+                usleep(($options['delay_ms'] ?? 100) * 1000);
+            }
         }
 
-        $ok = $ok || isset($res['document']) || isset($res['id']) || isset($res['file_id']);
+        $duration = round((microtime(true) - $startTime) * 1000, 2);
 
-        $finalStatus = $ok ? 'uploaded' : 'error';
-
-        $docBlock = is_array($res['document'] ?? null) ? $res['document'] : [];
-        $normalizedDoc = [
-            'id'   => $docBlock['id'] ?? ($res['id'] ?? ($res['file_id'] ?? null)),
-            'name' => $docBlock['name'] ?? ($res['name'] ?? $filename),
-            'mime' => $docBlock['mime'] ?? ($res['mime'] ?? ($docMeta['mime'] ?? 'application/octet-stream')),
-            'size' => $docBlock['size'] ?? ($res['size'] ?? ($docMeta['size'] ?? null)),
-        ];
+        Log::info('Bulk export completed', [
+            'total' => count($intakeIds),
+            'success' => $successCount,
+            'failure' => $failureCount,
+            'duration_ms' => $duration,
+        ]);
 
         return [
-            'status'   => $finalStatus,
-            'document' => $normalizedDoc,
-            '_raw'     => $res,
+            'success' => $failureCount === 0,
+            'total' => count($intakeIds),
+            'success_count' => $successCount,
+            'failure_count' => $failureCount,
+            'duration_ms' => $duration,
+            'results' => $results,
         ];
     }
 
     /**
-     * Clean up filename for better display
+     * Test connection to Robaws API
      */
-    protected function prettifyFilename(string $filename): string
+    public function testConnection(): array
     {
-        // Remove timestamp prefixes that might exist
-        $cleaned = preg_replace('/^\d{10,}_/', '', basename($filename));
+        Log::info('Testing Robaws API connection');
         
-        // Replace underscores with spaces and title case
-        $cleaned = str_replace('_', ' ', $cleaned);
+        $configCheck = $this->apiClient->validateConfig();
+        if (!$configCheck['valid']) {
+            return [
+                'success' => false,
+                'error' => 'Configuration invalid',
+                'issues' => $configCheck['issues'],
+            ];
+        }
+
+        $result = $this->apiClient->testConnection();
         
-        return $cleaned;
+        Log::info('Robaws connection test result', [
+            'success' => $result['success'],
+            'status' => $result['status'] ?? null,
+            'response_time' => $result['response_time'] ?? null,
+        ]);
+
+        return $result;
+    }
+
+    /**
+     * Get audit information for export troubleshooting
+     */
+    public function getExportAudit(Intake $intake): array
+    {
+        $extractionData = $this->getExtractionData($intake);
+        $payload = $this->mapper->mapIntakeToRobaws($intake, $extractionData);
+        
+        return [
+            'intake' => [
+                'id' => $intake->id,
+                'customer_name' => $intake->customer_name,
+                'robaws_quotation_id' => $intake->robaws_quotation_id,
+                'exported_at' => $intake->exported_at,
+                'export_attempt_count' => $intake->export_attempt_count ?? 0,
+                'last_export_error' => $intake->last_export_error,
+            ],
+            'extraction_summary' => [
+                'total_size' => strlen(json_encode($extractionData)),
+                'sections' => array_keys($extractionData),
+                'has_vehicle' => !empty($extractionData['vehicle']),
+                'has_shipping' => !empty($extractionData['shipping']),
+                'has_contact' => !empty($extractionData['contact']),
+            ],
+            'payload_summary' => [
+                'total_size' => strlen(json_encode($payload)),
+                'sections' => array_keys($payload),
+                'has_json_field' => !empty($payload['automation']['json']),
+                'json_size' => strlen($payload['automation']['json'] ?? ''),
+            ],
+            'mapping_completeness' => $this->analyzeMapping($payload),
+        ];
+    }
+
+    // Private helper methods
+
+    private function getExtractionData(Intake $intake): array
+    {
+        $base = $intake->extraction?->data ?? [];
+
+        foreach ($intake->documents as $doc) {
+            $docData = $doc->extraction?->data ?? [];
+            $base = array_replace_recursive($base, $docData);
+        }
+
+        return $base;
+    }
+
+    private function wasRecentlyExported(Intake $intake): bool
+    {
+        if (!$intake->exported_at) {
+            return false;
+        }
+        
+        $threshold = Carbon::parse($intake->exported_at)->addMinutes(5);
+        return now()->lt($threshold);
+    }
+
+    private function generateIdempotencyKey(Intake $intake, array $extractionData): string
+    {
+        $data = [
+            'intake_id' => $intake->id,
+            'customer' => $intake->customer_name,
+            'vehicle' => $extractionData['vehicle']['vin'] ?? $extractionData['vehicle']['brand'] ?? '',
+            'timestamp' => $intake->updated_at->timestamp,
+        ];
+        
+        $hash = hash('sha256', json_encode($data, JSON_SORT_KEYS));
+        return 'bconnect_' . $intake->id . '_' . substr($hash, 0, 16);
+    }
+
+    private function analyzeMapping(array $payload): array
+    {
+        $analysis = [];
+        
+        // Check each section for completeness
+        foreach ($payload as $section => $data) {
+            $analysis[$section] = $this->analyzeMappingSection($data);
+        }
+        
+        return $analysis;
+    }
+
+    private function analyzeMappingSection(array $data): array
+    {
+        $total = count($data);
+        $filled = 0;
+        $empty = 0;
+        
+        foreach ($data as $key => $value) {
+            if (is_string($value) && trim($value) !== '') {
+                $filled++;
+            } elseif (is_array($value) && !empty($value)) {
+                $filled++;
+            } elseif (!is_null($value) && $value !== '' && $value !== []) {
+                $filled++;
+            } else {
+                $empty++;
+            }
+        }
+        
+        return [
+            'total_fields' => $total,
+            'filled_fields' => $filled,
+            'empty_fields' => $empty,
+            'completeness_percent' => $total > 0 ? round(($filled / $total) * 100, 1) : 0,
+        ];
     }
 }
