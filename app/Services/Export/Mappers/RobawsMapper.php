@@ -354,8 +354,8 @@ class RobawsMapper
             'contact' => $this->extractContactPerson($contact, $shipping),
             'endcustomer' => $contact['company'] ?? '',
             'contact_email' => $contact['email'] ?? $intake->customer_email ?? '',
-            'customer_reference' => $intake->customer_reference ?? '',
-            'concerning' => $this->generateConcerning($vehicle, $shipping, $extractionData),
+            'customer_reference' => $this->generateConcerning($vehicle, $shipping, $extractionData),
+            'concerning' => '', // Empty since we moved content to customer_reference
             'status' => 'pending',
             'assignee' => $contact['email'] ?? 'sales@truck-time.com',
             'winst' => '',
