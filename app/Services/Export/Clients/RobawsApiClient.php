@@ -381,15 +381,23 @@ class RobawsApiClient
         $name  = $name ? trim($name) : null;
         $email = $email ? mb_strtolower(trim($email)) : null;
 
+        // String normalization helper for robust matching
+        $normalize = fn($s) => preg_replace('/\s+/', ' ', 
+            iconv('UTF-8', 'ASCII//TRANSLIT', mb_strtolower(trim($s ?? '')))
+        );
+
         Log::info('Robaws client lookup initiated', [
             'search_name' => $name,
             'search_email' => $email,
         ]);
 
-        // 1) Email exact match
+        // 1) Email exact match (case-insensitive)
         if ($email) {
             Log::info('Attempting email-based client lookup', ['email' => $email]);
-            $response = $this->makeRequest('GET', '/api/v2/clients', ['email' => $email, 'size' => 5]);
+            $response = $this->makeRequest('GET', '/api/v2/clients', [
+                'email' => $email, 
+                'pageSize' => 25
+            ]);
             
             Log::info('Client API response (email search)', [
                 'status' => $response->status(),
@@ -422,10 +430,15 @@ class RobawsApiClient
             }
         }
 
-        // 2) Name exact match (case-insensitive) - try explicit name param first
+        // 2) Name exact match with normalization - try explicit name param first
         if ($name) {
+            $normalizedSearchName = $normalize($name);
+            
             Log::info('Attempting name-based client lookup (explicit)', ['name' => $name]);
-            $response = $this->makeRequest('GET', '/api/v2/clients', ['name' => $name, 'size' => 10]);
+            $response = $this->makeRequest('GET', '/api/v2/clients', [
+                'name' => $name, 
+                'pageSize' => 25
+            ]);
             
             Log::info('Client API response (name search)', [
                 'status' => $response->status(),
@@ -439,6 +452,8 @@ class RobawsApiClient
                 
                 foreach ($clients as $client) {
                     $clientName = $client['name'] ?? '';
+                    
+                    // Try exact match first
                     if (mb_strtolower(trim($clientName)) === mb_strtolower($name)) {
                         $clientId = (int) $client['id'];
                         Log::info('Client found by exact name match', [
@@ -449,26 +464,60 @@ class RobawsApiClient
                         ]);
                         return $clientId;
                     }
+                    
+                    // Try normalized match for more tolerance
+                    if ($normalize($clientName) === $normalizedSearchName) {
+                        $clientId = (int) $client['id'];
+                        Log::info('Client found by normalized name match', [
+                            'client_id' => $clientId,
+                            'client_name' => $clientName,
+                            'client_email' => $client['email'] ?? 'N/A',
+                            'search_name' => $name,
+                            'normalized_match' => true,
+                        ]);
+                        return $clientId;
+                    }
                 }
             }
 
-            // Fallback: generic query parameter
+            // 3) Fallback: generic query parameter with client-side filtering
             Log::info('Attempting generic client lookup', ['name' => $name]);
-            $response2 = $this->makeRequest('GET', '/api/v2/clients', ['q' => $name, 'size' => 10]);
+            $response2 = $this->makeRequest('GET', '/api/v2/clients', [
+                'q' => $name, 
+                'pageSize' => 25
+            ]);
             
             if ($response2->successful()) {
                 $data2 = $response2->json();
                 $clients2 = $data2['items'] ?? []; // Use 'items' not 'data'
                 
+                // Use collect for better filtering
+                $hit = collect($clients2)->first(function($client) use ($normalize, $normalizedSearchName) {
+                    return $normalize($client['name'] ?? '') === $normalizedSearchName;
+                });
+                
+                if ($hit && isset($hit['id'])) {
+                    $clientId = (int) $hit['id'];
+                    Log::info('Client found by generic query with normalized filtering', [
+                        'client_id' => $clientId,
+                        'client_name' => $hit['name'] ?? 'N/A',
+                        'client_email' => $hit['email'] ?? 'N/A',
+                        'search_name' => $name,
+                    ]);
+                    return $clientId;
+                }
+                
+                // Last resort: take first match if no normalized match found
                 if (!empty($clients2)) {
                     $firstMatch = $clients2[0];
                     if (isset($firstMatch['id'])) {
                         $clientId = (int) $firstMatch['id'];
-                        Log::info('Client found by generic query', [
+                        Log::info('Client found by generic query (first match fallback)', [
                             'client_id' => $clientId,
                             'client_name' => $firstMatch['name'] ?? 'N/A',
                             'client_email' => $firstMatch['email'] ?? 'N/A',
                             'search_name' => $name,
+                            'fallback_match' => true,
                         ]);
                         return $clientId;
                     }

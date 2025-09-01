@@ -185,8 +185,16 @@ class RobawsExportService
                         'intake_id' => $intake->id,
                         'offer_id' => $id,
                         'verification_success' => $verify['success'] ?? false,
-                        'clientId' => data_get($verify, 'data.clientId'),
-                        'hasClientObj' => !empty(data_get($verify, 'data.client')),
+                        'verify_top' => [
+                            'clientId'       => data_get($verify, 'data.clientId'),
+                            'clientPresent'  => !empty(data_get($verify, 'data.client')),
+                            'clientReference'=> data_get($verify, 'data.clientReference'),
+                            'contactEmail'   => data_get($verify, 'data.contactEmail'),
+                        ],
+                        'legacy_compat' => [
+                            'clientId' => data_get($verify, 'data.clientId'),
+                            'hasClientObj' => !empty(data_get($verify, 'data.client')),
+                        ],
                         'top' => array_intersect_key($verify['data'] ?? [], array_flip([
                             'clientId','clientReference','title','contactEmail'
                         ])),
