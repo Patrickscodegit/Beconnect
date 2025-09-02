@@ -42,13 +42,22 @@ class RobawsExportService
 
     /**
      * Resolve client ID from extraction data for reliable export
+     * Updated to use unified ClientResolver (supports name-only resolution)
      */
     public function resolveClientId(array $extractionData): ?string
     {
         $contactEmail = data_get($extractionData, 'contact.email');
         $contactPhone = data_get($extractionData, 'contact.phone');
+        $contactName = data_get($extractionData, 'contact.name');
         
-        if (!$contactEmail && !$contactPhone) {
+        // Build hints for unified ClientResolver
+        $hints = array_filter([
+            'email' => $contactEmail,
+            'phone' => $contactPhone,
+            'name' => $contactName,
+        ]);
+        
+        if (empty($hints)) {
             Log::warning('Cannot resolve client - no contact info', [
                 'extraction_data_keys' => array_keys($extractionData)
             ]);
@@ -56,23 +65,29 @@ class RobawsExportService
         }
         
         try {
-            // Use the new API client which properly supports v2 endpoints
-            // Note: findClientId signature is (name, email, phone)
-            $clientId = $this->apiClient->findClientId(null, $contactEmail, $contactPhone);
+            $resolver = app(\App\Services\Robaws\ClientResolver::class);
+            $result = $resolver->resolve($hints);
             
-            Log::info('Client resolution result', [
-                'contact_email' => $contactEmail,
-                'contact_phone' => $contactPhone,
-                'client_id' => $clientId,
+            if ($result) {
+                Log::info('Client resolution successful via unified resolver', [
+                    'hints' => $hints,
+                    'client_id' => $result['id'],
+                    'confidence' => $result['confidence'],
+                ]);
+                
+                return (string) $result['id'];
+            }
+            
+            Log::warning('Client not found via unified resolver', [
+                'hints' => $hints
             ]);
             
-            return $clientId;
+            return null;
             
         } catch (\Exception $e) {
             Log::error('Exception during client resolution', [
                 'error' => $e->getMessage(),
-                'contact_email' => $contactEmail,
-                'contact_phone' => $contactPhone,
+                'hints' => $hints,
             ]);
             return null;
         }
@@ -102,7 +117,7 @@ class RobawsExportService
                 return [
                     'success' => false,
                     'error' => 'Intake was already exported recently. Use force=true to re-export.',
-                    'quotation_id' => $intake->robaws_offer_id,
+                    'quotation_id' => $intake->robaws_quotation_id,
                 ];
             }
 
@@ -173,9 +188,6 @@ class RobawsExportService
             // Build and log final payload for debugging
             $payload = $this->mapper->toRobawsApiPayload($mapped);
             
-            // Add payload safety checks - ensure minimal viable quotation
-            $this->ensureViablePayload($payload);
-            
             Log::info('Robaws payload (api shape)', [
                 'export_id' => $exportId,
                 'intake_id' => $intake->id,
@@ -211,10 +223,10 @@ class RobawsExportService
             $idempotencyKey = $options['idempotency_key'] ?? $this->generateIdempotencyKey($intake, $payloadHash);
 
             // Export to Robaws
-            if ($intake->robaws_offer_id && !($options['create_new'] ?? false)) {
+            if ($intake->robaws_quotation_id && !($options['create_new'] ?? false)) {
                 // Update existing quotation
                 $result = $this->apiClient->updateQuotation(
-                    $intake->robaws_offer_id, 
+                    $intake->robaws_quotation_id, 
                     $payload, 
                     $idempotencyKey
                 );
@@ -267,8 +279,8 @@ class RobawsExportService
 
                 // Update intake with export info
                 $updateData = [
-                    'robaws_offer_id' => $result['quotation_id'],
-                    'status' => 'exported',
+                    'robaws_quotation_id' => $result['quotation_id'],
+                    'exported_at' => now(),
                     'export_payload_hash' => hash('sha256', json_encode($payload)),
                     'export_attempt_count' => DB::raw('COALESCE(export_attempt_count, 0) + 1'),
                 ];
@@ -450,7 +462,8 @@ class RobawsExportService
             'intake' => [
                 'id' => $intake->id,
                 'customer_name' => $intake->customer_name,
-                'robaws_offer_id' => $intake->robaws_offer_id,
+                'robaws_quotation_id' => $intake->robaws_quotation_id,
+                'exported_at' => $intake->exported_at,
                 'export_attempt_count' => $intake->export_attempt_count ?? 0,
                 'last_export_error' => $intake->last_export_error,
             ],
@@ -507,20 +520,22 @@ class RobawsExportService
      */
     private function attachDocumentsToOffer(Intake $intake, int $offerId, string $exportId): void
     {
-        // Use files relationship instead of documents
-        $files = $intake->files;
+        // Pick "approved" docs (or sensible default if none approved yet)
+        $docs = $intake->documents()->where(function ($q) {
+            $q->where('status', 'approved')->orWhereNull('status');
+        })->get();
 
-        if ($files->isEmpty()) {
-            Log::info('No files to attach', ['export_id' => $exportId, 'offer_id' => $offerId]);
+        if ($docs->isEmpty()) {
+            Log::info('No documents to attach', ['export_id' => $exportId, 'offer_id' => $offerId]);
             return;
         }
 
-        foreach ($files as $file) {
-            $path = $file->storage_path;
+        foreach ($docs as $doc) {
+            $path = $doc->filepath ?? $doc->path ?? null;
             if (!$path || !Storage::exists($path)) {
-                Log::warning('File path missing or not found', [
+                Log::warning('Doc path missing or not found', [
                     'export_id' => $exportId,
-                    'file_id' => $file->id,
+                    'doc_id' => $doc->id,
                     'path' => $path
                 ]);
                 continue;
@@ -530,20 +545,18 @@ class RobawsExportService
                 $absolutePath = Storage::path($path);
                 $result = $this->apiClient->attachFileToOffer($offerId, $absolutePath);
                 
-                Log::info('Attached file to offer', [
+                Log::info('Attached document to offer', [
                     'export_id' => $exportId,
                     'offer_id' => $offerId,
-                    'file_id' => $file->id,
-                    'filename' => $file->filename,
+                    'doc_id' => $doc->id,
                     'path' => $path,
                     'result' => $result
                 ]);
             } catch (\Throwable $e) {
-                Log::error('File attach failed', [
+                Log::error('Attach failed', [
                     'export_id' => $exportId,
                     'offer_id' => $offerId,
-                    'file_id' => $file->id,
-                    'filename' => $file->filename,
+                    'doc_id' => $doc->id,
                     'error' => $e->getMessage()
                 ]);
             }
@@ -570,14 +583,7 @@ class RobawsExportService
             $base = array_replace_recursive($base, $normalize($raw));
         }
 
-        // Also merge from intake's extraction_data field
-        if (!empty($intake->extraction_data)) {
-            $intakeData = $normalize($intake->extraction_data);
-            $base = array_replace_recursive($base, $intakeData);
-        }
-
-        // Normalize the structure before returning
-        return \App\Services\Export\Adapters\ExtractionNormalizer::normalize($base);
+        return $base;
     }
 
     private function wasRecentlyExported(Intake $intake): bool
@@ -870,33 +876,5 @@ class RobawsExportService
         
         $fi = new \finfo(FILEINFO_MIME_TYPE);
         return $fi->file($file) ?: null;
-    }
-
-    /**
-     * Ensure payload has viable quotation data with title and line items
-     */
-    private function ensureViablePayload(array $payload): void
-    {
-        if (empty($payload['title'])) {
-            throw new \InvalidArgumentException('Quotation must have a title');
-        }
-
-        if (empty($payload['lines']) || !is_array($payload['lines'])) {
-            throw new \InvalidArgumentException('Quotation must have line items');
-        }
-
-        foreach ($payload['lines'] as $index => $line) {
-            if (empty($line['description'])) {
-                throw new \InvalidArgumentException("Line item {$index} must have a description");
-            }
-            
-            if (!isset($line['quantity']) || $line['quantity'] <= 0) {
-                throw new \InvalidArgumentException("Line item {$index} must have a valid quantity");
-            }
-            
-            if (!isset($line['unit_price']) || $line['unit_price'] < 0) {
-                throw new \InvalidArgumentException("Line item {$index} must have a valid unit price");
-            }
-        }
     }
 }

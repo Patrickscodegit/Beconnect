@@ -11,11 +11,18 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Add performance indexes to intakes table
+        // Add performance indexes to intakes table (check if they exist first)
         Schema::table('intakes', function (Blueprint $table) {
-            $table->index(['status']);
-            $table->index(['robaws_offer_id']);
-            $table->index(['created_at']);
+            // Check if indexes exist before creating them
+            if (!Schema::hasIndex('intakes', 'intakes_status_index')) {
+                $table->index(['status']);
+            }
+            if (!Schema::hasIndex('intakes', 'intakes_robaws_offer_id_index')) {
+                $table->index(['robaws_offer_id']);
+            }
+            if (!Schema::hasIndex('intakes', 'intakes_created_at_index')) {
+                $table->index(['created_at']);
+            }
         });
 
         // Add performance indexes to intake_files table

@@ -18,6 +18,7 @@ class Intake extends Model
         'priority',
         'robaws_offer_id',
         'robaws_offer_number',
+        'robaws_client_id',
         'extraction_data',
         'export_payload_hash',
         'export_attempt_count',

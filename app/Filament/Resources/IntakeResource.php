@@ -476,15 +476,11 @@ class IntakeResource extends Resource
                         Forms\Components\TextInput::make('contact_email')
                             ->label('Contact Email')
                             ->email()
-                            ->requiredWithout('contact_phone')
-                            ->helperText('Email OR phone is required (not both)')
                             ->default(fn (Intake $record) => $record->contact_email),
                             
                         Forms\Components\TextInput::make('contact_phone')
                             ->label('Contact Phone')
                             ->tel()
-                            ->requiredWithout('contact_email')
-                            ->helperText('Email OR phone is required (not both)')
                             ->default(fn (Intake $record) => $record->contact_phone),
                     ])
                     ->action(function (Intake $record, array $data) {

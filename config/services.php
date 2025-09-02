@@ -112,6 +112,12 @@ return [
         'upload_max_mb' => env('ROBAWS_UPLOAD_MAX_MB', 25),
         'upload_retries' => env('ROBAWS_UPLOAD_RETRIES', 2),
         'upload_backoff_ms' => env('ROBAWS_UPLOAD_BACKOFF_MS', 800),
+        // Client name to ID mappings for known clients that are hard to find via search
+        'client_mappings' => [
+            'carhanco' => env('ROBAWS_CLIENT_CARHANCO_ID'),
+            'carhanco bv' => env('ROBAWS_CLIENT_CARHANCO_ID'),
+            // Add more known client mappings here as needed
+        ],
         'labels' => [
             'customer' => 'Customer',
             'contact' => 'Contact',

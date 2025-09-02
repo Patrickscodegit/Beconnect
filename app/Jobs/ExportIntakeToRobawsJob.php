@@ -74,27 +74,30 @@ class ExportIntakeToRobawsJob implements ShouldQueue
     {
         $extractionData = $this->intake->extraction_data ?? [];
         
-        // Check if we have contact info for client resolution
-        $contactEmail = data_get($extractionData, 'contact.email') ?: $this->intake->contact_email;
-        $contactPhone = data_get($extractionData, 'contact.phone') ?: $this->intake->contact_phone;
-        
-        if (!$contactEmail && !$contactPhone) {
-            return [
-                'success' => false,
-                'error' => 'Missing contact info - either email or phone is required to resolve client in Robaws'
-            ];
+        // Check if we already have a resolved client ID from ProcessIntake
+        if (!empty($this->intake->robaws_client_id)) {
+            Log::info('Using pre-resolved client ID from ProcessIntake', [
+                'intake_id' => $this->intake->id,
+                'robaws_client_id' => $this->intake->robaws_client_id
+            ]);
+            
+            // Client already resolved - proceed directly to export
+            return $service->exportIntake($this->intake);
         }
         
-        // Try to resolve client first
+        // Fallback: Try to resolve client now (for legacy intakes)
         $clientId = $service->resolveClientId($extractionData);
         if (!$clientId) {
             return [
                 'success' => false,
-                'error' => 'Could not resolve client in Robaws. Contact may not exist or multiple matches found.'
+                'error' => 'Could not resolve client in Robaws. Please ensure customer name, email, or phone is valid.'
             ];
         }
         
-        // Proceed with export
+        // Store resolved client ID and proceed with export
+        $this->intake->robaws_client_id = $clientId;
+        $this->intake->save();
+        
         return $service->exportIntake($this->intake);
     }
 
@@ -108,17 +111,11 @@ class ExportIntakeToRobawsJob implements ShouldQueue
             'error' => $error
         ]);
         
-        // Determine status based on error type - be more specific about contact vs API errors
-        $status = 'export_failed'; // Default to export_failed
-        $errorLower = strtolower($error);
-        
-        // Only set needs_contact for actual missing contact info
-        if (str_contains($errorLower, 'missing contact info') || 
-            str_contains($errorLower, 'either email or phone is required')) {
+        // Determine status based on error type
+        $status = 'export_failed';
+        if (str_contains(strtolower($error), 'contact') || str_contains(strtolower($error), 'client')) {
             $status = 'needs_contact';
         }
-        // API errors, client resolution failures, auth failures should be export_failed
-        // Examples: "Could not resolve client", "Forbidden", "API error", etc.
         
         $this->intake->update([
             'status' => $status,
