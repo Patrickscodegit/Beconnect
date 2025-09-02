@@ -373,7 +373,7 @@ class RobawsApiClient
     /**
      * Find customer ID by email or name for proper Robaws customer assignment
      */
-    public function findClientId(?string $name, ?string $email): ?int
+    public function findClientId(?string $name, ?string $email, ?string $phone = null): ?int
     {
         $email = $email ? mb_strtolower(trim($email)) : null;
         $norm = fn(string $s) => trim(mb_strtolower(iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $s)));
@@ -381,138 +381,256 @@ class RobawsApiClient
         Log::info('Robaws client lookup initiated', [
             'search_name' => $name,
             'search_email' => $email,
+            'search_phone' => $phone,
         ]);
 
         // ---- 1) Exact email search using specific email parameter
         if ($email) {
-            Log::info('Searching by email with specific email parameter', ['email' => $email]);
-            
-            $response = $this->get('/api/v2/clients', [
-                'email' => $email,
-                'size' => 100
-            ]);
-            
-            $items = $response['items'] ?? [];
-            
-            Log::info('Email search results', [
-                'items_count' => count($items),
-                'email' => $email
-            ]);
-            
-            // Check for exact email match in client.email
-            foreach ($items as $client) {
-                $clientEmail = mb_strtolower(trim($client['email'] ?? ''));
-                if ($clientEmail === $email) {
-                    $clientId = (int) $client['id'];
-                    Log::info('Client found by exact email match', [
-                        'client_id' => $clientId,
-                        'client_name' => $client['name'] ?? 'N/A',
-                        'client_email' => $client['email'] ?? 'N/A',
-                    ]);
-                    return $clientId;
-                }
-            }
-            
-            // If no direct email match, check contacts for each client
-            foreach ($items as $client) {
-                $contacts = $this->get("/api/v2/clients/{$client['id']}/contacts", ['size' => 100]);
-                $contactItems = $contacts['items'] ?? [];
-                
-                foreach ($contactItems as $contact) {
-                    $contactEmail = mb_strtolower(trim($contact['email'] ?? ''));
-                    if ($contactEmail === $email) {
-                        $clientId = (int) $client['id'];
-                        Log::info('Client found by contact email match', [
-                            'client_id' => $clientId,
-                            'client_name' => $client['name'] ?? 'N/A',
-                            'contact_name' => $contact['name'] ?? 'N/A',
-                            'contact_email' => $contact['email'] ?? 'N/A',
-                        ]);
-                        return $clientId;
-                    }
-                }
-            }
-            
-            // Fallback: try general search with email
-            Log::info('Trying general search with email', ['email' => $email]);
-            $fallbackResponse = $this->get('/api/v2/clients', [
-                'search' => $email,
-                'size' => 100
-            ]);
-            
-            $fallbackItems = $fallbackResponse['items'] ?? [];
-            foreach ($fallbackItems as $client) {
-                $clientEmail = mb_strtolower(trim($client['email'] ?? ''));
-                if ($clientEmail === $email) {
-                    $clientId = (int) $client['id'];
-                    Log::info('Client found by fallback email search', [
-                        'client_id' => $clientId,
-                        'client_name' => $client['name'] ?? 'N/A',
-                        'client_email' => $client['email'] ?? 'N/A',
-                    ]);
-                    return $clientId;
-                }
-            }
+            $clientId = $this->findClientIdByEmail($email);
+            if ($clientId) return $clientId;
         }
 
-        // ---- 2) Exact name search using specific name parameter
+        // ---- 2) Exact phone search (strict)
+        if ($phone) {
+            $clientId = $this->findClientIdByPhone($phone);
+            if ($clientId) return $clientId;
+        }
+
+        // ---- 3) Exact name search using specific name parameter
         if ($name) {
-            Log::info('Searching by name with specific name parameter', ['name' => $name]);
-            $normalizedName = $norm($name);
-            
-            $response = $this->get('/api/v2/clients', [
-                'name' => $name,
-                'size' => 100
-            ]);
-            
-            $items = $response['items'] ?? [];
-            
-            Log::info('Name search results', [
-                'items_count' => count($items),
-                'name' => $name
-            ]);
-            
-            // Check for exact normalized name match
-            foreach ($items as $client) {
-                $clientName = $norm($client['name'] ?? '');
-                if ($clientName === $normalizedName) {
-                    $clientId = (int) $client['id'];
-                    Log::info('Client found by exact name match', [
-                        'client_id' => $clientId,
-                        'client_name' => $client['name'] ?? 'N/A',
-                        'normalized_match' => true,
-                    ]);
-                    return $clientId;
-                }
-            }
-            
-            // Fallback: try general search with name
-            Log::info('Trying general search with name', ['name' => $name]);
-            $fallbackResponse = $this->get('/api/v2/clients', [
-                'search' => $name,
-                'size' => 100
-            ]);
-            
-            $fallbackItems = $fallbackResponse['items'] ?? [];
-            foreach ($fallbackItems as $client) {
-                $clientName = $norm($client['name'] ?? '');
-                if ($clientName === $normalizedName) {
-                    $clientId = (int) $client['id'];
-                    Log::info('Client found by fallback name search', [
-                        'client_id' => $clientId,
-                        'client_name' => $client['name'] ?? 'N/A',
-                        'normalized_match' => true,
-                    ]);
-                    return $clientId;
-                }
-            }
+            $clientId = $this->findClientIdByName($name);
+            if ($clientId) return $clientId;
         }
 
         Log::warning('No client found after all search methods', [
             'search_name' => $name,
             'search_email' => $email,
+            'search_phone' => $phone,
         ]);
         
+        return null;
+    }
+
+    /**
+     * Find client ID by email with exact matching
+     */
+    private function findClientIdByEmail(string $email): ?int
+    {
+        Log::info('Searching by email with specific email parameter', ['email' => $email]);
+        
+        $response = $this->get('/api/v2/clients', [
+            'email' => $email,
+            'size' => 100
+        ]);
+        
+        $items = $response['items'] ?? [];
+        
+        Log::info('Email search results', [
+            'items_count' => count($items),
+            'email' => $email
+        ]);
+        
+        // Check for exact email match in client.email
+        foreach ($items as $client) {
+            $clientEmail = mb_strtolower(trim($client['email'] ?? ''));
+            if ($clientEmail === $email) {
+                $clientId = (int) $client['id'];
+                Log::info('Client found by exact email match', [
+                    'client_id' => $clientId,
+                    'client_name' => $client['name'] ?? 'N/A',
+                    'client_email' => $client['email'] ?? 'N/A',
+                ]);
+                return $clientId;
+            }
+        }
+        
+        // If no direct email match, check contacts for each client
+        foreach ($items as $client) {
+            $contacts = $this->get("/api/v2/clients/{$client['id']}/contacts", ['size' => 100]);
+            $contactItems = $contacts['items'] ?? [];
+            
+            foreach ($contactItems as $contact) {
+                $contactEmail = mb_strtolower(trim($contact['email'] ?? ''));
+                if ($contactEmail === $email) {
+                    $clientId = (int) $client['id'];
+                    Log::info('Client found by contact email match', [
+                        'client_id' => $clientId,
+                        'client_name' => $client['name'] ?? 'N/A',
+                        'contact_name' => $contact['name'] ?? 'N/A',
+                        'contact_email' => $contact['email'] ?? 'N/A',
+                    ]);
+                    return $clientId;
+                }
+            }
+        }
+        
+        // Fallback: try general search with email
+        Log::info('Trying general search with email', ['email' => $email]);
+        $fallbackResponse = $this->get('/api/v2/clients', [
+            'search' => $email,
+            'size' => 100
+        ]);
+        
+        $fallbackItems = $fallbackResponse['items'] ?? [];
+        foreach ($fallbackItems as $client) {
+            $clientEmail = mb_strtolower(trim($client['email'] ?? ''));
+            if ($clientEmail === $email) {
+                $clientId = (int) $client['id'];
+                Log::info('Client found by fallback email search', [
+                    'client_id' => $clientId,
+                    'client_name' => $client['name'] ?? 'N/A',
+                    'client_email' => $client['email'] ?? 'N/A',
+                ]);
+                return $clientId;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Strict phone resolver:
+     * 1) Try /clients?phone=...
+     * 2) If not found, try /clients?search=<last-7-9-digits>
+     * 3) For any candidate, fetch /clients/{id}/contacts and compare phones
+     * Returns clientId when unique; null when 0 or multiple matches.
+     */
+    public function findClientIdByPhone(string $phone, ?string $defaultCountry = null): ?int
+    {
+        $needle = $this->normalizePhone($phone, $defaultCountry);
+        if (!$needle) return null;
+
+        Log::info('Searching by phone number', [
+            'original_phone' => $phone,
+            'normalized_phone' => $needle
+        ]);
+
+        // A) direct phone param (if API supports it)
+        $resp = $this->get('/api/v2/clients', ['phone' => $needle, 'size' => 50]);
+        $cands = $resp['items'] ?? [];
+
+        // B) widen by search tail if needed
+        if (empty($cands)) {
+            $tail = substr($needle, -9);
+            $resp = $this->get('/api/v2/clients', ['search' => $tail, 'size' => 50]);
+            $cands = $resp['items'] ?? [];
+        }
+
+        $matches = [];
+
+        foreach ($cands as $c) {
+            $cid = $c['id'] ?? null;
+
+            // compare client-level phones if present
+            foreach (['telephone', 'mobile', 'phone'] as $key) {
+                if (!empty($c[$key]) && $this->phonesEqual($c[$key], $needle)) {
+                    $matches[$cid] = $c;
+                    Log::info('Phone match found in client data', [
+                        'client_id' => $cid,
+                        'client_name' => $c['name'] ?? 'N/A',
+                        'matched_field' => $key,
+                        'client_phone' => $c[$key]
+                    ]);
+                }
+            }
+
+            // fetch & compare each contact's phones
+            if ($cid) {
+                $contacts = $this->get("/api/v2/clients/{$cid}/contacts", ['size' => 50]);
+                foreach (($contacts['items'] ?? []) as $ct) {
+                    foreach (['telephone', 'mobile', 'phone'] as $pkey) {
+                        if (!empty($ct[$pkey]) && $this->phonesEqual($ct[$pkey], $needle)) {
+                            $matches[$cid] = $c;
+                            Log::info('Phone match found in contact data', [
+                                'client_id' => $cid,
+                                'client_name' => $c['name'] ?? 'N/A',
+                                'contact_name' => $ct['name'] ?? 'N/A',
+                                'matched_field' => $pkey,
+                                'contact_phone' => $ct[$pkey]
+                            ]);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (count($matches) === 1) {
+            $clientId = (int) array_key_first($matches);
+            Log::info('Unique phone match found', [
+                'client_id' => $clientId,
+                'phone' => $needle
+            ]);
+            return $clientId;
+        }
+
+        if (count($matches) > 1) {
+            Log::warning('Ambiguous phone match - multiple clients found', [
+                'phone' => $needle,
+                'matching_client_ids' => array_keys($matches),
+                'match_count' => count($matches)
+            ]);
+        }
+
+        // ambiguous or none → be safe and return null
+        return null;
+    }
+
+    /**
+     * Find client ID by name with exact normalized matching
+     */
+    private function findClientIdByName(string $name): ?int
+    {
+        Log::info('Searching by name with specific name parameter', ['name' => $name]);
+        $norm = fn(string $s) => trim(mb_strtolower(iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $s)));
+        $normalizedName = $norm($name);
+        
+        $response = $this->get('/api/v2/clients', [
+            'name' => $name,
+            'size' => 100
+        ]);
+        
+        $items = $response['items'] ?? [];
+        
+        Log::info('Name search results', [
+            'items_count' => count($items),
+            'name' => $name
+        ]);
+        
+        // Check for exact normalized name match
+        foreach ($items as $client) {
+            $clientName = $norm($client['name'] ?? '');
+            if ($clientName === $normalizedName) {
+                $clientId = (int) $client['id'];
+                Log::info('Client found by exact name match', [
+                    'client_id' => $clientId,
+                    'client_name' => $client['name'] ?? 'N/A',
+                    'normalized_match' => true,
+                ]);
+                return $clientId;
+            }
+        }
+        
+        // Fallback: try general search with name
+        Log::info('Trying general search with name', ['name' => $name]);
+        $fallbackResponse = $this->get('/api/v2/clients', [
+            'search' => $name,
+            'size' => 100
+        ]);
+        
+        $fallbackItems = $fallbackResponse['items'] ?? [];
+        foreach ($fallbackItems as $client) {
+            $clientName = $norm($client['name'] ?? '');
+            if ($clientName === $normalizedName) {
+                $clientId = (int) $client['id'];
+                Log::info('Client found by fallback name search', [
+                    'client_id' => $clientId,
+                    'client_name' => $client['name'] ?? 'N/A',
+                    'normalized_match' => true,
+                ]);
+                return $clientId;
+            }
+        }
+
         return null;
     }
 
@@ -523,6 +641,37 @@ class RobawsApiClient
     {
         $response = $this->makeRequest('GET', $endpoint, $params);
         return $response->successful() ? $response->json() : [];
+    }
+
+    /**
+     * Normalize phone number for consistent comparison
+     */
+    private function normalizePhone(?string $raw, ?string $defaultCountry = null): ?string
+    {
+        if (!$raw) return null;
+
+        // keep digits, keep leading +
+        $raw = preg_replace('/[^\d+]/', '', $raw ?? '');
+        if ($raw === '') return null;
+
+        // if it doesn't start with + and caller gave a country (e.g. "BE", "NL"),
+        // you can optionally prepend country code here (left as no-op by default)
+        return $raw;
+    }
+
+    /**
+     * Compare two phone numbers with fuzzy matching
+     */
+    private function phonesEqual(string $a, string $b): bool
+    {
+        $a = $this->normalizePhone($a);
+        $b = $this->normalizePhone($b);
+        if (!$a || !$b) return false;
+
+        // exact OR last 7–9 digits match (handles different formats)
+        if ($a === $b) return true;
+        $tail = 9;
+        return substr($a, -$tail) === substr($b, -$tail);
     }
 
     /**

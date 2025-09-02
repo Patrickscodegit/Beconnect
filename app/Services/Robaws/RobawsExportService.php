@@ -89,18 +89,26 @@ class RobawsExportService
                          ?? data_get($extractionData, 'contact.email')
                          ?? $intake->customer_email
                          ?? null;
+            $customerPhone = data_get($extractionData, 'contact.phone')
+                          ?? data_get($extractionData, 'document_data.contact.phone')
+                          ?? data_get($extractionData, 'shipping.phone')
+                          ?? data_get($extractionData, 'document_data.shipping.phone')
+                          ?? data_get($extractionData, 'contact.telephone')
+                          ?? data_get($extractionData, 'document_data.contact.telephone')
+                          ?? null;
 
             // Map to Robaws format first
             $mapped = $this->mapper->mapIntakeToRobaws($intake, $extractionData);
 
-            // Resolve Robaws client with strict email-first matching
-            $clientId = $this->apiClient->findClientId($customerName, $customerEmail);
+            // Resolve Robaws client with enhanced multi-method matching (email → phone → name)
+            $clientId = $this->apiClient->findClientId($customerName, $customerEmail, $customerPhone);
             
             Log::info('Robaws client resolution', [
                 'export_id' => $exportId,
                 'intake_id' => $intake->id,
                 'display_name' => $customerName,
                 'contact_email' => $customerEmail,
+                'contact_phone' => $customerPhone,
                 'resolved_client_id' => $clientId,
                 'binding_status' => $clientId ? 'will_bind_to_client' : 'no_client_binding',
             ]);
