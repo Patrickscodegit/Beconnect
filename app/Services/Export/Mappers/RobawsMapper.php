@@ -68,6 +68,7 @@ class RobawsMapper
     /**
      * Wraps a scalar into the typed Robaws extraFields entry.
      * Returns null when value is empty/invalid for the type.
+     * Format matches official Robaws API documentation.
      */
     private function wrapExtra(string $code, $value): ?array
     {
@@ -91,28 +92,33 @@ class RobawsMapper
             case 'TEXT':
             case 'TEXTAREA':
             case 'SELECT':   // still sent as stringValue
-                return ['type' => $type, 'stringValue' => (string) $value];
+                return ['stringValue' => (string) $value];
 
-            case 'DATE':     // Convert to dd/MM/YYYY format
+            case 'DATE':     // Convert to YYYY-MM-DD format for dateValue
                 try {
-                    $date = \Carbon\Carbon::parse($value)->format('d/m/Y');
-                    return ['type' => $type, 'stringValue' => $date];
+                    $date = \Carbon\Carbon::parse($value)->format('Y-m-d');
+                    return ['dateValue' => $date];
                 } catch (\Exception $e) {
-                    // If parsing fails, pass through as-is
-                    return ['type' => $type, 'stringValue' => (string) $value];
+                    // If parsing fails, treat as string
+                    return ['stringValue' => (string) $value];
                 }
 
             case 'NUMBER':
                 if (!is_numeric($value)) return null;
-                return ['type' => $type, 'stringValue' => (string) $value];
+                // Check if it's a decimal number
+                if (is_float($value) || strpos((string) $value, '.') !== false) {
+                    return ['decimalValue' => (float) $value];
+                } else {
+                    return ['integerValue' => (int) $value];
+                }
 
             case 'CHECKBOX':
                 // Accept truthy/falsy; cast to bool, use booleanValue
-                return ['type' => $type, 'booleanValue' => (bool) $value];
+                return ['booleanValue' => (bool) $value];
 
             default:
                 // Fallback to TEXT
-                return ['type' => 'TEXT', 'stringValue' => (string) $value];
+                return ['stringValue' => (string) $value];
         }
     }
 

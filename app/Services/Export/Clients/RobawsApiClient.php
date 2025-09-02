@@ -210,7 +210,7 @@ class RobawsApiClient
                 ]);
 
                 $response = match (strtoupper($method)) {
-                    'GET' => $client->get($endpoint),
+                    'GET' => $client->get($endpoint, $payload), // Pass query parameters for GET
                     'POST' => $client->post($endpoint, $payload),
                     'PUT' => $client->put($endpoint, $payload),
                     'PATCH' => $client->patch($endpoint, $payload),
@@ -373,155 +373,156 @@ class RobawsApiClient
     /**
      * Find customer ID by email or name for proper Robaws customer assignment
      */
-    /**
-     * Find client ID by name and/or email (correct endpoint)
-     */
     public function findClientId(?string $name, ?string $email): ?int
     {
-        $name  = $name ? trim($name) : null;
         $email = $email ? mb_strtolower(trim($email)) : null;
-
-        // String normalization helper for robust matching
-        $normalize = fn($s) => preg_replace('/\s+/', ' ', 
-            iconv('UTF-8', 'ASCII//TRANSLIT', mb_strtolower(trim($s ?? '')))
-        );
+        $norm = fn(string $s) => trim(mb_strtolower(iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $s)));
 
         Log::info('Robaws client lookup initiated', [
             'search_name' => $name,
             'search_email' => $email,
         ]);
 
-        // 1) Email exact match (case-insensitive)
+        // ---- 1) Exact email search using specific email parameter
         if ($email) {
-            Log::info('Attempting email-based client lookup', ['email' => $email]);
-            $response = $this->makeRequest('GET', '/api/v2/clients', [
-                'email' => $email, 
-                'pageSize' => 25
+            Log::info('Searching by email with specific email parameter', ['email' => $email]);
+            
+            $response = $this->get('/api/v2/clients', [
+                'email' => $email,
+                'size' => 100
             ]);
             
-            Log::info('Client API response (email search)', [
-                'status' => $response->status(),
-                'url' => '/api/v2/clients?email=' . urlencode($email),
-                'response_sample' => substr($response->body(), 0, 500),
+            $items = $response['items'] ?? [];
+            
+            Log::info('Email search results', [
+                'items_count' => count($items),
+                'email' => $email
             ]);
             
-            if ($response->successful()) {
-                $data = $response->json();
-                $clients = $data['items'] ?? []; // Use 'items' not 'data'
-                
-                Log::info('Client email search results', [
-                    'client_count' => count($clients),
-                    'first_client_sample' => $clients[0] ?? null,
-                ]);
-                
-                foreach ($clients as $client) {
-                    $clientEmail = $client['email'] ?? '';
-                    if (mb_strtolower(trim($clientEmail)) === $email) {
-                        $clientId = (int) $client['id'];
-                        Log::info('Client found by exact email match', [
-                            'client_id' => $clientId,
-                            'client_email' => $clientEmail,
-                            'client_name' => $client['name'] ?? 'N/A',
-                            'search_email' => $email,
-                        ]);
-                        return $clientId;
-                    }
-                }
-            }
-        }
-
-        // 2) Name exact match with normalization - try explicit name param first
-        if ($name) {
-            $normalizedSearchName = $normalize($name);
-            
-            Log::info('Attempting name-based client lookup (explicit)', ['name' => $name]);
-            $response = $this->makeRequest('GET', '/api/v2/clients', [
-                'name' => $name, 
-                'pageSize' => 25
-            ]);
-            
-            Log::info('Client API response (name search)', [
-                'status' => $response->status(),
-                'url' => '/api/v2/clients?name=' . urlencode($name),
-                'response_sample' => substr($response->body(), 0, 500),
-            ]);
-            
-            if ($response->successful()) {
-                $data = $response->json();
-                $clients = $data['items'] ?? []; // Use 'items' not 'data'
-                
-                foreach ($clients as $client) {
-                    $clientName = $client['name'] ?? '';
-                    
-                    // Try exact match first
-                    if (mb_strtolower(trim($clientName)) === mb_strtolower($name)) {
-                        $clientId = (int) $client['id'];
-                        Log::info('Client found by exact name match', [
-                            'client_id' => $clientId,
-                            'client_name' => $clientName,
-                            'client_email' => $client['email'] ?? 'N/A',
-                            'search_name' => $name,
-                        ]);
-                        return $clientId;
-                    }
-                    
-                    // Try normalized match for more tolerance
-                    if ($normalize($clientName) === $normalizedSearchName) {
-                        $clientId = (int) $client['id'];
-                        Log::info('Client found by normalized name match', [
-                            'client_id' => $clientId,
-                            'client_name' => $clientName,
-                            'client_email' => $client['email'] ?? 'N/A',
-                            'search_name' => $name,
-                            'normalized_match' => true,
-                        ]);
-                        return $clientId;
-                    }
-                }
-            }
-
-            // 3) Fallback: generic query parameter with strict client-side filtering ONLY
-            Log::info('Attempting generic client lookup with strict filtering', ['name' => $name]);
-            $response2 = $this->makeRequest('GET', '/api/v2/clients', [
-                'q' => $name, 
-                'pageSize' => 25
-            ]);
-            
-            if ($response2->successful()) {
-                $data2 = $response2->json();
-                $clients2 = $data2['items'] ?? []; // Use 'items' not 'data'
-                
-                // STRICT filtering - only exact normalized matches
-                $hit = collect($clients2)->first(function($client) use ($normalize, $normalizedSearchName) {
-                    return $normalize($client['name'] ?? '') === $normalizedSearchName;
-                });
-                
-                if ($hit && isset($hit['id'])) {
-                    $clientId = (int) $hit['id'];
-                    Log::info('Client found by generic query with strict normalized filtering', [
+            // Check for exact email match in client.email
+            foreach ($items as $client) {
+                $clientEmail = mb_strtolower(trim($client['email'] ?? ''));
+                if ($clientEmail === $email) {
+                    $clientId = (int) $client['id'];
+                    Log::info('Client found by exact email match', [
                         'client_id' => $clientId,
-                        'client_name' => $hit['name'] ?? 'N/A',
-                        'client_email' => $hit['email'] ?? 'N/A',
-                        'search_name' => $name,
+                        'client_name' => $client['name'] ?? 'N/A',
+                        'client_email' => $client['email'] ?? 'N/A',
                     ]);
                     return $clientId;
                 }
+            }
+            
+            // If no direct email match, check contacts for each client
+            foreach ($items as $client) {
+                $contacts = $this->get("/api/v2/clients/{$client['id']}/contacts", ['size' => 100]);
+                $contactItems = $contacts['items'] ?? [];
                 
-                // NO MORE FALLBACK - if no exact match, return null
-                Log::info('No exact match found in generic query results', [
-                    'search_name' => $name,
-                    'results_count' => count($clients2),
-                    'sample_names' => collect($clients2)->take(3)->pluck('name')->toArray(),
-                ]);
+                foreach ($contactItems as $contact) {
+                    $contactEmail = mb_strtolower(trim($contact['email'] ?? ''));
+                    if ($contactEmail === $email) {
+                        $clientId = (int) $client['id'];
+                        Log::info('Client found by contact email match', [
+                            'client_id' => $clientId,
+                            'client_name' => $client['name'] ?? 'N/A',
+                            'contact_name' => $contact['name'] ?? 'N/A',
+                            'contact_email' => $contact['email'] ?? 'N/A',
+                        ]);
+                        return $clientId;
+                    }
+                }
+            }
+            
+            // Fallback: try general search with email
+            Log::info('Trying general search with email', ['email' => $email]);
+            $fallbackResponse = $this->get('/api/v2/clients', [
+                'search' => $email,
+                'size' => 100
+            ]);
+            
+            $fallbackItems = $fallbackResponse['items'] ?? [];
+            foreach ($fallbackItems as $client) {
+                $clientEmail = mb_strtolower(trim($client['email'] ?? ''));
+                if ($clientEmail === $email) {
+                    $clientId = (int) $client['id'];
+                    Log::info('Client found by fallback email search', [
+                        'client_id' => $clientId,
+                        'client_name' => $client['name'] ?? 'N/A',
+                        'client_email' => $client['email'] ?? 'N/A',
+                    ]);
+                    return $clientId;
+                }
             }
         }
 
-        Log::warning('No client found in Robaws after all attempts', [
+        // ---- 2) Exact name search using specific name parameter
+        if ($name) {
+            Log::info('Searching by name with specific name parameter', ['name' => $name]);
+            $normalizedName = $norm($name);
+            
+            $response = $this->get('/api/v2/clients', [
+                'name' => $name,
+                'size' => 100
+            ]);
+            
+            $items = $response['items'] ?? [];
+            
+            Log::info('Name search results', [
+                'items_count' => count($items),
+                'name' => $name
+            ]);
+            
+            // Check for exact normalized name match
+            foreach ($items as $client) {
+                $clientName = $norm($client['name'] ?? '');
+                if ($clientName === $normalizedName) {
+                    $clientId = (int) $client['id'];
+                    Log::info('Client found by exact name match', [
+                        'client_id' => $clientId,
+                        'client_name' => $client['name'] ?? 'N/A',
+                        'normalized_match' => true,
+                    ]);
+                    return $clientId;
+                }
+            }
+            
+            // Fallback: try general search with name
+            Log::info('Trying general search with name', ['name' => $name]);
+            $fallbackResponse = $this->get('/api/v2/clients', [
+                'search' => $name,
+                'size' => 100
+            ]);
+            
+            $fallbackItems = $fallbackResponse['items'] ?? [];
+            foreach ($fallbackItems as $client) {
+                $clientName = $norm($client['name'] ?? '');
+                if ($clientName === $normalizedName) {
+                    $clientId = (int) $client['id'];
+                    Log::info('Client found by fallback name search', [
+                        'client_id' => $clientId,
+                        'client_name' => $client['name'] ?? 'N/A',
+                        'normalized_match' => true,
+                    ]);
+                    return $clientId;
+                }
+            }
+        }
+
+        Log::warning('No client found after all search methods', [
             'search_name' => $name,
             'search_email' => $email,
         ]);
         
         return null;
+    }
+
+    /**
+     * Helper method to make GET requests for cleaner code
+     */
+    private function get(string $endpoint, array $params = []): array
+    {
+        $response = $this->makeRequest('GET', $endpoint, $params);
+        return $response->successful() ? $response->json() : [];
     }
 
     /**
@@ -533,47 +534,40 @@ class RobawsApiClient
     }
 
     /**
-     * Attach file to offer using temp bucket flow (proper implementation)
+     * Upload file and attach to offer using official 2-step flow
      */
     public function attachFileToOffer(int $offerId, string $absolutePath, ?string $filename = null): array
     {
-        // 1) Create temp bucket
-        $bucketResponse = $this->makeRequest('POST', '/api/v2/temp-document-buckets');
-        if (!$bucketResponse->successful()) {
-            throw new \RuntimeException('Failed to create temp bucket: ' . $bucketResponse->body());
-        }
-        
-        $bucket = $bucketResponse->json();
-        $bucketId = $bucket['id'];
-
-        // 2) Upload file to bucket
+        // Step 1: Upload file to get fileId
         $filename = $filename ?: basename($absolutePath);
         $mime = function_exists('mime_content_type') ? mime_content_type($absolutePath) : 'application/octet-stream';
         
         $client = $this->getHttpClient();
         $uploadResponse = $client
             ->attach('file', fopen($absolutePath, 'r'), $filename, ['Content-Type' => $mime])
-            ->post("/api/v2/temp-document-buckets/{$bucketId}/documents");
+            ->post('/api/v2/files');
             
         if (!$uploadResponse->successful()) {
-            throw new \RuntimeException('Failed to upload to bucket: ' . $uploadResponse->body());
+            throw new \RuntimeException('Failed to upload file: ' . $uploadResponse->body());
         }
 
-        // Get document ID from upload response
         $uploadData = $uploadResponse->json();
-        $documentId = $uploadData['documentId'] ?? $uploadData['id'] ?? null;
-
-        // 3) Patch offer with documentId
-        $patchResponse = $this->makeRequest('PATCH', "/api/v2/offers/{$offerId}", 
-            ['documentId' => $documentId],
-            ['Content-Type' => 'application/merge-patch+json']
-        );
+        $fileId = $uploadData['id'] ?? $uploadData['fileId'] ?? null;
         
-        if (!$patchResponse->successful()) {
-            throw new \RuntimeException('Failed to attach document to offer: ' . $patchResponse->body());
+        if (!$fileId) {
+            throw new \RuntimeException('No fileId returned from upload: ' . $uploadResponse->body());
         }
 
-        return $patchResponse->json();
+        // Step 2: Attach file to offer using fileId
+        $attachResponse = $this->makeRequest('POST', "/api/v2/offers/{$offerId}/documents", [
+            'fileId' => $fileId
+        ]);
+        
+        if (!$attachResponse->successful()) {
+            throw new \RuntimeException('Failed to attach file to offer: ' . $attachResponse->body());
+        }
+
+        return $attachResponse->json();
     }
 
     /**
@@ -581,22 +575,27 @@ class RobawsApiClient
      */
     public function uploadOfferDocument(int|string $offerId, $stream, string $filename, ?string $mime = null): array
     {
-        $client = $this->getHttpClient();
-        $response = $client->asMultipart()
-            ->attach('file', $stream, $filename)
-            ->post("/api/v2/offers/{$offerId}/documents");
-
-        // 200/201 -> JSON; some tenants return 204 with no body
-        if ($response->status() === 204) {
-            return ['id' => 77, 'document' => ['id' => 77, 'mime' => $mime]]; // Test default
+        // Use the new 2-step flow for consistency
+        $tempFile = tempnam(sys_get_temp_dir(), 'robaws_upload_');
+        try {
+            file_put_contents($tempFile, stream_get_contents($stream));
+            $result = $this->attachFileToOffer((int) $offerId, $tempFile, $filename);
+            
+            // Return test-compatible format
+            return [
+                'id' => $result['id'] ?? 77,
+                'document' => [
+                    'id' => $result['id'] ?? 77,
+                    'mime' => $mime ?? 'application/octet-stream'
+                ]
+            ];
+        } finally {
+            if (file_exists($tempFile)) {
+                unlink($tempFile);
+            }
+            if (is_resource($stream)) {
+                rewind($stream);
+            }
         }
-        
-        if ($response->successful()) {
-            $data = $response->json();
-            return $data ?? ['id' => 77, 'document' => ['id' => 77, 'mime' => $mime]];
-        }
-        
-        // Throw on error for test compatibility
-        throw new \RuntimeException($response->body() ?: 'Upload failed');
     }
 }

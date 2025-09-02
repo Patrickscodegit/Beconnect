@@ -90,28 +90,31 @@ class RobawsExportService
                          ?? $intake->customer_email
                          ?? null;
 
-            // Resolve Robaws client
+            // Map to Robaws format first
+            $mapped = $this->mapper->mapIntakeToRobaws($intake, $extractionData);
+
+            // Resolve Robaws client with strict email-first matching
             $clientId = $this->apiClient->findClientId($customerName, $customerEmail);
             
             Log::info('Robaws client resolution', [
                 'export_id' => $exportId,
                 'intake_id' => $intake->id,
-                'name' => $customerName,
-                'email' => $customerEmail,
-                'clientId' => $clientId,
+                'display_name' => $customerName,
+                'contact_email' => $customerEmail,
+                'resolved_client_id' => $clientId,
                 'binding_status' => $clientId ? 'will_bind_to_client' : 'no_client_binding',
             ]);
 
-            // Map to Robaws format
-            $mapped = $this->mapper->mapIntakeToRobaws($intake, $extractionData);
-            
-            // SAFEGUARD: Only inject clientId if we found a confident match
+            // AFTER you build $mapped: inject clientId and contactEmail
             if ($clientId) {
-                $mapped['client_id'] = $clientId;  // Critical for binding the UI Customer
+                $mapped['client_id'] = (int) $clientId;  // mapper prefers client_id
+                $mapped['contact_email'] = $customerEmail;  // keep for top-level contactEmail
+                
                 Log::info('Client ID injected into payload', [
                     'export_id' => $exportId,
                     'client_id' => $clientId,
                     'customer_name' => $customerName,
+                    'contact_email' => $customerEmail,
                 ]);
             } else {
                 Log::warning('No unique client match found - export will proceed without client binding', [
@@ -119,10 +122,6 @@ class RobawsExportService
                     'customer_name' => $customerName,
                     'customer_email' => $customerEmail,
                 ]);
-            }
-            
-            if ($customerEmail) {
-                $mapped['quotation_info']['contact_email'] = $customerEmail;
             }
             
             // Build and log final payload for debugging
