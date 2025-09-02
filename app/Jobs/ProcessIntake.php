@@ -11,6 +11,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class ProcessIntake implements ShouldQueue
 {
@@ -62,52 +63,76 @@ class ProcessIntake implements ShouldQueue
                 }
             }
 
-            // Merge contact data: seeded data takes precedence, extracted fills gaps
-            $contactData = array_merge(
-                (array) data_get($payload, 'contact', []),
-                array_filter([
-                    'name' => $this->intake->customer_name,
-                    'email' => $this->intake->contact_email,
-                    'phone' => $this->intake->contact_phone,
-                ])
-            );
+            // Merge contact data: prefer extracted values over empty seeded values
+            $extractedContact = (array) data_get($payload, 'contact', []);
+            $intakeContactSeed = array_filter([
+                'name' => $this->intake->customer_name,
+                'email' => $this->intake->contact_email,
+                'phone' => $this->intake->contact_phone,
+            ], fn ($v) => $v !== null && $v !== '');
 
-            // Update contact in payload and flat columns
-            $payload['contact'] = $contactData;
-            
-            $this->intake->update([
-                'extraction_data' => $payload,
-                'customer_name' => $contactData['name'] ?? $this->intake->customer_name,
-                'contact_email' => $contactData['email'] ?? $this->intake->contact_email,
-                'contact_phone' => $contactData['phone'] ?? $this->intake->contact_phone,
-                'status' => 'processed'
-            ]);
+            $contactData = $this->preferNonEmpty($extractedContact, $intakeContactSeed);
 
-            // Check if ready for export (has contact info)
-            $hasEmail = !empty($contactData['email']);
-            $hasPhone = !empty($contactData['phone']);
+            // Optional: infer company from email domain if missing
+            if (!isset($contactData['company']) && !empty($contactData['email'])) {
+                $contactData['company'] = $this->inferCompanyFromEmail($contactData['email']);
+            }
 
-            if ($hasEmail || $hasPhone) {
-                Log::info('Contact info sufficient - ready for export', [
+            // Update payload with merged contact
+            $payload['contact'] = array_filter($contactData);
+
+            // Persist both JSON and columns in one transaction
+            \DB::transaction(function () use ($payload, $contactData) {
+                $this->intake->extraction_data = $payload;
+
+                // Hydrate flat columns only if empty
+                $this->intake->customer_name = $this->intake->customer_name ?: data_get($contactData, 'name');
+                $this->intake->contact_email = $this->intake->contact_email ?: data_get($contactData, 'email');
+                $this->intake->contact_phone = $this->intake->contact_phone ?: data_get($contactData, 'phone');
+
+                // Determine status based on final hydrated columns
+                $hasEmail = filter_var($this->intake->contact_email, FILTER_VALIDATE_EMAIL);
+                $hasPhone = !empty($this->intake->contact_phone);
+
+                if ($hasEmail || $hasPhone) {
+                    $this->intake->status = 'processed';
+                    $this->intake->last_export_error = null;
+                } else {
+                    $this->intake->status = 'needs_contact';
+                    $this->intake->last_export_error = 'Missing contact email/phone after extraction';
+                }
+
+                $this->intake->save();
+
+                // Authoritative post-merge log
+                Log::info('Post-merge contact status', [
                     'intake_id' => $this->intake->id,
-                    'has_email' => $hasEmail,
-                    'has_phone' => $hasPhone
+                    'extracted_contact' => data_get($payload, 'contact'),
+                    'columns' => [
+                        'name' => $this->intake->customer_name,
+                        'email' => $this->intake->contact_email,
+                        'phone' => $this->intake->contact_phone,
+                    ],
+                    'final_status' => $this->intake->status,
+                ]);
+            });
+
+            // Export trigger: only after the merged result
+            if ($this->intake->status === 'processed') {
+                Log::info('Contact info sufficient - dispatching export', [
+                    'intake_id' => $this->intake->id,
+                    'contact_email' => $this->intake->contact_email,
+                    'contact_phone' => $this->intake->contact_phone,
                 ]);
                 
                 // Dispatch export job
                 dispatch(new \App\Jobs\ExportIntakeToRobawsJob($this->intake->id));
-            } else {
-                Log::info('Contact info insufficient - marking as needs_contact', [
-                    'intake_id' => $this->intake->id
-                ]);
-                
-                $this->intake->update(['status' => 'needs_contact']);
             }
 
             Log::info('Intake processing completed', [
                 'intake_id' => $this->intake->id,
                 'files_processed' => $files->count(),
-                'ready_for_export' => $hasEmail || $hasPhone,
+                'ready_for_export' => $this->intake->status === 'processed',
                 'status' => $this->intake->fresh()->status
             ]);
 
@@ -121,5 +146,46 @@ class ProcessIntake implements ShouldQueue
             $this->intake->update(['status' => 'failed']);
             throw $e;
         }
+    }
+
+    /**
+     * Prefer non-empty values from incoming over base
+     */
+    private function preferNonEmpty(array $base, array $incoming): array
+    {
+        foreach ($incoming as $k => $v) {
+            if (is_array($v)) {
+                $base[$k] = $this->preferNonEmpty($base[$k] ?? [], $v);
+            } else {
+                // only take incoming if it is non-empty
+                if ($v !== null && $v !== '') {
+                    $base[$k] = $v;
+                }
+            }
+        }
+        return $base;
+    }
+
+    /**
+     * Infer company name from email domain
+     */
+    private function inferCompanyFromEmail(string $email): ?string
+    {
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return null;
+        }
+        
+        $domain = explode('@', $email)[1] ?? '';
+        $domainParts = explode('.', $domain);
+        $mainDomain = $domainParts[0] ?? '';
+        
+        // Skip common personal email providers
+        $personalProviders = ['gmail', 'yahoo', 'hotmail', 'outlook', 'live', 'icloud', 'aol'];
+        if (in_array(strtolower($mainDomain), $personalProviders)) {
+            return null;
+        }
+        
+        // Clean and format company name
+        return ucfirst(strtolower($mainDomain));
     }
 }
