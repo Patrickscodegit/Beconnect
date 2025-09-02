@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Document;
 use App\Models\Intake;
+use App\Services\IntakeCreationService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
@@ -15,15 +16,18 @@ class DocumentService
     private OcrService $ocrService;
     private PdfService $pdfService;
     private LlmExtractor $llmExtractor;
+    private IntakeCreationService $intakeCreationService;
 
     public function __construct(
         OcrService $ocrService,
         PdfService $pdfService,
-        LlmExtractor $llmExtractor
+        LlmExtractor $llmExtractor,
+        IntakeCreationService $intakeCreationService
     ) {
         $this->ocrService = $ocrService;
         $this->pdfService = $pdfService;
         $this->llmExtractor = $llmExtractor;
+        $this->intakeCreationService = $intakeCreationService;
     }
 
     public function processUpload(UploadedFile $file, string $type, string $source): Document
@@ -41,27 +45,25 @@ class DocumentService
         }
 
         try {
-            // Store file in configured storage disk (local for dev, spaces for prod)
-            $path = Storage::disk(config('filesystems.default'))->put('documents', $file);
-            
-            // Create intake record
-            $intake = Intake::create([
+            // Use the unified intake creation service
+            $intake = $this->intakeCreationService->createFromUploadedFile($file, [
                 'source' => $source,
-                'status' => 'uploaded'
+                'priority' => 'normal'
             ]);
 
-            // Create document record
+            // Create document record linked to the intake
             $document = Document::create([
                 'intake_id' => $intake->id,
                 'filename' => $file->getClientOriginalName(),
-                'file_path' => $path,
+                'file_path' => $intake->files()->first()->storage_path, // Use the path from IntakeFile
                 'mime_type' => $file->getClientMimeType(),
                 'file_size' => $file->getSize(),
                 'document_type' => $type,
             ]);
 
-            Log::info('Document uploaded successfully', [
+            Log::info('Document uploaded successfully using unified intake service', [
                 'document_id' => $document->id,
+                'intake_id' => $intake->id,
                 'filename' => $file->getClientOriginalName(),
                 'type' => $type,
                 'size' => $file->getSize()

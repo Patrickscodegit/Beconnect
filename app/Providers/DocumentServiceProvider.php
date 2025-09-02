@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Services\DocumentService;
+use App\Services\IntakeCreationService;
 use App\Services\LlmExtractor;
 use App\Services\OcrService;
 use App\Services\PdfService;
@@ -23,7 +24,8 @@ class DocumentServiceProvider extends ServiceProvider
             return new DocumentService(
                 $app->make(OcrService::class),
                 $app->make(PdfService::class),
-                $app->make(LlmExtractor::class)
+                $app->make(LlmExtractor::class),
+                $app->make(IntakeCreationService::class)
             );
         });
     }

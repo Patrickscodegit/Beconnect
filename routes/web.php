@@ -4,6 +4,7 @@ use App\Http\Controllers\FileController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ResultsController;
 use App\Http\Controllers\RobawsOfferController;
+use App\Http\Controllers\ApiIntakeController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -49,5 +50,13 @@ Route::middleware('auth')->group(function () {
 // Webhook endpoint (no auth required)
 Route::post('/webhooks/robaws', [RobawsOfferController::class, 'webhook'])
     ->name('webhooks.robaws');
+
+// API endpoints for intake creation (no auth required for external services)
+Route::post('/api/intakes/screenshot', [ApiIntakeController::class, 'createFromScreenshot'])
+    ->name('api.intakes.screenshot');
+Route::post('/api/intakes/text', [ApiIntakeController::class, 'createFromText'])
+    ->name('api.intakes.text');
+Route::get('/api/intakes/{intake}/status', [ApiIntakeController::class, 'getIntakeStatus'])
+    ->name('api.intakes.status');
 
 require __DIR__.'/auth.php';
