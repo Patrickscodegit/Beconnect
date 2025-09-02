@@ -46,6 +46,8 @@ class IntakeResource extends Resource
                                 'pending' => 'Pending',
                                 'processing' => 'Processing',
                                 'processed' => 'Processed',
+                                'needs_contact' => 'Needs Contact',
+                                'export_failed' => 'Export Failed',
                                 'completed' => 'Completed',
                                 'failed' => 'Failed',
                             ])
@@ -119,6 +121,7 @@ class IntakeResource extends Resource
                             ->disk('local')
                             ->directory('temp-uploads')
                             ->reorderable()
+                            ->storeFiles(false) // Let our service handle storage
                             ->helperText('Upload freight documents (PDF, images, email files). Maximum 20MB per file. Files will be processed for contact info and freight data.')
                             ->columnSpanFull(),
                     ]),
@@ -140,6 +143,8 @@ class IntakeResource extends Resource
                         'pending' => 'warning',
                         'processing' => 'info',
                         'processed' => 'success',
+                        'needs_contact' => 'warning',
+                        'export_failed' => 'danger',
                         'completed' => 'success',
                         'failed' => 'danger',
                         default => 'gray',
@@ -191,6 +196,16 @@ class IntakeResource extends Resource
                     ->placeholder('—')
                     ->copyable()
                     ->searchable(),
+                    
+                Tables\Columns\TextColumn::make('last_export_error')
+                    ->label('Export Error')
+                    ->limit(60)
+                    ->wrap()
+                    ->placeholder('—')
+                    ->tooltip(fn (?Intake $record): ?string => $record?->last_export_error)
+                    ->color('danger')
+                    ->toggleable()
+                    ->visible(fn (?Intake $record): bool => !empty($record?->last_export_error)),
                     
                 Tables\Columns\ViewColumn::make('extraction_summary')
                     ->label('Extraction')
@@ -448,6 +463,74 @@ class IntakeResource extends Resource
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel('Close')
                     ->visible(fn (?Intake $record): bool => $record && $record->extraction()->exists()),
+                    
+                Tables\Actions\Action::make('fix_contact_and_retry')
+                    ->label('Fix Contact & Retry')
+                    ->icon('heroicon-o-phone')
+                    ->color('warning')
+                    ->form([
+                        Forms\Components\TextInput::make('customer_name')
+                            ->label('Customer Name')
+                            ->default(fn (Intake $record) => $record->customer_name),
+                            
+                        Forms\Components\TextInput::make('contact_email')
+                            ->label('Contact Email')
+                            ->email()
+                            ->requiredWithout('contact_phone')
+                            ->default(fn (Intake $record) => $record->contact_email),
+                            
+                        Forms\Components\TextInput::make('contact_phone')
+                            ->label('Contact Phone')
+                            ->tel()
+                            ->requiredWithout('contact_email')
+                            ->default(fn (Intake $record) => $record->contact_phone),
+                    ])
+                    ->action(function (Intake $record, array $data) {
+                        // Update extraction data contact section
+                        $extractionData = (array) ($record->extraction_data ?? []);
+                        $extractionData['contact'] = array_merge(
+                            (array) data_get($extractionData, 'contact', []),
+                            array_filter([
+                                'name' => $data['customer_name'],
+                                'email' => $data['contact_email'],
+                                'phone' => $data['contact_phone'],
+                            ])
+                        );
+                        
+                        // Update contact information and reset export status
+                        $record->update([
+                            'customer_name' => $data['customer_name'],
+                            'contact_email' => $data['contact_email'],
+                            'contact_phone' => $data['contact_phone'],
+                            'extraction_data' => $extractionData,
+                            'status' => 'processed',
+                            'export_attempt_count' => 0,
+                            'last_export_error' => null,
+                            'last_export_error_at' => null,
+                        ]);
+                        
+                        // Retry export if we now have contact info
+                        if ($data['contact_email'] || $data['contact_phone']) {
+                            dispatch(new \App\Jobs\ExportIntakeToRobawsJob($record->id));
+                            
+                            Notification::make()
+                                ->title('Contact Updated & Export Queued')
+                                ->body('Contact information updated successfully. Export to Robaws has been queued for retry.')
+                                ->success()
+                                ->send();
+                        } else {
+                            Notification::make()
+                                ->title('Contact Updated')
+                                ->body('Contact information updated, but email or phone is still required for export.')
+                                ->warning()
+                                ->send();
+                        }
+                        
+                        // IMPORTANT: Don't return anything - prevents [object Object] issues
+                    })
+                    ->visible(fn (?Intake $record): bool => 
+                        $record && in_array($record->status, ['needs_contact', 'export_failed'])
+                    ),
                     
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),

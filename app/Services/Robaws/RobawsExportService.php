@@ -41,6 +41,63 @@ class RobawsExportService
     }
 
     /**
+     * Resolve client ID from extraction data for reliable export
+     */
+    public function resolveClientId(array $extractionData): ?string
+    {
+        $contactEmail = data_get($extractionData, 'contact.email');
+        $contactPhone = data_get($extractionData, 'contact.phone');
+        
+        if (!$contactEmail && !$contactPhone) {
+            Log::warning('Cannot resolve client - no contact info', [
+                'extraction_data_keys' => array_keys($extractionData)
+            ]);
+            return null;
+        }
+        
+        try {
+            $legacy = $this->legacy();
+            if (!$legacy) {
+                Log::warning('Legacy Robaws client not available for client resolution');
+                return null;
+            }
+            
+            // Try to find client by email first, then phone
+            $clientId = null;
+            
+            if ($contactEmail) {
+                $clients = $legacy->findClientsByEmail($contactEmail);
+                if (count($clients) === 1) {
+                    $clientId = $clients[0]['id'] ?? null;
+                }
+            }
+            
+            if (!$clientId && $contactPhone) {
+                $clients = $legacy->findClientsByPhone($contactPhone);
+                if (count($clients) === 1) {
+                    $clientId = $clients[0]['id'] ?? null;
+                }
+            }
+            
+            Log::info('Client resolution result', [
+                'contact_email' => $contactEmail,
+                'contact_phone' => $contactPhone,
+                'client_id' => $clientId,
+            ]);
+            
+            return $clientId;
+            
+        } catch (\Exception $e) {
+            Log::error('Exception during client resolution', [
+                'error' => $e->getMessage(),
+                'contact_email' => $contactEmail,
+                'contact_phone' => $contactPhone,
+            ]);
+            return null;
+        }
+    }
+
+    /**
      * Export intake to Robaws with comprehensive error handling
      */
     public function exportIntake(Intake $intake, array $options = []): array

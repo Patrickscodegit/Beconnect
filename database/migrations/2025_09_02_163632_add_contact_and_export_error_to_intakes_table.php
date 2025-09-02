@@ -13,16 +13,16 @@ return new class extends Migration
     {
         Schema::table('intakes', function (Blueprint $table) {
             if (!Schema::hasColumn('intakes', 'contact_email')) {
-                $table->string('contact_email')->nullable()->index()->after('customer_name');
+                $table->string('contact_email')->nullable()->index();
             }
             if (!Schema::hasColumn('intakes', 'contact_phone')) {
-                $table->string('contact_phone')->nullable()->index()->after('contact_email');
+                $table->string('contact_phone')->nullable()->index();
             }
             if (!Schema::hasColumn('intakes', 'last_export_error')) {
-                $table->text('last_export_error')->nullable()->after('export_attempt_count');
+                $table->text('last_export_error')->nullable();
             }
             if (!Schema::hasColumn('intakes', 'last_export_error_at')) {
-                $table->timestamp('last_export_error_at')->nullable()->after('last_export_error');
+                $table->timestamp('last_export_error_at')->nullable();
             }
         });
     }

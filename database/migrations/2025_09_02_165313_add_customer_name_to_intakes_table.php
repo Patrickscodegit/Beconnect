@@ -13,10 +13,10 @@ return new class extends Migration
     {
         Schema::table('intakes', function (Blueprint $table) {
             if (!Schema::hasColumn('intakes', 'customer_name')) {
-                $table->string('customer_name')->nullable()->after('priority');
+                $table->string('customer_name')->nullable();
             }
             if (!Schema::hasColumn('intakes', 'extraction_data')) {
-                $table->json('extraction_data')->nullable()->after('notes');
+                $table->json('extraction_data')->nullable();
             }
         });
     }

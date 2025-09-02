@@ -30,7 +30,7 @@ class ExtractionService
             // The existing pipeline expects Document models
             $tempDocument = new Document([
                 'filename' => $file->filename,
-                'storage_path' => $file->storage_path,
+                'file_path' => $file->storage_path,  // Map storage_path to file_path for compatibility
                 'storage_disk' => $file->storage_disk,
                 'mime_type' => $file->mime_type,
                 'file_size' => $file->file_size,
@@ -52,7 +52,7 @@ class ExtractionService
             // Run extraction
             $result = $this->extractionPipeline->process($tempDocument);
 
-            if ($result->isSuccess()) {
+            if ($result->isSuccessful()) {
                 Log::info('Extraction successful', [
                     'file_id' => $file->id,
                     'data_extracted' => !empty($result->getData())
@@ -62,7 +62,7 @@ class ExtractionService
             } else {
                 Log::warning('Extraction failed', [
                     'file_id' => $file->id,
-                    'error' => $result->getError()
+                    'error' => $result->getErrorMessage()
                 ]);
                 return null;
             }
