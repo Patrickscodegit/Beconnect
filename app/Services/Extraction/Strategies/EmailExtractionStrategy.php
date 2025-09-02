@@ -9,6 +9,7 @@ use App\Services\Extraction\Results\ExtractionResult;
 use App\Support\DocumentStorage;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use ZBateson\MailMimeParser\MailMimeParser;
 
 class EmailExtractionStrategy implements ExtractionStrategy
 {
@@ -70,6 +71,9 @@ class EmailExtractionStrategy implements ExtractionStrategy
             // Get the pipeline result data directly (let pipeline handle merging)
             $enhancedData = $pipelineResult['data'];
 
+            // CRITICAL FIX: Ensure email sender contact is merged into main contact data
+            $this->mergeEmailSenderIntoContact($enhancedData, $emailData);
+
             // Add email-specific metadata
             $metadata = $pipelineResult['metadata'];
             $metadata['extraction_strategy'] = $this->getName();
@@ -118,15 +122,15 @@ class EmailExtractionStrategy implements ExtractionStrategy
     }
 
     /**
-     * Parse email file and extract headers and content
+     * Parse email file and extract headers and content using robust MIME parser
      */
     private function parseEmailFile(Document $document): ?array
     {
         try {
             $content = $this->getEmailContent($document);
             
-            if (empty($content)) {
-                Log::error('Failed to get email content or content is empty', [
+            if ($content === '') {
+                Log::error('Email content empty', [
                     'document_id' => $document->id,
                     'file_path' => $document->file_path,
                     'storage_disk' => $document->storage_disk
@@ -134,116 +138,110 @@ class EmailExtractionStrategy implements ExtractionStrategy
                 return null;
             }
 
-            // Parse email headers and body
-            $headers = [];
-            $body = '';
-            $inHeaders = true;
-            $lines = explode("\n", $content);
-            
-            foreach ($lines as $line) {
-                if ($inHeaders && trim($line) === '') {
-                    $inHeaders = false;
-                    continue;
-                }
-                
-                if ($inHeaders) {
-                    if (preg_match('/^([^:]+):\s*(.+)$/i', $line, $matches)) {
-                        $headerName = strtolower(trim($matches[1]));
-                        $headerValue = trim($matches[2]);
-                        
-                        // Handle multi-line headers
-                        if (isset($headers[$headerName])) {
-                            if (is_array($headers[$headerName])) {
-                                $headers[$headerName][] = $headerValue;
-                            } else {
-                                $headers[$headerName] = [$headers[$headerName], $headerValue];
-                            }
-                        } else {
-                            $headers[$headerName] = $headerValue;
-                        }
-                    } elseif (preg_match('/^\s+(.+)$/', $line, $matches) && !empty($headers)) {
-                        // Continuation of previous header
-                        $lastKey = array_key_last($headers);
-                        if (is_array($headers[$lastKey])) {
-                            $headers[$lastKey][count($headers[$lastKey]) - 1] .= ' ' . trim($matches[1]);
-                        } else {
-                            $headers[$lastKey] .= ' ' . trim($matches[1]);
-                        }
-                    }
-                } else {
-                    $body .= $line . "\n";
-                }
-            }
+            $parser = new MailMimeParser();
+            $message = $parser->parse($content, false);
 
-            // Extract sender information from headers
-            $fromHeader = $headers['from'] ?? '';
+            // Extract sender information with fallbacks
+            $fromHeaderObject = $message->getHeader('from');
+            $fromHeader = $fromHeaderObject ? $fromHeaderObject->getRawValue() : null;
+            $replyToHeader = $message->getHeaderValue('reply-to');
+            
             $fromEmail = null;
             $fromName = null;
             
-            // Parse From header - handle format: "Name <email@domain.com>"
-            if (preg_match('/^(.+?)\s*<([^>]+)>/', $fromHeader, $matches)) {
-                $fromName = trim($matches[1], ' "\'');
-                $fromEmail = trim($matches[2]);
-            } elseif (preg_match('/^([^\s]+@[^\s]+)/', $fromHeader, $matches)) {
-                // Just email address
-                $fromEmail = trim($matches[1]);
+            // Parse FROM header first
+            if ($fromHeader) {
+                if (preg_match('/^(.+?)\s*<([^>]+)>/', $fromHeader, $matches)) {
+                    $fromName = trim($matches[1], ' "\'');
+                    $fromEmail = trim($matches[2]);
+                } elseif (preg_match('/^([^\s]+@[^\s]+)/', $fromHeader, $matches)) {
+                    $fromEmail = trim($matches[1]);
+                }
             }
             
-            // Also check Return-Path as fallback
-            if (!$fromEmail && isset($headers['return-path'])) {
-                if (preg_match('/<([^>]+)>/', $headers['return-path'], $matches)) {
+            // Fallback to Reply-To if FROM is missing
+            if (!$fromEmail && $replyToHeader) {
+                if (preg_match('/<([^>]+)>/', $replyToHeader, $matches)) {
                     $fromEmail = trim($matches[1]);
-                } elseif (preg_match('/([^\s]+@[^\s]+)/', $headers['return-path'], $matches)) {
+                } elseif (preg_match('/^([^\s]+@[^\s]+)/', $replyToHeader, $matches)) {
                     $fromEmail = trim($matches[1]);
                 }
             }
 
-            // Extract recipient information
-            $toHeader = $headers['to'] ?? '';
+            // Fallback: infer a name from the email local part if missing
+            if (!$fromName && $fromEmail) {
+                $fromName = $this->inferNameFromEmailLocalPart($fromEmail);
+            }
+
+            // Extract recipient
+            $toHeader = $message->getHeaderValue('to');
             $toEmail = null;
             
-            if (preg_match('/<([^>]+)>/', $toHeader, $matches)) {
-                $toEmail = trim($matches[1]);
-            } elseif (preg_match('/^([^\s]+@[^\s]+)/', $toHeader, $matches)) {
-                $toEmail = trim($matches[1]);
+            if ($toHeader) {
+                if (preg_match('/<([^>]+)>/', $toHeader, $matches)) {
+                    $toEmail = trim($matches[1]);
+                } elseif (preg_match('/^([^\s]+@[^\s]+)/', $toHeader, $matches)) {
+                    $toEmail = trim($matches[1]);
+                }
             }
 
-            // Extract subject and decode if needed
-            $subject = $headers['subject'] ?? '';
-            if (preg_match('/=\?.*\?=/i', $subject)) {
-                $subject = mb_decode_mimeheader($subject);
+            // Extract other headers
+            $subject = $message->getHeaderValue('subject') ?? '';
+            $date = $message->getHeaderValue('date');
+
+            // Extract body content - prefer text, fallback to HTML
+            $textContent = $message->getTextContent();
+            $htmlContent = $message->getHtmlContent();
+            
+            $body = '';
+            if (!empty($textContent)) {
+                $body = $textContent;
+            } elseif (!empty($htmlContent)) {
+                $body = strip_tags(html_entity_decode($htmlContent, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
             }
 
-            // Extract plain text body
-            $plainBody = $this->extractPlainTextBody($body);
-
-            Log::info('Email parsed successfully', [
+            Log::info('Email parsed successfully (modern MIME parser)', [
                 'document_id' => $document->id,
                 'from_email' => $fromEmail,
                 'from_name' => $fromName,
                 'to_email' => $toEmail,
                 'subject' => $subject,
-                'body_length' => strlen($plainBody)
+                'body_length' => strlen($body)
             ]);
 
             return [
-                'headers' => $headers,
+                'headers' => [], // keep minimal; you can add selected headers if needed
                 'from_email' => $fromEmail,
                 'from_name' => $fromName,
                 'to_email' => $toEmail,
                 'subject' => $subject,
-                'body' => $plainBody,
-                'date' => $headers['date'] ?? null,
+                'body' => trim($body),
+                'date' => $date,
             ];
 
-        } catch (\Exception $e) {
-            Log::error('Failed to parse email file', [
+        } catch (\Throwable $e) {
+            Log::error('Failed to parse email file (modern MIME)', [
                 'document_id' => $document->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
             
             return null;
         }
+    }
+
+    /**
+     * Helper: Infer a name from email local part if missing
+     */
+    private function inferNameFromEmailLocalPart(string $email): ?string
+    {
+        if (!str_contains($email, '@')) return null;
+        
+        [$local] = explode('@', $email, 2);
+        $local = preg_replace('/[._-]+/', ' ', $local);
+        $local = ucwords(trim(preg_replace('/\s+/', ' ', $local)));
+        
+        return $local !== '' ? $local : null;
     }
 
     /**
@@ -308,82 +306,6 @@ class EmailExtractionStrategy implements ExtractionStrategy
     }
 
     /**
-     * Extract plain text from email body (handle multipart messages)
-     */
-    private function extractPlainTextBody(string $body): string
-    {
-        $plainText = '';
-        
-        // Check if this is a multipart message
-        if (preg_match('/Content-Type:\s*multipart\//i', $body)) {
-            
-            // First, try to extract just the plain text part
-            if (preg_match('/Content-Type:\s*text\/plain.*?\n\n(.*?)(?=\n--)/s', $body, $matches)) {
-                $plainText = $matches[1];
-                
-                // Handle quoted-printable encoding in the plain text part
-                if (strpos($body, 'Content-Transfer-Encoding: quoted-printable') !== false) {
-                    $plainText = quoted_printable_decode($plainText);
-                }
-            } else {
-                // Fallback: extract from HTML part and clean it
-                if (preg_match('/Content-Type:\s*text\/html.*?\n\n(.*?)(?=\n--)/s', $body, $matches)) {
-                    $htmlContent = $matches[1];
-                    
-                    // Handle quoted-printable encoding in HTML part
-                    if (strpos($body, 'Content-Transfer-Encoding: quoted-printable') !== false) {
-                        $htmlContent = quoted_printable_decode($htmlContent);
-                    }
-                    
-                    // Strip HTML tags and decode entities
-                    $plainText = strip_tags(html_entity_decode($htmlContent, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
-                } else {
-                    // Last resort: use the whole body
-                    $plainText = $body;
-                }
-            }
-        } else {
-            // Single part message
-            $plainText = $body;
-            
-            // Handle quoted-printable encoding
-            if (strpos($body, 'Content-Transfer-Encoding: quoted-printable') !== false) {
-                $plainText = quoted_printable_decode($plainText);
-            }
-
-            // Handle base64 encoding  
-            if (strpos($body, 'Content-Transfer-Encoding: base64') !== false) {
-                $plainText = base64_decode($plainText);
-            }
-        }
-
-        // Clean up the text thoroughly
-        $plainText = trim($plainText);
-        
-        // Remove MIME boundaries and headers that leaked through
-        $plainText = preg_replace('/--Apple-Mail-[A-F0-9-]+/', '', $plainText);
-        $plainText = preg_replace('/Content-Type:.*?\n/', '', $plainText);
-        $plainText = preg_replace('/Content-Transfer-Encoding:.*?\n/', '', $plainText);
-        $plainText = preg_replace('/Content-Disposition:.*?\n/', '', $plainText);
-        $plainText = preg_replace('/charset=.*?\n/', '', $plainText);
-        
-        // Remove any remaining HTML if it leaked through
-        if (strpos($plainText, '<html>') !== false || strpos($plainText, '<div>') !== false) {
-            $plainText = strip_tags(html_entity_decode($plainText, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
-        }
-        
-        // Normalize line endings and remove excessive whitespace
-        $plainText = preg_replace('/\r\n|\r/', "\n", $plainText);
-        $plainText = preg_replace('/\n{3,}/', "\n\n", $plainText);
-        $plainText = preg_replace('/[ \t]{2,}/', ' ', $plainText);
-        
-        // Remove HTML entities that might remain
-        $plainText = html_entity_decode($plainText, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-
-        return trim($plainText);
-    }
-
-    /**
      * Calculate confidence based on extracted data quality
      */
     private function calculateConfidence(array $extractedData, array $emailData): float
@@ -431,6 +353,86 @@ class EmailExtractionStrategy implements ExtractionStrategy
         $context .= $emailData['body'] ?? '';
         
         return $context;
+    }
+
+    /**
+     * CRITICAL FIX: Merge email sender information into contact data
+     * This ensures the sender (customer) email/name is properly extracted as the contact
+     */
+    private function mergeEmailSenderIntoContact(array &$enhancedData, array $emailData): void
+    {
+        // If no contact extracted or contact is incomplete, use email sender as primary contact
+        $currentContact = $enhancedData['contact'] ?? [];
+        
+        // Email sender has high confidence as the customer/contact
+        $emailSender = [
+            'name' => $emailData['from_name'] ?? null,
+            'email' => $emailData['from_email'] ?? null,
+        ];
+        
+        // Clean sender name
+        if ($emailSender['name']) {
+            $emailSender['name'] = trim($emailSender['name'], ' "\'');
+        }
+        
+        // Merge strategy: Email sender wins if current contact is empty/incomplete
+        $mergedContact = [];
+        
+        // Use sender name if current name is missing or looks generic
+        if (empty($currentContact['name']) || 
+            in_array(strtolower($currentContact['name'] ?? ''), ['unknown', 'customer', 'client', 'sender'])) {
+            $mergedContact['name'] = $emailSender['name'];
+        } else {
+            $mergedContact['name'] = $currentContact['name'];
+        }
+        
+        // Use sender email if current email is missing
+        if (empty($currentContact['email'])) {
+            $mergedContact['email'] = $emailSender['email'];
+        } else {
+            $mergedContact['email'] = $currentContact['email'];
+        }
+        
+        // Preserve other contact fields
+        $mergedContact['phone'] = $currentContact['phone'] ?? null;
+        $mergedContact['company'] = $currentContact['company'] ?? null;
+        
+        // Infer company from email domain if missing
+        if (empty($mergedContact['company']) && !empty($mergedContact['email'])) {
+            $mergedContact['company'] = $this->inferCompanyFromEmail($mergedContact['email']);
+        }
+        
+        // Remove empty values
+        $enhancedData['contact'] = array_filter($mergedContact, fn($v) => !is_null($v) && $v !== '');
+        
+        Log::info('Email sender merged into contact data', [
+            'sender_name' => $emailSender['name'],
+            'sender_email' => $emailSender['email'],
+            'final_contact' => $enhancedData['contact']
+        ]);
+    }
+    
+    /**
+     * Infer company name from email domain
+     */
+    private function inferCompanyFromEmail(string $email): ?string
+    {
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return null;
+        }
+        
+        $domain = explode('@', $email)[1] ?? '';
+        $domainParts = explode('.', $domain);
+        $mainDomain = $domainParts[0] ?? '';
+        
+        // Skip common personal email providers
+        $personalProviders = ['gmail', 'yahoo', 'hotmail', 'outlook', 'live', 'icloud', 'aol'];
+        if (in_array(strtolower($mainDomain), $personalProviders)) {
+            return null;
+        }
+        
+        // Clean and format company name
+        return ucfirst(strtolower($mainDomain));
     }
 
 
