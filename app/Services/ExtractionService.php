@@ -82,13 +82,19 @@ class ExtractionService
      */
     private function formatExtractionData(array $data, IntakeFile $file): array
     {
+        // Extract contact data from nested structure (supports both flat and nested formats)
+        $contactEmail = $data['contact_email'] ?? $data['contact']['email'] ?? null;
+        $contactPhone = $data['contact_phone'] ?? $data['contact']['phone'] ?? null;
+        $customerName = $data['customer_name'] ?? $data['contact']['name'] ?? null;
+        
         return [
             'file_id' => $file->id,
             'filename' => $file->filename,
             'mime_type' => $file->mime_type,
-            'contact_email' => $data['contact_email'] ?? null,
-            'contact_phone' => $data['contact_phone'] ?? null,
-            'customer_name' => $data['customer_name'] ?? null,
+            'contact_email' => $contactEmail,
+            'contact_phone' => $contactPhone,
+            'customer_name' => $customerName,
+            'contact' => $data['contact'] ?? [], // Preserve nested contact data for ProcessIntake
             'raw_data' => $data,
             'extracted_at' => now()->toISOString(),
         ];
