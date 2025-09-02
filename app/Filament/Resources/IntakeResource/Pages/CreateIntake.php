@@ -9,6 +9,7 @@ use Filament\Resources\Pages\CreateRecord;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\UploadedFile;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class CreateIntake extends CreateRecord
 {
@@ -16,21 +17,46 @@ class CreateIntake extends CreateRecord
     
     protected function handleRecordCreation(array $data): Intake
     {
-        \Log::info('CreateIntake: Starting record creation with new service', [
+        \Log::info('CreateIntake: Starting record creation with robust file handling', [
             'data_keys' => array_keys($data),
             'has_intake_files' => isset($data['intake_files']),
-            'intake_files_count' => isset($data['intake_files']) ? count($data['intake_files']) : 0
         ]);
         
-        $intakeCreationService = app(IntakeCreationService::class);
-        $uploadedFiles = $data['intake_files'] ?? [];
-        
-        // Remove files from intake data for cleaner creation
-        unset($data['intake_files']);
-        
+        /** @var \App\Services\IntakeCreationService $intakeCreationService */
+        $intakeCreationService = app(\App\Services\IntakeCreationService::class);
+
+        // 1) Fetch raw state (not the dehydrated/normalized one) 
+        $raw = $this->form->getRawState()['intake_files'] ?? [];
+
+        // 2) Flatten & convert to UploadedFile[]
+        $uploadedFiles = collect(is_array($raw) ? $raw : [$raw])
+            ->flatMap(function ($item) {
+                // Livewire sometimes wraps each file in an associative array keyed by a UUID
+                if ($item instanceof TemporaryUploadedFile || $item instanceof UploadedFile || is_string($item)) {
+                    return [$item];
+                }
+                if (is_array($item)) {
+                    // e.g. [ 'uuid' => TemporaryUploadedFile, ... ] or [TemporaryUploadedFile, ...]
+                    return array_values($item);
+                }
+                return [];
+            })
+            ->map(fn($f) => $this->convertToUploadedFile($f))
+            ->filter()
+            ->values()
+            ->all();
+
         if (empty($uploadedFiles)) {
             // Create simple intake without files
-            $intake = Intake::create($data);
+            $intake = Intake::create([
+                'status' => $data['status'] ?? 'pending',
+                'source' => $data['source'] ?? 'upload',
+                'priority' => $data['priority'] ?? 'normal',
+                'notes' => $data['notes'] ?? null,
+                'customer_name' => $data['customer_name'] ?? null,
+                'contact_email' => $data['contact_email'] ?? null,
+                'contact_phone' => $data['contact_phone'] ?? null,
+            ]);
             
             Notification::make()
                 ->title('Intake created')
@@ -40,39 +66,34 @@ class CreateIntake extends CreateRecord
                 
             return $intake;
         }
-        
-        // Process the first file to create the intake
-        $firstFile = array_shift($uploadedFiles);
-        $uploadedFile = $this->convertToUploadedFile($firstFile);
-        
-        if (!$uploadedFile) {
-            throw new \Exception('Could not process uploaded file');
-        }
-        
+
         try {
-            // Create intake from first file using the service
-            $intake = $intakeCreationService->createFromUploadedFile($uploadedFile, [
-                'source' => $data['source'] ?? 'upload',
-                'notes' => $data['notes'] ?? null,
-                'priority' => $data['priority'] ?? 'normal',
-                'customer_name' => $data['customer_name'] ?? null,
-                'contact_email' => $data['contact_email'] ?? null,
-                'contact_phone' => $data['contact_phone'] ?? null,
+            // 3) Create intake from the first file
+            $first = array_shift($uploadedFiles);
+            $intake = $intakeCreationService->createFromUploadedFile($first, [
+                'source'         => $data['source'] ?? 'upload',
+                'notes'          => $data['notes'] ?? null,
+                'priority'       => $data['priority'] ?? 'normal',
+                'customer_name'  => $data['customer_name'] ?? null,
+                'contact_email'  => $data['contact_email'] ?? null,
+                'contact_phone'  => $data['contact_phone'] ?? null,
+                'extraction_data'=> [
+                    'contact' => array_filter([
+                        'name'  => $data['customer_name'] ?? null,
+                        'email' => $data['contact_email'] ?? null,
+                        'phone' => $data['contact_phone'] ?? null,
+                    ]),
+                ],
             ]);
-            
+
             $processedCount = 1;
             $failedCount = 0;
-            
-            // Add any additional files to the intake
-            foreach ($uploadedFiles as $fileData) {
+
+            // 4) Attach the rest
+            foreach ($uploadedFiles as $file) {
                 try {
-                    $additionalFile = $this->convertToUploadedFile($fileData);
-                    if ($additionalFile) {
-                        $intakeCreationService->addFileToIntake($intake, $additionalFile);
-                        $processedCount++;
-                    } else {
-                        $failedCount++;
-                    }
+                    $intakeCreationService->addFileToIntake($intake, $file);
+                    $processedCount++;
                 } catch (\Exception $e) {
                     \Log::error('Failed to add additional file to intake', [
                         'intake_id' => $intake->id,
@@ -81,19 +102,19 @@ class CreateIntake extends CreateRecord
                     $failedCount++;
                 }
             }
-            
+
             // Show notification about upload results
-            $message = "{$processedCount} file(s) uploaded and processed";
+            $message = "{$processedCount} file(s) uploaded and processing queued";
             if ($failedCount > 0) {
                 $message .= ". {$failedCount} file(s) failed to process.";
             }
-            
+
             Notification::make()
-                ->title('Intake created successfully')
+                ->title('Intake created')
                 ->body($message)
                 ->success()
                 ->send();
-                
+
             return $intake;
             
         } catch (\Exception $e) {
@@ -112,57 +133,40 @@ class CreateIntake extends CreateRecord
         }
     }
     
-    private function convertToUploadedFile(string $tempPath): ?UploadedFile
+    protected function convertToUploadedFile($file): ?UploadedFile
     {
-        try {
-            // Clean up the path
-            $cleanFileName = str_replace('temp-uploads/', '', $tempPath);
-            
-            // Try multiple possible paths for Filament/Livewire temporary files
-            $possiblePaths = [
-                Storage::disk('local')->path('temp-uploads/' . $cleanFileName),
-                Storage::disk('local')->path($cleanFileName),
-                storage_path('app/livewire-tmp/' . $cleanFileName),
-                storage_path('app/private/temp-uploads/' . $cleanFileName),
-                storage_path('app/private/livewire-tmp/' . $cleanFileName),
-                $tempPath // Direct path
-            ];
-            
-            $realPath = null;
-            foreach ($possiblePaths as $path) {
-                if (file_exists($path)) {
-                    $realPath = $path;
-                    break;
-                }
-            }
-            
-            if (!$realPath) {
-                \Log::error('ConvertToUploadedFile: File not found', [
-                    'temp_path' => $tempPath,
-                    'checked_paths' => $possiblePaths
-                ]);
-                return null;
-            }
-            
-            // Create UploadedFile instance
-            $originalName = basename($cleanFileName);
-            $mimeType = mime_content_type($realPath);
-            
-            return new UploadedFile(
-                $realPath,
-                $originalName,
-                $mimeType,
-                null,
-                true // test mode - allows using any file path
-            );
-            
-        } catch (\Exception $e) {
-            \Log::error('ConvertToUploadedFile: Exception', [
-                'temp_path' => $tempPath,
-                'error' => $e->getMessage()
-            ]);
-            return null;
+        if ($file instanceof UploadedFile) {
+            return $file;
         }
+
+        if ($file instanceof TemporaryUploadedFile) {
+            // Livewire v3 helper to get a Symfony UploadedFile
+            return $file->toUploadedFile();
+        }
+
+        // If your FileUpload was NOT set to storeFiles(false) and saved to a disk already,
+        // sometimes you'll get a string path relative to that disk:
+        if (is_string($file)) {
+            // adjust disk name if you configured a different one
+            $disk = config('filesystems.default', 'local');
+            if (Storage::disk($disk)->exists($file)) {
+                $abs = Storage::disk($disk)->path($file);
+                return new UploadedFile($abs, basename($abs), null, null, true);
+            }
+
+            // If it's a livewire-temp path on local disk:
+            if (is_file($file)) {
+                return new UploadedFile($file, basename($file), null, null, true);
+            }
+        }
+
+        \Log::warning('ConvertToUploadedFile: Could not convert file', [
+            'file_type' => gettype($file),
+            'file_class' => is_object($file) ? get_class($file) : null,
+            'file_preview' => is_scalar($file) ? $file : 'non-scalar'
+        ]);
+
+        return null;
     }
     
     protected function getRedirectUrl(): string
