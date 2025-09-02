@@ -683,40 +683,155 @@ class RobawsApiClient
     }
 
     /**
+     * Get offer by human-readable number (e.g., "Q251114")
+     */
+    public function getOfferByNumber(string $offerNumber): ?array
+    {
+        $response = $this->makeRequest('GET', '/api/v2/offers', [
+            'search' => $offerNumber,
+            'size' => 1
+        ]);
+
+        if ($response->successful()) {
+            $data = $response->json();
+            $offers = $data['items'] ?? [];
+            
+            if (!empty($offers)) {
+                Log::info('Found offer by number', [
+                    'offer_number' => $offerNumber,
+                    'internal_id' => $offers[0]['id'],
+                    'title' => $offers[0]['title'] ?? 'N/A'
+                ]);
+                return $offers[0];
+            }
+        }
+
+        Log::warning('Offer not found by number', [
+            'offer_number' => $offerNumber,
+            'status' => $response->status()
+        ]);
+        
+        return null;
+    }
+
+    /**
      * Upload file and attach to offer using official 2-step flow
      */
     public function attachFileToOffer(int $offerId, string $absolutePath, ?string $filename = null): array
     {
-        // Step 1: Upload file to get fileId
         $filename = $filename ?: basename($absolutePath);
-        $mime = function_exists('mime_content_type') ? mime_content_type($absolutePath) : 'application/octet-stream';
+        $fileSize = filesize($absolutePath);
         
+        Log::info('Starting file upload to offer', [
+            'offer_id' => $offerId,
+            'filename' => $filename,
+            'file_size' => $fileSize
+        ]);
+
+        // Choose upload method based on file size
+        if ($fileSize <= 6 * 1024 * 1024) { // 6MB or less - use direct upload
+            return $this->directUploadToOffer($offerId, $absolutePath, $filename);
+        } else {
+            return $this->tempBucketUploadToOffer($offerId, $absolutePath, $filename);
+        }
+    }
+
+    /**
+     * Direct upload to offer (≤ 6MB) - simplest method
+     */
+    private function directUploadToOffer(int $offerId, string $absolutePath, string $filename): array
+    {
+        Log::info('Using direct upload method', [
+            'offer_id' => $offerId,
+            'filename' => $filename
+        ]);
+
+        $client = $this->getHttpClient();
+        $response = $client
+            ->attach('file', file_get_contents($absolutePath), $filename)
+            ->post("/api/v2/offers/{$offerId}/documents");
+
+        if ($response->successful()) {
+            $data = $response->json();
+            Log::info('Direct upload successful', [
+                'offer_id' => $offerId,
+                'document_id' => $data['id'] ?? 'N/A',
+                'status' => $response->status()
+            ]);
+            return $data;
+        }
+
+        Log::error('Direct upload failed', [
+            'offer_id' => $offerId,
+            'status' => $response->status(),
+            'error' => $response->body()
+        ]);
+        
+        throw new \RuntimeException('Failed to upload file directly to offer: ' . $response->body());
+    }
+
+    /**
+     * Temp bucket upload then attach to offer (any size)
+     */
+    private function tempBucketUploadToOffer(int $offerId, string $absolutePath, string $filename): array
+    {
+        Log::info('Using temp bucket upload method', [
+            'offer_id' => $offerId,
+            'filename' => $filename
+        ]);
+
+        // Step 1: Create temp bucket
+        $bucketResponse = $this->makeRequest('POST', '/api/v2/temp-document-buckets');
+        if (!$bucketResponse->successful()) {
+            throw new \RuntimeException('Failed to create temp bucket: ' . $bucketResponse->body());
+        }
+        
+        $bucket = $bucketResponse->json();
+        $bucketId = $bucket['id'];
+        
+        Log::info('Created temp bucket', [
+            'bucket_id' => $bucketId
+        ]);
+
+        // Step 2: Upload file to bucket
         $client = $this->getHttpClient();
         $uploadResponse = $client
-            ->attach('file', fopen($absolutePath, 'r'), $filename, ['Content-Type' => $mime])
-            ->post('/api/v2/files');
+            ->attach('file', file_get_contents($absolutePath), $filename)
+            ->post("/api/v2/temp-document-buckets/{$bucketId}/documents");
             
         if (!$uploadResponse->successful()) {
-            throw new \RuntimeException('Failed to upload file: ' . $uploadResponse->body());
+            throw new \RuntimeException('Failed to upload to bucket: ' . $uploadResponse->body());
         }
 
         $uploadData = $uploadResponse->json();
-        $fileId = $uploadData['id'] ?? $uploadData['fileId'] ?? null;
+        $documentId = $uploadData['id'];
         
-        if (!$fileId) {
-            throw new \RuntimeException('No fileId returned from upload: ' . $uploadResponse->body());
-        }
-
-        // Step 2: Attach file to offer using fileId
-        $attachResponse = $this->makeRequest('POST', "/api/v2/offers/{$offerId}/documents", [
-            'fileId' => $fileId
+        Log::info('Uploaded to temp bucket', [
+            'bucket_id' => $bucketId,
+            'document_id' => $documentId
         ]);
+
+        // Step 3: Attach document to offer using merge-patch
+        $attachResponse = $this->makeRequest('PATCH', "/api/v2/offers/{$offerId}", 
+            ['documentId' => $documentId],
+            ['Content-Type' => 'application/merge-patch+json']
+        );
         
-        if (!$attachResponse->successful()) {
-            throw new \RuntimeException('Failed to attach file to offer: ' . $attachResponse->body());
+        if (!$attachResponse->successful() && $attachResponse->status() !== 204) {
+            throw new \RuntimeException('Failed to attach document to offer: ' . $attachResponse->body());
         }
 
-        return $attachResponse->json();
+        Log::info('Document attached to offer successfully', [
+            'offer_id' => $offerId,
+            'document_id' => $documentId,
+            'status' => $attachResponse->status()
+        ]);
+
+        return [
+            'id' => $documentId,
+            'filename' => $filename,
+            'attached_to_offer' => $offerId
+        ];
     }
 
     /**
