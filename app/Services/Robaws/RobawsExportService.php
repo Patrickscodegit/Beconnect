@@ -57,7 +57,8 @@ class RobawsExportService
         
         try {
             // Use the new API client which properly supports v2 endpoints
-            $clientId = $this->apiClient->findClientId($contactEmail, $contactPhone);
+            // Note: findClientId signature is (name, email, phone)
+            $clientId = $this->apiClient->findClientId(null, $contactEmail, $contactPhone);
             
             Log::info('Client resolution result', [
                 'contact_email' => $contactEmail,
