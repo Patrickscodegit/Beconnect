@@ -22,11 +22,16 @@ class Intake extends Model
         'export_payload_hash',
         'export_attempt_count',
         'last_export_error',
+        'last_export_error_at',
+        'customer_name',
+        'contact_email',
+        'contact_phone',
     ];
 
     protected $casts = [
         'notes' => 'array',
         'extraction_data' => 'array',
+        'last_export_error_at' => 'datetime',
     ];
 
     public function documents(): HasMany

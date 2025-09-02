@@ -4,11 +4,7 @@ namespace App\Filament\Resources\IntakeResource\Pages;
 
 use App\Filament\Resources\IntakeResource;
 use App\Models\Intake;
-use App\Models\Document;
-use App\Services\DocumentService;
-use App\Services\DocumentStorageConfig;
-use App\Services\EmailDocumentService;
-use Filament\Actions;
+use App\Services\IntakeCreationService;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Storage;
@@ -20,256 +16,153 @@ class CreateIntake extends CreateRecord
     
     protected function handleRecordCreation(array $data): Intake
     {
-        \Log::info('CreateIntake: Starting record creation', [
+        \Log::info('CreateIntake: Starting record creation with new service', [
             'data_keys' => array_keys($data),
-            'has_document_files' => isset($data['document_files']),
-            'document_files_count' => isset($data['document_files']) ? count($data['document_files']) : 0
+            'has_intake_files' => isset($data['intake_files']),
+            'intake_files_count' => isset($data['intake_files']) ? count($data['intake_files']) : 0
         ]);
         
-        // Extract uploaded files before creating the intake
-        $uploadedFiles = $data['document_files'] ?? [];
-        unset($data['document_files']); // Remove from intake data
+        $intakeCreationService = app(IntakeCreationService::class);
+        $uploadedFiles = $data['intake_files'] ?? [];
         
-        \Log::info('CreateIntake: Extracted files', [
-            'uploaded_files' => $uploadedFiles,
-            'count' => count($uploadedFiles)
-        ]);
+        // Remove files from intake data for cleaner creation
+        unset($data['intake_files']);
         
-        // Create the intake record
-        $intake = Intake::create($data);
-        \Log::info('CreateIntake: Intake created', ['intake_id' => $intake->id]);
-        
-        // Process uploaded documents
-        if (!empty($uploadedFiles)) {
-            \Log::info('CreateIntake: Processing uploaded files', ['count' => count($uploadedFiles)]);
-            $this->processUploadedFiles($intake, $uploadedFiles);
-        } else {
-            \Log::info('CreateIntake: No files to process');
-        }
-        
-        return $intake;
-    }
-    
-    private function processUploadedFiles(Intake $intake, array $files): void
-    {
-        $processedCount = 0;
-        $failedCount = 0;
-        
-        \Log::info('ProcessUploadedFiles: Starting processing', [
-            'intake_id' => $intake->id,
-            'files' => $files
-        ]);
-        
-        foreach ($files as $file) {
-            try {
-                \Log::info('ProcessUploadedFiles: Processing file', ['file' => $file]);
-                
-                if (is_string($file)) {
-                    // Remove directory prefix if it exists (Filament adds it)
-                    $cleanFileName = str_replace('temp-uploads/', '', $file);
-                    
-                    // Try multiple possible paths for Filament/Livewire temporary files
-                    $possiblePaths = [
-                        Storage::disk('local')->path('temp-uploads/' . $cleanFileName),
-                        Storage::disk('local')->path($cleanFileName),
-                        storage_path('app/livewire-tmp/' . $cleanFileName),
-                        storage_path('app/private/temp-uploads/' . $cleanFileName),
-                        storage_path('app/private/livewire-tmp/' . $cleanFileName),
-                        $file // Direct path
-                    ];
-                    
-                    $tempPath = null;
-                    foreach ($possiblePaths as $path) {
-                        if (file_exists($path)) {
-                            $tempPath = $path;
-                            \Log::info('ProcessUploadedFiles: Found file at path', ['path' => $path]);
-                            break;
-                        }
-                    }
-                    
-                    if (!$tempPath) {
-                        \Log::error('ProcessUploadedFiles: File not found in any path', [
-                            'file' => $file,
-                            'checked_paths' => $possiblePaths
-                        ]);
-                        $failedCount++;
-                        continue;
-                    }
-                    
-                    // Get file info
-                    $originalName = basename($cleanFileName);
-                    $mimeType = mime_content_type($tempPath);
-                    $fileSize = filesize($tempPath);
-                    
-                    \Log::info('ProcessUploadedFiles: File info', [
-                        'original_name' => $originalName,
-                        'mime_type' => $mimeType,
-                        'file_size' => $fileSize
-                    ]);
-                    
-                    // Try to store in Spaces, fallback to local if Spaces is down
-                    $fileContent = file_get_contents($tempPath);
-                    $storagePath = 'documents/' . uniqid() . '_' . $originalName;
-                    
-                    // Determine storage disk based on environment
-                    $storageDisk = DocumentStorageConfig::getStorageDisk();
-                    
-                    try {
-                        // Store file using the configured disk
-                        Storage::disk($storageDisk)->put($storagePath, $fileContent);
-                        \Log::info('ProcessUploadedFiles: File stored successfully', [
-                            'storage_disk' => $storageDisk,
-                            'path' => $storagePath
-                        ]);
-                    } catch (\Exception $e) {
-                        // If primary disk fails, try local as fallback
-                        if ($storageDisk !== 'local') {
-                            try {
-                                Storage::disk('local')->put($storagePath, $fileContent);
-                                $storageDisk = 'local';
-                                \Log::warning('ProcessUploadedFiles: Primary storage failed, using local fallback', [
-                                    'error' => $e->getMessage(),
-                                    'path' => $storagePath
-                                ]);
-                            } catch (\Exception $localE) {
-                                \Log::error('ProcessUploadedFiles: Both primary and local storage failed', [
-                                    'primary_error' => $e->getMessage(),
-                                    'local_error' => $localE->getMessage(),
-                                    'path' => $storagePath
-                                ]);
-                                throw $localE;
-                            }
-                        } else {
-                            throw $e;
-                        }
-                    }
-                    
-                    // Check if this is an email file and use EmailDocumentService for deduplication
-                    if (str_ends_with(strtolower($originalName), '.eml')) {
-                        try {
-                            $emailService = app(EmailDocumentService::class);
-                            $result = $emailService->ingestStoredEmail($storageDisk, $storagePath, $intake->id, $originalName);
-                            
-                            if ($result['skipped_as_duplicate']) {
-                                \Log::info('ProcessUploadedFiles: Email duplicate detected, cleaning up storage', [
-                                    'filename' => $originalName,
-                                    'existing_document_id' => $result['document_id'] ?? null,
-                                    'storage_path' => $storagePath,
-                                    'storage_disk' => $storageDisk
-                                ]);
-                                
-                                // Clean up the duplicate file from storage
-                                try {
-                                    Storage::disk($storageDisk)->delete($storagePath);
-                                    \Log::info('ProcessUploadedFiles: Duplicate file cleaned from storage', [
-                                        'path' => $storagePath,
-                                        'disk' => $storageDisk
-                                    ]);
-                                } catch (\Exception $cleanupError) {
-                                    \Log::error('ProcessUploadedFiles: Failed to cleanup duplicate file', [
-                                        'error' => $cleanupError->getMessage(),
-                                        'path' => $storagePath
-                                    ]);
-                                }
-                                
-                                unlink($tempPath);
-                                continue; // Skip processing this duplicate
-                            }
-                            
-                            \Log::info('ProcessUploadedFiles: Email document created with deduplication', [
-                                'document_id' => $result['document']->id,
-                                'storage_disk' => $storageDisk,
-                                'fingerprint_type' => isset($result['fingerprint']['message_id']) ? 'message-id' : 'content-hash',
-                                'extraction_completed' => !empty($result['extraction_data'])
-                            ]);
-                            
-                        } catch (\Exception $e) {
-                            \Log::error('ProcessUploadedFiles: Email ingestion failed, falling back to standard creation', [
-                                'error' => $e->getMessage(),
-                                'filename' => $originalName,
-                                'trace' => $e->getTraceAsString()
-                            ]);
-                            
-                            // Create standard document record as fallback
-                            $document = Document::create([
-                                'intake_id' => $intake->id,
-                                'filename' => $originalName,
-                                'file_path' => $storagePath,
-                                'mime_type' => $mimeType,
-                                'file_size' => $fileSize,
-                                'document_type' => 'freight_document',
-                                'has_text_layer' => false,
-                                'storage_disk' => $storageDisk,
-                                'processing_status' => 'failed',
-                            ]);
-                            
-                            \Log::info('ProcessUploadedFiles: Fallback document created', [
-                                'document_id' => $document->id,
-                                'storage_disk' => $storageDisk
-                            ]);
-                        }
-                    } else {
-                        // Create document record for non-email files
-                        $document = Document::create([
-                            'intake_id' => $intake->id,
-                            'filename' => $originalName,
-                            'file_path' => $storagePath,
-                            'mime_type' => $mimeType,
-                            'file_size' => $fileSize,
-                            'document_type' => 'freight_document',
-                            'has_text_layer' => false, // Will be determined during processing
-                            'storage_disk' => $storageDisk,
-                        ]);
-                        
-                        \Log::info('ProcessUploadedFiles: Standard document created', [
-                            'document_id' => $document->id,
-                            'storage_disk' => $storageDisk
-                        ]);
-                    }
-                    
-                    // Clean up temporary file
-                    unlink($tempPath);
-                    $processedCount++;
-                }
-            } catch (\Exception $e) {
-                \Log::error('ProcessUploadedFiles: Failed to process file', [
-                    'intake_id' => $intake->id,
-                    'file' => $file,
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
-                ]);
-                $failedCount++;
-                continue;
-            }
-        }
-        
-        // Update intake status if documents were processed
-        if ($processedCount > 0) {
-            $intake->update(['status' => 'processing']);
-            \Log::info('ProcessUploadedFiles: Updated intake status to processing', ['intake_id' => $intake->id]);
-        }
-        
-        // Show notification about upload results
-        if ($processedCount > 0) {
+        if (empty($uploadedFiles)) {
+            // Create simple intake without files
+            $intake = Intake::create($data);
+            
             Notification::make()
-                ->title("Intake created successfully")
-                ->body("{$processedCount} document(s) uploaded and stored" . 
-                      ($failedCount > 0 ? ". {$failedCount} file(s) failed to process." : "."))
+                ->title('Intake created')
+                ->body('Intake created successfully without files.')
                 ->success()
                 ->send();
-        } elseif ($failedCount > 0) {
-            Notification::make()
-                ->title("Intake created with errors")
-                ->body("All {$failedCount} uploaded file(s) failed to process.")
-                ->warning()
-                ->send();
+                
+            return $intake;
         }
         
-        \Log::info('ProcessUploadedFiles: Completed', [
-            'intake_id' => $intake->id,
-            'processed' => $processedCount,
-            'failed' => $failedCount
-        ]);
+        // Process the first file to create the intake
+        $firstFile = array_shift($uploadedFiles);
+        $uploadedFile = $this->convertToUploadedFile($firstFile);
+        
+        if (!$uploadedFile) {
+            throw new \Exception('Could not process uploaded file');
+        }
+        
+        try {
+            // Create intake from first file using the service
+            $intake = $intakeCreationService->createFromUploadedFile($uploadedFile, [
+                'source' => $data['source'] ?? 'upload',
+                'notes' => $data['notes'] ?? null,
+                'priority' => $data['priority'] ?? 'normal',
+                'customer_name' => $data['customer_name'] ?? null,
+                'contact_email' => $data['contact_email'] ?? null,
+                'contact_phone' => $data['contact_phone'] ?? null,
+            ]);
+            
+            $processedCount = 1;
+            $failedCount = 0;
+            
+            // Add any additional files to the intake
+            foreach ($uploadedFiles as $fileData) {
+                try {
+                    $additionalFile = $this->convertToUploadedFile($fileData);
+                    if ($additionalFile) {
+                        $intakeCreationService->addFileToIntake($intake, $additionalFile);
+                        $processedCount++;
+                    } else {
+                        $failedCount++;
+                    }
+                } catch (\Exception $e) {
+                    \Log::error('Failed to add additional file to intake', [
+                        'intake_id' => $intake->id,
+                        'error' => $e->getMessage()
+                    ]);
+                    $failedCount++;
+                }
+            }
+            
+            // Show notification about upload results
+            $message = "{$processedCount} file(s) uploaded and processed";
+            if ($failedCount > 0) {
+                $message .= ". {$failedCount} file(s) failed to process.";
+            }
+            
+            Notification::make()
+                ->title('Intake created successfully')
+                ->body($message)
+                ->success()
+                ->send();
+                
+            return $intake;
+            
+        } catch (\Exception $e) {
+            \Log::error('CreateIntake: Failed to create intake', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            Notification::make()
+                ->title('Failed to create intake')
+                ->body('Error: ' . $e->getMessage())
+                ->danger()
+                ->send();
+                
+            throw $e;
+        }
+    }
+    
+    private function convertToUploadedFile(string $tempPath): ?UploadedFile
+    {
+        try {
+            // Clean up the path
+            $cleanFileName = str_replace('temp-uploads/', '', $tempPath);
+            
+            // Try multiple possible paths for Filament/Livewire temporary files
+            $possiblePaths = [
+                Storage::disk('local')->path('temp-uploads/' . $cleanFileName),
+                Storage::disk('local')->path($cleanFileName),
+                storage_path('app/livewire-tmp/' . $cleanFileName),
+                storage_path('app/private/temp-uploads/' . $cleanFileName),
+                storage_path('app/private/livewire-tmp/' . $cleanFileName),
+                $tempPath // Direct path
+            ];
+            
+            $realPath = null;
+            foreach ($possiblePaths as $path) {
+                if (file_exists($path)) {
+                    $realPath = $path;
+                    break;
+                }
+            }
+            
+            if (!$realPath) {
+                \Log::error('ConvertToUploadedFile: File not found', [
+                    'temp_path' => $tempPath,
+                    'checked_paths' => $possiblePaths
+                ]);
+                return null;
+            }
+            
+            // Create UploadedFile instance
+            $originalName = basename($cleanFileName);
+            $mimeType = mime_content_type($realPath);
+            
+            return new UploadedFile(
+                $realPath,
+                $originalName,
+                $mimeType,
+                null,
+                true // test mode - allows using any file path
+            );
+            
+        } catch (\Exception $e) {
+            \Log::error('ConvertToUploadedFile: Exception', [
+                'temp_path' => $tempPath,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
     }
     
     protected function getRedirectUrl(): string

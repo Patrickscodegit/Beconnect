@@ -21,6 +21,9 @@ class ApiIntakeController extends Controller
             'filename' => 'nullable|string|max:255',
             'notes' => 'nullable|string|max:1000',
             'priority' => 'nullable|in:low,normal,high,urgent',
+            'customer_name' => 'nullable|string|max:255',
+            'contact_email' => 'nullable|email|max:255',
+            'contact_phone' => 'nullable|string|max:50',
         ]);
 
         if ($validator->fails()) {
@@ -38,6 +41,9 @@ class ApiIntakeController extends Controller
                     'source' => 'screenshot_api',
                     'notes' => $request->input('notes'),
                     'priority' => $request->input('priority', 'normal'),
+                    'customer_name' => $request->input('customer_name'),
+                    'contact_email' => $request->input('contact_email'),
+                    'contact_phone' => $request->input('contact_phone'),
                 ]
             );
 
@@ -67,6 +73,9 @@ class ApiIntakeController extends Controller
             'text_content' => 'required|string|max:10000',
             'notes' => 'nullable|string|max:1000',
             'priority' => 'nullable|in:low,normal,high,urgent',
+            'customer_name' => 'nullable|string|max:255',
+            'contact_email' => 'nullable|email|max:255',
+            'contact_phone' => 'nullable|string|max:50',
         ]);
 
         if ($validator->fails()) {
@@ -83,6 +92,9 @@ class ApiIntakeController extends Controller
                     'source' => 'text_api',
                     'notes' => $request->input('notes'),
                     'priority' => $request->input('priority', 'normal'),
+                    'customer_name' => $request->input('customer_name'),
+                    'contact_email' => $request->input('contact_email'),
+                    'contact_phone' => $request->input('contact_phone'),
                 ]
             );
 
@@ -115,12 +127,16 @@ class ApiIntakeController extends Controller
                 'intake_id' => $intake->id,
                 'status' => $intake->status,
                 'source' => $intake->source,
+                'customer_name' => $intake->customer_name,
+                'contact_email' => $intake->contact_email,
+                'contact_phone' => $intake->contact_phone,
                 'robaws_offer_id' => $intake->robaws_offer_id,
                 'robaws_offer_number' => $intake->robaws_offer_number,
                 'created_at' => $intake->created_at,
                 'updated_at' => $intake->updated_at,
                 'extraction_data' => $intake->extraction_data ? json_decode($intake->extraction_data, true) : null,
                 'last_export_error' => $intake->last_export_error,
+                'last_export_error_at' => $intake->last_export_error_at,
             ]);
 
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {

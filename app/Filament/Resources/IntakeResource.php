@@ -45,6 +45,7 @@ class IntakeResource extends Resource
                             ->options([
                                 'pending' => 'Pending',
                                 'processing' => 'Processing',
+                                'processed' => 'Processed',
                                 'completed' => 'Completed',
                                 'failed' => 'Failed',
                             ])
@@ -79,10 +80,30 @@ class IntakeResource extends Resource
                     ])
                     ->columns(3),
                     
-                Forms\Components\Section::make('Document Upload')
+                Forms\Components\Section::make('Contact Information (Optional)')
+                    ->description('Pre-seed contact information if known. This will be merged with extracted data.')
                     ->schema([
-                        Forms\Components\FileUpload::make('document_files')
-                            ->label('Upload Documents')
+                        Forms\Components\TextInput::make('customer_name')
+                            ->label('Customer Name')
+                            ->placeholder('Customer or company name'),
+                            
+                        Forms\Components\TextInput::make('contact_email')
+                            ->label('Contact Email')
+                            ->email()
+                            ->placeholder('customer@example.com'),
+                            
+                        Forms\Components\TextInput::make('contact_phone')
+                            ->label('Contact Phone')
+                            ->tel()
+                            ->placeholder('+1 (555) 123-4567'),
+                    ])
+                    ->columns(3)
+                    ->collapsible(),
+                    
+                Forms\Components\Section::make('File Upload')
+                    ->schema([
+                        Forms\Components\FileUpload::make('intake_files')
+                            ->label('Upload Files')
                             ->multiple()
                             ->acceptedFileTypes([
                                 'application/pdf',
@@ -98,7 +119,7 @@ class IntakeResource extends Resource
                             ->disk('local')
                             ->directory('temp-uploads')
                             ->reorderable()
-                            ->helperText('Upload freight documents (PDF, images, email files). Maximum 20MB per file.')
+                            ->helperText('Upload freight documents (PDF, images, email files). Maximum 20MB per file. Files will be processed for contact info and freight data.')
                             ->columnSpanFull(),
                     ]),
             ]);
@@ -118,6 +139,7 @@ class IntakeResource extends Resource
                     ->color(fn (string $state): string => match ($state) {
                         'pending' => 'warning',
                         'processing' => 'info',
+                        'processed' => 'success',
                         'completed' => 'success',
                         'failed' => 'danger',
                         default => 'gray',
@@ -146,11 +168,29 @@ class IntakeResource extends Resource
                     })
                     ->sortable(),
                     
-                Tables\Columns\TextColumn::make('documents_count')
-                    ->label('Documents')
-                    ->counts('documents')
+                Tables\Columns\TextColumn::make('files_count')
+                    ->label('Files')
+                    ->counts('files')
                     ->badge()
                     ->color('success'),
+                    
+                Tables\Columns\TextColumn::make('customer_name')
+                    ->label('Customer')
+                    ->limit(30)
+                    ->placeholder('—')
+                    ->searchable(),
+                    
+                Tables\Columns\TextColumn::make('contact_email')
+                    ->label('Email')
+                    ->placeholder('—')
+                    ->copyable()
+                    ->searchable(),
+                    
+                Tables\Columns\TextColumn::make('contact_phone')
+                    ->label('Phone')
+                    ->placeholder('—')
+                    ->copyable()
+                    ->searchable(),
                     
                 Tables\Columns\ViewColumn::make('extraction_summary')
                     ->label('Extraction')

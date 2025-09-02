@@ -19,6 +19,10 @@ class IntakeCreationService
             'source' => $options['source'] ?? 'file_upload',
             'notes' => $options['notes'] ?? null,
             'priority' => $options['priority'] ?? 'normal',
+            'customer_name' => $options['customer_name'] ?? null,
+            'contact_email' => $options['contact_email'] ?? null,
+            'contact_phone' => $options['contact_phone'] ?? null,
+            'extraction_data' => $options['extraction_data'] ?? null,
         ]);
 
         $this->storeFile($intake, $file, $file->getClientOriginalName());
@@ -41,6 +45,10 @@ class IntakeCreationService
             'source' => $options['source'] ?? 'screenshot',
             'notes' => $options['notes'] ?? null,
             'priority' => $options['priority'] ?? 'normal',
+            'customer_name' => $options['customer_name'] ?? null,
+            'contact_email' => $options['contact_email'] ?? null,
+            'contact_phone' => $options['contact_phone'] ?? null,
+            'extraction_data' => $options['extraction_data'] ?? null,
         ]);
 
         // Remove data URL prefix if present
@@ -57,9 +65,12 @@ class IntakeCreationService
             $filename = 'screenshot_' . now()->format('Y-m-d_H-i-s') . '.' . $extension;
         }
 
-        // Decode and store the file
+        // Decode and store the file - CONSISTENT PATH
         $fileData = base64_decode($base64Data);
-        $storagePath = 'intakes/' . $intake->id . '/' . $filename;
+        $ext = Str::lower(pathinfo($filename, PATHINFO_EXTENSION) ?: 'png');
+        $name = Str::uuid() . '.' . $ext;
+        $dir = 'intakes/' . date('Y/m/d');  // ← Consistent with uploaded files
+        $storagePath = $dir . '/' . $name;
         
         Storage::disk('local')->put($storagePath, $fileData);
 
@@ -90,11 +101,17 @@ class IntakeCreationService
             'source' => $options['source'] ?? 'text_input',
             'notes' => $options['notes'] ?? null,
             'priority' => $options['priority'] ?? 'normal',
+            'customer_name' => $options['customer_name'] ?? null,
+            'contact_email' => $options['contact_email'] ?? null,
+            'contact_phone' => $options['contact_phone'] ?? null,
+            'extraction_data' => $options['extraction_data'] ?? null,
         ]);
 
-        // Store text as a .txt file
+        // Store text as a .txt file - CONSISTENT PATH
         $filename = 'text_input_' . now()->format('Y-m-d_H-i-s') . '.txt';
-        $storagePath = 'intakes/' . $intake->id . '/' . $filename;
+        $name = Str::uuid() . '.txt';
+        $dir = 'intakes/' . date('Y/m/d');  // ← Consistent with other files
+        $storagePath = $dir . '/' . $name;
         
         Storage::disk('local')->put($storagePath, $text);
 
@@ -118,17 +135,91 @@ class IntakeCreationService
         return $intake;
     }
 
+    public function createFromEmail(string $emailContent, array $options = []): Intake
+    {
+        $intake = Intake::create([
+            'status' => 'pending',
+            'source' => $options['source'] ?? 'email',
+            'notes' => $options['notes'] ?? null,
+            'priority' => $options['priority'] ?? 'normal',
+            'customer_name' => $options['customer_name'] ?? null,
+            'contact_email' => $options['contact_email'] ?? null,
+            'contact_phone' => $options['contact_phone'] ?? null,
+            'extraction_data' => $options['extraction_data'] ?? null,
+        ]);
+
+        // Store email as a .eml file - CONSISTENT PATH
+        $filename = 'email_' . now()->format('Y-m-d_H-i-s') . '.eml';
+        $name = Str::uuid() . '.eml';
+        $dir = 'intakes/' . date('Y/m/d');
+        $storagePath = $dir . '/' . $name;
+        
+        Storage::disk('local')->put($storagePath, $emailContent);
+
+        IntakeFile::create([
+            'intake_id' => $intake->id,
+            'filename' => $filename,
+            'storage_path' => $storagePath,
+            'storage_disk' => 'local',
+            'mime_type' => 'message/rfc822',
+            'file_size' => strlen($emailContent),
+        ]);
+
+        ProcessIntake::dispatch($intake);
+        
+        Log::info('Created intake from email', [
+            'intake_id' => $intake->id,
+            'filename' => $filename,
+            'source' => $intake->source
+        ]);
+
+        return $intake;
+    }
+
+    public function addFileToIntake(Intake $intake, UploadedFile $file): IntakeFile
+    {
+        // CONSISTENT PATH STRUCTURE - intakes/Y/m/d/uuid.ext
+        $extension = $file->getClientOriginalExtension();
+        $name = Str::uuid() . '.' . $extension;
+        $dir = 'intakes/' . date('Y/m/d');
+        $storagePath = $dir . '/' . $name;
+        
+        // Store with the consistent structure
+        Storage::disk('local')->putFileAs($dir, $file, $name);
+
+        $intakeFile = IntakeFile::create([
+            'intake_id' => $intake->id,
+            'filename' => $file->getClientOriginalName(),
+            'storage_path' => $storagePath,
+            'storage_disk' => 'local',
+            'mime_type' => $file->getMimeType(),
+            'file_size' => $file->getSize(),
+        ]);
+
+        Log::info('Added file to existing intake', [
+            'intake_id' => $intake->id,
+            'file_id' => $intakeFile->id,
+            'filename' => $intakeFile->filename
+        ]);
+
+        return $intakeFile;
+    }
+
     private function storeFile(Intake $intake, UploadedFile $file, string $originalName): void
     {
-        $filename = Str::uuid() . '_' . $originalName;
-        $storagePath = 'intakes/' . $intake->id . '/' . $filename;
+        // CONSISTENT PATH STRUCTURE - intakes/Y/m/d/uuid.ext
+        $extension = $file->getClientOriginalExtension();
+        $name = Str::uuid() . '.' . $extension;
+        $dir = 'intakes/' . date('Y/m/d');
+        $storagePath = $dir . '/' . $name;
         
-        $path = $file->storeAs('intakes/' . $intake->id, $filename, 'local');
+        // Store with the consistent structure
+        Storage::disk('local')->putFileAs($dir, $file, $name);
 
         IntakeFile::create([
             'intake_id' => $intake->id,
             'filename' => $originalName,
-            'storage_path' => $path,
+            'storage_path' => $storagePath,
             'storage_disk' => 'local',
             'mime_type' => $file->getMimeType(),
             'file_size' => $file->getSize(),
