@@ -153,8 +153,8 @@ class RobawsExportService
             // Map to Robaws format first
             $mapped = $this->mapper->mapIntakeToRobaws($intake, $extractionData);
 
-            // Resolve Robaws client with enhanced multi-method matching (email → phone → name)
-            $clientId = $this->apiClient->findClientId($customerName, $customerEmail, $customerPhone);
+            // Use pre-resolved client ID if available, otherwise resolve via API
+            $clientId = $intake->robaws_client_id ?? $this->apiClient->findClientId($customerName, $customerEmail, $customerPhone);
             
             Log::info('Robaws client resolution', [
                 'export_id' => $exportId,
@@ -162,6 +162,7 @@ class RobawsExportService
                 'display_name' => $customerName,
                 'contact_email' => $customerEmail,
                 'contact_phone' => $customerPhone,
+                'pre_resolved_client_id' => $intake->robaws_client_id,
                 'resolved_client_id' => $clientId,
                 'binding_status' => $clientId ? 'will_bind_to_client' : 'no_client_binding',
             ]);
@@ -169,13 +170,16 @@ class RobawsExportService
             // AFTER you build $mapped: inject clientId and contactEmail
             if ($clientId) {
                 $mapped['client_id'] = (int) $clientId;  // mapper prefers client_id
-                $mapped['contact_email'] = $customerEmail;  // keep for top-level contactEmail
+                
+                // Use provided email or fallback to prevent empty contactEmail
+                $finalContactEmail = $customerEmail ?: 'sales@truck-time.com';
+                $mapped['contact_email'] = $finalContactEmail;  // keep for top-level contactEmail
                 
                 Log::info('Client ID injected into payload', [
                     'export_id' => $exportId,
                     'client_id' => $clientId,
                     'customer_name' => $customerName,
-                    'contact_email' => $customerEmail,
+                    'contact_email' => $finalContactEmail,
                 ]);
             } else {
                 Log::warning('No unique client match found - export will proceed without client binding', [

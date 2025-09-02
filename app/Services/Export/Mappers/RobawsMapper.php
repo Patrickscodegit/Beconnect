@@ -144,6 +144,39 @@ class RobawsMapper
         $dates = $extractionData['dates'] ?? $rawData['dates'] ?? [];
         $pricing = $extractionData['pricing'] ?? $rawData['pricing'] ?? [];
 
+        // Handle flat field structure (from image extraction) by building nested arrays
+        if (empty($vehicle) && !empty($rawData)) {
+            $vehicle = [
+                'make' => $rawData['vehicle_make'] ?? null,
+                'model' => $rawData['vehicle_model'] ?? null,
+                'year' => $rawData['vehicle_year'] ?? null,
+                'condition' => $rawData['vehicle_condition'] ?? null,
+                'dimensions' => $rawData['dimensions'] ?? null,
+                'weight' => $rawData['weight'] ?? null,
+                'fuel_type' => $rawData['fuel_type'] ?? null,
+                'cargo_description' => $rawData['cargo_description'] ?? null,
+            ];
+        }
+
+        if (empty($shipment) && !empty($rawData)) {
+            $shipment = [
+                'origin' => $rawData['origin'] ?? null,
+                'destination' => $rawData['destination'] ?? null,
+                'shipping_type' => $rawData['shipment_type'] ?? null,
+            ];
+        }
+
+        if (empty($shipping) && !empty($rawData)) {
+            // Build shipping structure from flat fields
+            $shipping = [
+                'route' => [
+                    'origin' => ['city' => $this->extractCityFromLocation($rawData['origin'] ?? ''), 'country' => $this->extractCountryFromLocation($rawData['origin'] ?? '')],
+                    'destination' => ['city' => $this->extractCityFromLocation($rawData['destination'] ?? ''), 'country' => $this->extractCountryFromLocation($rawData['destination'] ?? '')],
+                ],
+                'method' => $this->mapShippingMethod($rawData['shipment_type'] ?? null),
+            ];
+        }
+
         // Map to Robaws structure
         return [
             'quotation_info' => $this->mapQuotationInfo($intake, $contact, $vehicle, $shipping, $extractionData),
@@ -221,10 +254,11 @@ class RobawsMapper
         $xf['INSURANCE']       = $this->wrapExtra('INSURANCE',       $amt($p['insurance'] ?? null));
 
         // --- Automation / notes ---
-        // Truncate JSON if too large to avoid API limits
+        // Skip JSON field for image-based extractions to prevent API errors
         $jsonData = $au['json'] ?? null;
-        if ($jsonData && strlen($jsonData) > 60000) {
-            $jsonData = substr($jsonData, 0, 60000) . '… [truncated]';
+        if ($jsonData && strlen($jsonData) > 5000) {
+            // For very large JSON data, skip it entirely to prevent API 500 errors
+            $jsonData = null;
         }
         $xf['JSON']                  = $this->wrapExtra('JSON',                  $jsonData);
         $xf['EXTRACTED_INFORMATION'] = $this->wrapExtra('EXTRACTED_INFORMATION', $au['extracted_information'] ?? null);
@@ -353,6 +387,74 @@ class RobawsMapper
     }
 
     /**
+     * Extract city from location string
+     */
+    private function extractCityFromLocation(string $location): string
+    {
+        // Handle common patterns like "Beverly Hills Car Club" -> "Beverly Hills"
+        // or "Antwerpen" -> "Antwerpen"
+        $location = trim($location);
+        
+        // If it contains "Car Club" or similar, extract the city part
+        if (str_contains($location, 'Car Club')) {
+            return trim(str_replace('Car Club', '', $location));
+        }
+        
+        // For simple city names, return as is
+        return $location;
+    }
+
+    /**
+     * Extract country from location string or map to known countries
+     */
+    private function extractCountryFromLocation(string $location): string
+    {
+        $location = strtolower(trim($location));
+        
+        // Map common locations to countries
+        $locationMap = [
+            'antwerpen' => 'Belgium',
+            'antwerp' => 'Belgium',
+            'beverly hills' => 'USA',
+            'los angeles' => 'USA',
+            'california' => 'USA',
+            'bruxelles' => 'Belgium',
+            'brussels' => 'Belgium',
+            'djeddah' => 'Saudi Arabia',
+            'jeddah' => 'Saudi Arabia',
+        ];
+
+        foreach ($locationMap as $key => $country) {
+            if (str_contains($location, $key)) {
+                return $country;
+            }
+        }
+
+        return 'Unknown';
+    }
+
+    /**
+     * Map shipping method from extraction to standard terms
+     */
+    private function mapShippingMethod(?string $method): string
+    {
+        if (!$method) return '';
+        
+        $method = strtolower(trim($method));
+        
+        $methodMap = [
+            'lcl' => 'LCL',
+            'fcl' => 'FCL', 
+            'roro' => 'RoRo',
+            'ro-ro' => 'RoRo',
+            'air' => 'Air Freight',
+            'truck' => 'Road Transport',
+        ];
+
+        return $methodMap[$method] ?? ucfirst($method);
+    }
+
+    /**
      * Map quotation info section
      */
     private function mapQuotationInfo(Intake $intake, array $contact, array $vehicle, array $shipping, array $extractionData = []): array
@@ -423,13 +525,38 @@ class RobawsMapper
     private function mapCargoDetails(array $vehicle, array $extractionData): array
     {
         $dimensions = $vehicle['dimensions'] ?? [];
-        [$L, $W, $H] = $this->normalizeDimensions($dimensions);
-        $dimString = ($L && $W && $H) ? sprintf("L: %.2fm x W: %.2fm x H: %.2fm", $L, $W, $H) : '';
+        
+        // Handle both array and string dimensions
+        if (is_array($dimensions)) {
+            [$L, $W, $H] = $this->normalizeDimensions($dimensions);
+            $dimString = ($L && $W && $H) ? sprintf("L: %.2fm x W: %.2fm x H: %.2fm", $L, $W, $H) : '';
+        } else {
+            $dimString = is_string($dimensions) ? $dimensions : '';
+        }
 
-        // Check for cargo description in nested data first, then generate from vehicle
-        $cargoDescription = $extractionData['document_data']['cargo']['description'] ?? 
-                            $extractionData['cargo']['description'] ?? 
-                            $this->generateCargoDescription($vehicle);
+        // Enhanced cargo description logic for different data structures
+        $cargoDescription = null;
+        
+        // First check for direct cargo description (from flat structure)
+        if (isset($extractionData['raw_data']['cargo_description'])) {
+            $cargoDescription = $extractionData['raw_data']['cargo_description'];
+        }
+        // Then check nested structures
+        elseif (isset($extractionData['document_data']['cargo']['description'])) {
+            $cargoDescription = $extractionData['document_data']['cargo']['description'];
+        }
+        elseif (isset($extractionData['cargo']['description'])) {
+            $cargoDescription = $extractionData['cargo']['description'];
+        }
+        // Fallback to generated description
+        else {
+            $cargoDescription = $this->generateCargoDescription($vehicle);
+        }
+
+        // Enhanced dimensions handling for flat structure
+        if (!$dimString && isset($extractionData['raw_data']['dimensions'])) {
+            $dimString = $extractionData['raw_data']['dimensions'];
+        }
 
         return [
             'cargo' => $cargoDescription,
