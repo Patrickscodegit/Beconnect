@@ -107,6 +107,7 @@ return [
         'auto_create_quotations' => env('ROBAWS_AUTO_CREATE_QUOTATIONS', false),
         'default_client_id' => env('ROBAWS_DEFAULT_CLIENT_ID', 1),
         'default_company_id' => env('ROBAWS_DEFAULT_COMPANY_ID', env('ROBAWS_COMPANY_ID', 1)),
+        'tenant_id' => env('ROBAWS_TENANT_ID'),
         'convert_images_to_pdf' => env('ROBAWS_CONVERT_IMAGES_TO_PDF', true),
         'upload_max_mb' => env('ROBAWS_UPLOAD_MAX_MB', 25),
         'upload_retries' => env('ROBAWS_UPLOAD_RETRIES', 2),

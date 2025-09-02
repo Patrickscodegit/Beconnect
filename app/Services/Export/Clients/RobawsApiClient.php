@@ -163,12 +163,13 @@ class RobawsApiClient
     }
 
     /**
-     * Test API connection
+     * Test API connection with real endpoint
      */
     public function testConnection(): array
     {
         try {
-            $response = $this->makeRequest('GET', '/health', [], [], false); // No retry for health check
+            // Use a real endpoint instead of /health
+            $response = $this->makeRequest('GET', '/api/v2/clients', ['size' => 1], [], false);
             
             return [
                 'success' => $response->successful(),
@@ -179,6 +180,27 @@ class RobawsApiClient
         } catch (\Exception $e) {
             return [
                 'success' => false,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Ping API with safe read-only endpoint
+     */
+    public function ping(): array
+    {
+        try {
+            $response = $this->makeRequest('GET', '/api/v2/clients', ['size' => 1]);
+            return [
+                'status' => $response->status(),
+                'ok' => $response->status() < 400,
+                'response_time' => $response->transferStats?->getTransferTime(),
+            ];
+        } catch (\Exception $e) {
+            return [
+                'status' => 0,
+                'ok' => false,
                 'error' => $e->getMessage(),
             ];
         }
@@ -207,6 +229,13 @@ class RobawsApiClient
                     'attempt' => $attempt,
                     'payload_size' => strlen(json_encode($payload)),
                     'headers' => array_keys($headers),
+                    'payload_summary' => [
+                        'client_id' => $payload['clientId'] ?? null,
+                        'contact_email' => $payload['contactEmail'] ?? null,
+                        'title' => $payload['title'] ?? null,
+                        'lines_count' => isset($payload['lines']) ? count($payload['lines']) : 0,
+                        'extra_fields_count' => isset($payload['extraFields']) ? count($payload['extraFields']) : 0,
+                    ],
                 ]);
 
                 $response = match (strtoupper($method)) {
@@ -223,6 +252,12 @@ class RobawsApiClient
                     'attempt' => $attempt,
                     'response_size' => strlen($response->body()),
                     'successful' => $response->successful(),
+                    'response_summary' => [
+                        'id' => $response->json()['id'] ?? null,
+                        'offer_id' => $response->json()['offer_id'] ?? null,
+                        'message' => $response->json()['message'] ?? null,
+                        'error' => $response->json()['error'] ?? null,
+                    ],
                 ]);
 
                 // Success or non-retryable error
@@ -272,7 +307,10 @@ class RobawsApiClient
             'Accept' => 'application/json',
             'User-Agent' => 'Bconnect/1.0 (Laravel)',
             'X-Request-ID' => Str::uuid()->toString(),
-        ], $extraHeaders);
+        ], array_filter([
+            'X-Company-ID' => config('services.robaws.default_company_id'),
+            'X-Tenant-ID' => config('services.robaws.tenant_id'),
+        ]), $extraHeaders);
 
         $http = Http::baseUrl($this->baseUrl)
             ->withHeaders($headers)

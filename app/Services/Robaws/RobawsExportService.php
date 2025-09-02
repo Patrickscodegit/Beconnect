@@ -121,7 +121,7 @@ class RobawsExportService
                 return [
                     'success' => false,
                     'error' => 'Intake was already exported recently. Use force=true to re-export.',
-                    'quotation_id' => $intake->robaws_quotation_id,
+                    'quotation_id' => $intake->robaws_offer_id,
                 ];
             }
 
@@ -192,6 +192,9 @@ class RobawsExportService
             // Build and log final payload for debugging
             $payload = $this->mapper->toRobawsApiPayload($mapped);
             
+            // Add payload safety checks - ensure minimal viable quotation
+            $this->ensureViablePayload($payload);
+            
             Log::info('Robaws payload (api shape)', [
                 'export_id' => $exportId,
                 'intake_id' => $intake->id,
@@ -227,10 +230,10 @@ class RobawsExportService
             $idempotencyKey = $options['idempotency_key'] ?? $this->generateIdempotencyKey($intake, $payloadHash);
 
             // Export to Robaws
-            if ($intake->robaws_quotation_id && !($options['create_new'] ?? false)) {
+            if ($intake->robaws_offer_id && !($options['create_new'] ?? false)) {
                 // Update existing quotation
                 $result = $this->apiClient->updateQuotation(
-                    $intake->robaws_quotation_id, 
+                    $intake->robaws_offer_id, 
                     $payload, 
                     $idempotencyKey
                 );
@@ -283,8 +286,8 @@ class RobawsExportService
 
                 // Update intake with export info
                 $updateData = [
-                    'robaws_quotation_id' => $result['quotation_id'],
-                    'exported_at' => now(),
+                    'robaws_offer_id' => $result['quotation_id'],
+                    'status' => 'exported',
                     'export_payload_hash' => hash('sha256', json_encode($payload)),
                     'export_attempt_count' => DB::raw('COALESCE(export_attempt_count, 0) + 1'),
                 ];
@@ -466,8 +469,7 @@ class RobawsExportService
             'intake' => [
                 'id' => $intake->id,
                 'customer_name' => $intake->customer_name,
-                'robaws_quotation_id' => $intake->robaws_quotation_id,
-                'exported_at' => $intake->exported_at,
+                'robaws_offer_id' => $intake->robaws_offer_id,
                 'export_attempt_count' => $intake->export_attempt_count ?? 0,
                 'last_export_error' => $intake->last_export_error,
             ],
@@ -587,7 +589,14 @@ class RobawsExportService
             $base = array_replace_recursive($base, $normalize($raw));
         }
 
-        return $base;
+        // Also merge from intake's extraction_data field
+        if (!empty($intake->extraction_data)) {
+            $intakeData = $normalize($intake->extraction_data);
+            $base = array_replace_recursive($base, $intakeData);
+        }
+
+        // Normalize the structure before returning
+        return \App\Services\Export\Adapters\ExtractionNormalizer::normalize($base);
     }
 
     private function wasRecentlyExported(Intake $intake): bool
@@ -880,5 +889,33 @@ class RobawsExportService
         
         $fi = new \finfo(FILEINFO_MIME_TYPE);
         return $fi->file($file) ?: null;
+    }
+
+    /**
+     * Ensure payload has viable quotation data with title and line items
+     */
+    private function ensureViablePayload(array $payload): void
+    {
+        if (empty($payload['title'])) {
+            throw new \InvalidArgumentException('Quotation must have a title');
+        }
+
+        if (empty($payload['lines']) || !is_array($payload['lines'])) {
+            throw new \InvalidArgumentException('Quotation must have line items');
+        }
+
+        foreach ($payload['lines'] as $index => $line) {
+            if (empty($line['description'])) {
+                throw new \InvalidArgumentException("Line item {$index} must have a description");
+            }
+            
+            if (!isset($line['quantity']) || $line['quantity'] <= 0) {
+                throw new \InvalidArgumentException("Line item {$index} must have a valid quantity");
+            }
+            
+            if (!isset($line['unit_price']) || $line['unit_price'] < 0) {
+                throw new \InvalidArgumentException("Line item {$index} must have a valid unit price");
+            }
+        }
     }
 }
