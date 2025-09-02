@@ -81,7 +81,7 @@ class ExportIntakeToRobawsJob implements ShouldQueue
         if (!$contactEmail && !$contactPhone) {
             return [
                 'success' => false,
-                'error' => 'Missing contact info (email/phone) required to resolve client in Robaws'
+                'error' => 'Missing contact info - either email or phone is required to resolve client in Robaws'
             ];
         }
         

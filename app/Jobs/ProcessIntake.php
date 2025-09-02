@@ -99,7 +99,7 @@ class ProcessIntake implements ShouldQueue
                     $this->intake->last_export_error = null;
                 } else {
                     $this->intake->status = 'needs_contact';
-                    $this->intake->last_export_error = 'Missing contact email/phone after extraction';
+                    $this->intake->last_export_error = 'Missing contact information - either email or phone number is required';
                 }
 
                 $this->intake->save();
