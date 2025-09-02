@@ -41,13 +41,26 @@ class CreateIntake extends CreateRecord
                 }
                 return [];
             })
-            ->map(fn($f) => $this->convertToUploadedFile($f))
+            ->map(function($f) {
+                try {
+                    return $this->convertToUploadedFile($f);
+                } catch (\Throwable $e) {
+                    \Log::warning('File convert failed', ['error' => $e->getMessage(), 'file_type' => gettype($f)]);
+                    return null;
+                }
+            })
             ->filter()
             ->values()
             ->all();
 
         if (empty($uploadedFiles)) {
-            // Create simple intake without files
+            \Filament\Notifications\Notification::make()
+                ->title('No files received')
+                ->body('Please re-select your files and try again.')
+                ->danger()
+                ->send();
+            
+            // Create simple intake without files as fallback
             $intake = Intake::create([
                 'status' => $data['status'] ?? 'pending',
                 'source' => $data['source'] ?? 'upload',
@@ -58,12 +71,6 @@ class CreateIntake extends CreateRecord
                 'contact_phone' => $data['contact_phone'] ?? null,
             ]);
             
-            Notification::make()
-                ->title('Intake created')
-                ->body('Intake created successfully without files.')
-                ->success()
-                ->send();
-                
             return $intake;
         }
 
@@ -140,8 +147,17 @@ class CreateIntake extends CreateRecord
         }
 
         if ($file instanceof TemporaryUploadedFile) {
-            // Livewire v3 helper to get a Symfony UploadedFile
-            return $file->toUploadedFile();
+            try {
+                // Livewire v3 helper to get a Symfony UploadedFile
+                return $file->toUploadedFile();
+            } catch (\Throwable $e) {
+                \Log::error('Failed to convert TemporaryUploadedFile', [
+                    'error' => $e->getMessage(),
+                    'file_path' => $file->path(),
+                    'filename' => $file->getClientOriginalName()
+                ]);
+                return null;
+            }
         }
 
         // If your FileUpload was NOT set to storeFiles(false) and saved to a disk already,
@@ -150,13 +166,30 @@ class CreateIntake extends CreateRecord
             // adjust disk name if you configured a different one
             $disk = config('filesystems.default', 'local');
             if (Storage::disk($disk)->exists($file)) {
-                $abs = Storage::disk($disk)->path($file);
-                return new UploadedFile($abs, basename($abs), null, null, true);
+                try {
+                    $abs = Storage::disk($disk)->path($file);
+                    return new UploadedFile($abs, basename($abs), null, null, true);
+                } catch (\Throwable $e) {
+                    \Log::error('Failed to create UploadedFile from storage path', [
+                        'error' => $e->getMessage(),
+                        'file_path' => $file,
+                        'disk' => $disk
+                    ]);
+                    return null;
+                }
             }
 
             // If it's a livewire-temp path on local disk:
             if (is_file($file)) {
-                return new UploadedFile($file, basename($file), null, null, true);
+                try {
+                    return new UploadedFile($file, basename($file), null, null, true);
+                } catch (\Throwable $e) {
+                    \Log::error('Failed to create UploadedFile from file path', [
+                        'error' => $e->getMessage(),
+                        'file_path' => $file
+                    ]);
+                    return null;
+                }
             }
         }
 

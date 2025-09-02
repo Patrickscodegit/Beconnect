@@ -771,6 +771,80 @@ class RobawsClient
     }
 
     /**
+     * Find clients by email address
+     */
+    public function findClientsByEmail(string $email): array
+    {
+        try {
+            $this->validateCredentials();
+            
+            $response = Http::timeout($this->timeout)
+                ->withBasicAuth($this->username, $this->password)
+                ->get("{$this->baseUrl}/api/clients", [
+                    'email' => $email,
+                    'limit' => 10
+                ]);
+
+            $result = $this->handleResponse($response);
+            
+            if ($result['success']) {
+                return $result['data']['clients'] ?? [];
+            }
+            
+            Log::warning('Failed to find clients by email', [
+                'email' => $email,
+                'error' => $result['message']
+            ]);
+            
+            return [];
+            
+        } catch (\Exception $e) {
+            Log::error('Exception finding clients by email', [
+                'email' => $email,
+                'error' => $e->getMessage()
+            ]);
+            return [];
+        }
+    }
+
+    /**
+     * Find clients by phone number
+     */
+    public function findClientsByPhone(string $phone): array
+    {
+        try {
+            $this->validateCredentials();
+            
+            $response = Http::timeout($this->timeout)
+                ->withBasicAuth($this->username, $this->password)
+                ->get("{$this->baseUrl}/api/clients", [
+                    'phone' => $phone,
+                    'limit' => 10
+                ]);
+
+            $result = $this->handleResponse($response);
+            
+            if ($result['success']) {
+                return $result['data']['clients'] ?? [];
+            }
+            
+            Log::warning('Failed to find clients by phone', [
+                'phone' => $phone,
+                'error' => $result['message']
+            ]);
+            
+            return [];
+            
+        } catch (\Exception $e) {
+            Log::error('Exception finding clients by phone', [
+                'phone' => $phone,
+                'error' => $e->getMessage()
+            ]);
+            return [];
+        }
+    }
+
+    /**
      * Handle HTTP response from Robaws API
      */
     private function handleResponse(Response $response): array
