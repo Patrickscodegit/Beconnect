@@ -56,28 +56,8 @@ class RobawsExportService
         }
         
         try {
-            $legacy = $this->legacy();
-            if (!$legacy) {
-                Log::warning('Legacy Robaws client not available for client resolution');
-                return null;
-            }
-            
-            // Try to find client by email first, then phone
-            $clientId = null;
-            
-            if ($contactEmail) {
-                $clients = $legacy->findClientsByEmail($contactEmail);
-                if (count($clients) === 1) {
-                    $clientId = $clients[0]['id'] ?? null;
-                }
-            }
-            
-            if (!$clientId && $contactPhone) {
-                $clients = $legacy->findClientsByPhone($contactPhone);
-                if (count($clients) === 1) {
-                    $clientId = $clients[0]['id'] ?? null;
-                }
-            }
+            // Use the new API client which properly supports v2 endpoints
+            $clientId = $this->apiClient->findClientId($contactEmail, $contactPhone);
             
             Log::info('Client resolution result', [
                 'contact_email' => $contactEmail,
