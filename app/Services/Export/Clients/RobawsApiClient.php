@@ -683,39 +683,88 @@ class RobawsApiClient
     }
 
     /**
-     * Get offer by human-readable number (e.g., "Q251114")
+     * Find exact offer ID by number + client - critical for file uploads
      */
-    public function getOfferByNumber(string $offerNumber): ?array
+    public function findOfferId(string $number, ?int $clientId = null): ?int
     {
         $response = $this->makeRequest('GET', '/api/v2/offers', [
-            'search' => $offerNumber,
-            'size' => 1
+            'search' => $number,
+            'size' => 10,
+            'page' => 0
         ]);
 
-        if ($response->successful()) {
-            $data = $response->json();
-            $offers = $data['items'] ?? [];
-            
-            if (!empty($offers)) {
-                Log::info('Found offer by number', [
-                    'offer_number' => $offerNumber,
-                    'internal_id' => $offers[0]['id'],
-                    'title' => $offers[0]['title'] ?? 'N/A'
+        if (!$response->successful()) {
+            Log::warning('Offer search failed', [
+                'number' => $number,
+                'client_id' => $clientId,
+                'status' => $response->status()
+            ]);
+            return null;
+        }
+
+        $data = $response->json();
+        $items = $data['items'] ?? [];
+
+        // Filter by clientId if provided (critical for avoiding wrong offers)
+        if ($clientId) {
+            $items = array_values(array_filter($items, fn($o) => (int)($o['clientId'] ?? 0) === $clientId));
+            Log::info('Filtered offers by client ID', [
+                'number' => $number,
+                'client_id' => $clientId,
+                'filtered_count' => count($items)
+            ]);
+        }
+
+        // Look for exact number match first (e.g., O251114)
+        foreach ($items as $offer) {
+            if (($offer['logicId'] ?? '') === $number || ($offer['number'] ?? '') === $number) {
+                $offerId = (int) $offer['id'];
+                Log::info('Found exact offer match', [
+                    'number' => $number,
+                    'client_id' => $clientId,
+                    'offer_id' => $offerId,
+                    'title' => $offer['title'] ?? 'N/A'
                 ]);
-                return $offers[0];
+                return $offerId;
             }
         }
 
-        Log::warning('Offer not found by number', [
-            'offer_number' => $offerNumber,
-            'status' => $response->status()
+        // If single result and no exact match, return it (fuzzy match)
+        if (count($items) === 1) {
+            $offerId = (int) $items[0]['id'];
+            Log::info('Single fuzzy offer match', [
+                'number' => $number,
+                'client_id' => $clientId,
+                'offer_id' => $offerId,
+                'actual_number' => $items[0]['logicId'] ?? $items[0]['number'] ?? 'N/A',
+                'title' => $items[0]['title'] ?? 'N/A'
+            ]);
+            return $offerId;
+        }
+
+        Log::warning('No unique offer found', [
+            'number' => $number,
+            'client_id' => $clientId,
+            'matches' => count($items)
         ]);
-        
+
         return null;
     }
 
     /**
-     * Upload file and attach to offer using official 2-step flow
+     * Get offer by human-readable number (e.g., "Q251114") - backward compatibility
+     */
+    public function getOfferByNumber(string $offerNumber): ?array
+    {
+        $offerId = $this->findOfferId($offerNumber);
+        if (!$offerId) return null;
+
+        $response = $this->makeRequest('GET', "/api/v2/offers/{$offerId}");
+        return $response->successful() ? $response->json() : null;
+    }
+
+    /**
+     * Upload file and attach to offer - updated to use new methods
      */
     public function attachFileToOffer(int $offerId, string $absolutePath, ?string $filename = null): array
     {
@@ -730,25 +779,48 @@ class RobawsApiClient
 
         // Choose upload method based on file size
         if ($fileSize <= 6 * 1024 * 1024) { // 6MB or less - use direct upload
-            return $this->directUploadToOffer($offerId, $absolutePath, $filename);
+            $result = $this->uploadOfferDocumentDirect($offerId, $absolutePath, $filename);
+            if ($result['success']) {
+                return $result['data'];
+            }
+            throw new \RuntimeException('Direct upload failed: ' . ($result['error'] ?? 'Unknown error'));
         } else {
-            return $this->tempBucketUploadToOffer($offerId, $absolutePath, $filename);
+            $result = $this->uploadViaTempBucket($offerId, $absolutePath, $filename);
+            if ($result['success']) {
+                return $result['data'];
+            }
+            throw new \RuntimeException('Temp bucket upload failed: ' . ($result['error'] ?? 'Unknown error'));
         }
     }
 
     /**
-     * Direct upload to offer (≤ 6MB) - simplest method
+     * Direct upload to offer (≤ 6MB) - fixed with proper parameters
      */
-    private function directUploadToOffer(int $offerId, string $absolutePath, string $filename): array
+    public function uploadOfferDocumentDirect(int $offerId, string $absPath, ?string $filename = null): array
     {
-        Log::info('Using direct upload method', [
+        if (!is_readable($absPath)) {
+            return ['success' => false, 'error' => 'File not readable'];
+        }
+        
+        if (filesize($absPath) === 0) {
+            return ['success' => false, 'error' => 'Zero-byte file'];
+        }
+
+        $filename = $filename ?: basename($absPath);
+        $contentType = $this->detectMime($absPath) ?? 'application/octet-stream';
+
+        Log::info('Direct upload starting', [
             'offer_id' => $offerId,
-            'filename' => $filename
+            'filename' => $filename,
+            'content_type' => $contentType,
+            'file_size' => filesize($absPath)
         ]);
 
-        $client = $this->getHttpClient();
-        $response = $client
-            ->attach('file', file_get_contents($absolutePath), $filename)
+        $response = $this->http()
+            ->asMultipart()
+            ->attach('file', fopen($absPath, 'rb'), $filename)
+            ->attach('name', $filename)
+            ->attach('contentType', $contentType)
             ->post("/api/v2/offers/{$offerId}/documents");
 
         if ($response->successful()) {
@@ -758,7 +830,7 @@ class RobawsApiClient
                 'document_id' => $data['id'] ?? 'N/A',
                 'status' => $response->status()
             ]);
-            return $data;
+            return ['success' => true, 'data' => $data];
         }
 
         Log::error('Direct upload failed', [
@@ -766,72 +838,149 @@ class RobawsApiClient
             'status' => $response->status(),
             'error' => $response->body()
         ]);
-        
-        throw new \RuntimeException('Failed to upload file directly to offer: ' . $response->body());
+
+        return [
+            'success' => false,
+            'status' => $response->status(),
+            'error' => $response->body()
+        ];
     }
 
     /**
-     * Temp bucket upload then attach to offer (any size)
+     * Temp bucket upload method - fixed with proper name parameter
      */
-    private function tempBucketUploadToOffer(int $offerId, string $absolutePath, string $filename): array
+    public function uploadViaTempBucket(int $offerId, string $absPath, ?string $filename = null): array
     {
-        Log::info('Using temp bucket upload method', [
+        if (!is_readable($absPath) || filesize($absPath) === 0) {
+            return ['success' => false, 'error' => 'File missing or zero-byte'];
+        }
+
+        $filename = $filename ?: basename($absPath);
+        $contentType = $this->detectMime($absPath) ?? 'application/octet-stream';
+
+        Log::info('Temp bucket upload starting', [
             'offer_id' => $offerId,
-            'filename' => $filename
+            'filename' => $filename,
+            'content_type' => $contentType,
+            'file_size' => filesize($absPath)
         ]);
 
-        // Step 1: Create temp bucket
-        $bucketResponse = $this->makeRequest('POST', '/api/v2/temp-document-buckets');
+        // A) Create bucket
+        $bucketResponse = $this->makeRequest('POST', '/api/v2/temp-document-buckets', []);
         if (!$bucketResponse->successful()) {
-            throw new \RuntimeException('Failed to create temp bucket: ' . $bucketResponse->body());
+            return ['success' => false, 'error' => 'Failed to create temp bucket'];
         }
-        
-        $bucket = $bucketResponse->json();
-        $bucketId = $bucket['id'];
-        
-        Log::info('Created temp bucket', [
-            'bucket_id' => $bucketId
-        ]);
 
-        // Step 2: Upload file to bucket
-        $client = $this->getHttpClient();
-        $uploadResponse = $client
-            ->attach('file', file_get_contents($absolutePath), $filename)
+        $bucketData = $bucketResponse->json();
+        $bucketId = $bucketData['id'] ?? null;
+        if (!$bucketId) {
+            return ['success' => false, 'error' => 'No bucket ID returned'];
+        }
+
+        Log::info('Temp bucket created', ['bucket_id' => $bucketId]);
+
+        // B) Upload to bucket (multipart) - use same approach as direct upload
+        $uploadResponse = $this->http()
+            ->asMultipart()
+            ->attach('file', fopen($absPath, 'rb'), $filename)
+            ->attach('name', $filename)
+            ->attach('contentType', $contentType)
             ->post("/api/v2/temp-document-buckets/{$bucketId}/documents");
-            
+
         if (!$uploadResponse->successful()) {
-            throw new \RuntimeException('Failed to upload to bucket: ' . $uploadResponse->body());
+            Log::error('Temp bucket file upload failed', [
+                'bucket_id' => $bucketId,
+                'status' => $uploadResponse->status(),
+                'error' => $uploadResponse->body()
+            ]);
+            return [
+                'success' => false,
+                'status' => $uploadResponse->status(),
+                'error' => $uploadResponse->body()
+            ];
         }
 
-        $uploadData = $uploadResponse->json();
-        $documentId = $uploadData['id'];
-        
-        Log::info('Uploaded to temp bucket', [
-            'bucket_id' => $bucketId,
-            'document_id' => $documentId
+        Log::info('File uploaded to temp bucket', ['bucket_id' => $bucketId]);
+
+        // C) Attach to offer (critical: include name parameter)
+        $attachResponse = $this->makeRequest('POST', "/api/v2/offers/{$offerId}/documents", [
+            'tempDocumentBucketId' => $bucketId,
+            'name' => $filename,
         ]);
 
-        // Step 3: Attach document to offer using merge-patch
-        $attachResponse = $this->makeRequest('PATCH', "/api/v2/offers/{$offerId}", 
-            ['documentId' => $documentId],
-            ['Content-Type' => 'application/merge-patch+json']
-        );
-        
-        if (!$attachResponse->successful() && $attachResponse->status() !== 204) {
-            throw new \RuntimeException('Failed to attach document to offer: ' . $attachResponse->body());
+        if ($attachResponse->successful()) {
+            $data = $attachResponse->json();
+            Log::info('Document attached to offer successfully', [
+                'offer_id' => $offerId,
+                'document_id' => $data['id'] ?? 'N/A'
+            ]);
+            return ['success' => true, 'data' => $data];
         }
-
-        Log::info('Document attached to offer successfully', [
-            'offer_id' => $offerId,
-            'document_id' => $documentId,
-            'status' => $attachResponse->status()
-        ]);
 
         return [
-            'id' => $documentId,
-            'filename' => $filename,
-            'attached_to_offer' => $offerId
+            'success' => false,
+            'status' => $attachResponse->status(),
+            'error' => $attachResponse->body()
         ];
+    }
+
+    /**
+     * Detect MIME type for proper Content-Type headers
+     */
+    private function detectMime(string $path): ?string
+    {
+        if (function_exists('mime_content_type')) {
+            $mime = mime_content_type($path);
+            if ($mime) return $mime;
+        }
+
+        // Fallback based on extension
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $mimeMap = [
+            'pdf' => 'application/pdf',
+            'doc' => 'application/msword',
+            'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'xls' => 'application/vnd.ms-excel',
+            'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'txt' => 'text/plain',
+            'eml' => 'message/rfc822',
+            'msg' => 'application/vnd.ms-outlook',
+            'jpg' => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'gif' => 'image/gif',
+            'zip' => 'application/zip',
+        ];
+
+        return $mimeMap[$ext] ?? 'application/octet-stream';
+    }
+
+    /**
+     * Get HTTP client for multipart uploads (no JSON headers)
+     */
+    private function http(): PendingRequest
+    {
+        $http = Http::baseUrl($this->baseUrl)
+            ->timeout($this->config['timeout'] ?? 30)
+            ->connectTimeout($this->config['connect_timeout'] ?? 10)
+            ->withOptions([
+                'verify' => $this->config['verify_ssl'] ?? true,
+            ]);
+
+        // Configure authentication
+        if (config('services.robaws.auth') === 'basic') {
+            $http = $http->withBasicAuth(
+                config('services.robaws.username'),
+                config('services.robaws.password')
+            );
+        } else {
+            $token = config('services.robaws.token') ?? config('services.robaws.api_key');
+            if ($token) {
+                $http = $http->withToken($token);
+            }
+        }
+
+        return $http;
     }
 
     /**

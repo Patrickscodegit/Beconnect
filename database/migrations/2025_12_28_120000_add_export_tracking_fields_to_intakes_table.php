@@ -11,15 +11,41 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Skip safely if the table doesn't exist (e.g., test DB)
+        if (! Schema::hasTable('intakes')) {
+            return;
+        }
+
         Schema::table('intakes', function (Blueprint $table) {
             // Export tracking fields
-            $table->string('export_payload_hash')->nullable();
-            $table->integer('export_attempt_count')->default(0);
-            $table->text('last_export_error')->nullable();
+            if (! Schema::hasColumn('intakes', 'export_payload_hash')) {
+                $table->string('export_payload_hash')->nullable();
+            }
             
-            // Add indexes for performance
-            $table->index(['exported_at', 'export_attempt_count'], 'idx_intake_export_status');
-            $table->index('export_payload_hash', 'idx_intake_export_hash');
+            if (! Schema::hasColumn('intakes', 'export_attempt_count')) {
+                $table->integer('export_attempt_count')->default(0);
+            }
+            
+            if (! Schema::hasColumn('intakes', 'last_export_error')) {
+                $table->text('last_export_error')->nullable();
+            }
+            
+            // Add indexes for performance (only if columns exist)
+            if (Schema::hasColumn('intakes', 'exported_at') && Schema::hasColumn('intakes', 'export_attempt_count')) {
+                try {
+                    $table->index(['exported_at', 'export_attempt_count'], 'idx_intake_export_status');
+                } catch (Exception $e) {
+                    // Index might already exist
+                }
+            }
+            
+            if (Schema::hasColumn('intakes', 'export_payload_hash')) {
+                try {
+                    $table->index('export_payload_hash', 'idx_intake_export_hash');
+                } catch (Exception $e) {
+                    // Index might already exist
+                }
+            }
         });
     }
 
@@ -28,14 +54,32 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (! Schema::hasTable('intakes')) {
+            return;
+        }
+
         Schema::table('intakes', function (Blueprint $table) {
-            $table->dropIndex('idx_intake_export_status');
-            $table->dropIndex('idx_intake_export_hash');
-            $table->dropColumn([
-                'export_payload_hash',
-                'export_attempt_count', 
-                'last_export_error'
+            try {
+                $table->dropIndex('idx_intake_export_status');
+            } catch (Exception $e) {
+                // Index might not exist
+            }
+            
+            try {
+                $table->dropIndex('idx_intake_export_hash');
+            } catch (Exception $e) {
+                // Index might not exist
+            }
+            
+            $drops = array_filter([
+                Schema::hasColumn('intakes', 'export_payload_hash') ? 'export_payload_hash' : null,
+                Schema::hasColumn('intakes', 'export_attempt_count') ? 'export_attempt_count' : null,
+                Schema::hasColumn('intakes', 'last_export_error') ? 'last_export_error' : null,
             ]);
+
+            if ($drops) {
+                $table->dropColumn($drops);
+            }
         });
     }
 };

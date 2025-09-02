@@ -17,12 +17,16 @@ return new class extends Migration
         }
 
         Schema::table('intakes', function (Blueprint $table) {
-            if (! Schema::hasColumn('intakes', 'robaws_offer_id')) {
-                $table->string('robaws_offer_id')->nullable()->index();
+            if (! Schema::hasColumn('intakes', 'export_status')) {
+                $table->string('export_status')->nullable()->after('processing_status');
             }
             
-            if (! Schema::hasColumn('intakes', 'robaws_offer_number')) {
-                $table->string('robaws_offer_number')->nullable();
+            if (! Schema::hasColumn('intakes', 'exported_at')) {
+                $table->timestamp('exported_at')->nullable()->after('export_status');
+            }
+            
+            if (! Schema::hasColumn('intakes', 'export_notes')) {
+                $table->text('export_notes')->nullable()->after('exported_at');
             }
         });
     }
@@ -38,8 +42,9 @@ return new class extends Migration
 
         Schema::table('intakes', function (Blueprint $table) {
             $drops = array_filter([
-                Schema::hasColumn('intakes', 'robaws_offer_id') ? 'robaws_offer_id' : null,
-                Schema::hasColumn('intakes', 'robaws_offer_number') ? 'robaws_offer_number' : null,
+                Schema::hasColumn('intakes', 'export_status') ? 'export_status' : null,
+                Schema::hasColumn('intakes', 'exported_at') ? 'exported_at' : null,
+                Schema::hasColumn('intakes', 'export_notes') ? 'export_notes' : null,
             ]);
 
             if ($drops) {
