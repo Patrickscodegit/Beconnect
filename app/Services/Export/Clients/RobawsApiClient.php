@@ -107,6 +107,189 @@ final class RobawsApiClient
         return $result ? (int)$result['id'] : null;
     }
 
+    /**
+     * Create a new quotation/offer in Robaws
+     */
+    public function createQuotation(array $payload, ?string $idempotencyKey = null): array
+    {
+        $headers = [];
+        if ($idempotencyKey) {
+            $headers['Idempotency-Key'] = $idempotencyKey;
+        }
+
+        try {
+            $response = $this->http
+                ->withHeaders($headers)
+                ->post('/api/v2/offers', $payload);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                return [
+                    'success' => true,
+                    'quotation_id' => $data['id'] ?? null,
+                    'data' => $data,
+                    'idempotency_key' => $idempotencyKey,
+                ];
+            }
+
+            return [
+                'success' => false,
+                'error' => $response->body(),
+                'status' => $response->status(),
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'status' => 500,
+            ];
+        }
+    }
+
+    /**
+     * Update an existing quotation/offer in Robaws
+     */
+    public function updateQuotation(string $quotationId, array $payload, ?string $idempotencyKey = null): array
+    {
+        $headers = [];
+        if ($idempotencyKey) {
+            $headers['Idempotency-Key'] = $idempotencyKey;
+        }
+
+        try {
+            $response = $this->http
+                ->withHeaders($headers)
+                ->put("/api/v2/offers/{$quotationId}", $payload);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                return [
+                    'success' => true,
+                    'quotation_id' => $quotationId,
+                    'data' => $data,
+                    'idempotency_key' => $idempotencyKey,
+                ];
+            }
+
+            return [
+                'success' => false,
+                'error' => $response->body(),
+                'status' => $response->status(),
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'status' => 500,
+            ];
+        }
+    }
+
+    /**
+     * Get an offer by ID
+     */
+    public function getOffer(string $offerId): array
+    {
+        try {
+            $response = $this->http->get("/api/v2/offers/{$offerId}");
+
+            if ($response->successful()) {
+                return [
+                    'success' => true,
+                    'data' => $response->json(),
+                ];
+            }
+
+            return [
+                'success' => false,
+                'error' => $response->body(),
+                'status' => $response->status(),
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'status' => 500,
+            ];
+        }
+    }
+
+    /**
+     * Attach a file to an offer
+     */
+    public function attachFileToOffer(int $offerId, string $filePath, ?string $filename = null): array
+    {
+        try {
+            $filename = $filename ?: basename($filePath);
+            
+            $response = $this->http
+                ->attach('file', file_get_contents($filePath), $filename)
+                ->post("/api/v2/offers/{$offerId}/documents");
+
+            if ($response->successful()) {
+                return [
+                    'success' => true,
+                    'data' => $response->json(),
+                ];
+            }
+
+            return [
+                'success' => false,
+                'error' => $response->body(),
+                'status' => $response->status(),
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'status' => 500,
+            ];
+        }
+    }
+
+    /**
+     * Test connection to Robaws API
+     */
+    public function testConnection(): array
+    {
+        try {
+            $response = $this->http->get('/api/v2/health');
+            
+            return [
+                'success' => $response->successful(),
+                'status' => $response->status(),
+                'response_time' => $response->transferStats?->getTransferTime(),
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'status' => 500,
+            ];
+        }
+    }
+
+    /**
+     * Validate API configuration
+     */
+    public function validateConfig(): array
+    {
+        $issues = [];
+        
+        if (empty(config('services.robaws.api_key'))) {
+            $issues[] = 'API key not configured';
+        }
+        
+        if (empty(config('services.robaws.base_url'))) {
+            $issues[] = 'Base URL not configured';
+        }
+        
+        return [
+            'valid' => empty($issues),
+            'issues' => $issues,
+        ];
+    }
+
     private function createHttpClient(string $baseUrl, string $apiKey): PendingRequest
     {
         $headers = [

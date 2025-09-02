@@ -97,6 +97,16 @@ class ProcessIntake implements ShouldQueue
                 $this->intake->robaws_client_id = (string)$hit['id'];
                 $this->intake->status = 'processed';
                 $this->intake->save();
+                
+                // Automatically dispatch export job when client is resolved
+                \App\Jobs\ExportIntakeToRobawsJob::dispatch($this->intake->id);
+                
+                Log::info('Intake processed and export job dispatched', [
+                    'intake_id' => $this->intake->id,
+                    'client_id' => $hit['id'],
+                    'confidence' => $hit['confidence'] ?? null,
+                ]);
+                
                 return;
             }
 
@@ -105,6 +115,17 @@ class ProcessIntake implements ShouldQueue
             $hasPhone = !empty($this->intake->contact_phone);
             $this->intake->status = ($hasEmail || $hasPhone) ? 'processed' : 'needs_contact';
             $this->intake->save();
+
+            // Dispatch export job if intake is ready for export
+            if ($this->intake->status === 'processed') {
+                \App\Jobs\ExportIntakeToRobawsJob::dispatch($this->intake->id);
+                
+                Log::info('Intake processed via fallback and export job dispatched', [
+                    'intake_id' => $this->intake->id,
+                    'has_email' => $hasEmail,
+                    'has_phone' => $hasPhone,
+                ]);
+            }
 
             Log::info('Intake processing completed', [
                 'intake_id' => $this->intake->id,

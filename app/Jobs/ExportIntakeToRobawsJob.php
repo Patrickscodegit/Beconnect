@@ -44,13 +44,13 @@ class ExportIntakeToRobawsJob implements ShouldQueue
             if ($result['success']) {
                 Log::info('Robaws export successful', [
                     'intake_id' => $this->intake->id,
-                    'offer_id' => $result['offer_id'] ?? null
+                    'quotation_id' => $result['quotation_id'] ?? null
                 ]);
                 
                 $this->intake->update([
                     'status' => 'completed',
-                    'robaws_offer_id' => $result['offer_id'] ?? null,
-                    'robaws_offer_number' => $result['offer_number'] ?? null,
+                    'robaws_offer_id' => $result['quotation_id'] ?? null,
+                    'robaws_offer_number' => $result['data']['logicId'] ?? null,
                 ]);
             } else {
                 $this->handleExportError($result['error']);

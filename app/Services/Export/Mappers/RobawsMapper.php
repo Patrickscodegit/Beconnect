@@ -133,13 +133,16 @@ class RobawsMapper
         }
 
         // Extract nested data structures from actual extraction format
+        // Check both direct access and raw_data nested structure
+        $rawData = $extractionData['raw_data'] ?? [];
         $documentData = $extractionData['document_data'] ?? [];
-        $vehicle = $documentData['vehicle'] ?? $extractionData['vehicle'] ?? [];
-        $shipping = $documentData['shipping'] ?? $extractionData['shipping'] ?? [];
-        $contact = $documentData['contact'] ?? $extractionData['contact'] ?? [];
-        $shipment = $documentData['shipment'] ?? $extractionData['shipment'] ?? [];
-        $dates = $extractionData['dates'] ?? [];
-        $pricing = $extractionData['pricing'] ?? [];
+        
+        $vehicle = $documentData['vehicle'] ?? $extractionData['vehicle'] ?? $rawData['vehicle'] ?? [];
+        $shipping = $documentData['shipping'] ?? $extractionData['shipping'] ?? $rawData['shipping'] ?? [];
+        $contact = $documentData['contact'] ?? $extractionData['contact'] ?? $rawData['contact'] ?? [];
+        $shipment = $documentData['shipment'] ?? $extractionData['shipment'] ?? $rawData['shipment'] ?? [];
+        $dates = $extractionData['dates'] ?? $rawData['dates'] ?? [];
+        $pricing = $extractionData['pricing'] ?? $rawData['pricing'] ?? [];
 
         // Map to Robaws structure
         return [
@@ -176,25 +179,12 @@ class RobawsMapper
         }
 
         $payload = [
-            'title'           => $q['concerning'] ?: ($q['project'] ?: ($q['customer_reference'] ?: 'Transport Quote')),
+            'title'           => $q['concerning'] ?? ($q['project'] ?? null),
             'project'         => $q['project'] ?? null,
             'clientReference' => $q['customer_reference'] ?? $q['client_reference'] ?? null,
             'contactEmail'    => $q['contact_email'] ?? null,
             'clientId'        => $clientId !== null ? (int) $clientId : null, // Top-level for Customer binding
         ];
-
-        // Generate basic line items
-        $lines = [];
-        
-        // Create a default transport line item
-        $lines[] = [
-            'description' => $this->generateLineDescription($q, $r, $c),
-            'quantity' => 1,
-            'unit_price' => 0.00,
-            'total_price' => 0.00,
-        ];
-        
-        $payload['lines'] = $lines;
 
         $xf = [];
 
@@ -351,7 +341,8 @@ class RobawsMapper
      */
     private function getExtractionData(Intake $intake): array
     {
-        $base = $intake->extraction?->extracted_data ?? [];
+        // Use the intake's extraction_data attribute (not a relationship)
+        $base = $intake->extraction_data ?? [];
 
         foreach ($intake->documents as $doc) {
             $docData = $doc->extraction?->extracted_data ?? [];
@@ -544,12 +535,8 @@ class RobawsMapper
 
     private function extractProject(array $vehicle): string
     {
-        // Support both 'brand'/'make' and 'model' fields
-        $brand = $vehicle['brand'] ?? $vehicle['make'] ?? '';
-        $model = $vehicle['model'] ?? '';
-        
-        if (!empty($brand) && !empty($model)) {
-            return trim($brand . ' ' . $model);
+        if (!empty($vehicle['brand']) && !empty($vehicle['model'])) {
+            return trim($vehicle['brand'] . ' ' . $vehicle['model']);
         }
         return '';
     }
@@ -915,33 +902,5 @@ class RobawsMapper
         }
         
         return false;
-    }
-
-    /**
-     * Generate line item description for transport service
-     */
-    private function generateLineDescription(array $quotationInfo, array $routing, array $cargoDetails): string
-    {
-        $parts = [];
-        
-        // Add project/vehicle info
-        if (!empty($quotationInfo['project'])) {
-            $parts[] = $quotationInfo['project'];
-        }
-        
-        // Add route info
-        $origin = $routing['pol'] ?? $routing['por'] ?? 'Origin';
-        $destination = $routing['pod'] ?? $routing['fdest'] ?? 'Destination';
-        
-        if ($origin !== 'Origin' || $destination !== 'Destination') {
-            $parts[] = "Transport from {$origin} to {$destination}";
-        }
-        
-        // Add cargo info if available
-        if (!empty($cargoDetails['cargo'])) {
-            $parts[] = $cargoDetails['cargo'];
-        }
-        
-        return implode(' - ', $parts) ?: 'Transport Service';
     }
 }
