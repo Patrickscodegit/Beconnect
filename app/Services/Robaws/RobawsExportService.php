@@ -507,22 +507,20 @@ class RobawsExportService
      */
     private function attachDocumentsToOffer(Intake $intake, int $offerId, string $exportId): void
     {
-        // Pick "approved" docs (or sensible default if none approved yet)
-        $docs = $intake->documents()->where(function ($q) {
-            $q->where('status', 'approved')->orWhereNull('status');
-        })->get();
+        // Use files relationship instead of documents
+        $files = $intake->files;
 
-        if ($docs->isEmpty()) {
-            Log::info('No documents to attach', ['export_id' => $exportId, 'offer_id' => $offerId]);
+        if ($files->isEmpty()) {
+            Log::info('No files to attach', ['export_id' => $exportId, 'offer_id' => $offerId]);
             return;
         }
 
-        foreach ($docs as $doc) {
-            $path = $doc->filepath ?? $doc->path ?? null;
+        foreach ($files as $file) {
+            $path = $file->storage_path;
             if (!$path || !Storage::exists($path)) {
-                Log::warning('Doc path missing or not found', [
+                Log::warning('File path missing or not found', [
                     'export_id' => $exportId,
-                    'doc_id' => $doc->id,
+                    'file_id' => $file->id,
                     'path' => $path
                 ]);
                 continue;
@@ -532,18 +530,20 @@ class RobawsExportService
                 $absolutePath = Storage::path($path);
                 $result = $this->apiClient->attachFileToOffer($offerId, $absolutePath);
                 
-                Log::info('Attached document to offer', [
+                Log::info('Attached file to offer', [
                     'export_id' => $exportId,
                     'offer_id' => $offerId,
-                    'doc_id' => $doc->id,
+                    'file_id' => $file->id,
+                    'filename' => $file->filename,
                     'path' => $path,
                     'result' => $result
                 ]);
             } catch (\Throwable $e) {
-                Log::error('Attach failed', [
+                Log::error('File attach failed', [
                     'export_id' => $exportId,
                     'offer_id' => $offerId,
-                    'doc_id' => $doc->id,
+                    'file_id' => $file->id,
+                    'filename' => $file->filename,
                     'error' => $e->getMessage()
                 ]);
             }
