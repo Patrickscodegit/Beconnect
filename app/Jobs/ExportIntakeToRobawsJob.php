@@ -108,11 +108,17 @@ class ExportIntakeToRobawsJob implements ShouldQueue
             'error' => $error
         ]);
         
-        // Determine status based on error type
-        $status = 'export_failed';
-        if (str_contains(strtolower($error), 'contact') || str_contains(strtolower($error), 'client')) {
+        // Determine status based on error type - be more specific about contact vs API errors
+        $status = 'export_failed'; // Default to export_failed
+        $errorLower = strtolower($error);
+        
+        // Only set needs_contact for actual missing contact info
+        if (str_contains($errorLower, 'missing contact info') || 
+            str_contains($errorLower, 'either email or phone is required')) {
             $status = 'needs_contact';
         }
+        // API errors, client resolution failures, auth failures should be export_failed
+        // Examples: "Could not resolve client", "Forbidden", "API error", etc.
         
         $this->intake->update([
             'status' => $status,
