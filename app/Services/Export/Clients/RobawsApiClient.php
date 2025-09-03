@@ -222,8 +222,38 @@ final class RobawsApiClient
         try {
             $filename = $filename ?: basename($filePath);
             
-            $response = $this->http
-                ->attach('file', file_get_contents($filePath), $filename)
+            // Determine MIME type - prefer message/rfc822 for .eml files
+            $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+            $mimeType = match($ext) {
+                'eml' => 'message/rfc822',
+                'pdf' => 'application/pdf',
+                'png' => 'image/png',
+                'jpg', 'jpeg' => 'image/jpeg',
+                default => mime_content_type($filePath) ?: 'application/octet-stream'
+            };
+
+            // Create a FRESH HTTP client for multipart upload (avoid JSON Content-Type)
+            $baseUrl = rtrim(config('services.robaws.base_url'), '/');
+            $http = Http::baseUrl($baseUrl)
+                ->acceptJson()
+                ->asMultipart()
+                ->timeout(config('services.robaws.timeout', 30));
+
+            // Configure authentication the same way as the main client
+            if (config('services.robaws.auth') === 'basic') {
+                $http = $http->withBasicAuth(
+                    config('services.robaws.username'),
+                    config('services.robaws.password')
+                );
+            } else {
+                // Bearer token authentication
+                $token = config('services.robaws.token') ?? config('services.robaws.api_key');
+                if ($token) {
+                    $http = $http->withToken($token);
+                }
+            }
+
+            $response = $http->attach('file', file_get_contents($filePath), $filename, ['Content-Type' => $mimeType])
                 ->post("/api/v2/offers/{$offerId}/documents");
 
             if ($response->successful()) {

@@ -529,38 +529,87 @@ class RobawsExportService
             $q->where('status', 'approved')->orWhereNull('status');
         })->get();
 
-        if ($docs->isEmpty()) {
-            Log::info('No documents to attach', ['export_id' => $exportId, 'offer_id' => $offerId]);
+        // Also check for IntakeFiles (for .eml files and other direct uploads)
+        $intakeFiles = $intake->files()->whereIn('mime_type', [
+            'message/rfc822',  // .eml files
+            'application/pdf',  // PDFs
+            'image/png',        // Images
+            'image/jpeg',       // Images
+        ])->get();
+
+        $allFilesToUpload = collect();
+
+        // Add Document models to upload list
+        foreach ($docs as $doc) {
+            $path = $doc->filepath ?? $doc->file_path ?? null;
+            if ($path && Storage::exists($path)) {
+                $allFilesToUpload->push([
+                    'type' => 'document',
+                    'id' => $doc->id,
+                    'path' => $path,
+                    'filename' => $doc->original_filename ?? $doc->filename ?? basename($path),
+                ]);
+            }
+        }
+
+        // Add IntakeFile models to upload list
+        foreach ($intakeFiles as $file) {
+            if (Storage::disk($file->storage_disk)->exists($file->storage_path)) {
+                $allFilesToUpload->push([
+                    'type' => 'intake_file',
+                    'id' => $file->id,
+                    'path' => $file->storage_path,
+                    'disk' => $file->storage_disk,
+                    'filename' => $file->filename,
+                ]);
+            }
+        }
+
+        if ($allFilesToUpload->isEmpty()) {
+            Log::info('No files to attach', [
+                'export_id' => $exportId, 
+                'offer_id' => $offerId,
+                'documents_count' => $docs->count(),
+                'intake_files_count' => $intakeFiles->count()
+            ]);
             return;
         }
 
-        foreach ($docs as $doc) {
-            $path = $doc->filepath ?? $doc->path ?? null;
-            if (!$path || !Storage::exists($path)) {
-                Log::warning('Doc path missing or not found', [
-                    'export_id' => $exportId,
-                    'doc_id' => $doc->id,
-                    'path' => $path
-                ]);
-                continue;
-            }
+        Log::info('Attaching files to offer', [
+            'export_id' => $exportId,
+            'offer_id' => $offerId,
+            'total_files' => $allFilesToUpload->count(),
+            'documents' => $docs->count(),
+            'intake_files' => $intakeFiles->count()
+        ]);
 
+        foreach ($allFilesToUpload as $fileInfo) {
             try {
-                $absolutePath = Storage::path($path);
-                $result = $this->apiClient->attachFileToOffer($offerId, $absolutePath);
+                if ($fileInfo['type'] === 'intake_file') {
+                    // Handle IntakeFile
+                    $absolutePath = Storage::disk($fileInfo['disk'])->path($fileInfo['path']);
+                } else {
+                    // Handle Document
+                    $absolutePath = Storage::path($fileInfo['path']);
+                }
+
+                $result = $this->apiClient->attachFileToOffer($offerId, $absolutePath, $fileInfo['filename']);
                 
-                Log::info('Attached document to offer', [
+                Log::info('Attached file to offer', [
                     'export_id' => $exportId,
                     'offer_id' => $offerId,
-                    'doc_id' => $doc->id,
-                    'path' => $path,
+                    'file_type' => $fileInfo['type'],
+                    'file_id' => $fileInfo['id'],
+                    'filename' => $fileInfo['filename'],
                     'result' => $result
                 ]);
             } catch (\Throwable $e) {
-                Log::error('Attach failed', [
+                Log::error('File attach failed', [
                     'export_id' => $exportId,
                     'offer_id' => $offerId,
-                    'doc_id' => $doc->id,
+                    'file_type' => $fileInfo['type'],
+                    'file_id' => $fileInfo['id'],
+                    'filename' => $fileInfo['filename'],
                     'error' => $e->getMessage()
                 ]);
             }
