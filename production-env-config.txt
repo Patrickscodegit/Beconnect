@@ -59,8 +59,8 @@ DOCUMENTS_ROOT=documents
 # ================================================
 
 # Temporary file uploads
-LIVEWIRE_TEMPORARY_FILE_UPLOAD_DISK=spaces
-LIVEWIRE_TEMPORARY_FILE_UPLOAD_PATH=livewire-tmp
+LIVEWIRE_DISK=spaces
+LIVEWIRE_TMP_PATH=livewire-tmp
 
 # ================================================
 # ROBAWS API INTEGRATION
