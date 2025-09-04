@@ -42,10 +42,8 @@
             "app/Services/**/*_clean_canonical.php",
             "app/Services/**/*_simple.php",
             "app/Services/**/*_new.php",
-            "app/Services/**/RobawsExportService_new.php",
-            "app/Services/**/RobawsExportService_old.php",
-            "app/Services/**/MultiDocumentUploadService_backup.php",
-            "app/Services/**/MultiDocumentUploadService_new.php",
+            "app/Services/**/MultiDocumentUploadService_*",
+            "app/Services/**/RobawsExportService_*",
             "app/Services/**/ClientResolver_old.php",
             "app/Services/**/RobawsMapper_old.php",
             "app/Services/**/ContactValueObjects.php"
