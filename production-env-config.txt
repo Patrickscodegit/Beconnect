@@ -41,6 +41,7 @@ QUEUE_CONNECTION=redis
 
 # Storage Configuration
 FILESYSTEM_DISK=spaces
+DOCUMENTS_DRIVER=spaces
 
 # DigitalOcean Spaces - Frankfurt Region
 SPACES_KEY=YOUR_SPACES_ACCESS_KEY
@@ -51,8 +52,16 @@ SPACES_ENDPOINT=https://fra1.digitaloceanspaces.com
 SPACES_URL=https://bconnect-documents.fra1.digitaloceanspaces.com
 SPACES_USE_PATH_STYLE_ENDPOINT=false
 
-# AWS compatibility URLs (should match Spaces)
+# AWS S3 compatibility (for packages that expect AWS_ variables)
+AWS_ACCESS_KEY_ID=YOUR_SPACES_ACCESS_KEY
+AWS_SECRET_ACCESS_KEY=YOUR_SPACES_SECRET_KEY
+AWS_DEFAULT_REGION=fra1
+AWS_BUCKET=bconnect-documents
+AWS_ENDPOINT=https://fra1.digitaloceanspaces.com
 AWS_URL=https://bconnect-documents.fra1.digitaloceanspaces.com
+AWS_USE_PATH_STYLE_ENDPOINT=false
+
+# Additional compatibility URLs
 DO_SPACES_URL=https://bconnect-documents.fra1.digitaloceanspaces.com
 
 # Document storage settings
@@ -63,6 +72,10 @@ DOCUMENTS_ROOT=documents
 # ================================================
 
 # Temporary file uploads
+LIVEWIRE_TEMPORARY_FILE_UPLOAD_DISK=spaces
+LIVEWIRE_TEMPORARY_FILE_UPLOAD_PATH=livewire-tmp
+
+# Legacy Livewire variable names (for backward compatibility)
 LIVEWIRE_DISK=spaces
 LIVEWIRE_TMP_PATH=livewire-tmp
 

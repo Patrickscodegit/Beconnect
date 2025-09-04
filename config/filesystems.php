@@ -1,5 +1,8 @@
 <?php
 
+// Environment-aware document storage configuration
+$documentsDriver = env('DOCUMENTS_DRIVER', 'public'); // public in local, spaces in prod
+
 return [
 
     /*
@@ -13,7 +16,7 @@ return [
     |
     */
 
-    'default' => env('FILESYSTEM_DISK', 'local'),
+    'default' => env('FILESYSTEM_DISK', 'public'),
 
     /*
     |--------------------------------------------------------------------------
@@ -115,6 +118,31 @@ return [
             'throw' => false,
             'report' => false,
         ],
+
+        // Environment-aware documents disk - switches between local/public in dev and spaces in prod
+        'documents' => $documentsDriver === 'spaces'
+            ? [
+                // Production: use DigitalOcean Spaces with documents/ prefix
+                'driver' => 's3',
+                'key' => env('AWS_ACCESS_KEY_ID'),
+                'secret' => env('AWS_SECRET_ACCESS_KEY'),
+                'region' => env('AWS_DEFAULT_REGION', 'fra1'),
+                'bucket' => env('AWS_BUCKET'),
+                'url' => env('AWS_URL'),
+                'endpoint' => env('AWS_ENDPOINT'),
+                'root' => 'documents', // prefix within the bucket
+                'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+                'visibility' => 'private',
+                'throw' => true,
+            ]
+            : [
+                // Local/Development: use public disk with documents/ subdirectory
+                'driver' => 'local',
+                'root' => storage_path('app/public/documents'),
+                'url' => env('APP_URL').'/storage/documents',
+                'visibility' => 'public',
+                'throw' => true,
+            ],
 
     ],
 

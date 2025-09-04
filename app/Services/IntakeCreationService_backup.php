@@ -182,13 +182,24 @@ class IntakeCreationService
 
     public function addFileToIntake(Intake $intake, TemporaryUploadedFile|UploadedFile $file): IntakeFile
     {
-        $storagePath = $this->storeFileOnly($file);
+        $disk = 'documents'; // Use environment-aware documents disk
+        $dir = 'documents';
+        $extension = $file->getClientOriginalExtension();
+        $safeName = Str::uuid() . '.' . strtolower($extension);
+
+        if ($file instanceof TemporaryUploadedFile) {
+            // Livewire temp file is already on the configured disk -> use Livewire's storeAs
+            $storagePath = $file->storeAs($dir, $safeName, $disk);
+        } else {
+            // Regular UploadedFile (from local temp) -> use Laravel's storeAs
+            $storagePath = $file->storeAs($dir, $safeName, $disk);
+        }
 
         $intakeFile = IntakeFile::create([
             'intake_id' => $intake->id,
             'filename' => $file->getClientOriginalName(),
             'storage_path' => $storagePath,
-            'storage_disk' => 'documents',
+            'storage_disk' => $disk,
             'mime_type' => $file->getMimeType(),
             'file_size' => $file->getSize(),
         ]);
@@ -204,30 +215,27 @@ class IntakeCreationService
 
     private function storeFile(Intake $intake, TemporaryUploadedFile|UploadedFile $file, string $originalName): void
     {
-        $storagePath = $this->storeFileOnly($file);
-        
+        $disk = 'documents'; // Use environment-aware documents disk
+        $dir = 'documents';
+        $extension = $file->getClientOriginalExtension();
+        $safeName = Str::uuid() . '.' . strtolower($extension);
+
+        if ($file instanceof TemporaryUploadedFile) {
+            // Livewire temp file is already on the configured disk -> use Livewire's storeAs
+            $storagePath = $file->storeAs($dir, $safeName, $disk);
+        } else {
+            // Regular UploadedFile (from local temp) -> use Laravel's storeAs
+            $storagePath = $file->storeAs($dir, $safeName, $disk);
+        }
+
         IntakeFile::create([
             'intake_id' => $intake->id,
             'filename' => $originalName,
             'storage_path' => $storagePath,
-            'storage_disk' => 'documents',
+            'storage_disk' => $disk,
             'mime_type' => $file->getMimeType(),
             'file_size' => $file->getSize(),
         ]);
-    }
-
-    /**
-     * S3-safe file storage - never treats Spaces keys as local paths
-     */
-    private function storeFileOnly(TemporaryUploadedFile|UploadedFile $file): string
-    {
-        $disk = 'documents';           // env-aware disk
-        $dir  = '';                    // (root of the documents disk)
-        $ext  = strtolower($file->getClientOriginalExtension() ?? '');
-        $name = (string) Str::uuid() . ($ext ? ".$ext" : '');
-
-        // Works for both TemporaryUploadedFile (Livewire) and classic UploadedFile
-        return $file->storeAs($dir, $name, $disk);
     }
 
     private function getExtensionFromMimeType(string $mimeType): string

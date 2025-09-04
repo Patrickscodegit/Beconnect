@@ -69,11 +69,11 @@ return [
 
     'temporary_file_uploads' => [
 
-        'disk' => env('LIVEWIRE_DISK', 'spaces'),
+        'disk' => env('LIVEWIRE_TEMPORARY_FILE_UPLOAD_DISK', env('FILESYSTEM_DISK', 'public')),
 
         'rules' => ['required', 'file', 'max:51200'], // 50MB Max
 
-        'path' => env('LIVEWIRE_TMP_PATH', 'livewire-tmp'),
+        'path' => env('LIVEWIRE_TEMPORARY_FILE_UPLOAD_PATH', 'livewire-tmp'),
 
         'directory_separator' => '/',
 

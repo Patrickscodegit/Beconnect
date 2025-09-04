@@ -1,0 +1,27 @@
+[
+  {
+    "AllowedOrigins": [
+      "http://bconnect.64.226.120.45.nip.io",
+      "https://bconnect.64.226.120.45.nip.io",
+      "http://your-production-domain.com",
+      "https://your-production-domain.com"
+    ],
+    "AllowedMethods": [
+      "GET",
+      "PUT", 
+      "POST",
+      "DELETE",
+      "HEAD",
+      "OPTIONS"
+    ],
+    "AllowedHeaders": [
+      "*"
+    ],
+    "ExposeHeaders": [
+      "ETag",
+      "x-amz-request-id", 
+      "x-amz-id-2"
+    ],
+    "MaxAgeSeconds": 3000
+  }
+]
