@@ -60,3 +60,11 @@ Route::get('/api/intakes/{intake}/status', [ApiIntakeController::class, 'getInta
     ->name('api.intakes.status');
 
 require __DIR__.'/auth.php';
+
+// TEMPORARY: Catch-all OPTIONS handler for CORS debugging
+Route::options('/{any}', function () {
+    return response('', 204)
+        ->header('Access-Control-Allow-Origin', '*')
+        ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+        ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-TOKEN, X-Requested-With');
+})->where('any', '.*');

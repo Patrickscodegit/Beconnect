@@ -51,6 +51,10 @@ SPACES_ENDPOINT=https://fra1.digitaloceanspaces.com
 SPACES_URL=https://bconnect-documents.fra1.digitaloceanspaces.com
 SPACES_USE_PATH_STYLE_ENDPOINT=false
 
+# AWS compatibility URLs (should match Spaces)
+AWS_URL=https://bconnect-documents.fra1.digitaloceanspaces.com
+DO_SPACES_URL=https://bconnect-documents.fra1.digitaloceanspaces.com
+
 # Document storage settings
 DOCUMENTS_ROOT=documents
 
