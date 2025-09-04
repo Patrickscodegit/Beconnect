@@ -34,7 +34,21 @@
             "App\\": "app/",
             "Database\\Factories\\": "database/factories/",
             "Database\\Seeders\\": "database/seeders/"
-        }
+        },
+        "exclude-from-classmap": [
+            "app/Services/**/*_backup.php",
+            "app/Services/**/*_old.php",
+            "app/Services/**/*_clean.php",
+            "app/Services/**/*_clean_canonical.php",
+            "app/Services/**/*_simple.php",
+            "app/Services/**/*_new.php",
+            "app/Services/**/MultiDocumentUploadService_backup.php",
+            "app/Services/**/MultiDocumentUploadService_new.php",
+            "app/Services/**/RobawsExportService_old.php",
+            "app/Services/**/RobawsExportService_new.php",
+            "app/Services/**/ClientResolver_old.php",
+            "app/Services/**/RobawsMapper_old.php"
+        ]
     },
     "autoload-dev": {
         "psr-4": {
