@@ -96,14 +96,14 @@ return [
     ],
 
     'robaws' => [
-        'base_url' => env('ROBAWS_BASE_URL', 'https://app.robaws.com'),
-        'auth' => env('ROBAWS_AUTH', 'basic'), // 'basic' or 'bearer'
-        'username' => env('ROBAWS_USERNAME'),
-        'password' => env('ROBAWS_PASSWORD'),
-        'token' => env('ROBAWS_TOKEN'),
-        'api_key' => env('ROBAWS_API_KEY'),
+        'base_url'   => env('ROBAWS_BASE_URL', 'https://app.robaws.com'),
+        'auth'       => env('ROBAWS_AUTH', 'basic'),
+        'username'   => env('ROBAWS_USERNAME'),
+        'password'   => env('ROBAWS_PASSWORD'),
+        'api_key'    => env('ROBAWS_API_KEY'),
         'api_secret' => env('ROBAWS_API_SECRET'),
-        'timeout' => env('ROBAWS_TIMEOUT', 30),
+        'company_id' => env('ROBAWS_COMPANY_ID', env('ROBAWS_DEFAULT_COMPANY_ID')),
+        'timeout'    => env('ROBAWS_TIMEOUT', 30),
         'auto_create_quotations' => env('ROBAWS_AUTO_CREATE_QUOTATIONS', false),
         'default_client_id' => env('ROBAWS_DEFAULT_CLIENT_ID', 1),
         'default_company_id' => env('ROBAWS_DEFAULT_COMPANY_ID', env('ROBAWS_COMPANY_ID', 1)),

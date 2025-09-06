@@ -108,6 +108,56 @@ final class RobawsApiClient
     }
 
     /**
+     * Create a new client in Robaws
+     */
+    public function createClient(array $clientData): ?array
+    {
+        try {
+            // Ensure we have at least a name
+            if (empty($clientData['name'])) {
+                $clientData['name'] = 'Unknown Customer';
+            }
+            
+            // Set default email if not provided (some Robaws setups require it)
+            if (empty($clientData['email'])) {
+                $clientData['email'] = 'noreply@bconnect.com';
+            }
+            
+            $response = $this->http
+                ->post('/api/v2/clients', $clientData)
+                ->throw()
+                ->json();
+            
+            if ($response && isset($response['id'])) {
+                \Illuminate\Support\Facades\Log::info('Created new Robaws client', [
+                    'client_id' => $response['id'],
+                    'name' => $clientData['name']
+                ]);
+                
+                return $response;
+            }
+            
+            return null;
+            
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to create Robaws client', [
+                'error' => $e->getMessage(),
+                'data' => $clientData
+            ]);
+            
+            // Try with minimal data if the first attempt fails
+            if (count($clientData) > 2) {
+                return $this->createClient([
+                    'name' => $clientData['name'],
+                    'email' => $clientData['email'] ?? 'noreply@bconnect.com'
+                ]);
+            }
+            
+            return null;
+        }
+    }
+
+    /**
      * Create a new quotation/offer in Robaws
      */
     public function createQuotation(array $payload, ?string $idempotencyKey = null): array

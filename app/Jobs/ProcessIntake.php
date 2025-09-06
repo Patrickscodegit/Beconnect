@@ -83,49 +83,37 @@ class ProcessIntake implements ShouldQueue
                 'contact_phone' => $contactData['phone'] ?? $this->intake->contact_phone,
             ]);
 
-            // V2-ONLY CLIENT RESOLUTION: Run resolver before validation
-            $resolver = app(\App\Services\Robaws\ClientResolver::class);
-
-            $hints = [
-                'id'    => $this->intake->metadata['robaws_client_id'] ?? null,               // optional override
-                'email' => $this->intake->contact_email ?: ($this->intake->metadata['from_email'] ?? null),
-                'phone' => $this->intake->contact_phone ?: null,
-                'name'  => $this->intake->customer_name  ?: ($this->intake->metadata['from_name'] ?? null),
-            ];
-
-            if ($hit = $resolver->resolve($hints)) {
-                $this->intake->robaws_client_id = (string)$hit['id'];
-                $this->intake->status = 'processed';
-                $this->intake->save();
+            // Try to find or create Robaws client
+            $robawsClientId = $this->findOrCreateRobawsClient($contactData);
+            
+            if ($robawsClientId) {
+                $this->intake->update([
+                    'robaws_client_id' => (string)$robawsClientId,
+                    'status' => 'completed'
+                ]);
                 
                 // Automatically dispatch export job when client is resolved
                 \App\Jobs\ExportIntakeToRobawsJob::dispatch($this->intake->id);
                 
-                Log::info('Intake processed and export job dispatched', [
+                Log::info('Intake processed with client and export job dispatched', [
                     'intake_id' => $this->intake->id,
-                    'client_id' => $hit['id'],
-                    'confidence' => $hit['confidence'] ?? null,
+                    'client_id' => $robawsClientId,
+                    'method' => 'auto_resolve_or_create'
                 ]);
                 
                 return;
             }
 
-            // unchanged fallback rule:
-            $hasEmail = filter_var($this->intake->contact_email, FILTER_VALIDATE_EMAIL);
-            $hasPhone = !empty($this->intake->contact_phone);
-            $this->intake->status = ($hasEmail || $hasPhone) ? 'processed' : 'needs_contact';
-            $this->intake->save();
-
-            // Dispatch export job if intake is ready for export
-            if ($this->intake->status === 'processed') {
-                \App\Jobs\ExportIntakeToRobawsJob::dispatch($this->intake->id);
-                
-                Log::info('Intake processed via fallback and export job dispatched', [
-                    'intake_id' => $this->intake->id,
-                    'has_email' => $hasEmail,
-                    'has_phone' => $hasPhone,
-                ]);
-            }
+            // If client resolution/creation failed, still mark as processed
+            // Contact info is no longer mandatory for processing
+            $this->intake->update(['status' => 'processed']);
+            
+            // Dispatch export job even without client (will attempt client creation during export)
+            \App\Jobs\ExportIntakeToRobawsJob::dispatch($this->intake->id);
+            
+            Log::info('Intake processed without client - export will attempt client creation', [
+                'intake_id' => $this->intake->id,
+            ]);
 
             Log::info('Intake processing completed', [
                 'intake_id' => $this->intake->id,
@@ -143,6 +131,108 @@ class ProcessIntake implements ShouldQueue
             
             $this->intake->update(['status' => 'failed']);
             throw $e;
+        }
+    }
+
+    /**
+     * Find existing client or create a new one with available data
+     */
+    private function findOrCreateRobawsClient(array $contactData): ?string
+    {
+        try {
+            $resolver = app(\App\Services\Robaws\ClientResolver::class);
+
+            $hints = [
+                'id'    => $this->intake->metadata['robaws_client_id'] ?? null,
+                'email' => $contactData['email'] ?? ($this->intake->metadata['from_email'] ?? null),
+                'phone' => $contactData['phone'] ?? null,
+                'name'  => $contactData['name'] ?? ($this->intake->metadata['from_name'] ?? null),
+            ];
+
+            // Try to find existing client first
+            if ($hit = $resolver->resolve($hints)) {
+                Log::info('Found existing Robaws client', [
+                    'intake_id' => $this->intake->id,
+                    'client_id' => $hit['id'],
+                    'confidence' => $hit['confidence'] ?? null,
+                ]);
+                
+                return (string)$hit['id'];
+            }
+
+            // If no client found, create a new one with whatever info we have
+            $apiClient = app(\App\Services\Export\Clients\RobawsApiClient::class);
+            
+            $clientId = $this->createRobawsClient($apiClient, $contactData);
+            
+            if ($clientId) {
+                Log::info('Created new Robaws client', [
+                    'intake_id' => $this->intake->id,
+                    'client_id' => $clientId,
+                    'data_used' => array_filter($contactData)
+                ]);
+                
+                return (string)$clientId;
+            }
+
+            Log::warning('Failed to find or create Robaws client', [
+                'intake_id' => $this->intake->id,
+                'contact_data' => $contactData
+            ]);
+
+            return null;
+            
+        } catch (\Exception $e) {
+            Log::error('Error in findOrCreateRobawsClient', [
+                'intake_id' => $this->intake->id,
+                'error' => $e->getMessage()
+            ]);
+            
+            // Don't fail the entire process if client creation fails
+            return null;
+        }
+    }
+
+    /**
+     * Create a new client in Robaws using available contact data
+     */
+    private function createRobawsClient(\App\Services\Export\Clients\RobawsApiClient $apiClient, array $contactData): ?int
+    {
+        // Build client data with fallbacks
+        $clientPayload = [
+            'name' => $contactData['name'] ?? $this->intake->customer_name ?? 'Customer #' . $this->intake->id,
+            'email' => $contactData['email'] ?? $this->intake->contact_email ?? 'noreply@bconnect.com',
+        ];
+
+        // Add optional fields if available
+        if (!empty($contactData['phone']) || !empty($this->intake->contact_phone)) {
+            $clientPayload['phone'] = $contactData['phone'] ?? $this->intake->contact_phone;
+        }
+
+        try {
+            // Use the direct Robaws API to create a client
+            $response = $apiClient->createClient($clientPayload);
+            
+            if ($response && isset($response['id'])) {
+                return (int) $response['id'];
+            }
+            
+            Log::error('Failed to create client - no ID in response', [
+                'intake_id' => $this->intake->id,
+                'payload' => $clientPayload,
+                'response' => $response
+            ]);
+            
+            return null;
+            
+        } catch (\Exception $e) {
+            Log::error('Exception creating Robaws client', [
+                'intake_id' => $this->intake->id,
+                'payload' => $clientPayload,
+                'error' => $e->getMessage()
+            ]);
+            
+            return null;
         }
     }
 }
