@@ -37,46 +37,74 @@ final class RobawsApiClient
         return $this->http;
     }
 
-    /** Contacts search with include=client for direct client linkage */
+    /** Search clients directly by email (more reliable than contacts endpoint) */
     public function findContactByEmail(string $email): ?array
     {
-        $res = $this->getHttpClient()
-            ->get('/api/v2/contacts', ['email' => $email, 'size' => 50])
-            ->throw()
-            ->json();
+        // Search through clients directly since contacts endpoint doesn't have reliable email data
+        $page = 0;
+        $size = 100;
+        $maxPages = 50; // reasonable limit to avoid infinite loops
+        
+        do {
+            $res = $this->getHttpClient()
+                ->get('/api/v2/clients', ['page' => $page, 'size' => $size, 'sort' => 'name:asc'])
+                ->throw()
+                ->json();
 
-        foreach (($res['content'] ?? []) as $c) {
-            if (strcasecmp($c['email'] ?? '', $email) === 0 && !empty($c['client']['id'])) {
-                return $c['client']; // { id, name, ... }
+            $clients = $res['items'] ?? [];
+            
+            foreach ($clients as $client) {
+                if (!empty($client['email']) && strcasecmp($client['email'], $email) === 0) {
+                    return $client; // Return the client directly since it has all needed info
+                }
             }
-        }
-        // fallback if 'email' filter isn't supported on tenant → try best-effort search
-        $res = $this->http
-            ->get('/api/v2/contacts', ['search' => $email, 'include' => 'client', 'size' => 50])
-            ->throw()
-            ->json();
-        foreach (($res['content'] ?? []) as $c) {
-            if (strcasecmp($c['email'] ?? '', $email) === 0 && !empty($c['client']['id'])) {
-                return $c['client'];
-            }
-        }
+            
+            $page++;
+            $totalItems = (int)($res['totalItems'] ?? 0);
+            
+        } while ($page < $maxPages && $page * $size < $totalItems);
+
         return null;
+    }
+
+    /** Direct client search by email - alias for findContactByEmail for compatibility */
+    public function findClientByEmail(string $email): ?array
+    {
+        return $this->findContactByEmail($email);
     }
 
     public function findClientByPhone(string $phone): ?array
     {
-        $res = $this->getHttpClient()
-            ->get('/api/v2/contacts', ['phone' => $phone, 'include' => 'client', 'size' => 50])
-            ->throw()
-            ->json();
-        foreach (($res['content'] ?? []) as $c) {
-            if (!empty($c['phone']) && !empty($c['client']['id'])) {
-                // simple normalization for phone match
-                $a = preg_replace('/\D+/', '', $c['phone']);
-                $b = preg_replace('/\D+/', '', $phone);
-                if ($a === $b) return $c['client'];
+        // Search through clients directly since contacts endpoint doesn't have reliable phone data
+        $page = 0;
+        $size = 100;
+        $maxPages = 20; // smaller limit for phone search since it's more computationally expensive
+        
+        do {
+            $res = $this->getHttpClient()
+                ->get('/api/v2/clients', ['page' => $page, 'size' => $size, 'sort' => 'name:asc'])
+                ->throw()
+                ->json();
+
+            $clients = $res['items'] ?? [];
+            
+            foreach ($clients as $client) {
+                if (!empty($client['tel'])) {
+                    // Normalize phone numbers for comparison
+                    $clientPhone = preg_replace('/\D+/', '', $client['tel']);
+                    $searchPhone = preg_replace('/\D+/', '', $phone);
+                    
+                    if ($clientPhone === $searchPhone) {
+                        return $client; // Return the client directly
+                    }
+                }
             }
-        }
+            
+            $page++;
+            $totalItems = (int)($res['totalItems'] ?? 0);
+            
+        } while ($page < $maxPages && $page * $size < $totalItems);
+
         return null;
     }
 
@@ -248,10 +276,15 @@ final class RobawsApiClient
     /**
      * Get an offer by ID
      */
-    public function getOffer(string $offerId): array
+    public function getOffer(string $offerId, array $include = []): array
     {
         try {
-            $response = $this->getHttpClient()->get("/api/v2/offers/{$offerId}");
+            $query = [];
+            if (!empty($include)) {
+                $query['include'] = implode(',', $include);  // e.g. 'client'
+            }
+
+            $response = $this->getHttpClient()->get("/api/v2/offers/{$offerId}", $query);
 
             if ($response->successful()) {
                 return [
@@ -313,7 +346,7 @@ final class RobawsApiClient
                 }
             }
 
-            $response = $http->attach('file', file_get_contents($filePath), $filename, ['Content-Type' => $mimeType])
+            $response = $http->attach('file', $this->getFileContent($filePath), $filename, ['Content-Type' => $mimeType])
                 ->post("/api/v2/offers/{$offerId}/documents");
 
             if ($response->successful()) {
@@ -415,5 +448,24 @@ final class RobawsApiClient
         }
 
         return $http;
+    }
+
+    /**
+     * Get file content using Storage facade for cloud compatibility
+     */
+    private function getFileContent(string $filePath): string
+    {
+        // Try Storage facade first for cloud storage compatibility
+        $disk = \Illuminate\Support\Facades\Storage::disk('documents');
+        if ($disk->exists($filePath)) {
+            return $disk->get($filePath);
+        }
+        
+        // Fallback to direct file access for local files
+        if (file_exists($filePath)) {
+            return file_get_contents($filePath);
+        }
+        
+        throw new \Exception("File not found: {$filePath}");
     }
 }

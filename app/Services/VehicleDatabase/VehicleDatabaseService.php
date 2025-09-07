@@ -122,10 +122,10 @@ class VehicleDatabaseService
         $normalizedBrand = $this->aliasBrand($brand);
         $normalizedModel = $this->norm($model);
         
-        $query = VehicleSpec::whereRaw('LOWER(REPLACE(make, " ", "")) LIKE ?', [str_replace(' ', '', $normalizedBrand)]);
+        $query = VehicleSpec::whereRaw("LOWER(REPLACE(make, ' ', '')) LIKE ?", [str_replace(' ', '', $normalizedBrand)]);
         
         if (!empty($model)) {
-            $query->whereRaw('LOWER(REPLACE(model, " ", "")) LIKE ?', [str_replace(' ', '', $normalizedModel)]);
+            $query->whereRaw("LOWER(REPLACE(model, ' ', '')) LIKE ?", [str_replace(' ', '', $normalizedModel)]);
         }
         
         if (!empty($data['year'])) {
@@ -147,7 +147,7 @@ class VehicleDatabaseService
         $brand = strtolower($data['brand'] ?? $data['make']);
         $model = strtolower($data['model'] ?? '');
         
-        // Try partial matches with SQLite-compatible LIKE
+        // Try partial matches with PostgreSQL-compatible LIKE
         $result = VehicleSpec::whereRaw('LOWER(make) LIKE ?', ["%{$brand}%"])
                             ->when($model, function($query) use ($model) {
                                 return $query->whereRaw('LOWER(model) LIKE ?', ["%{$model}%"]);

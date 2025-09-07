@@ -406,14 +406,30 @@ class RobawsClient
                 // Fallback to file path handling
                 $file = $fileData['file'];
                 if (is_string($file)) {
+                    // File path - could be cloud storage path
                     $fileName = basename($file);
-                    $mimeType = mime_content_type($file);
-                    $fileContent = file_get_contents($file);
-                    $fileSize = filesize($file);
+                    
+                    // Use Storage facade for cloud compatibility
+                    $disk = Storage::disk('documents');
+                    if ($disk->exists($file)) {
+                        $mimeType = $disk->mimeType($file) ?: 'application/octet-stream';
+                        $fileContent = $disk->get($file);
+                        $fileSize = $disk->size($file);
+                    } else {
+                        // Fallback to direct file access for local files
+                        if (file_exists($file)) {
+                            $mimeType = mime_content_type($file);
+                            $fileContent = file_get_contents($file);
+                            $fileSize = filesize($file);
+                        } else {
+                            throw new \Exception("File not found: {$file}");
+                        }
+                    }
                 } else {
+                    // UploadedFile object
                     $fileName = $file->getClientOriginalName();
                     $mimeType = $file->getClientMimeType();
-                    $fileContent = file_get_contents($file->getRealPath());
+                    $fileContent = $file->get(); // Use get() instead of file_get_contents for UploadedFile
                     $fileSize = $file->getSize();
                 }
             }
@@ -499,16 +515,32 @@ class RobawsClient
         try {
             // Handle both UploadedFile and file path
             if (is_string($file)) {
+                // File path - could be cloud storage path
                 $filePath = $file;
                 $fileName = basename($file);
-                $mimeType = mime_content_type($file);
-                $fileContent = file_get_contents($file);
-                $fileSize = filesize($file);
+                
+                // Use Storage facade for cloud compatibility
+                $disk = Storage::disk('documents');
+                if ($disk->exists($file)) {
+                    $mimeType = $disk->mimeType($file) ?: 'application/octet-stream';
+                    $fileContent = $disk->get($file);
+                    $fileSize = $disk->size($file);
+                } else {
+                    // Fallback to direct file access for local files
+                    if (file_exists($file)) {
+                        $mimeType = mime_content_type($file);
+                        $fileContent = file_get_contents($file);
+                        $fileSize = filesize($file);
+                    } else {
+                        throw new \Exception("File not found: {$file}");
+                    }
+                }
             } else {
+                // UploadedFile object
                 $filePath = $file->getRealPath();
                 $fileName = $file->getClientOriginalName();
                 $mimeType = $file->getClientMimeType();
-                $fileContent = file_get_contents($filePath);
+                $fileContent = $file->get(); // Use get() instead of file_get_contents for UploadedFile
                 $fileSize = $file->getSize();
             }
 
@@ -583,14 +615,29 @@ class RobawsClient
         try {
             // Handle both UploadedFile and file path
             if (is_string($file)) {
+                // File path - could be cloud storage path
                 $filePath = $file;
                 $fileName = basename($file);
-                $fileContent = file_get_contents($file);
-                $fileSize = filesize($file);
+                
+                // Use Storage facade for cloud compatibility
+                $disk = Storage::disk('documents');
+                if ($disk->exists($file)) {
+                    $fileContent = $disk->get($file);
+                    $fileSize = $disk->size($file);
+                } else {
+                    // Fallback to direct file access for local files
+                    if (file_exists($file)) {
+                        $fileContent = file_get_contents($file);
+                        $fileSize = filesize($file);
+                    } else {
+                        throw new \Exception("File not found: {$file}");
+                    }
+                }
             } else {
+                // UploadedFile object
                 $filePath = $file->getRealPath();
                 $fileName = $file->getClientOriginalName();
-                $fileContent = file_get_contents($filePath);
+                $fileContent = $file->get(); // Use get() instead of file_get_contents for UploadedFile
                 $fileSize = $file->getSize();
             }
 

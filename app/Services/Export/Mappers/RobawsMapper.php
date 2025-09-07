@@ -216,7 +216,8 @@ class RobawsMapper
             'project'         => $q['project'] ?? null,
             'clientReference' => $q['customer_reference'] ?? $q['client_reference'] ?? null,
             'contactEmail'    => $q['contact_email'] ?? null,
-            'clientId'        => $clientId !== null ? (int) $clientId : null, // Top-level for Customer binding
+            'customerId'      => $clientId !== null ? (int) $clientId : null, // Top-level for Customer binding
+            'clientId'        => $clientId !== null ? (int) $clientId : null, // Also set clientId for compatibility
         ];
 
         $xf = [];

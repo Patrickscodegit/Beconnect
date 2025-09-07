@@ -153,54 +153,8 @@ class RobawsExportService
             // Map to Robaws format first
             $mapped = $this->mapper->mapIntakeToRobaws($intake, $extractionData);
 
-            // Use pre-resolved client ID if available, otherwise resolve via API
-            $clientId = $intake->robaws_client_id ?? $this->apiClient->findClientId($customerName, $customerEmail, $customerPhone);
-            
-            Log::info('Robaws client resolution', [
-                'export_id' => $exportId,
-                'intake_id' => $intake->id,
-                'display_name' => $customerName,
-                'contact_email' => $customerEmail,
-                'contact_phone' => $customerPhone,
-                'pre_resolved_client_id' => $intake->robaws_client_id,
-                'resolved_client_id' => $clientId,
-                'binding_status' => $clientId ? 'will_bind_to_client' : 'no_client_binding',
-            ]);
-
-            // AFTER you build $mapped: inject clientId and contactEmail
-            if ($clientId) {
-                $mapped['client_id'] = (int) $clientId;  // mapper prefers client_id
-                
-                // Use provided email or fallback to prevent empty contactEmail
-                $finalContactEmail = $customerEmail ?: 'sales@truck-time.com';
-                $mapped['contact_email'] = $finalContactEmail;  // keep for top-level contactEmail
-                
-                Log::info('Client ID injected into payload', [
-                    'export_id' => $exportId,
-                    'client_id' => $clientId,
-                    'customer_name' => $customerName,
-                    'contact_email' => $finalContactEmail,
-                ]);
-            } else {
-                Log::warning('No unique client match found - export will proceed without client binding', [
-                    'export_id' => $exportId,
-                    'customer_name' => $customerName,
-                    'customer_email' => $customerEmail,
-                ]);
-            }
-            
-            // Build and log final payload for debugging
-            $payload = $this->mapper->toRobawsApiPayload($mapped);
-            
-            Log::info('Robaws payload (api shape)', [
-                'export_id' => $exportId,
-                'intake_id' => $intake->id,
-                'top' => array_keys($payload),
-                'client_id_debug' => $payload['clientId'] ?? null,
-                'contact_email_debug' => $payload['contactEmail'] ?? null,
-                'client_reference_debug' => $payload['clientReference'] ?? null,
-                'payload_size' => strlen(json_encode($payload)),
-            ]);
+            // Build type-safe payload with proper client ID handling
+            $payload = $this->buildTypeSeafePayload($intake, $extractionData, $mapped, $exportId);
             
             // Block export if payload is empty
             if (empty($payload)) {
@@ -246,35 +200,51 @@ class RobawsExportService
             if ($result['success']) {
                 // Verify the offer was stored correctly
                 if ($id = $result['quotation_id'] ?? null) {
-                    $verify = $this->apiClient->getOffer($id);
+                    $verify = $this->apiClient->getOffer($id, ['client']); // Include client object
+                    $verifyData = $verify['data'] ?? [];
                     
                     $stored = [];
-                    if (!empty($verify['data']['extraFields'])) {
+                    if (!empty($verifyData['extraFields'])) {
                         // Pull key fields from extraFields
                         foreach (['POR','POL','POD','FDEST','CARGO','DIM_BEFORE_DELIVERY','METHOD','VESSEL','ETA','JSON'] as $code) {
-                            if (isset($verify['data']['extraFields'][$code])) {
-                                $node = $verify['data']['extraFields'][$code];
+                            if (isset($verifyData['extraFields'][$code])) {
+                                $node = $verifyData['extraFields'][$code];
                                 $stored[$code] = $node['stringValue'] ?? ($node['booleanValue'] ?? null);
                             }
                         }
                     }
+                    
+                    // Improved client linking verification
+                    $linkedIdFromField = (int)($verifyData['clientId'] ?? 0);
+                    $linkedIdFromObject = (int)($verifyData['client']['id'] ?? 0);
+                    $expectedClientId = (int)($clientId ?? 0);
+                    
+                    // Consider it linked if either the field or object matches the intended clientId
+                    $isLinked = ($linkedIdFromField === $expectedClientId) || ($linkedIdFromObject === $expectedClientId);
                     
                     Log::info('Robaws offer verification', [
                         'export_id' => $exportId,
                         'intake_id' => $intake->id,
                         'offer_id' => $id,
                         'verification_success' => $verify['success'] ?? false,
+                        'client_linking' => [
+                            'expected_client_id' => $expectedClientId,
+                            'clientId_field' => $linkedIdFromField ?: null,
+                            'client_object_id' => $linkedIdFromObject ?: null,
+                            'is_linked' => $isLinked,
+                            'client_name' => $verifyData['client']['name'] ?? null,
+                        ],
                         'verify_top' => [
-                            'clientId'       => data_get($verify, 'data.clientId'),
-                            'clientPresent'  => !empty(data_get($verify, 'data.client')),
-                            'clientReference'=> data_get($verify, 'data.clientReference'),
-                            'contactEmail'   => data_get($verify, 'data.contactEmail'),
+                            'clientId'       => data_get($verifyData, 'clientId'),
+                            'clientPresent'  => !empty(data_get($verifyData, 'client')),
+                            'clientReference'=> data_get($verifyData, 'clientReference'),
+                            'contactEmail'   => data_get($verifyData, 'contactEmail'),
                         ],
                         'legacy_compat' => [
-                            'clientId' => data_get($verify, 'data.clientId'),
-                            'hasClientObj' => !empty(data_get($verify, 'data.client')),
+                            'clientId' => data_get($verifyData, 'clientId'),
+                            'hasClientObj' => !empty(data_get($verifyData, 'client')),
                         ],
-                        'top' => array_intersect_key($verify['data'] ?? [], array_flip([
+                        'top' => array_intersect_key($verifyData, array_flip([
                             'clientId','clientReference','title','contactEmail'
                         ])),
                         'xf' => $stored,
@@ -364,6 +334,141 @@ class RobawsExportService
                 'duration_ms' => $duration,
             ];
         }
+    }
+
+    /**
+     * Build a type-safe payload with comprehensive validation and logging
+     */
+    private function buildTypeSeafePayload($intake, $extractionData, $mapped, $exportId): array
+    {
+        $customerName = trim($extractionData['customerName'] ?? $extractionData['customer_name'] ?? $intake->customer_name ?? 'Unknown Customer');
+        $customerEmail = trim($extractionData['contactEmail'] ?? $extractionData['customer_email'] ?? $intake->contact_email ?? '');
+        $customerPhone = trim($extractionData['customerPhone'] ?? $extractionData['customer_phone'] ?? $intake->contact_phone ?? '');
+
+        // Validate and sanitize email
+        $customerEmail = $this->validateAndSanitizeEmail($customerEmail);
+
+        // Use pre-resolved client ID if available, otherwise resolve via API
+        $clientId = $intake->robaws_client_id ?? $this->apiClient->findClientId($customerName, $customerEmail, $customerPhone);
+        
+        // Type-safe client ID casting with validation
+        $validatedClientId = $this->validateClientId($clientId, $exportId);
+
+        Log::info('Type-safe client resolution', [
+            'export_id' => $exportId,
+            'intake_id' => $intake->id,
+            'display_name' => $customerName,
+            'contact_email' => $customerEmail,
+            'contact_phone' => $customerPhone,
+            'pre_resolved_client_id' => $intake->robaws_client_id,
+            'resolved_client_id' => $clientId,
+            'validated_client_id' => $validatedClientId,
+            'binding_status' => $validatedClientId ? 'will_bind_to_client' : 'no_client_binding',
+        ]);
+
+        // Inject client ID and contact email into mapped data
+        if ($validatedClientId) {
+            $mapped['client_id'] = $validatedClientId;  // Already validated as integer
+            
+            // Use validated email or fallback to prevent empty contactEmail
+            $finalContactEmail = $customerEmail ?: 'sales@truck-time.com';
+            $mapped['contact_email'] = $finalContactEmail;
+            
+            Log::info('Client ID injected into payload', [
+                'export_id' => $exportId,
+                'client_id' => $validatedClientId,
+                'customer_name' => $customerName,
+                'contact_email' => $finalContactEmail,
+            ]);
+        } else {
+            Log::warning('No unique client match found - export will proceed without client binding', [
+                'export_id' => $exportId,
+                'customer_name' => $customerName,
+                'customer_email' => $customerEmail,
+            ]);
+        }
+        
+        // Build final payload with comprehensive logging
+        $payload = $this->mapper->toRobawsApiPayload($mapped);
+        
+        Log::info('Type-safe Robaws payload (api shape)', [
+            'export_id' => $exportId,
+            'intake_id' => $intake->id,
+            'top' => array_keys($payload),
+            'client_id_debug' => $payload['clientId'] ?? null,
+            'contact_email_debug' => $payload['contactEmail'] ?? null,
+            'client_reference_debug' => $payload['clientReference'] ?? null,
+            'payload_size' => strlen(json_encode($payload)),
+            'type_safety_applied' => true,
+        ]);
+
+        return $payload;
+    }
+
+    /**
+     * Validate and sanitize email address
+     */
+    private function validateAndSanitizeEmail(?string $email): string
+    {
+        if (empty($email)) {
+            return '';
+        }
+
+        $email = trim(strtolower($email));
+        
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            Log::warning('Invalid email format detected', [
+                'original_email' => $email,
+                'will_use_fallback' => true,
+            ]);
+            return '';
+        }
+
+        return $email;
+    }
+
+    /**
+     * Validate and cast client ID to integer with comprehensive logging
+     */
+    private function validateClientId($clientId, string $exportId): ?int
+    {
+        if ($clientId === null || $clientId === '') {
+            return null;
+        }
+
+        // Handle string representations
+        if (is_string($clientId) && !is_numeric($clientId)) {
+            Log::error('Non-numeric client ID detected', [
+                'export_id' => $exportId,
+                'client_id' => $clientId,
+                'type' => gettype($clientId),
+            ]);
+            return null;
+        }
+
+        // Cast to integer
+        $intClientId = (int) $clientId;
+
+        // Validate positive integer
+        if ($intClientId <= 0) {
+            Log::error('Invalid client ID - must be positive integer', [
+                'export_id' => $exportId,
+                'original_client_id' => $clientId,
+                'cast_client_id' => $intClientId,
+            ]);
+            return null;
+        }
+
+        // Log successful validation
+        Log::info('Client ID validation successful', [
+            'export_id' => $exportId,
+            'original_client_id' => $clientId,
+            'original_type' => gettype($clientId),
+            'validated_client_id' => $intClientId,
+            'validated_type' => gettype($intClientId),
+        ]);
+
+        return $intClientId;
     }
 
     /**
