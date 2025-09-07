@@ -14,11 +14,15 @@ use Illuminate\Support\Facades\Log;
  */
 class AIExtractionService
 {
-    private ExtractionService $extractionService;
-    
+    /**
+     * Extract data from text content using pattern matching
+     * 
+     * This service provides a consistent interface for text extraction
+     * with fallback to pattern-based extraction when AI services are unavailable.
+     */
     public function __construct()
     {
-        $this->extractionService = app(ExtractionService::class);
+        // Constructor intentionally empty - no dependencies needed for text extraction
     }
     
     /**
@@ -35,8 +39,9 @@ class AIExtractionService
                 'preview' => substr($text, 0, 100)
             ]);
 
-            // For now, delegate to existing extraction patterns
-            // In future versions, this could use the AiRouter directly
+            // Use pattern-based extraction
+            // Note: ExtractionService only works with files (extractFromFile), 
+            // so we use fallback for direct text extraction
             $result = $this->fallbackExtraction($text);
             
             if ($result) {
