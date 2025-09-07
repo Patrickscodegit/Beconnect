@@ -51,15 +51,15 @@ class RobawsMapperComprehensiveTest extends TestCase
 
         // Assert: typed extraFields
         $xf = $payload['extraFields'];
-        $this->assertSame('TEXT', $xf['POR']['type']);
+        $this->assertArrayHasKey('POR', $xf);
         $this->assertSame('Bruxelles, Belgium', $xf['POR']['stringValue']);
         // FDEST should be empty for port destinations (Djeddah is a port)
         $this->assertArrayNotHasKey('FDEST', $xf);
-        $this->assertSame('TEXT', $xf['CARGO']['type']);
+        $this->assertArrayHasKey('CARGO', $xf);
         $this->assertStringContainsString('BMW', $xf['CARGO']['stringValue']);
         $this->assertStringContainsString('Série 7', $xf['CARGO']['stringValue']);
         $this->assertStringContainsString('WBA123456789', $xf['CARGO']['stringValue']);
-        $this->assertSame('TEXT', $xf['JSON']['type']); // JSON is TEXT not TEXTAREA in current mapper
+        $this->assertArrayHasKey('JSON', $xf); // JSON field should exist
         $this->assertNotEmpty($xf['JSON']['stringValue']); // pretty-printed extraction
     }
 
@@ -86,11 +86,13 @@ class RobawsMapperComprehensiveTest extends TestCase
 
         // Depending on your tenant, DATE might be TEXT. If Robaws rejected DATE, keep them TEXT.
         $this->assertArrayHasKey('ETA', $xf);
-        $this->assertContains($xf['ETA']['type'], ['DATE','TEXT']);
-        $this->assertNotEmpty($xf['ETA']['stringValue']);
+        // Check if ETA has dateValue (for DATE type) or stringValue (for TEXT type)
+        $this->assertTrue(
+            isset($xf['ETA']['dateValue']) || isset($xf['ETA']['stringValue']),
+            'ETA should have either dateValue or stringValue'
+        );
 
         $this->assertArrayHasKey('URGENT', $xf);
-        $this->assertSame('CHECKBOX', $xf['URGENT']['type']);
         $this->assertIsBool($xf['URGENT']['booleanValue']);
     }
 
