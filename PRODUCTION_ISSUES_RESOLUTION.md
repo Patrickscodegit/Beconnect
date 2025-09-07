@@ -105,14 +105,37 @@ Enhanced `getFileContent()` method to:
 - Can be run on both local and production environments
 
 ### 2. `setup_production.sh` 
-- Complete production environment setup script
+- Complete production environment setup script for **Ubuntu/Debian servers**
 - Installs Redis, configures Laravel, sets permissions
 - Sets up Horizon for queue processing
 - Includes proper error handling and colored output
+- **Use this on your production server only**
+
+### 3. `setup_local_macos.sh`
+- Local development environment setup script for **macOS**
+- Uses Homebrew instead of apt package manager
+- Uses `brew services` instead of systemctl
+- Sets up complete local development environment
+- **Use this on your local Mac for development**
 
 ## How to Deploy the Fixes
 
-### Option 1: Manual Deployment
+### Option 1: Local Development (macOS)
+1. Run the macOS setup script:
+   ```bash
+   chmod +x setup_local_macos.sh
+   ./setup_local_macos.sh
+   ```
+
+### Option 2: Production Server Deployment (Ubuntu/Debian)
+1. Upload the fixed files to production server
+2. Run the production setup script:
+   ```bash
+   chmod +x setup_production.sh
+   ./setup_production.sh
+   ```
+
+### Option 3: Git Deployment (Any Environment)
 1. Upload the fixed files to production server
 2. Run the setup script:
    ```bash
