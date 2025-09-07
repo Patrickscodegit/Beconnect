@@ -36,7 +36,8 @@ return [
     ],
 
     'openai' => [
-        'api_key'    => env('OPENAI_API_KEY'),
+        'key'        => env('OPENAI_API_KEY'),       // Primary key for compatibility
+        'api_key'    => env('OPENAI_API_KEY'),       // Legacy key for existing services  
         'base_url'   => env('OPENAI_BASE', 'https://api.openai.com/v1'),
         'model'      => env('OPENAI_MODEL', 'gpt-4o'),
         'model_cheap'=> env('OPENAI_MODEL_CHEAP', 'gpt-4o-mini'),
