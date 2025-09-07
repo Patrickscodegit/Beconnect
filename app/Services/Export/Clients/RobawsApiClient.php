@@ -334,10 +334,13 @@ final class RobawsApiClient
 
             // Configure authentication the same way as the main client
             if (config('services.robaws.auth') === 'basic') {
-                $http = $http->withBasicAuth(
-                    config('services.robaws.username'),
-                    config('services.robaws.password')
-                );
+                $username = config('services.robaws.username');
+                $password = config('services.robaws.password');
+                
+                // Handle null values gracefully for CI environments
+                if ($username !== null && $password !== null) {
+                    $http = $http->withBasicAuth($username, $password);
+                }
             } else {
                 // Bearer token authentication
                 $token = config('services.robaws.token') ?? config('services.robaws.api_key');
@@ -455,17 +458,45 @@ final class RobawsApiClient
      */
     private function getFileContent(string $filePath): string
     {
+        // Normalize the file path - remove storage disk prefix if present
+        $normalizedPath = $filePath;
+        $documentsRoot = storage_path('app/documents');
+        if (str_starts_with($filePath, $documentsRoot)) {
+            $normalizedPath = str_replace($documentsRoot . '/', '', $filePath);
+        }
+        
         // Try Storage facade first for cloud storage compatibility
         $disk = \Illuminate\Support\Facades\Storage::disk('documents');
+        
+        // Try the normalized path first
+        if ($disk->exists($normalizedPath)) {
+            return $disk->get($normalizedPath);
+        }
+        
+        // Try the original path with Storage facade
         if ($disk->exists($filePath)) {
             return $disk->get($filePath);
         }
         
-        // Fallback to direct file access for local files
+        // Try direct file access for absolute paths
         if (file_exists($filePath)) {
             return file_get_contents($filePath);
         }
         
-        throw new \Exception("File not found: {$filePath}");
+        // Try with the documents root prepended
+        $fullPath = $documentsRoot . '/' . ltrim($normalizedPath, '/');
+        if (file_exists($fullPath)) {
+            return file_get_contents($fullPath);
+        }
+        
+        // Provide detailed error information
+        $attempts = [
+            "Storage disk 'documents' with normalized path: {$normalizedPath}",
+            "Storage disk 'documents' with original path: {$filePath}",
+            "Direct file access: {$filePath}",
+            "Direct file access (full path): {$fullPath}"
+        ];
+        
+        throw new \Exception("File not found after trying multiple paths: " . implode(', ', $attempts));
     }
 }
