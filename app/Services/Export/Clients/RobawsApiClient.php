@@ -455,48 +455,123 @@ final class RobawsApiClient
 
     /**
      * Get file content using Storage facade for cloud compatibility
+     * Enhanced with smart path resolution to handle various path formats
      */
     private function getFileContent(string $filePath): string
     {
-        // Normalize the file path - remove storage disk prefix if present
-        $normalizedPath = $filePath;
-        $documentsRoot = storage_path('app/documents');
-        if (str_starts_with($filePath, $documentsRoot)) {
-            $normalizedPath = str_replace($documentsRoot . '/', '', $filePath);
+        try {
+            // Log the attempt for debugging
+            \Illuminate\Support\Facades\Log::info('Attempting to retrieve file', [
+                'original_path' => $filePath,
+                'is_absolute' => str_starts_with($filePath, '/'),
+                'file_exists_check' => file_exists($filePath) ? 'yes' : 'no'
+            ]);
+            
+            // First, try direct file access if it's an absolute path
+            if (str_starts_with($filePath, '/') && file_exists($filePath)) {
+                \Illuminate\Support\Facades\Log::info('File found via direct access', [
+                    'path' => $filePath,
+                    'size' => filesize($filePath)
+                ]);
+                return file_get_contents($filePath);
+            }
+            
+            // If not absolute path or direct access failed, use Storage disk
+            $disk = \Illuminate\Support\Facades\Storage::disk('documents');
+            
+            // Remove any leading 'documents/' prefix if present
+            $normalizedPath = preg_replace('/^documents\//i', '', $filePath);
+            
+            // Also handle different storage path formats
+            $documentsRoot = storage_path('app/documents');
+            $publicDocumentsRoot = storage_path('app/public/documents');
+            
+            if (str_starts_with($filePath, $documentsRoot)) {
+                $normalizedPath = str_replace($documentsRoot . '/', '', $filePath);
+            } elseif (str_starts_with($filePath, $publicDocumentsRoot)) {
+                $normalizedPath = str_replace($publicDocumentsRoot . '/', '', $filePath);
+            }
+            
+            // Try different path variations
+            $pathsToTry = [
+                $normalizedPath,                    // Clean path without prefix
+                basename($filePath),                // Just the filename
+                $filePath,                          // Original path as-is (if relative)
+            ];
+            
+            // Remove duplicates and empty paths
+            $pathsToTry = array_unique(array_filter($pathsToTry));
+            
+            foreach ($pathsToTry as $tryPath) {
+                if ($disk->exists($tryPath)) {
+                    \Illuminate\Support\Facades\Log::info('File found via Storage disk', [
+                        'path' => $tryPath,
+                        'size' => $disk->size($tryPath)
+                    ]);
+                    return $disk->get($tryPath);
+                }
+            }
+            
+            // If we're in production, try S3/MinIO paths
+            if (app()->environment('production')) {
+                // Check if using S3/MinIO
+                if (config('filesystems.disks.documents.driver') === 's3') {
+                    $s3Path = trim($filePath, '/');
+                    if ($disk->exists($s3Path)) {
+                        return $disk->get($s3Path);
+                    }
+                }
+            }
+            
+            // Try direct file access for absolute paths (fallback)
+            if (file_exists($filePath)) {
+                return file_get_contents($filePath);
+            }
+            
+            // Try with the documents root prepended
+            $fullPath = $documentsRoot . '/' . ltrim($normalizedPath, '/');
+            if (file_exists($fullPath)) {
+                return file_get_contents($fullPath);
+            }
+            
+            // Log all attempted paths for debugging
+            $attemptedPaths = array_map(function($path) use ($disk) {
+                return [
+                    'path' => $path,
+                    'storage_exists' => $disk->exists($path) ? 'yes' : 'no',
+                    'file_exists' => file_exists($path) ? 'yes' : 'no'
+                ];
+            }, $pathsToTry);
+            
+            // Additional fallback paths to try
+            $fallbackPaths = [
+                $documentsRoot . '/' . ltrim($normalizedPath, '/'),
+                $publicDocumentsRoot . '/' . ltrim($normalizedPath, '/'),
+            ];
+            
+            foreach ($fallbackPaths as $fallbackPath) {
+                if (file_exists($fallbackPath)) {
+                    \Illuminate\Support\Facades\Log::info('File found via fallback path', [
+                        'path' => $fallbackPath,
+                        'size' => filesize($fallbackPath)
+                    ]);
+                    return file_get_contents($fallbackPath);
+                }
+            }
+            
+            $attempts = array_merge(
+                array_map(function($path) { return "Storage disk 'documents' with path: {$path}"; }, $pathsToTry),
+                array_map(function($path) { return "Direct file access: {$path}"; }, array_merge([$filePath], $fallbackPaths))
+            );
+            
+            throw new \Exception("File not found after trying multiple paths: " . implode(', ', $attempts));
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to get file content', [
+                'file_path' => $filePath,
+                'error' => $e->getMessage(),
+                'attempted_paths' => isset($attemptedPaths) ? $attemptedPaths : 'none'
+            ]);
+            throw $e;
         }
-        
-        // Try Storage facade first for cloud storage compatibility
-        $disk = \Illuminate\Support\Facades\Storage::disk('documents');
-        
-        // Try the normalized path first
-        if ($disk->exists($normalizedPath)) {
-            return $disk->get($normalizedPath);
-        }
-        
-        // Try the original path with Storage facade
-        if ($disk->exists($filePath)) {
-            return $disk->get($filePath);
-        }
-        
-        // Try direct file access for absolute paths
-        if (file_exists($filePath)) {
-            return file_get_contents($filePath);
-        }
-        
-        // Try with the documents root prepended
-        $fullPath = $documentsRoot . '/' . ltrim($normalizedPath, '/');
-        if (file_exists($fullPath)) {
-            return file_get_contents($fullPath);
-        }
-        
-        // Provide detailed error information
-        $attempts = [
-            "Storage disk 'documents' with normalized path: {$normalizedPath}",
-            "Storage disk 'documents' with original path: {$filePath}",
-            "Direct file access: {$filePath}",
-            "Direct file access (full path): {$fullPath}"
-        ];
-        
-        throw new \Exception("File not found after trying multiple paths: " . implode(', ', $attempts));
     }
 }
