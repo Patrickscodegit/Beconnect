@@ -8,30 +8,40 @@ use Illuminate\Support\Str;
 
 final class RobawsApiClient
 {
-    private readonly PendingRequest $http;
+    private ?PendingRequest $http = null;
 
     public function __construct()
     {
-        $baseUrl = rtrim(config('services.robaws.base_url'), '/');
-        $apiKey = config('services.robaws.api_key');
-        
-        // Validate required configuration
-        if (empty($apiKey)) {
-            throw new \InvalidArgumentException('Robaws API key is not configured. Set ROBAWS_API_KEY in your .env file.');
-        }
-        
-        if (empty($baseUrl)) {
-            throw new \InvalidArgumentException('Robaws base URL is not configured. Set ROBAWS_BASE_URL in your .env file.');
+        // Lazy initialization - don't create HTTP client in constructor
+        // This prevents errors during composer autoload discovery
+    }
+
+    private function getHttpClient(): PendingRequest
+    {
+        if ($this->http === null) {
+            $baseUrl = rtrim(config('services.robaws.base_url'), '/');
+            $apiKey = config('services.robaws.api_key');
+            
+            // Validate required configuration
+            if (empty($apiKey)) {
+                throw new \InvalidArgumentException('Robaws API key is not configured. Set ROBAWS_API_KEY in your .env file.');
+            }
+            
+            if (empty($baseUrl)) {
+                throw new \InvalidArgumentException('Robaws base URL is not configured. Set ROBAWS_BASE_URL in your .env file.');
+            }
+
+            $this->http = $this->createHttpClient($baseUrl, $apiKey);
         }
 
-        $this->http = $this->createHttpClient($baseUrl, $apiKey);
+        return $this->http;
     }
 
     /** Contacts search with include=client for direct client linkage */
-    public function findClientByEmail(string $email): ?array
+    public function findContactByEmail(string $email): ?array
     {
-        $res = $this->http
-            ->get('/api/v2/contacts', ['email' => $email, 'include' => 'client', 'size' => 50])
+        $res = $this->getHttpClient()
+            ->get('/api/v2/contacts', ['email' => $email, 'size' => 50])
             ->throw()
             ->json();
 
@@ -55,7 +65,7 @@ final class RobawsApiClient
 
     public function findClientByPhone(string $phone): ?array
     {
-        $res = $this->http
+        $res = $this->getHttpClient()
             ->get('/api/v2/contacts', ['phone' => $phone, 'include' => 'client', 'size' => 50])
             ->throw()
             ->json();
@@ -73,7 +83,7 @@ final class RobawsApiClient
     /** Paged slice of clients for local matching */
     public function listClients(int $page = 0, int $size = 100): array
     {
-        return $this->http
+        return $this->getHttpClient()
             ->get('/api/v2/clients', ['page' => $page, 'size' => min($size, 100), 'sort' => 'name:asc'])
             ->throw()
             ->json();
@@ -81,7 +91,7 @@ final class RobawsApiClient
 
     public function getClientById(string $id, array $include = []): ?array
     {
-        $res = $this->http
+        $res = $this->getHttpClient()
             ->get("/api/v2/clients/{$id}", ['include' => implode(',', $include)])
             ->throw()
             ->json();
@@ -123,7 +133,7 @@ final class RobawsApiClient
                 $clientData['email'] = 'noreply@bconnect.com';
             }
             
-            $response = $this->http
+            $response = $this->getHttpClient()
                 ->post('/api/v2/clients', $clientData)
                 ->throw()
                 ->json();
@@ -168,7 +178,7 @@ final class RobawsApiClient
         }
 
         try {
-            $response = $this->http
+            $response = $this->getHttpClient()
                 ->withHeaders($headers)
                 ->post('/api/v2/offers', $payload);
 
@@ -207,7 +217,7 @@ final class RobawsApiClient
         }
 
         try {
-            $response = $this->http
+            $response = $this->getHttpClient()
                 ->withHeaders($headers)
                 ->put("/api/v2/offers/{$quotationId}", $payload);
 
@@ -241,7 +251,7 @@ final class RobawsApiClient
     public function getOffer(string $offerId): array
     {
         try {
-            $response = $this->http->get("/api/v2/offers/{$offerId}");
+            $response = $this->getHttpClient()->get("/api/v2/offers/{$offerId}");
 
             if ($response->successful()) {
                 return [
@@ -333,7 +343,7 @@ final class RobawsApiClient
     public function testConnection(): array
     {
         try {
-            $response = $this->http->get('/api/v2/health');
+            $response = $this->getHttpClient()->get('/api/v2/health');
             
             return [
                 'success' => $response->successful(),
@@ -389,10 +399,13 @@ final class RobawsApiClient
 
         // Configure authentication based on config
         if (config('services.robaws.auth') === 'basic') {
-            $http = $http->withBasicAuth(
-                config('services.robaws.username'),
-                config('services.robaws.password')
-            );
+            $username = config('services.robaws.username');
+            $password = config('services.robaws.password');
+            
+            // Handle null values gracefully for CI environments
+            if ($username !== null && $password !== null) {
+                $http = $http->withBasicAuth($username, $password);
+            }
         } else {
             // Bearer token authentication
             $token = config('services.robaws.token') ?? $apiKey;
