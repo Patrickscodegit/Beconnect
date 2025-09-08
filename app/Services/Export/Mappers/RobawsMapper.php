@@ -591,7 +591,7 @@ class RobawsMapper
         }
         // Fallback to generated description (simple format for CARGO field)
         else {
-            $cargoDescription = $this->generateCargoDescription($vehicle);
+            $cargoDescription = $this->generateCargoDescription($vehicle, $extractionData);
         }
 
         // Enhanced dimensions handling from various extraction sources (fallback)
@@ -758,13 +758,13 @@ class RobawsMapper
                           $shipment['destination'] ?? 
                           $this->formatLocation($route['destination'] ?? []);
         
-        // Use full port names, not abbreviations
+        // Use abbreviated port names for customer reference
         if ($originStr) {
             if (stripos($originStr, 'bruxelles') !== false || stripos($originStr, 'brussels') !== false) {
                 $parts[] = 'BRUSSEL';
-                $parts[] = 'ANTWERP'; // Port of Loading
+                $parts[] = 'ANR'; // Port of Loading (Antwerp)
             } elseif (stripos($originStr, 'antwerp') !== false || stripos($originStr, 'antwerpen') !== false) {
-                $parts[] = 'ANTWERP';
+                $parts[] = 'ANR'; // Use abbreviation for customer reference
             } else {
                 $parts[] = strtoupper($this->normalizePortNames($originStr));
             }
@@ -827,10 +827,14 @@ class RobawsMapper
         
         // Check for vehicle info in different formats
         $vehicleMatch = '';
-        if (preg_match('/(\d+)\s*x\s*([A-Za-z0-9\s]+?)(?:\s*,|\s*afmetingen|\s*dimensions|\s*$)/i', $rawText, $matches)) {
+        if (preg_match('/(\d+)\s*x\s*(?:(new|used|second\s*hand)\s+)?([A-Za-z0-9\s]+?)(?:\s*,|\s*afmetingen|\s*dimensions|\s*$)/i', $rawText, $matches)) {
             $quantity = $matches[1];
-            $vehicleType = trim($matches[2]);
-            $vehicleMatch = $quantity . ' x ' . $vehicleType;
+            $conditionFromText = !empty($matches[2]) ? strtolower($matches[2]) : null;
+            $vehicleType = trim($matches[3]);
+            
+            // Use condition from text if found, otherwise default
+            $condition = $conditionFromText === 'second hand' ? 'used' : ($conditionFromText ?? $this->getVehicleCondition($vehicle, $rawText));
+            $vehicleMatch = $quantity . ' x ' . $condition . ' ' . $vehicleType;
         }
         
         // If we found a match in raw text, use it
@@ -839,11 +843,13 @@ class RobawsMapper
         }
         
         // Fallback to vehicle array data
+        $condition = $this->getVehicleCondition($vehicle, $rawText);
+        
         if (empty($vehicle['brand']) && empty($vehicle['model'])) {
-            return '1 x Motorgrader'; // Default for heavy machinery
+            return '1 x ' . $condition . ' Motorgrader'; // Default for heavy machinery
         }
         
-        $desc = '1 x';
+        $desc = '1 x ' . $condition;
         if (!empty($vehicle['brand'])) {
             $desc .= ' ' . $vehicle['brand'];
         }
@@ -852,6 +858,26 @@ class RobawsMapper
         }
         
         return $desc;
+    }
+
+    /**
+     * Get vehicle condition, defaulting to 'used' if not specified
+     */
+    private function getVehicleCondition(array $vehicle, string $rawText = ''): string
+    {
+        // Check vehicle array first
+        if (!empty($vehicle['condition'])) {
+            return strtolower($vehicle['condition']);
+        }
+        
+        // Check raw text for condition keywords
+        if (preg_match('/\b(new|used|second\s*hand)\b/i', $rawText, $matches)) {
+            $condition = strtolower($matches[1]);
+            return $condition === 'second hand' ? 'used' : $condition;
+        }
+        
+        // Default to 'used'
+        return 'used';
     }
 
     private function formatLocation(array $location): string
@@ -871,33 +897,48 @@ class RobawsMapper
         return implode(', ', $parts);
     }
 
-    private function generateCargoDescription(array $vehicle): string
+    private function generateCargoDescription(array $vehicle, array $extractionData = []): string
     {
         $parts = [];
+        $rawText = $extractionData['raw_text'] ?? '';
 
         // Add quantity (default to 1)
         $quantity = $vehicle['quantity'] ?? 1;
         $parts[] = $quantity . ' x';
 
-        // Add vehicle/equipment type
-        if (!empty($vehicle['type'])) {
-            $parts[] = $vehicle['type'];
-        } elseif (!empty($vehicle['brand']) && !empty($vehicle['model'])) {
-            $parts[] = trim($vehicle['brand'] . ' ' . $vehicle['model']);
-        } elseif (!empty($vehicle['brand'])) {
-            $parts[] = $vehicle['brand'];
+        // Try to extract vehicle type and condition from raw text first
+        if ($rawText && preg_match('/(\d+)\s*x\s*(?:(new|used|second\s*hand)\s+)?([A-Za-z0-9\s]+?)(?:\s*,|\s*afmetingen|\s*dimensions|\s*$)/i', $rawText, $matches)) {
+            $conditionFromText = !empty($matches[2]) ? strtolower($matches[2]) : null;
+            $vehicleType = trim($matches[3]);
+            
+            // Use condition from text if found, otherwise default
+            $condition = $conditionFromText === 'second hand' ? 'used' : ($conditionFromText ?? $this->getVehicleCondition($vehicle, $rawText));
+            $parts[] = $condition;
+            $parts[] = $vehicleType;
         }
+        // Fallback to vehicle array data
+        else {
+            // Add condition (default to 'used' if not specified)
+            $condition = $this->getVehicleCondition($vehicle, $rawText);
+            $parts[] = $condition;
 
-        // Add condition if specified (only for non-runner vehicles)
-        if (!empty($vehicle['condition']) && stripos($vehicle['condition'], 'non') !== false) {
-            $parts[] = '(non-runner)';
+            // Add vehicle/equipment type from vehicle array
+            if (!empty($vehicle['type'])) {
+                $parts[] = $vehicle['type'];
+            } elseif (!empty($vehicle['brand']) && !empty($vehicle['model'])) {
+                $parts[] = trim($vehicle['brand'] . ' ' . $vehicle['model']);
+            } elseif (!empty($vehicle['brand'])) {
+                $parts[] = $vehicle['brand'];
+            } else {
+                $parts[] = 'Motorgrader'; // Default for heavy machinery
+            }
         }
 
         // Build simple cargo string (no dimensions or weight)
         $cargo = implode(' ', array_filter($parts));
 
         // Fallback description
-        return $cargo ?: 'Vehicle';
+        return $cargo ?: '1 x used Vehicle';
     }
 
     /**
