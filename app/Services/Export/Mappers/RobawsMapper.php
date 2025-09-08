@@ -825,12 +825,27 @@ class RobawsMapper
         // Try to extract vehicle info from raw text if not in vehicle array
         $rawText = $extractionData['raw_text'] ?? '';
         
-        // Check for vehicle info in different formats
+        // Check for vehicle info in different formats - improved regex to avoid duplication
         $vehicleMatch = '';
-        if (preg_match('/(\d+)\s*x\s*(?:(new|used|second\s*hand)\s+)?([A-Za-z0-9\s]+?)(?:\s*,|\s*afmetingen|\s*dimensions|\s*$)/i', $rawText, $matches)) {
+        if (preg_match('/(\d+)\s*x\s*(?:(new|used|second\s*hand)\s+)?([A-Za-z0-9\s]+?)(?:\s+[A-Za-z0-9\s]+)?(?:\s*,|\s*afmetingen|\s*dimensions|\s*$)/i', $rawText, $matches)) {
             $quantity = $matches[1];
             $conditionFromText = !empty($matches[2]) ? strtolower($matches[2]) : null;
             $vehicleType = trim($matches[3]);
+            
+            // Clean up vehicle type to remove duplicate words
+            $words = explode(' ', $vehicleType);
+            $uniqueWords = [];
+            $lastWord = '';
+            
+            foreach ($words as $word) {
+                $cleanWord = trim($word);
+                if (!empty($cleanWord) && strtolower($cleanWord) !== strtolower($lastWord)) {
+                    $uniqueWords[] = $cleanWord;
+                    $lastWord = $cleanWord;
+                }
+            }
+            
+            $vehicleType = implode(' ', $uniqueWords);
             
             // Use condition from text if found, otherwise default
             $condition = $conditionFromText === 'second hand' ? 'used' : ($conditionFromText ?? $this->getVehicleCondition($vehicle, $rawText));
@@ -910,6 +925,21 @@ class RobawsMapper
         if ($rawText && preg_match('/(\d+)\s*x\s*(?:(new|used|second\s*hand)\s+)?([A-Za-z0-9\s]+?)(?:\s*,|\s*afmetingen|\s*dimensions|\s*$)/i', $rawText, $matches)) {
             $conditionFromText = !empty($matches[2]) ? strtolower($matches[2]) : null;
             $vehicleType = trim($matches[3]);
+            
+            // Clean up vehicle type to remove duplicate words
+            $words = explode(' ', $vehicleType);
+            $uniqueWords = [];
+            $lastWord = '';
+            
+            foreach ($words as $word) {
+                $cleanWord = trim($word);
+                if (!empty($cleanWord) && strtolower($cleanWord) !== strtolower($lastWord)) {
+                    $uniqueWords[] = $cleanWord;
+                    $lastWord = $cleanWord;
+                }
+            }
+            
+            $vehicleType = implode(' ', $uniqueWords);
             
             // Use condition from text if found, otherwise default
             $condition = $conditionFromText === 'second hand' ? 'used' : ($conditionFromText ?? $this->getVehicleCondition($vehicle, $rawText));
