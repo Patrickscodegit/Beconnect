@@ -177,6 +177,9 @@ class RobawsMapper
             ];
         }
 
+        // Build enhanced customer data for client creation
+        $customerData = $this->extractEnhancedCustomerData($extractionData, $intake);
+
         // Map to Robaws structure
         return [
             'quotation_info' => $this->mapQuotationInfo($intake, $contact, $vehicle, $shipping, $extractionData),
@@ -187,6 +190,7 @@ class RobawsMapper
             'shipping' => $this->mapShipping($shipping, $dates),
             'payments' => $this->mapPayments($pricing, $extractionData),
             'offer_extra_info' => $this->mapOfferExtraInfo($extractionData),
+            'customer_data' => $customerData, // Pass enhanced customer data for client creation
         ];
     }
 
@@ -1353,5 +1357,257 @@ class RobawsMapper
         }
         
         return $location; // Return original if no mapping found
+    }
+
+    /**
+     * Extract enhanced customer data from extraction data
+     */
+    protected function extractEnhancedCustomerData(array $extractionData, Intake $intake): array
+    {
+        $rawData = $extractionData['raw_data'] ?? [];
+        $documentData = $extractionData['document_data'] ?? [];
+        $contact = $documentData['contact'] ?? $extractionData['contact'] ?? $rawData['contact'] ?? [];
+        
+        // Extract customer name with fallbacks (prioritize company name over contact person name)
+        $customerName = $extractionData['customer_name'] ?? 
+                       $intake->customer_name ??
+                       $contact['name'] ?? 
+                       'Unknown Customer';
+        
+        // Extract email with fallbacks
+        $email = $contact['email'] ?? 
+                $extractionData['email'] ?? 
+                $extractionData['customer_email'] ?? 
+                $intake->contact_email ?? 
+                null;
+        
+        // Extract phone numbers
+        $phone = $contact['phone'] ?? 
+                $extractionData['phone'] ?? 
+                $extractionData['customer_phone'] ?? 
+                $intake->contact_phone ?? 
+                null;
+        
+        $mobile = $contact['mobile'] ?? 
+                 $extractionData['mobile'] ?? 
+                 null;
+        
+        // Extract contact person
+        $contactPerson = null;
+        if (!empty($contact)) {
+            $contactPerson = $this->formatContactPerson($contact);
+        } elseif (!empty($extractionData['sender']) && $extractionData['sender'] !== $customerName) {
+            // Use sender as contact person if different from customer name
+            $contactPerson = $this->formatContactPerson($extractionData['sender']);
+        }
+        
+        // Extract address information
+        $address = $this->extractAddress($extractionData);
+        
+        // Extract company information
+        $companyInfo = $this->extractCompanyInfo($extractionData);
+        
+        // Build comprehensive customer data
+        $customerData = array_merge([
+            'name' => trim($customerName),
+            'email' => $email,
+            'phone' => $phone,
+            'mobile' => $mobile,
+            'contact_person' => $contactPerson,
+            'language' => $this->detectLanguage($extractionData),
+            'currency' => $extractionData['currency'] ?? 'EUR',
+        ], $address, $companyInfo);
+
+        // Remove empty values
+        return array_filter($customerData, function ($value) {
+            return $value !== null && $value !== '' && $value !== [];
+        });
+    }
+
+    /**
+     * Format contact person data
+     */
+    protected function formatContactPerson($contact): ?array
+    {
+        if (empty($contact)) {
+            return null;
+        }
+        
+        if (is_string($contact)) {
+            // Parse name to extract first and last name
+            $nameParts = explode(' ', trim($contact), 2);
+            return [
+                'name' => $contact,
+                'first_name' => $nameParts[0] ?? null,
+                'last_name' => $nameParts[1] ?? null,
+                'is_primary' => true,
+            ];
+        }
+        
+        if (is_array($contact)) {
+            return array_filter([
+                'name' => $contact['name'] ?? null,
+                'first_name' => $contact['first_name'] ?? null,
+                'last_name' => $contact['last_name'] ?? null,
+                'email' => $contact['email'] ?? null,
+                'phone' => $contact['phone'] ?? null,
+                'mobile' => $contact['mobile'] ?? null,
+                'function' => $contact['function'] ?? $contact['title'] ?? null,
+                'is_primary' => true,
+            ]);
+        }
+        
+        return null;
+    }
+
+    /**
+     * Extract address information
+     */
+    protected function extractAddress(array $extractionData): array
+    {
+        $address = [];
+        
+        // Check for structured address data
+        if (!empty($extractionData['address'])) {
+            $address = array_filter([
+                'street' => $extractionData['address']['street'] ?? null,
+                'street_number' => $extractionData['address']['street_number'] ?? null,
+                'city' => $extractionData['address']['city'] ?? null,
+                'postal_code' => $extractionData['address']['postal_code'] ?? null,
+                'country' => $extractionData['address']['country'] ?? null,
+            ]);
+        }
+        
+        // Fallback to individual fields
+        if (empty($address['city']) && !empty($extractionData['city'])) {
+            $address['city'] = $extractionData['city'];
+        }
+        
+        if (empty($address['country'])) {
+            // Try to determine country from shipping data
+            $origin = $extractionData['shipping']['origin'] ?? 
+                     $extractionData['shipment']['origin'] ?? 
+                     null;
+            
+            if ($origin) {
+                $address['country'] = $this->normalizeCountryName($origin);
+            }
+        }
+        
+        return $address;
+    }
+
+    /**
+     * Extract company information
+     */
+    protected function extractCompanyInfo(array $extractionData): array
+    {
+        $companyInfo = [];
+        
+        if (!empty($extractionData['vat_number'])) {
+            $companyInfo['vat_number'] = $extractionData['vat_number'];
+        }
+        
+        if (!empty($extractionData['company_number'])) {
+            $companyInfo['company_number'] = $extractionData['company_number'];
+        }
+        
+        if (!empty($extractionData['website'])) {
+            $companyInfo['website'] = $extractionData['website'];
+        }
+        
+        // Determine client type
+        $companyInfo['client_type'] = $this->determineClientType($extractionData);
+        
+        return $companyInfo;
+    }
+
+    /**
+     * Determine if client is company or individual
+     */
+    protected function determineClientType(array $extractionData): string
+    {
+        // Check for company indicators
+        if (!empty($extractionData['vat_number']) || 
+            !empty($extractionData['company_number'])) {
+            return 'company';
+        }
+        
+        // Check name for company indicators
+        $name = $extractionData['customer_name'] ?? 
+               $extractionData['contact']['name'] ?? '';
+        
+        $companyIndicators = ['Ltd', 'LLC', 'GmbH', 'BV', 'NV', 'SA', 'Inc', 'Corp', 'Company', 'Co.'];
+        
+        foreach ($companyIndicators as $indicator) {
+            if (stripos($name, $indicator) !== false) {
+                return 'company';
+            }
+        }
+        
+        return 'individual';
+    }
+
+    /**
+     * Normalize country name for consistency
+     */
+    protected function normalizeCountryName(?string $country): ?string
+    {
+        if (!$country) return null;
+        
+        $countryMap = [
+            'deutschland' => 'Germany',
+            'germany' => 'Germany',
+            'belgium' => 'Belgium',
+            'belgie' => 'Belgium',
+            'belgique' => 'Belgium',
+            'netherlands' => 'Netherlands',
+            'nederland' => 'Netherlands',
+            'nigeria' => 'Nigeria',
+            'kenya' => 'Kenya',
+            'antwerp' => 'Belgium', // Port to country mapping
+            'hamburg' => 'Germany',
+            'rotterdam' => 'Netherlands',
+            'lagos' => 'Nigeria',
+            'mombasa' => 'Kenya',
+        ];
+        
+        $normalized = strtolower(trim($country));
+        return $countryMap[$normalized] ?? ucfirst($country);
+    }
+
+    /**
+     * Detect language from extraction data
+     */
+    protected function detectLanguage(array $extractionData): string
+    {
+        $text = $extractionData['raw_text'] ?? '';
+        
+        // Simple language detection based on common words
+        $germanWords = ['und', 'der', 'die', 'das', 'nach', 'von', 'ab', 'mit'];
+        $dutchWords = ['en', 'de', 'het', 'van', 'naar', 'met', 'voor'];
+        $frenchWords = ['et', 'le', 'la', 'de', 'pour', 'avec', 'dans'];
+        
+        $germanCount = 0;
+        $dutchCount = 0;
+        $frenchCount = 0;
+        
+        $words = str_word_count(strtolower($text), 1);
+        
+        foreach ($words as $word) {
+            if (in_array($word, $germanWords)) $germanCount++;
+            if (in_array($word, $dutchWords)) $dutchCount++;
+            if (in_array($word, $frenchWords)) $frenchCount++;
+        }
+        
+        if ($germanCount > $dutchCount && $germanCount > $frenchCount) {
+            return 'de';
+        } elseif ($dutchCount > $germanCount && $dutchCount > $frenchCount) {
+            return 'nl';
+        } elseif ($frenchCount > $germanCount && $frenchCount > $dutchCount) {
+            return 'fr';
+        }
+        
+        return 'en'; // Default to English
     }
 }

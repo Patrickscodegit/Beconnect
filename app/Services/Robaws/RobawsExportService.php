@@ -337,24 +337,64 @@ class RobawsExportService
     }
 
     /**
-     * Build a type-safe payload with comprehensive validation and logging
+     * Build a type-safe payload with comprehensive validation and enhanced client creation
      */
     private function buildTypeSeafePayload($intake, $extractionData, $mapped, $exportId): array
     {
-        $customerName = trim($extractionData['customerName'] ?? $extractionData['customer_name'] ?? $intake->customer_name ?? 'Unknown Customer');
-        $customerEmail = trim($extractionData['contactEmail'] ?? $extractionData['customer_email'] ?? $intake->contact_email ?? '');
-        $customerPhone = trim($extractionData['customerPhone'] ?? $extractionData['customer_phone'] ?? $intake->contact_phone ?? '');
+        // Extract enhanced customer data
+        $customerData = $mapped['customer_data'] ?? [];
+        
+        $customerName = trim($customerData['name'] ?? $extractionData['customerName'] ?? $extractionData['customer_name'] ?? $intake->customer_name ?? 'Unknown Customer');
+        $customerEmail = trim($customerData['email'] ?? $extractionData['contactEmail'] ?? $extractionData['customer_email'] ?? $intake->contact_email ?? '');
+        $customerPhone = trim($customerData['phone'] ?? $extractionData['customerPhone'] ?? $extractionData['customer_phone'] ?? $intake->contact_phone ?? '');
 
         // Validate and sanitize email
         $customerEmail = $this->validateAndSanitizeEmail($customerEmail);
 
-        // Use pre-resolved client ID if available, otherwise resolve via API
-        $clientId = $intake->robaws_client_id ?? $this->apiClient->findClientId($customerName, $customerEmail, $customerPhone);
+        // Use pre-resolved client ID if available, otherwise try to find or create client
+        $clientId = $intake->robaws_client_id;
+        
+        if (!$clientId) {
+            // Try to find existing client first
+            $clientId = $this->apiClient->findClientId($customerName, $customerEmail, $customerPhone);
+            
+            // If no existing client found and we have enough data, create a new one
+            if (!$clientId && !empty($customerData)) {
+                Log::info('Attempting to create new client with enhanced data', [
+                    'export_id' => $exportId,
+                    'customer_name' => $customerName,
+                    'has_email' => !empty($customerEmail),
+                    'has_phone' => !empty($customerPhone),
+                    'has_contact_person' => !empty($customerData['contact_person']),
+                    'has_address' => !empty($customerData['street']) || !empty($customerData['city']),
+                    'client_type' => $customerData['client_type'] ?? 'unknown'
+                ]);
+                
+                $createdClient = $this->apiClient->findOrCreateClient($customerData);
+                if ($createdClient && isset($createdClient['id'])) {
+                    $clientId = $createdClient['id'];
+                    
+                    // Store the client ID for future use
+                    $intake->update(['robaws_client_id' => $clientId]);
+                    
+                    Log::info('Successfully created new client', [
+                        'export_id' => $exportId,
+                        'client_id' => $clientId,
+                        'customer_name' => $customerName
+                    ]);
+                } else {
+                    Log::warning('Failed to create new client', [
+                        'export_id' => $exportId,
+                        'customer_name' => $customerName
+                    ]);
+                }
+            }
+        }
         
         // Type-safe client ID casting with validation
         $validatedClientId = $this->validateClientId($clientId, $exportId);
 
-        Log::info('Type-safe client resolution', [
+        Log::info('Enhanced client resolution', [
             'export_id' => $exportId,
             'intake_id' => $intake->id,
             'display_name' => $customerName,
@@ -363,6 +403,8 @@ class RobawsExportService
             'pre_resolved_client_id' => $intake->robaws_client_id,
             'resolved_client_id' => $clientId,
             'validated_client_id' => $validatedClientId,
+            'has_contact_person' => !empty($customerData['contact_person']),
+            'has_enhanced_data' => !empty($customerData),
             'binding_status' => $validatedClientId ? 'will_bind_to_client' : 'no_client_binding',
         ]);
 
@@ -385,13 +427,17 @@ class RobawsExportService
                 'export_id' => $exportId,
                 'customer_name' => $customerName,
                 'customer_email' => $customerEmail,
+                'attempted_creation' => !empty($customerData),
             ]);
         }
+        
+        // Remove customer_data from mapped data before building payload (it's only for client creation)
+        unset($mapped['customer_data']);
         
         // Build final payload with comprehensive logging
         $payload = $this->mapper->toRobawsApiPayload($mapped);
         
-        Log::info('Type-safe Robaws payload (api shape)', [
+        Log::info('Enhanced Robaws payload (api shape)', [
             'export_id' => $exportId,
             'intake_id' => $intake->id,
             'top' => array_keys($payload),
@@ -399,7 +445,7 @@ class RobawsExportService
             'contact_email_debug' => $payload['contactEmail'] ?? null,
             'client_reference_debug' => $payload['clientReference'] ?? null,
             'payload_size' => strlen(json_encode($payload)),
-            'type_safety_applied' => true,
+            'enhanced_client_creation' => true,
         ]);
 
         return $payload;
