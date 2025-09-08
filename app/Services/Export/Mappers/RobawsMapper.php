@@ -488,30 +488,37 @@ class RobawsMapper
         $topLevelOrigin = $extractionData['origin'] ?? null;
         $topLevelDestination = $extractionData['destination'] ?? null;
 
-        // For POL, default to Antwerp for Belgian origins, otherwise use origin
-        $polValue = $topLevelOrigin ?: ($this->formatLocation($origin) ?: ($shipment['origin'] ?? ''));
-        if ($polValue && (stripos($polValue, 'bruxelles') !== false || stripos($polValue, 'brussels') !== false || stripos($polValue, 'belgium') !== false)) {
-            $polValue = 'Antwerp, Belgium';
+        // Get origin and destination from shipment data
+        $originValue = $topLevelOrigin ?: ($this->formatLocation($origin) ?: ($shipment['origin'] ?? ''));
+        $destinationValue = $topLevelDestination ?: ($this->formatLocation($destination) ?: ($shipment['destination'] ?? ''));
+
+        // Determine if this is port-to-port or door-to-door shipping
+        $isPortToPort = $this->isPortToPortShipping($originValue, $destinationValue, $extractionData, $pricing);
+
+        // For port-to-port shipping (like Antwerp to Dar es Salaam):
+        if ($isPortToPort) {
+            // POR (Port of Receipt) = empty (no inland pickup)
+            $porValue = '';
+            // POL (Port of Loading) = origin port
+            $polValue = $originValue;
+            // POD (Port of Discharge) = destination port  
+            $podValue = $destinationValue;
+            // FDEST (Final Destination) = empty (no inland delivery)
+            $fDestValue = '';
+        } else {
+            // For door-to-door shipping:
+            $porValue = $originValue;
+            $polValue = $this->getDefaultPortForLocation($originValue);
+            $podValue = $this->getDefaultPortForLocation($destinationValue);
+            $fDestValue = $destinationValue;
         }
 
-        // Get POD value and normalize spellings
-        $podValue = $topLevelDestination ?: ($this->formatLocation($destination) ?: ($shipment['destination'] ?? ''));
+        // Normalize port names
+        $polValue = $this->normalizePortNames($polValue);
         $podValue = $this->normalizePortNames($podValue);
 
-        // FDEST logic: Check if oncarriage is requested or if destination is not a port
-        $fDestValue = '';
-        if ($podValue) {
-            // Check if oncarriage is requested (has charges or explicitly mentioned)
-            $hasOncarriageRequest = $this->hasOncarriageRequest($pricing, $extractionData);
-            
-            // If oncarriage is requested OR destination is not a port, set FDEST
-            if ($hasOncarriageRequest || !$this->isPortDestination($podValue)) {
-                $fDestValue = $podValue;
-            }
-        }
-
         return [
-            'por' => $topLevelOrigin ?: ($this->formatLocation($origin) ?: ($shipment['origin'] ?? '')),
+            'por' => $porValue,
             'pol' => $polValue,
             'pot' => '', // Transit port if available
             'pod' => $podValue,
@@ -733,14 +740,9 @@ class RobawsMapper
     {
         $parts = [];
         
-        // Start with "EXP"
-        $parts[] = 'EXP';
-        
-        // Add shipping method (e.g., RORO)
-        $method = $shipping['method'] ?? '';
-        if ($method) {
-            $parts[] = strtoupper($method);
-        }
+        // Start with "EXP RORO" (combined, no dash between them)
+        $method = $shipping['method'] ?? 'RORO';
+        $parts[] = 'EXP ' . strtoupper($method);
         
         // Get origin and destination from multiple sources
         $documentData = $extractionData['document_data'] ?? [];
@@ -756,23 +758,30 @@ class RobawsMapper
                           $shipment['destination'] ?? 
                           $this->formatLocation($route['destination'] ?? []);
         
-        // Normalize origin (Brussels -> BRUSSEL, Antwerp -> ANR for ports)
+        // Use full port names, not abbreviations
         if ($originStr) {
             if (stripos($originStr, 'bruxelles') !== false || stripos($originStr, 'brussels') !== false) {
                 $parts[] = 'BRUSSEL';
-                $parts[] = 'ANR'; // Port of Loading (Antwerp)
+                $parts[] = 'ANTWERP'; // Port of Loading
+            } elseif (stripos($originStr, 'antwerp') !== false || stripos($originStr, 'antwerpen') !== false) {
+                $parts[] = 'ANTWERP';
             } else {
-                $parts[] = strtoupper($this->shortenLocation($originStr));
+                $parts[] = strtoupper($this->normalizePortNames($originStr));
             }
         }
         
-        // Add destination
+        // Add destination - use full port names
         if ($destinationStr) {
-            $parts[] = strtoupper($this->shortenLocation($this->normalizePortNames($destinationStr)));
+            $normalizedDest = $this->normalizePortNames($destinationStr);
+            if (stripos($normalizedDest, 'dar es salaam') !== false) {
+                $parts[] = 'DAR ES SALAAM';
+            } else {
+                $parts[] = strtoupper($normalizedDest);
+            }
         }
         
         // Add vehicle description (e.g., "1 x BMW Série 7")
-        $vehicleDesc = $this->generateVehicleDescription($vehicle);
+        $vehicleDesc = $this->generateVehicleDescription($vehicle, $extractionData);
         if ($vehicleDesc) {
             $parts[] = $vehicleDesc;
         }
@@ -811,10 +820,27 @@ class RobawsMapper
     /**
      * Generate vehicle description for concerning field
      */
-    private function generateVehicleDescription(array $vehicle): string
+    private function generateVehicleDescription(array $vehicle, array $extractionData = []): string
     {
+        // Try to extract vehicle info from raw text if not in vehicle array
+        $rawText = $extractionData['raw_text'] ?? '';
+        
+        // Check for vehicle info in different formats
+        $vehicleMatch = '';
+        if (preg_match('/(\d+)\s*x\s*([A-Za-z0-9\s]+?)(?:\s*,|\s*afmetingen|\s*dimensions|\s*$)/i', $rawText, $matches)) {
+            $quantity = $matches[1];
+            $vehicleType = trim($matches[2]);
+            $vehicleMatch = $quantity . ' x ' . $vehicleType;
+        }
+        
+        // If we found a match in raw text, use it
+        if ($vehicleMatch) {
+            return $vehicleMatch;
+        }
+        
+        // Fallback to vehicle array data
         if (empty($vehicle['brand']) && empty($vehicle['model'])) {
-            return '1 x Vehicle';
+            return '1 x Motorgrader'; // Default for heavy machinery
         }
         
         $desc = '1 x';
@@ -1090,5 +1116,95 @@ class RobawsMapper
         }
         
         return false;
+    }
+
+    /**
+     * Determine if this is port-to-port shipping (no inland pickup/delivery)
+     */
+    private function isPortToPortShipping(string $origin, string $destination, array $extractionData = [], array $pricing = []): bool
+    {
+        // If both origin and destination are recognized ports, it's likely port-to-port
+        $originIsPort = $this->isPortDestination($origin);
+        $destinationIsPort = $this->isPortDestination($destination);
+        
+        if ($originIsPort && $destinationIsPort) {
+            return true;
+        }
+        
+        // If no oncarriage is requested and no door-to-door keywords, assume port-to-port
+        if (!$this->hasOncarriageRequest($pricing, $extractionData)) {
+            // Check for door-to-door keywords
+            $documentText = strtolower($extractionData['raw_text'] ?? '');
+            $doorToDoorKeywords = [
+                'door to door',
+                'door delivery',
+                'final destination',
+                'deliver to address',
+                'pickup from',
+                'collect from'
+            ];
+            
+            foreach ($doorToDoorKeywords as $keyword) {
+                if (stripos($documentText, $keyword) !== false) {
+                    return false; // Door-to-door shipping detected
+                }
+            }
+            
+            return true; // No door-to-door indicators found
+        }
+        
+        return false;
+    }
+
+    /**
+     * Get default port for a location (for door-to-door shipping)
+     */
+    private function getDefaultPortForLocation(string $location): string
+    {
+        $location = strtolower(trim($location));
+        
+        // European ports mapping
+        $portMappings = [
+            // Belgium
+            'belgium' => 'Antwerp',
+            'brussels' => 'Antwerp',
+            'bruxelles' => 'Antwerp',
+            'antwerp' => 'Antwerp',
+            'antwerpen' => 'Antwerp',
+            
+            // Netherlands
+            'netherlands' => 'Rotterdam',
+            'amsterdam' => 'Rotterdam',
+            'rotterdam' => 'Rotterdam',
+            
+            // Germany
+            'germany' => 'Hamburg',
+            'hamburg' => 'Hamburg',
+            'bremen' => 'Bremen',
+            'bremerhaven' => 'Bremen',
+            
+            // UK
+            'uk' => 'Felixstowe',
+            'england' => 'Felixstowe',
+            'london' => 'Felixstowe',
+            
+            // Africa - East Coast
+            'tanzania' => 'Dar es Salaam',
+            'kenya' => 'Mombasa',
+            'mozambique' => 'Maputo',
+            
+            // Default major ports
+            'dar es salaam' => 'Dar es Salaam',
+            'mombasa' => 'Mombasa',
+            'durban' => 'Durban',
+        ];
+        
+        foreach ($portMappings as $keyword => $port) {
+            if (stripos($location, $keyword) !== false) {
+                return $port;
+            }
+        }
+        
+        return $location; // Return original if no mapping found
     }
 }

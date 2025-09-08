@@ -30,6 +30,7 @@ class PatternExtractor
             'contact' => $this->extractContactData($content),
             'dates' => $this->extractDateData($content),
             'pricing' => $this->extractPricingData($content),
+            'raw_text' => $content, // Include raw text for routing analysis
             'metadata' => [
                 'extraction_method' => 'pattern_matching',
                 'extracted_at' => now()->toIso8601String()
