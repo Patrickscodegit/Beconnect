@@ -1266,12 +1266,17 @@ class RobawsMapper
     {
         $location = strtolower(trim($location));
         
-        // Countries that should always be mapped to their default ports
+        // Countries and ports that should always be mapped to their default ports
         $countriesRequiringMapping = [
             'germany',
             'deutschland', 
             'belgium',
-            'netherlands'
+            'netherlands',
+            'nigeria',
+            'lagos',
+            'tin-can port',
+            'tin can port',
+            'tincan'
         ];
         
         foreach ($countriesRequiringMapping as $country) {
