@@ -521,18 +521,51 @@ class RobawsMapper
     }
 
     /**
-     * Map cargo details section with normalized dimensions
+     * Map cargo details section with enhanced dimensions and weight handling
      */
     private function mapCargoDetails(array $vehicle, array $extractionData): array
     {
         $dimensions = $vehicle['dimensions'] ?? [];
+        $dimString = '';
         
-        // Handle both array and string dimensions
+        // Generate enhanced dimensions string with cargo info for DIM_BEF_DELIVERY
         if (is_array($dimensions)) {
             [$L, $W, $H] = $this->normalizeDimensions($dimensions);
-            $dimString = ($L && $W && $H) ? sprintf("L: %.2fm x W: %.2fm x H: %.2fm", $L, $W, $H) : '';
-        } else {
-            $dimString = is_string($dimensions) ? $dimensions : '';
+            if ($L && $W && $H) {
+                // Build enhanced dimension string: "1 x Motorgrader L: 10.06m x W: 2.52m x H: 3.12m (79.10m³) // 18,750 kg"
+                $parts = [];
+                
+                // Add quantity and type
+                $quantity = $vehicle['quantity'] ?? 1;
+                $parts[] = $quantity . ' x';
+                
+                if (!empty($vehicle['type'])) {
+                    $parts[] = $vehicle['type'];
+                } elseif (!empty($vehicle['brand']) && !empty($vehicle['model'])) {
+                    $parts[] = trim($vehicle['brand'] . ' ' . $vehicle['model']);
+                } elseif (!empty($vehicle['brand'])) {
+                    $parts[] = $vehicle['brand'];
+                }
+                
+                $cargoType = implode(' ', array_filter($parts));
+                
+                // Add dimensions
+                $dimString = sprintf("%s L: %.2fm x W: %.2fm x H: %.2fm", 
+                    $cargoType, $L, $W, $H);
+                
+                // Calculate and add volume
+                $volume = $L * $W * $H;
+                if ($volume > 0) {
+                    $dimString .= sprintf(" (%.2fm³)", $volume);
+                }
+                
+                // Add weight if available
+                if (!empty($vehicle['weight_kg'])) {
+                    $dimString .= ' // ' . number_format($vehicle['weight_kg'], 0) . ' kg';
+                }
+            }
+        } elseif (is_string($dimensions) && !empty($dimensions)) {
+            $dimString = $dimensions;
         }
 
         // Enhanced cargo description logic for different data structures
@@ -549,19 +582,37 @@ class RobawsMapper
         elseif (isset($extractionData['cargo']['description'])) {
             $cargoDescription = $extractionData['cargo']['description'];
         }
-        // Fallback to generated description
+        // Fallback to generated description (simple format for CARGO field)
         else {
             $cargoDescription = $this->generateCargoDescription($vehicle);
         }
 
-        // Enhanced dimensions handling for flat structure
-        if (!$dimString && isset($extractionData['raw_data']['dimensions'])) {
-            $dimString = $extractionData['raw_data']['dimensions'];
+        // Enhanced dimensions handling from various extraction sources (fallback)
+        if (!$dimString) {
+            // Try raw_data dimensions
+            if (isset($extractionData['raw_data']['dimensions'])) {
+                $dimString = $extractionData['raw_data']['dimensions'];
+            }
+            // Try direct dimensions field from extraction
+            elseif (isset($extractionData['dimensions']) && is_string($extractionData['dimensions'])) {
+                $dimString = $extractionData['dimensions'];
+            }
+            // Try vehicle dimensions raw text
+            elseif (isset($vehicle['raw_dimensions'])) {
+                $dimString = $vehicle['raw_dimensions'];
+            }
         }
+
+        Log::info('Cargo details mapping completed', [
+            'cargo_description' => $cargoDescription,
+            'dimensions_text' => $dimString,
+            'has_vehicle_dimensions' => !empty($vehicle['dimensions']),
+            'vehicle_weight' => $vehicle['weight_kg'] ?? null
+        ]);
 
         return [
             'cargo' => $cargoDescription,
-            'dimensions_text' => $dimString, // Fixed field name
+            'dimensions_text' => $dimString,
             'container_nr' => $extractionData['container_number'] ?? '',
         ];
     }
@@ -798,20 +849,29 @@ class RobawsMapper
     {
         $parts = [];
 
-        if (!empty($vehicle['brand'])) {
+        // Add quantity (default to 1)
+        $quantity = $vehicle['quantity'] ?? 1;
+        $parts[] = $quantity . ' x';
+
+        // Add vehicle/equipment type
+        if (!empty($vehicle['type'])) {
+            $parts[] = $vehicle['type'];
+        } elseif (!empty($vehicle['brand']) && !empty($vehicle['model'])) {
+            $parts[] = trim($vehicle['brand'] . ' ' . $vehicle['model']);
+        } elseif (!empty($vehicle['brand'])) {
             $parts[] = $vehicle['brand'];
         }
-        if (!empty($vehicle['model'])) {
-            $parts[] = $vehicle['model'];
-        }
-        if (!empty($vehicle['vin'])) {
-            $parts[] = 'VIN: ' . $vehicle['vin'];
-        }
-        if (!empty($vehicle['year'])) {
-            $parts[] = 'Year: ' . $vehicle['year'];
+
+        // Add condition if specified (only for non-runner vehicles)
+        if (!empty($vehicle['condition']) && stripos($vehicle['condition'], 'non') !== false) {
+            $parts[] = '(non-runner)';
         }
 
-        return implode(' | ', $parts) ?: 'Vehicle';
+        // Build simple cargo string (no dimensions or weight)
+        $cargo = implode(' ', array_filter($parts));
+
+        // Fallback description
+        return $cargo ?: 'Vehicle';
     }
 
     /**

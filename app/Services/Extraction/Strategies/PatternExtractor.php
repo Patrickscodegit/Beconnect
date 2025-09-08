@@ -80,11 +80,12 @@ class PatternExtractor
         ];
         
         $this->shippingPatterns = [
-            'route_from_to' => '/from\s+([A-Za-z\s,\-\.]+?)\s+to\s+([A-Za-z\s,\-\.]+?)(?:[.,;]|\s|$)/i',
+            'route_from_to' => '/from\s+([A-Za-z\s,\-\.]+?)\s+to\s+([A-Za-z\s,\-\.]+?)(?:[.,;]|\s+(?:incl|including|with)|$)/i',
             'route_french' => '/de\s+([A-Za-zÀ-ÿ\s,\-\.]+?)\s+vers\s+([A-Za-zÀ-ÿ\s,\-\.]+?)(?:[.,;]|\s|par|$)/i',
+            'route_dutch' => '/(?:vanaf|van)\s+([A-Za-zÀ-ÿ\s,\-\.]+?)\s+naar\s+([A-Za-zÀ-ÿ\s,\-\.]+?)(?:\s+(?:incl|inclusief|met)|[.,;]|$)/i',
             'route_arrow' => '/([A-Za-z\s,\-\.]+?)\s*[-–—→>\s]+\s*([A-Za-z\s,\-\.]+?)(?:[.,;]|\s|$)/',
-            'origin' => '/(?:origin|from|loading|pickup|departure):\s*([A-Za-z\s,\-\.]+?)(?:[.,;\n]|$)/i',
-            'destination' => '/(?:destination|to|delivery|discharge|arrival):\s*([A-Za-z\s,\-\.]+?)(?:[.,;\n]|$)/i',
+            'origin' => '/(?:origin|from|loading|pickup|departure|vanaf|van):\s*([A-Za-z\s,\-\.]+?)(?:[.,;\n]|$)/i',
+            'destination' => '/(?:destination|to|delivery|discharge|arrival|naar):\s*([A-Za-z\s,\-\.]+?)(?:[.,;\n]|$)/i',
             'pol' => '/POL:\s*([A-Za-z\s,\-\.]+?)(?:[.,;\n]|$)/i',
             'pod' => '/POD:\s*([A-Za-z\s,\-\.]+?)(?:[.,;\n]|$)/i',
             'roro' => '/\b(ro[\s-]?ro|RORO|RoRo|roll[\s-]?on[\s-]?roll[\s-]?off)\b/i',
@@ -133,6 +134,12 @@ class PatternExtractor
                 $vehicle['vin_decoded'] = $vinData;
                 $vehicle['year'] = $vinData['year'] ?? $vehicle['year'] ?? null;
             }
+        }
+        
+        // Extract equipment/vehicle type first (before brand/model extraction)
+        $equipmentInfo = $this->extractEquipmentInfo($content);
+        if ($equipmentInfo) {
+            $vehicle = array_merge($vehicle, $equipmentInfo);
         }
         
         // Extract brand and model using database patterns
@@ -198,11 +205,22 @@ class PatternExtractor
             $vehicle['engine_cc'] = (int)$matches[1];
         }
         
-        // Extract dimensions
-        $vehicle['dimensions'] = $this->extractDimensions($content);
+        // Extract dimensions (enhanced with weight extraction)
+        $dimensionsData = $this->extractDimensions($content);
+        if ($dimensionsData) {
+            $vehicle['dimensions'] = $dimensionsData;
+            
+            // If weight was found in dimension context, add it
+            if (isset($dimensionsData['weight_kg'])) {
+                $vehicle['weight_kg'] = $dimensionsData['weight_kg'];
+                unset($vehicle['dimensions']['weight_kg']); // Remove from dimensions array
+            }
+        }
         
-        // Extract weight
-        $vehicle['weight_kg'] = $this->extractWeight($content);
+        // Extract weight separately if not found in dimensions
+        if (!isset($vehicle['weight_kg'])) {
+            $vehicle['weight_kg'] = $this->extractWeight($content);
+        }
         
         // Extract mileage
         $vehicle['mileage_km'] = $this->extractMileage($content);
@@ -231,6 +249,46 @@ class PatternExtractor
     }
     
     /**
+     * Extract equipment/vehicle type information
+     */
+    private function extractEquipmentInfo(string $content): ?array
+    {
+        $equipment = [];
+        
+        // Equipment type patterns (prioritize heavy equipment)
+        $equipmentPatterns = [
+            '/motorgrader/i' => ['type' => 'Motorgrader', 'category' => 'heavy_equipment'],
+            '/grader/i' => ['type' => 'Grader', 'category' => 'heavy_equipment'],
+            '/excavator/i' => ['type' => 'Excavator', 'category' => 'heavy_equipment'],
+            '/bulldozer/i' => ['type' => 'Bulldozer', 'category' => 'heavy_equipment'],
+            '/wheel\s*loader/i' => ['type' => 'Wheel Loader', 'category' => 'heavy_equipment'],
+            '/loader/i' => ['type' => 'Loader', 'category' => 'heavy_equipment'],
+            '/crane/i' => ['type' => 'Crane', 'category' => 'heavy_equipment'],
+            '/dump\s*truck/i' => ['type' => 'Dump Truck', 'category' => 'commercial_vehicle'],
+            '/truck/i' => ['type' => 'Truck', 'category' => 'commercial_vehicle'],
+            '/forklift/i' => ['type' => 'Forklift', 'category' => 'warehouse_equipment'],
+            '/tractor/i' => ['type' => 'Tractor', 'category' => 'agricultural'],
+        ];
+        
+        foreach ($equipmentPatterns as $pattern => $info) {
+            if (preg_match($pattern, $content)) {
+                $equipment['type'] = $info['type'];
+                $equipment['category'] = $info['category'];
+                $equipment['make'] = $info['type']; // Use as make if no brand found
+                $equipment['model'] = $info['type']; // Use as model if no specific model found
+                
+                Log::info('Equipment type identified', [
+                    'type' => $info['type'],
+                    'category' => $info['category']
+                ]);
+                break;
+            }
+        }
+        
+        return !empty($equipment) ? $equipment : null;
+    }
+    
+    /**
      * Extract shipping/route data
      */
     private function extractShippingData(string $content): array
@@ -242,6 +300,9 @@ class PatternExtractor
             $shipping['origin'] = trim($matches[1]);
             $shipping['destination'] = trim($matches[2]);
         } elseif (preg_match($this->shippingPatterns['route_french'], $content, $matches)) {
+            $shipping['origin'] = trim($matches[1]);
+            $shipping['destination'] = trim($matches[2]);
+        } elseif (preg_match($this->shippingPatterns['route_dutch'], $content, $matches)) {
             $shipping['origin'] = trim($matches[1]);
             $shipping['destination'] = trim($matches[2]);
         } elseif (preg_match($this->shippingPatterns['route_arrow'], $content, $matches)) {
@@ -423,8 +484,21 @@ class PatternExtractor
     {
         Log::info('Attempting dimension extraction', ['content_length' => strlen($content)]);
         
-        // Try different dimension patterns in order of preference
+        // Enhanced patterns for dimension extraction (including European comma format)
         $patterns = [
+            // Pattern 1: 10.06m x 2.52m x 3.12m or 10,06m x 2,52m x 3,12m
+            'european_comma_format' => '/(\d+[,.]?\d*)\s*m?\s*[x×]\s*(\d+[,.]?\d*)\s*m?\s*[x×]\s*(\d+[,.]?\d*)\s*m?/i',
+            
+            // Pattern 2: L: 10.06 W: 2.52 H: 3.12
+            'lwh_labeled' => '/[lL](?:ength)?[:\s]+(\d+[,.]?\d*)\s*m?\s*[wW](?:idth)?[:\s]+(\d+[,.]?\d*)\s*m?\s*[hH](?:eight)?[:\s]+(\d+[,.]?\d*)\s*m?/i',
+            
+            // Pattern 3: 10.06 x 2.52 x 3.12 (with spaces)
+            'spaced_format' => '/(\d+[,.]?\d*)\s+x\s+(\d+[,.]?\d*)\s+x\s+(\d+[,.]?\d*)/i',
+            
+            // Pattern 4: dimensions with comma as decimal separator specifically
+            'comma_decimal' => '/(\d+,\d+)\s*m?\s*[x×]\s*(\d+,\d+)\s*m?\s*[x×]\s*(\d+,\d+)\s*m?/i',
+            
+            // Original patterns (keeping for backward compatibility)
             'dimensions_labeled' => $this->vehiclePatterns['dimensions_labeled'],
             'dimensions_lwh' => $this->vehiclePatterns['dimensions_lwh'], 
             'dimensions_parentheses' => $this->vehiclePatterns['dimensions_parentheses'],
@@ -436,32 +510,117 @@ class PatternExtractor
             if (preg_match($pattern, $content, $matches)) {
                 Log::info("Dimension pattern matched", [
                     'pattern' => $patternName,
-                    'matches' => $matches
+                    'matches' => $matches,
+                    'raw_text' => substr($content, 0, 200)
                 ]);
                 
-                $length = (float)$matches[1];
-                $width = (float)$matches[2]; 
-                $height = (float)$matches[3];
+                // Convert comma to dot for decimal numbers
+                $length = (float) str_replace(',', '.', $matches[1]);
+                $width = (float) str_replace(',', '.', $matches[2]);
+                $height = (float) str_replace(',', '.', $matches[3]);
                 $unit = isset($matches[4]) ? strtolower(trim($matches[4])) : 'm';
                 
-                // Convert to meters
-                $dimensions = $this->convertDimensionsToMeters($length, $width, $height, $unit);
-                
-                if ($this->validateDimensions($dimensions)) {
-                    Log::info('Valid dimensions extracted', $dimensions);
-                    return $dimensions;
+                // Validate dimensions (reasonable ranges for equipment/vehicles)
+                if ($length > 0 && $length < 100 && 
+                    $width > 0 && $width < 50 && 
+                    $height > 0 && $height < 50) {
+                    
+                    // Convert to meters
+                    $dimensions = $this->convertDimensionsToMeters($length, $width, $height, $unit);
+                    
+                    if ($this->validateDimensions($dimensions)) {
+                        // Try to extract weight from the same context
+                        $weight = $this->extractWeightFromDimensionContext($content);
+                        if ($weight) {
+                            $dimensions['weight_kg'] = $weight;
+                        }
+                        
+                        Log::info('Valid dimensions extracted', [
+                            'dimensions' => $dimensions,
+                            'pattern_used' => $patternName,
+                            'source_text' => substr($content, 0, 200)
+                        ]);
+                        return $dimensions;
+                    }
                 }
             }
         }
         
+        // Also try to extract weight if present in the same context
+        $weight = $this->extractWeightFromDimensionContext($content);
+        
         // Try individual labeled dimensions (L:, W:, H:)
         $individualDimensions = $this->extractIndividualDimensions($content);
         if ($individualDimensions && $this->validateDimensions($individualDimensions)) {
+            if ($weight) {
+                $individualDimensions['weight_kg'] = $weight;
+            }
             Log::info('Individual dimensions extracted', $individualDimensions);
             return $individualDimensions;
         }
         
         Log::info('No dimensions found in content');
+        return null;
+    }
+    
+    /**
+     * Extract weight specifically from dimension context (like "10,06m x 2,52m x 3,12m / 18.750 kg")
+     */
+    private function extractWeightFromDimensionContext(string $content): ?float
+    {
+        // Look for weight patterns near dimension patterns
+        $weightPatterns = [
+            '/\/\s*(\d{1,3}\.?\d{3})\s*kg/i', // After slash like "/ 18.750 kg" - prioritize this pattern
+            '/(\d+[,.]?\d*)\s*kg/i',
+            '/(\d+[\s,.]?\d+)\s*kg/i', // Handle "18.750" or "18 750" format
+            '/weight[:\s]+(\d+[,.]?\d*)\s*kg/i',
+        ];
+        
+        foreach ($weightPatterns as $pattern) {
+            if (preg_match($pattern, $content, $matches)) {
+                $weightStr = $matches[1];
+                
+                Log::info('Weight extraction attempt', [
+                    'pattern' => $pattern,
+                    'raw_match' => $weightStr,
+                    'content_context' => substr($content, max(0, strpos($content, $matches[0]) - 20), 40)
+                ]);
+                
+                // Handle European heavy equipment weight format (18.750 = 18750kg)
+                if (preg_match('/^\d{1,3}\.\d{3}$/', $weightStr)) {
+                    // Format like 18.750 - this is thousands separator for heavy equipment
+                    $weight = (float) str_replace('.', '', $weightStr);
+                    Log::info('Interpreted as thousands-separated weight', [
+                        'original' => $weightStr,
+                        'interpreted' => $weight
+                    ]);
+                } elseif (preg_match('/^\d+,\d{1,2}$/', $weightStr)) {
+                    // Format like 18,75 - this is decimal separator, convert to dot
+                    $weight = (float) str_replace(',', '.', $weightStr);
+                    Log::info('Interpreted as decimal weight', [
+                        'original' => $weightStr,
+                        'interpreted' => $weight
+                    ]);
+                } else {
+                    // Standard format - remove spaces and convert comma to dot for decimals
+                    $weight = (float) str_replace([',', ' '], ['.', ''], $weightStr);
+                    Log::info('Interpreted as standard weight', [
+                        'original' => $weightStr,
+                        'interpreted' => $weight
+                    ]);
+                }
+                
+                if ($weight > 0 && $weight < 1000000) { // Reasonable weight range
+                    Log::info('Weight extracted from dimension context', [
+                        'weight' => $weight,
+                        'raw_match' => $matches[1],
+                        'final_weight' => $weight . 'kg'
+                    ]);
+                    return $weight;
+                }
+            }
+        }
+        
         return null;
     }
     
