@@ -499,10 +499,14 @@ class RobawsMapper
         if ($isPortToPort) {
             // POR (Port of Receipt) = empty (no inland pickup)
             $porValue = '';
-            // POL (Port of Loading) = origin port
-            $polValue = $originValue;
-            // POD (Port of Discharge) = destination port  
-            $podValue = $destinationValue;
+            // POL (Port of Loading) = origin port, but map Germany to Antwerp
+            $polValue = $this->shouldMapToDefaultPort($originValue) 
+                ? $this->getDefaultPortForLocation($originValue) 
+                : $originValue;
+            // POD (Port of Discharge) = destination port, but map certain countries to default ports
+            $podValue = $this->shouldMapToDefaultPort($destinationValue)
+                ? $this->getDefaultPortForLocation($destinationValue)
+                : $destinationValue;
             // FDEST (Final Destination) = empty (no inland delivery)
             $fDestValue = '';
         } else {
@@ -542,14 +546,25 @@ class RobawsMapper
                 // Build enhanced dimension string: "1 x Motorgrader L: 10.06m x W: 2.52m x H: 3.12m (79.10m³) // 18,750 kg"
                 $parts = [];
                 
-                // Add quantity and type
+                // Add quantity and type with enhanced description
                 $quantity = $vehicle['quantity'] ?? 1;
                 $parts[] = $quantity . ' x';
                 
-                if (!empty($vehicle['type'])) {
+                // Use full_description if available for enhanced formatting
+                if (!empty($vehicle['full_description'])) {
+                    $parts[] = $vehicle['full_description'];
+                } elseif (!empty($vehicle['type'])) {
                     $parts[] = $vehicle['type'];
                 } elseif (!empty($vehicle['brand']) && !empty($vehicle['model'])) {
-                    $parts[] = trim($vehicle['brand'] . ' ' . $vehicle['model']);
+                    $condition = $this->getVehicleCondition($vehicle, $extractionData['raw_email_content'] ?? '');
+                    $description = trim($condition . ' ' . $vehicle['brand'] . ' ' . $vehicle['model']);
+                    
+                    // Add trailer connection if present
+                    if (!empty($vehicle['additional_info'])) {
+                        $description .= ' connected to 1 x ' . $condition . ' ' . $vehicle['additional_info'];
+                    }
+                    
+                    $parts[] = $description;
                 } elseif (!empty($vehicle['brand'])) {
                     $parts[] = $vehicle['brand'];
                 }
@@ -765,6 +780,8 @@ class RobawsMapper
                 $parts[] = 'ANR'; // Port of Loading (Antwerp)
             } elseif (stripos($originStr, 'antwerp') !== false || stripos($originStr, 'antwerpen') !== false) {
                 $parts[] = 'ANR'; // Use abbreviation for customer reference
+            } elseif (stripos($originStr, 'germany') !== false || stripos($originStr, 'deutschland') !== false) {
+                $parts[] = 'ANR'; // Germany ships via Antwerp
             } else {
                 $parts[] = strtoupper($this->normalizePortNames($originStr));
             }
@@ -948,20 +965,30 @@ class RobawsMapper
         }
         // Fallback to vehicle array data
         else {
-            // Add condition (default to 'used' if not specified)
-            $condition = $this->getVehicleCondition($vehicle, $rawText);
-            $parts[] = $condition;
+        // Add condition (default to 'used' if not specified)
+        $condition = $this->getVehicleCondition($vehicle, $rawText);
+        $parts[] = $condition;
 
-            // Add vehicle/equipment type from vehicle array
-            if (!empty($vehicle['type'])) {
-                $parts[] = $vehicle['type'];
-            } elseif (!empty($vehicle['brand']) && !empty($vehicle['model'])) {
-                $parts[] = trim($vehicle['brand'] . ' ' . $vehicle['model']);
-            } elseif (!empty($vehicle['brand'])) {
-                $parts[] = $vehicle['brand'];
-            } else {
-                $parts[] = 'Motorgrader'; // Default for heavy machinery
+        // Add vehicle/equipment type from vehicle array
+        if (!empty($vehicle['full_description'])) {
+            // Use the enhanced full description if available
+            $parts[] = $vehicle['full_description'];
+        } elseif (!empty($vehicle['type'])) {
+            $parts[] = $vehicle['type'];
+        } elseif (!empty($vehicle['brand']) && !empty($vehicle['model'])) {
+            $description = trim($vehicle['brand'] . ' ' . $vehicle['model']);
+            
+            // Check if there's additional_info to connect
+            if (!empty($vehicle['additional_info'])) {
+                $description .= ' connected to 1 x ' . $condition . ' ' . $vehicle['additional_info'];
             }
+            
+            $parts[] = $description;
+        } elseif (!empty($vehicle['brand'])) {
+            $parts[] = $vehicle['brand'];
+        } else {
+            $parts[] = 'Motorgrader'; // Default for heavy machinery
+        }
         }
 
         // Build simple cargo string (no dimensions or weight)
@@ -1228,46 +1255,71 @@ class RobawsMapper
     }
 
     /**
+     * Check if a location should be mapped to its default port even in port-to-port shipping
+     */
+    private function shouldMapToDefaultPort(string $location): bool
+    {
+        $location = strtolower(trim($location));
+        
+        // Countries that should always be mapped to their default ports
+        $countriesRequiringMapping = [
+            'germany',
+            'deutschland', 
+            'belgium',
+            'netherlands'
+        ];
+        
+        foreach ($countriesRequiringMapping as $country) {
+            if (stripos($location, $country) !== false) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
      * Get default port for a location (for door-to-door shipping)
      */
     private function getDefaultPortForLocation(string $location): string
     {
         $location = strtolower(trim($location));
         
-        // European ports mapping
+        // European ports mapping with countries
         $portMappings = [
             // Belgium
-            'belgium' => 'Antwerp',
-            'brussels' => 'Antwerp',
-            'bruxelles' => 'Antwerp',
-            'antwerp' => 'Antwerp',
-            'antwerpen' => 'Antwerp',
+            'belgium' => 'Antwerp, Belgium',
+            'brussels' => 'Antwerp, Belgium',
+            'bruxelles' => 'Antwerp, Belgium',
+            'antwerp' => 'Antwerp, Belgium',
+            'antwerpen' => 'Antwerp, Belgium',
             
             // Netherlands
-            'netherlands' => 'Rotterdam',
-            'amsterdam' => 'Rotterdam',
-            'rotterdam' => 'Rotterdam',
+            'netherlands' => 'Rotterdam, Netherlands',
+            'amsterdam' => 'Rotterdam, Netherlands',
+            'rotterdam' => 'Rotterdam, Netherlands',
             
-            // Germany
-            'germany' => 'Hamburg',
-            'hamburg' => 'Hamburg',
-            'bremen' => 'Bremen',
-            'bremerhaven' => 'Bremen',
+            // Germany - Changed to map to Antwerp instead of Hamburg
+            'germany' => 'Antwerp, Belgium',
+            'deutschland' => 'Antwerp, Belgium',
+            'hamburg' => 'Hamburg, Germany',
+            'bremen' => 'Bremen, Germany',
+            'bremerhaven' => 'Bremen, Germany',
             
             // UK
-            'uk' => 'Felixstowe',
-            'england' => 'Felixstowe',
-            'london' => 'Felixstowe',
+            'uk' => 'Felixstowe, UK',
+            'england' => 'Felixstowe, UK',
+            'london' => 'Felixstowe, UK',
             
             // Africa - East Coast
-            'tanzania' => 'Dar es Salaam',
-            'kenya' => 'Mombasa',
-            'mozambique' => 'Maputo',
+            'tanzania' => 'Dar es Salaam, Tanzania',
+            'kenya' => 'Mombasa, Kenya',
+            'mozambique' => 'Maputo, Mozambique',
             
             // Default major ports
-            'dar es salaam' => 'Dar es Salaam',
-            'mombasa' => 'Mombasa',
-            'durban' => 'Durban',
+            'dar es salaam' => 'Dar es Salaam, Tanzania',
+            'mombasa' => 'Mombasa, Kenya',
+            'durban' => 'Durban, South Africa',
         ];
         
         foreach ($portMappings as $keyword => $port) {

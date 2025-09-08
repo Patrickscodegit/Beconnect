@@ -1,0 +1,234 @@
+Received: from DBBPR03MB6937.eurprd03.prod.outlook.com (2603:10a6:10:20a::23)
+ by AM0PR03MB5972.eurprd03.prod.outlook.com with HTTPS; Mon, 8 Sep 2025
+ 05:13:37 +0000
+ARC-Seal: i=2; a=rsa-sha256; s=arcselector10001; d=microsoft.com; cv=pass;
+ b=VkH0PgHsNzpa7b114EXI3dqryafXBcmXh9WOh57EYmpyGuw+oVsiU7fhRbhC00s+iivQJGjm9JjU856zfsNsL+QB2aZ6AjYD6MLVbQqHwDbxl1hzU9DydK9niBBNqKt+a0fcKirs9GqAKhdW97SQo/IzaYmQ+4FgXhEtVa6PooirF206JGYMIzQcqhcfhEmIB/u+g8D+a3O3VRju2CMaEYzxFEK/VXHajMrMeVCC5Y7fEMTqA5QxBZFyqF8Af8yNCHMN2qWW3Q8LuUzqvjUgh20yUzmiakqgn/V9BGIE9tyBDeSSAn+dGpa+TQbun1CgW+Zetd6cSe5XSSfptK5T3w==
+ARC-Message-Signature: i=2; a=rsa-sha256; c=relaxed/relaxed; d=microsoft.com;
+ s=arcselector10001;
+ h=From:Date:Subject:Message-ID:Content-Type:MIME-Version:X-MS-Exchange-AntiSpam-MessageData-ChunkCount:X-MS-Exchange-AntiSpam-MessageData-0:X-MS-Exchange-AntiSpam-MessageData-1;
+ bh=UQ9FduWXkFpyBVVoJsKTosuylx4WV33zPOLEvBShVgE=;
+ b=Vu5ARgVDs4icYaJpj3IqR+plyFbU3/fBNMJ+42UzFiCbNJus2PiDcltxHs6a0Q5tl+wMFq+a8AaTzkeUwrRZle6MeokI792t7Sp/hjrXLyBq3x0uGUu0X5HOHnPyfuKn2l6fci+nVZ87vRbwqWfNLzTtmrDQpuP5Ajf4BvWssLzrE62oIJSl931TXqbH6mcEU0S5Bm197xAsu4nlMwIXbeRy5vciPDimgRz6+DGHnH9wcOis7RmtAWd2NMGzOGZjW6EddIXK/SPSffLrT8CevMMkrXU0vr268KKE7T+3hwHV3w/BTrhfGrw3sCK+sd1FIOJIAPnbik6JMOoCtDfLLg==
+ARC-Authentication-Results: i=2; mx.microsoft.com 1; spf=none (sender ip is
+ 85.215.255.25) smtp.rcpttodomain=belgaco.be smtp.mailfrom=oliversielemann.de;
+ dmarc=pass (p=reject sp=reject pct=100) action=none
+ header.from=oliversielemann.de; dkim=pass (signature was verified)
+ header.d=oliversielemann.de; dkim=fail (signature syntax error)
+ header.d=none; arc=pass (0 oda=0 ltdi=0 93)
+Received: from DUZPR01CA0039.eurprd01.prod.exchangelabs.com
+ (2603:10a6:10:468::17) by DBBPR03MB6937.eurprd03.prod.outlook.com
+ (2603:10a6:10:20a::23) with Microsoft SMTP Server (version=TLS1_2,
+ cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.20.9094.19; Mon, 8 Sep
+ 2025 05:13:33 +0000
+Received: from DB1PEPF0003922E.eurprd03.prod.outlook.com
+ (2603:10a6:10:468:cafe::c0) by DUZPR01CA0039.outlook.office365.com
+ (2603:10a6:10:468::17) with Microsoft SMTP Server (version=TLS1_3,
+ cipher=TLS_AES_256_GCM_SHA384) id 15.20.9094.22 via Frontend Transport; Mon,
+ 8 Sep 2025 05:13:39 +0000
+Authentication-Results: spf=none (sender IP is 85.215.255.25)
+ smtp.mailfrom=oliversielemann.de; dkim=pass (signature was verified)
+ header.d=oliversielemann.de;dkim=fail (signature syntax error)
+ header.d=none;dmarc=pass action=none
+ header.from=oliversielemann.de;compauth=pass reason=100
+Received-SPF: None (protection.outlook.com: oliversielemann.de does not
+ designate permitted sender hosts)
+Received: from mo4-p00-ob.smtp.rzone.de (85.215.255.25) by
+ DB1PEPF0003922E.mail.protection.outlook.com (10.167.8.101) with Microsoft
+ SMTP Server (version=TLS1_3, cipher=TLS_AES_256_GCM_SHA384) id 15.20.9115.13
+ via Frontend Transport; Mon, 8 Sep 2025 05:13:33 +0000
+ARC-Seal: i=1; a=rsa-sha256; t=1757308412; cv=none;
+    d=strato.com; s=strato-dkim-0002;
+    b=NGcCK2nkSihOeNHpxwtg9u2mhC6wbTdycprdOKwElMeUuxgyWaUnC6BYVz5AjM/g/5
+    /i6bSnQlPexEvNxDLI4ZRCkg+NybyS58O46S4X4FGBWMfj3EldjW0px4rOkA4O7thTSt
+    IJoGLKNhBGrx+AEHOFmmnItKc7NuTSWGG+m1yb+YaUJz0krABet70fXWEhOGHO4wugq4
+    iTn17/SwKrDLfajvXzNjUJNs2VC/o0Fxk30Lx9rtBoKUDxnYUrpH81hskVWYIKDgmEVV
+    mAwi/II13nGTBoLYbbSldUy3oCAyK1kKVi7dUlzY8c7DPamyKFXFWT8F8BS1sIag2qww
+    dQ5g==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; t=1757308412;
+    s=strato-dkim-0002; d=strato.com;
+    h=Message-ID:Date:Subject:To:From:Cc:Date:From:Subject:Sender;
+    bh=UQ9FduWXkFpyBVVoJsKTosuylx4WV33zPOLEvBShVgE=;
+    b=KoBMvr32lW5aSvW0vahRWoaShgUTKAWI509xpfmbKPKdaK8xuxbi6pH2S5xV81Q/gd
+    mAlr21H8pHRM1s9CFfp9IcJsLgjQxszuf5335sIBGCTFIPpzJp1Uf4xhxJGr0smPssYa
+    l57oFLi56biQ2TANC0al5OefMwRAS/6x6ci6uhA/PwMe3fBB5G37G53hs9sfDdGPNidV
+    3MQ6QEfMrlfRlw8GOoPE7lSJeUEwvWwD2nQTtzV/c8yj9EdNxJtntFOuA21XHNE9Jt6a
+    Reyhxea6YGLoZ6re1IEBlHYpK+OHsgJlVCX0SKOamXeZ3AQ1wjTkYkvoUW5DFadrcRr/
+    uOUQ==
+ARC-Authentication-Results: i=1; strato.com;
+    arc=none;
+    dkim=none
+X-RZG-CLASS-ID: mo00
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; t=1757308412;
+    s=strato-dkim-0002; d=oliversielemann.de;
+    h=Message-ID:Date:Subject:To:From:Cc:Date:From:Subject:Sender;
+    bh=UQ9FduWXkFpyBVVoJsKTosuylx4WV33zPOLEvBShVgE=;
+    b=jNB5Fi4zk96kQSCw1gRAG34npJPK7O3Q2gg0K7gBKorRZGqxdRtAhyt7Afg+glumhu
+    RhFSsJAz4HLaDpOeq7ZnAsyQ0nqgY3bY1b5mDFNb8xDf2xOYVoN6FGsGoMC+AXTS9gA0
+    hyg6PqEw9YpcDKFGTPp+7+hl4NTaRY19I6yEu2VerT9HNEPo7xghRkUjvXWqoV8Z8WNT
+    4k+AQTOwd1n1I6ecyvmokSd20jhaFLjWf8oJqz1J59FIbRKBFuJ/zbNMIP56I7IYtRzf
+    UhAOUzhPGUqndZan/DVZszhzJr75CYTVBNP3z+hzsDkTvLAXqc/KII8QXgby9GHki+Ow
+    AiUA==
+DKIM-Signature: v=1; a=ed25519-sha256; c=relaxed/relaxed; t=1757308412;
+    s=strato-dkim-0003; d=oliversielemann.de;
+    h=Message-ID:Date:Subject:To:From:Cc:Date:From:Subject:Sender;
+    bh=UQ9FduWXkFpyBVVoJsKTosuylx4WV33zPOLEvBShVgE=;
+    b=6O72D5bdcOxVNLh3hQMP5hWLbbbgL6OumIPb1QkBKi2YFEBJJLAgxuRRVxN+m07bso
+    os/3RZOeYppq2rv8PvBA==
+X-RZG-AUTH: ":JWICemCnd/bQlYWzoyyaJKFVCjgNyHbsTOMEzo2QBIacXdgTCAOCtKbG9MPbLVG4qAF9NhvPSWyMiOWCBPufxOyRcCkyuav1u9JeWpw="
+Received: from RechterPC
+    by smtp.strato.de (RZmta 52.1.2 AUTH)
+    with ESMTPSA id u9b8c71885DWebb
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256 bits))
+	(Client did not present a certificate)
+    for <sales@belgaco.be>;
+    Mon, 8 Sep 2025 07:13:32 +0200 (CEST)
+From: "Oliver Sielemann" <info@oliversielemann.de>
+To: <sales@belgaco.be>
+Subject: car shipment
+Date: Mon, 8 Sep 2025 07:13:32 +0200
+Message-ID: <001601dc207f$523e43e0$f6bacba0$@oliversielemann.de>
+Content-Type: multipart/alternative;
+	boundary="----=_NextPart_000_0017_01DC2090.15C713E0"
+X-Mailer: Microsoft Outlook 14.0
+Thread-Index: Adwgf0mnBQYQk9QqQOidhCHfuCGIhQ==
+Content-Language: de
+X-Antivirus: Avast (VPS 250907-4, 7.9.2025), Outbound message
+X-Antivirus-Status: Clean
+Content-Transfer-Encoding: 7bit
+Return-Path: info@oliversielemann.de
+X-MS-Exchange-Organization-ExpirationStartTime: 08 Sep 2025 05:13:33.3843
+ (UTC)
+X-MS-Exchange-Organization-ExpirationStartTimeReason: OriginalSubmit
+X-MS-Exchange-Organization-ExpirationInterval: 1:00:00:00.0000000
+X-MS-Exchange-Organization-ExpirationIntervalReason: OriginalSubmit
+X-MS-Exchange-Organization-Network-Message-Id: a17df756-81c5-416b-60ac-08ddee96751d
+X-EOPAttributedMessage: 0
+X-EOPTenantAttributedMessage: 02ceaed9-55e3-451c-abea-72a2cfb39e70:0
+X-MS-Exchange-Organization-MessageDirectionality: Incoming
+X-MS-PublicTrafficType: Email
+X-MS-TrafficTypeDiagnostic: DB1PEPF0003922E:EE_|DBBPR03MB6937:EE_|AM0PR03MB5972:EE_
+X-MS-Exchange-Organization-AuthSource: DB1PEPF0003922E.eurprd03.prod.outlook.com
+X-MS-Exchange-Organization-AuthAs: Anonymous
+X-MS-Office365-Filtering-Correlation-Id: a17df756-81c5-416b-60ac-08ddee96751d
+X-MS-Exchange-Organization-SCL: 1
+X-Microsoft-Antispam: BCL:0;ARA:13230040|1032899013|69100299015|5063199012|4123199012|5073199012|13003099007|8096899003|2066899003|4076899003;
+X-Forefront-Antispam-Report: CIP:85.215.255.25;CTRY:DE;LANG:en;SCL:1;SRV:;IPV:NLI;SFV:NSPM;H:mo4-p00-ob.smtp.rzone.de;PTR:mo4-p00-ob.smtp.rzone.de;CAT:NONE;SFS:(13230040)(1032899013)(69100299015)(5063199012)(4123199012)(5073199012)(13003099007)(8096899003)(2066899003)(4076899003);DIR:INB;
+X-MS-Exchange-CrossTenant-OriginalArrivalTime: 08 Sep 2025 05:13:33.2012
+ (UTC)
+X-MS-Exchange-CrossTenant-Network-Message-Id: a17df756-81c5-416b-60ac-08ddee96751d
+X-MS-Exchange-CrossTenant-Id: 02ceaed9-55e3-451c-abea-72a2cfb39e70
+X-MS-Exchange-CrossTenant-AuthSource: DB1PEPF0003922E.eurprd03.prod.outlook.com
+X-MS-Exchange-CrossTenant-AuthAs: Anonymous
+X-MS-Exchange-CrossTenant-FromEntityHeader: Internet
+X-MS-Exchange-Transport-CrossTenantHeadersStamped: DBBPR03MB6937
+X-MS-Exchange-Transport-EndToEndLatency: 00:00:04.0997278
+X-MS-Exchange-Processed-By-BccFoldering: 15.20.9052.000
+X-Microsoft-Antispam-Mailbox-Delivery:
+	ucf:0;jmr:0;auth:0;dest:I;ENG:(910005)(944506478)(944626604)(4710137)(4712097)(4999163)(920097)(930097)(140003);
+X-Microsoft-Antispam-Message-Info:
+	=?us-ascii?Q?ZFIHuornIB1+BmuY6Cix4twK+YR2AJyNogyQ8joUY8PEuiCQ8pag4/q+5ANe?=
+ =?us-ascii?Q?K1ctkhcIGCM8Dtc6NoLjLgBBUnF77UIuiStesQDj5Rd92KjJSTRUIwL5jFld?=
+ =?us-ascii?Q?8wVFBOZp5bGRFSd8W5QHR6k+W//Lb+hVpAFGy9U2ZDDG+bMxqPWZiXMFQXSV?=
+ =?us-ascii?Q?riskTk5KmSVmOWtvJUUyaKcCwKfdJJ32rJNt7lgV5/MjwEo2vXpG0KAVHbjz?=
+ =?us-ascii?Q?dbHLJDlSfnTNWltCzePGS7ihiowNHCFLtwr1UzR8DIGdbwv6RPKPh7TEJpgA?=
+ =?us-ascii?Q?hcEEFVhR5l8hIDV6ZK9cjwVoWvMUyOnfI4IlyH2O86NvLF9Uvpil2ohBSCfK?=
+ =?us-ascii?Q?UVV+bcB6/AiHST1dU6LHg2UbsmeKzrfTxW9RaSgXydWwpyiMPGWjSz5rdJC2?=
+ =?us-ascii?Q?7BvvWBIiFpiOgx5/uAFmCdGlNdFM3oJwn+ek/8sWt1mdjCBuNWBq9eFXCWQ4?=
+ =?us-ascii?Q?4sYElKS6t6SdC7zzUJYffV/bRmFKctzJsZCiBbzkWW/hm4d4jOCt3LORxOyo?=
+ =?us-ascii?Q?xzno/e4JHLG60doQtluKxeJ8Qm/JRdcXfar61/CvHSEqjm3KokI4CaUePIul?=
+ =?us-ascii?Q?NXEa0peeI4ce7u/V9X7csGx9OVcIx14lwyUbNa4u0SdjrYwL8oaClME+7m6c?=
+ =?us-ascii?Q?SLIYvOxMfsE/QDeuyfFDBWwI7i2blcLM8wTTi50Ih5m+1jOCtlToUzdKJoPD?=
+ =?us-ascii?Q?GB3Wi6LUaOImvN1XGoBt9U5Q7lf767QZVVlIcLH4ONxnTc6IxID/hrpwMYo9?=
+ =?us-ascii?Q?/rAxQQhsDzl4E7cNl2ilL46VzACWfXaPLQghFPX/pKzH58SE+YTUQm98KkGr?=
+ =?us-ascii?Q?Fy+eXU3KUkAvlX/KgX2DsZ8zOt6/HmAWzlMGnJCu706vE2ev6jMaFDuc2pDj?=
+ =?us-ascii?Q?HMQ3oMUpuBY3bTGJXNXw3eqYrOshOymc06gUROM6a0MSLG5loZQVV31f/Ybh?=
+ =?us-ascii?Q?7CrP9XI4/MCk672cxyPA8XA0qTf4qIkThvnuQmUHIgfpXKneEVkplu/AHb9i?=
+ =?us-ascii?Q?RCQWolkDoxQIDfCeuUDaYbs8DV/DE903TvrV6/N+imZ2xYa6/RZfNEnkZ7sy?=
+ =?us-ascii?Q?OokhThmV5q7gtHUkImx87O1tiaP7J0SnTvrwHGT4rgwGwZpG88vQigsWR0gl?=
+ =?us-ascii?Q?DDrOkODGVf7pxgRfnuK3Vix+gla+AKlBDKJkkH4IveXaT1K0fjSMMFsX6EHJ?=
+ =?us-ascii?Q?0vxI5lVHwyER6h2ZgZVcZ8R2GRfQIqxDqXSuJd66gkaAsfDWAyf3RANWeJ4q?=
+ =?us-ascii?Q?Gi5M+P9UyIL7N1XKqYX/yegKspiSR120WuZAAbEGuQVlqkueysncC55aIcZC?=
+ =?us-ascii?Q?Ca3LNaH1L7ju/r0zDGhozCgQ/ZsmlPn4onP4c9R1jMtlVakIHjgqfxO/U4BE?=
+ =?us-ascii?Q?Mzlz/dwolmWxUIyV+bUNxU5U+ktGoIQ/i+hpPVc6XhJN3i5aFystROZs4Vg+?=
+ =?us-ascii?Q?ZEoMNiGxJiL48ibdCuofyC947Ifwm2taDUdntgMw5EMrZd++70ujrFrffJH9?=
+ =?us-ascii?Q?99/+YTzXR7e3H51bcc31e+sn2+Z44D8vgW8F6rbswfgwPTYXYVdf8k0e1kIy?=
+ =?us-ascii?Q?4B6eq2L4mU4b0e4hB2OGa1HPaMJmla9Y5UEColmMsL3LEV1LcDhtEA7qrFA/?=
+ =?us-ascii?Q?7dQwWW0DozO60WLIZaWxQQw4spakCAL/OhIJe2sBSi4xCBVHHMjS+zjfmt7Z?=
+ =?us-ascii?Q?UtWJ36Aj/sRyqODxLu90xzyQNSgsYjHwll46hqBYdb57hpkyoAVZttKO6NDr?=
+ =?us-ascii?Q?1gBOxvGb449qIycQXdwg5wEoYtL/S+uhMlaL0OmkT10NdVg6jJfr5esy66vV?=
+ =?us-ascii?Q?HU1zHOTKzMiLknAZGRU956odrkldSW5FrLZzQfI8+Ksaly62gOldGmFBh5/h?=
+ =?us-ascii?Q?1k1wivXAIxPiYmsZOaKF2DGi3niyBZgnzPD+OXqxCI50Rtuf4fuddY9PUwN+?=
+ =?us-ascii?Q?LEAs1CCMDEqhcv+q2PcN08yONDgvtjFhLjI2aRmt/+Vmo1V+TB+GnV/aZigJ?=
+ =?us-ascii?Q?1sUp6QC1hCbbwUhleFPKLlPXG8nkSJ5IeYhpcmp+rtuEm+Jv+lLZE68pKFT4?=
+ =?us-ascii?Q?SqM2+mX48Z27zfw7t/UkZhop2/nDrA=3D=3D?=
+MIME-Version: 1.0
+
+------=_NextPart_000_0017_01DC2090.15C713E0
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+Hello,
+
+We would like to ship our trailer (Suzuki Samurai plus RS-Camp caravan)with
+
+RoRO from Germany to Mombasa or Dar es Salaam. The trailer measures 800cm
+long, 204cm wide, 232cm high, and has a total weight of approximately
+2000kg. Could you please provide us with a quote and tell us what documents
+
+we need for transport and entry into Kenya/Tanzania? What insurance do we
+need, and how do we handle any port and customs fees in Kenya/Tanzania?
+
+Best regards, Oliver Sielemann
+
+ 
+
+
+
+-- 
+Diese E-Mail wurde von Avast-Antivirussoftware auf Viren geprüft.
+www.avast.com
+------=_NextPart_000_0017_01DC2090.15C713E0
+Content-Type: text/html; charset="us-ascii"
+Content-Transfer-Encoding: quoted-printable
+
+<html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns:m="http://schemas.microsoft.com/office/2004/12/omml" xmlns="http://www.w3.org/TR/REC-html40"><head>
+<meta http-equiv="Content-Type" content="text/html; charset=us-ascii"><meta name="Generator" content="Microsoft Word 14 (filtered medium)"><style><!--
+/* Font Definitions */
+@font-face
+	{font-family:Calibri;
+	panose-1:2 15 5 2 2 2 4 3 2 4;}
+/* Style Definitions */
+p.MsoNormal, li.MsoNormal, div.MsoNormal
+	{margin:0cm;
+	margin-bottom:.0001pt;
+	font-size:11.0pt;
+	font-family:"Calibri","sans-serif";
+	mso-fareast-language:EN-US;}
+a:link, span.MsoHyperlink
+	{mso-style-priority:99;
+	color:blue;
+	text-decoration:underline;}
+a:visited, span.MsoHyperlinkFollowed
+	{mso-style-priority:99;
+	color:purple;
+	text-decoration:underline;}
+span.E-MailFormatvorlage17
+	{mso-style-type:personal-compose;
+	font-family:"Calibri","sans-serif";
+	color:windowtext;}
+.MsoChpDefault
+	{mso-style-type:export-only;
+	font-family:"Calibri","sans-serif";
+	mso-fareast-language:EN-US;}
+@page WordSection1
+	{size:612.0pt 792.0pt;
+	margin:70.85pt 70.85pt 2.0cm 70.85pt;}
+div.WordSection1
+	{page:WordSection1;}
+--></style><!--[if gte mso 9]><xml>
+<o:shapedefaults v:ext="edit" spidmax="1026" />
+</xml><![endif]--><!--[if gte mso 9]><xml>
+<o:shapelayout v:ext="edit">
+<o:idmap v:ext="edit" data="1" />
+</o:shapelayout></xml><![endif]--></head><body lang="DE" link="blue" vlink="purple"><div class="WordSection1"><p class="MsoNormal"><span lang="EN" style="font-size:10.0pt;font-family:&quot;Courier New&quot;;mso-fareast-language:DE">Hello,<o:p></o:p></span></p><p class="MsoNormal"><span lang="EN" style="font-size:10.0pt;font-family:&quot;Courier New&quot;;mso-fareast-language:DE">We would like to ship our trailer (Suzuki Samurai plus RS-Camp caravan)with RoRO from Germany to Mombasa or Dar es Salaam. The trailer measures 800cm long, 204cm wide, 232cm high, and has a total weight of approximately 2000kg. Could you please provide us with a quote and tell us what documents we need for transport and entry into Kenya/Tanzania? What insurance do we need, and how do we handle any port and customs fees in Kenya/Tanzania?<o:p></o:p></span></p><p class="MsoNormal"><span lang="EN" style="font-size:10.0pt;font-family:&quot;Courier New&quot;;mso-fareast-language:DE">Best regards, Oliver Sielemann</span><span style="font-size:10.0pt;font-family:&quot;Courier New&quot;;mso-fareast-language:DE"><o:p></o:p></span></p><p class="MsoNormal"><o:p>&nbsp;</o:p></p></div><div id="DAB4FAD8-2DD7-40BB-A1B8-4E2AA1F9FDF2"><br><table style="border-top: 1px solid #D3D4DE;"><tr><td style="width: 55px; padding-top: 13px;"><a href="https://www.avast.com/sig-email?utm_medium=email&amp;utm_source=link&amp;utm_campaign=sig-email&amp;utm_content=emailclient" target="_blank"><img src="https://s-install.avcdn.net/ipm/preview/icons/icon-envelope-tick-round-orange-animated-no-repeat-v1.gif" alt="" width="46" height="29" style="width: 46px; height: 29px;"></a></td><td style="width: 470px; padding-top: 12px; color: #41424e; font-size: 13px; font-family: Arial, Helvetica, sans-serif; line-height: 18px;">Virenfrei.<a href="https://www.avast.com/sig-email?utm_medium=email&amp;utm_source=link&amp;utm_campaign=sig-email&amp;utm_content=emailclient" target="_blank" style="color: #4453ea;">www.avast.com</a></td></tr></table><a href="#DAB4FAD8-2DD7-40BB-A1B8-4E2AA1F9FDF2" width="1" height="1"> </a></div></body></html>
+
+------=_NextPart_000_0017_01DC2090.15C713E0--

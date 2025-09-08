@@ -58,6 +58,10 @@ class PatternExtractor
             // Enhanced dimension patterns - LxWxH format
             'dimensions_metric' => '/(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*(m|M|cm|CM|mm|MM|meters?|centimeters?|millimeters?)/',
             'dimensions_imperial' => '/(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*(ft|FT|feet|FEET|in|IN|inch|inches|foot)/',
+                        // NEW: German separated dimensions pattern for "800cm lang, 204cm breit, 232cm hoch"
+            'dimensions_separated_german' => '/(\d+)\s*cm\s+lang[,]?\s*(\d+)\s*cm\s+breit[,]?\s*(\d+)\s*cm\s+hoch/i',
+            // NEW: Dimensions separated pattern for "800cm long, 204cm wide, 232cm high"
+            'dimensions_separated' => '/(\d+)\s*cm\s+long[,]?\s*(\d+)\s*cm\s+wide[,]?\s*(\d+)\s*cm\s+high/i',
             // Individual dimension fields with labels - very specific to avoid false positives
             'length_labeled' => '/(?:^|\b)(?:vehicle\s+)?length[\s:=]+(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)\b/i',
             'width_labeled' => '/(?:^|\b)(?:vehicle\s+)?width[\s:=]+(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)\b/i',
@@ -70,23 +74,33 @@ class PatternExtractor
             'dimensions_labeled' => '/(?:dimensions?|size|measurements?)[\s:=]+(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)?/i',
             'dimensions_lwh' => '/(?:L\s*[×x×X*]\s*W\s*[×x×X*]\s*H|LWH)[\s:=]*(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)?/i',
             'dimensions_parentheses' => '/\((\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)?\)/',
-            'weight_kg' => '/(\d+\.?\d*)\s*(kg|KG|Kg|kilo|kilos|kilogram|kilograms)/',
+            'weight_kg' => '/(?:total\s+weight\s+of\s+approximately\s+)?(\d+\.?\d*)\s*(kg|KG|Kg|kilo|kilos|kilogram|kilograms)/',
             'weight_lbs' => '/(\d+\.?\d*)\s*(lbs|LBS|lb|LB|pounds|POUNDS)/',
             'mileage_km' => '/(\d+[\d,\.]*)\s*(km|KM|kilometer|kilometers|kilometre|kilometres)/',
             'mileage_miles' => '/(\d+[\d,\.]*)\s*(miles|mi|MI|mile)/',
             'fuel_types' => '/\b(diesel|petrol|gasoline|benzine|electric|hybrid|lpg|cng|gas)\b/i',
             'transmission' => '/\b(automatic|manual|auto|stick|CVT|cvt)\b/i',
             'condition' => '/\b(new|used|pre[\s-]?owned|second[\s-]?hand|damaged|accident|salvage)\b/i',
-            'colors' => '/\b(black|white|silver|grey|gray|red|blue|green|yellow|orange|brown|beige|gold|bronze|purple|metallic|pearl)\b/i'
+            'colors' => '/\b(black|white|silver|grey|gray|red|blue|green|yellow|orange|brown|beige|gold|bronze|purple|metallic|pearl)\b/i',
+            // NEW: Vehicle in parentheses pattern for "(Suzuki Samurai plus RS-Camp caravan)"
+            'vehicle_parentheses' => '/\(([^)]+)\)/i',
+            // NEW: Direct vehicle name pattern for "Suzuki Samurai plus..."
+            'vehicle_direct' => '/\b([A-Z][a-z]+\s+[A-Z][a-z]+)\s+plus\b/i'
         ];
         
         $this->shippingPatterns = [
             'route_from_to' => '/from\s+([A-Za-z\s,\-\.]+?)\s+to\s+([A-Za-z\s,\-\.]+?)(?:[.,;]|\s+(?:incl|including|with)|$)/i',
+            // NEW: German route pattern for "ab Deutschland nach X"
+            'route_german' => '/ab\s+([A-Za-zÄÖÜäöüß\s,\-\.]+?)\s+nach\s+([A-Za-zÄÖÜäöüß\s,\-\.]+?)(?:[.,;]|\s|$)/i',
             'route_french' => '/de\s+([A-Za-zÀ-ÿ\s,\-\.]+?)\s+vers\s+([A-Za-zÀ-ÿ\s,\-\.]+?)(?:[.,;]|\s|par|$)/i',
             'route_dutch' => '/(?:vanaf|van)\s+([A-Za-zÀ-ÿ\s,\-\.]+?)\s+naar\s+([A-Za-zÀ-ÿ\s,\-\.]+?)(?:\s+(?:incl|inclusief|met)|[.,;]|$)/i',
             'route_arrow' => '/([A-Za-z\s,\-\.]+?)\s*[-–—→>\s]+\s*([A-Za-z\s,\-\.]+?)(?:[.,;]|\s|$)/',
             'origin' => '/(?:origin|from|loading|pickup|departure|vanaf|van):\s*([A-Za-z\s,\-\.]+?)(?:[.,;\n]|$)/i',
             'destination' => '/(?:destination|to|delivery|discharge|arrival|naar):\s*([A-Za-z\s,\-\.]+?)(?:[.,;\n]|$)/i',
+            // NEW: Handle "to X or Y" pattern for destinations
+            'destination_options' => '/to\s+([A-Za-z\s,\-\.]+?)\s+or\s+([A-Za-z\s,\-\.]+?)(?:[.,;\n]|$)/i',
+            // NEW: German destination options pattern for "nach X oder Y"
+            'destination_options_german' => '/nach\s+([A-Za-zÄÖÜäöüß\s,\-\.]+?)\s+oder\s+([A-Za-zÄÖÜäöüß\s,\-\.]+?)(?:[.,;\n]|$)/i',
             'pol' => '/POL:\s*([A-Za-z\s,\-\.]+?)(?:[.,;\n]|$)/i',
             'pod' => '/POD:\s*([A-Za-z\s,\-\.]+?)(?:[.,;\n]|$)/i',
             'roro' => '/\b(ro[\s-]?ro|RORO|RoRo|roll[\s-]?on[\s-]?roll[\s-]?off)\b/i',
@@ -154,6 +168,42 @@ class PatternExtractor
             }
         }
         
+        // NEW: Check for vehicle info patterns before fallback patterns
+        if (empty($vehicle['brand']) || empty($vehicle['model'])) {
+            // Try parentheses pattern first for full vehicle context
+            if (preg_match($this->vehiclePatterns['vehicle_parentheses'], $content, $matches)) {
+                $vehicleInfo = trim($matches[1]);
+                Log::info('Vehicle info found in parentheses', ['info' => $vehicleInfo]);
+                
+                // Parse "Suzuki Samurai plus RS-Camp caravan" format
+                $parsedInfo = $this->parseVehicleInfo($vehicleInfo);
+                if ($parsedInfo) {
+                    $vehicle = array_merge($vehicle, $parsedInfo);
+                }
+            }
+            // Try direct vehicle pattern if parentheses didn't work
+            elseif (preg_match($this->vehiclePatterns['vehicle_direct'], $content, $matches)) {
+                $vehicleName = trim($matches[1]);
+                Log::info('Direct vehicle name found', ['name' => $vehicleName]);
+                
+                // Parse "Brand Model" format
+                $nameParts = explode(' ', $vehicleName);
+                if (count($nameParts) >= 2) {
+                    $vehicle['brand'] = $nameParts[0];
+                    $vehicle['model'] = implode(' ', array_slice($nameParts, 1));
+                    $vehicle['extraction_pattern'] = 'vehicle_direct';
+                    $vehicle['extraction_source'] = 'direct_text';
+                    
+                    // Also check if there's additional context in parentheses nearby
+                    if (preg_match('/\(([^)]*caravan[^)]*)\)/i', $content, $contextMatches)) {
+                        $vehicle['additional_info'] = trim($contextMatches[1]);
+                        $vehicle['type'] = 'Trailer';
+                        $vehicle['category'] = 'recreational_vehicle';
+                    }
+                }
+            }
+        }
+
         // Fallback: Extract brand and model using common patterns (when database is empty)
         if (empty($vehicle['brand']) || empty($vehicle['model'])) {
             $commonPatterns = $this->getCommonVehiclePatterns();
@@ -173,9 +223,7 @@ class PatternExtractor
                     break; // Use first match
                 }
             }
-        }
-        
-        // Extract year (context-aware)
+        }        // Extract year (context-aware)
         if (empty($vehicle['year'])) {
             // First, try to extract model year specifically
             if (preg_match('/Model:\s*(\d{4})/i', $content, $matches)) {
@@ -241,12 +289,57 @@ class PatternExtractor
             $vehicle['condition'] = $this->standardizeCondition($matches[1]);
         }
         
+        // Default to "used" if no condition specified (typical for personal vehicle shipments)
+        if (empty($vehicle['condition'])) {
+            $vehicle['condition'] = 'used';
+        }
+        
+        // Create full description if additional_info exists
+        if (!empty($vehicle['additional_info'])) {
+            $vehicle['full_description'] = ($vehicle['brand'] ?? '') . ' ' . ($vehicle['model'] ?? '') . ' connected to ' . $vehicle['additional_info'];
+        }
+        
         // Extract color
         if (preg_match($this->vehiclePatterns['colors'], $content, $matches)) {
             $vehicle['color'] = strtolower($matches[1]);
         }
         
         return array_filter($vehicle); // Remove empty values
+    }
+    
+    /**
+     * Parse vehicle information from parentheses like "(Suzuki Samurai plus RS-Camp caravan)"
+     */
+    private function parseVehicleInfo(string $vehicleInfo): ?array
+    {
+        $result = [];
+        
+        // Handle "Brand Model plus other info" format
+        if (preg_match('/^([A-Za-z]+)\s+([A-Za-z0-9\s]+?)\s+plus\s+(.+)$/i', $vehicleInfo, $matches)) {
+            $result['brand'] = trim($matches[1]);
+            $result['model'] = trim($matches[2]);
+            $result['additional_info'] = trim($matches[3]);
+            
+            // Check if additional info contains vehicle type
+            if (preg_match('/\b(trailer|caravan|camper|rv)\b/i', $result['additional_info'], $typeMatch)) {
+                $result['type'] = ucfirst(strtolower($typeMatch[1]));
+                $result['category'] = 'recreational_vehicle';
+            }
+            
+            Log::info('Parsed vehicle info from parentheses', $result);
+            return $result;
+        }
+        
+        // Handle simple "Brand Model" format
+        if (preg_match('/^([A-Za-z]+)\s+([A-Za-z0-9\s]+)$/i', $vehicleInfo, $matches)) {
+            $result['brand'] = trim($matches[1]);
+            $result['model'] = trim($matches[2]);
+            
+            Log::info('Parsed simple vehicle info from parentheses', $result);
+            return $result;
+        }
+        
+        return null;
     }
     
     /**
@@ -296,8 +389,42 @@ class PatternExtractor
     {
         $shipping = [];
         
-        // Extract route (from-to pattern)
-        if (preg_match($this->shippingPatterns['route_from_to'], $content, $matches)) {
+        // Check for destination options patterns first (more specific)
+        if (preg_match($this->shippingPatterns['destination_options_german'], $content, $matches)) {
+            $option1 = trim($matches[1]);
+            $option2 = trim($matches[2]);
+            
+            // For German pattern, we also need to extract the origin from "ab X"
+            if (preg_match('/ab\s+([A-Za-zÄÖÜäöüß\s,\-\.]+?)\s+nach/i', $content, $originMatches)) {
+                $shipping['origin'] = trim($originMatches[1]);
+            }
+            
+            $shipping['destination'] = $option1;
+            $shipping['destination_options'] = [$option1, $option2];
+            
+            Log::info('German destination options found', [
+                'primary' => $option1,
+                'alternative' => $option2,
+                'origin' => $shipping['origin'] ?? null
+            ]);
+        } elseif (preg_match($this->shippingPatterns['destination_options'], $content, $matches)) {
+            $option1 = trim($matches[1]);
+            $option2 = trim($matches[2]);
+            
+            $shipping['destination'] = $option1;
+            $shipping['destination_options'] = [$option1, $option2];
+            
+            Log::info('Destination options found', [
+                'primary' => $option1,
+                'alternative' => $option2
+            ]);
+        }
+        
+        // Only check route patterns if we haven't found destination options
+        elseif (preg_match($this->shippingPatterns['route_from_to'], $content, $matches)) {
+            $shipping['origin'] = trim($matches[1]);
+            $shipping['destination'] = trim($matches[2]);
+        } elseif (preg_match($this->shippingPatterns['route_german'], $content, $matches)) {
             $shipping['origin'] = trim($matches[1]);
             $shipping['destination'] = trim($matches[2]);
         } elseif (preg_match($this->shippingPatterns['route_french'], $content, $matches)) {
@@ -487,6 +614,11 @@ class PatternExtractor
         
         // Enhanced patterns for dimension extraction (including European comma format)
         $patterns = [
+            // NEW Pattern: German "800cm lang, 204cm breit, 232cm hoch" format  
+            'separated_dimensions_german' => $this->vehiclePatterns['dimensions_separated_german'],
+            // NEW Pattern: English "800cm long, 204cm wide, 232cm high" format
+            'separated_dimensions' => $this->vehiclePatterns['dimensions_separated'],
+            
             // Pattern 1: 10.06m x 2.52m x 3.12m or 10,06m x 2,52m x 3,12m
             'european_comma_format' => '/(\d+[,.]?\d*)\s*m?\s*[x×]\s*(\d+[,.]?\d*)\s*m?\s*[x×]\s*(\d+[,.]?\d*)\s*m?/i',
             
@@ -515,16 +647,29 @@ class PatternExtractor
                     'raw_text' => substr($content, 0, 200)
                 ]);
                 
-                // Convert comma to dot for decimal numbers
-                $length = (float) str_replace(',', '.', $matches[1]);
-                $width = (float) str_replace(',', '.', $matches[2]);
-                $height = (float) str_replace(',', '.', $matches[3]);
-                $unit = isset($matches[4]) ? strtolower(trim($matches[4])) : 'm';
+                // Handle the new separated dimensions format
+                if ($patternName === 'separated_dimensions_german' || $patternName === 'separated_dimensions') {
+                    $length = (float) str_replace(',', '.', $matches[1]);
+                    $width = (float) str_replace(',', '.', $matches[2]);
+                    $height = (float) str_replace(',', '.', $matches[3]);
+                    $unit = 'cm'; // These patterns are specifically for cm
+                } else {
+                    // Convert comma to dot for decimal numbers
+                    $length = (float) str_replace(',', '.', $matches[1]);
+                    $width = (float) str_replace(',', '.', $matches[2]);
+                    $height = (float) str_replace(',', '.', $matches[3]);
+                    $unit = isset($matches[4]) ? strtolower(trim($matches[4])) : 'm';
+                }
                 
                 // Validate dimensions (reasonable ranges for equipment/vehicles)
-                if ($length > 0 && $length < 100 && 
-                    $width > 0 && $width < 50 && 
-                    $height > 0 && $height < 50) {
+                // For cm values, allow larger ranges; for m values, use smaller ranges
+                $maxLength = ($unit === 'cm') ? 5000 : 100;  // 50m max for cm, 100m for other units
+                $maxWidth = ($unit === 'cm') ? 1000 : 50;    // 10m max for cm, 50m for other units  
+                $maxHeight = ($unit === 'cm') ? 1000 : 50;   // 10m max for cm, 50m for other units
+                
+                if ($length > 0 && $length < $maxLength && 
+                    $width > 0 && $width < $maxWidth && 
+                    $height > 0 && $height < $maxHeight) {
                     
                     // Convert to meters
                     $dimensions = $this->convertDimensionsToMeters($length, $width, $height, $unit);
@@ -743,6 +888,17 @@ class PatternExtractor
         if (preg_match($this->vehiclePatterns['weight_lbs'], $content, $matches)) {
             $lbs = (float)str_replace(',', '', $matches[1]);
             return (int)round($lbs * 0.453592); // Convert to kg
+        }
+        
+        // NEW: Handle weight in tons (e.g., "1,8t" or "1.8 tons")
+        if (preg_match('/(\d+(?:[,\.]\d+)?)\s*(?:tons?|t)\b/i', $content, $matches)) {
+            $weight = (float) str_replace(',', '.', $matches[1]);
+            return (int)round($weight * 1000); // Convert to kg
+        }
+        
+        // NEW: Handle weight near vehicle context
+        if (preg_match('/(?:weight[:\s]*|wiegt[:\s]*|masse[:\s]*)?(\d+(?:,\d+)?)\s*kg\b/i', $content, $matches)) {
+            return (int)round((float)str_replace(',', '', $matches[1]));
         }
         
         return null;
