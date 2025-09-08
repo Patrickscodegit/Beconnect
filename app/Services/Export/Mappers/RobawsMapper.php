@@ -787,11 +787,16 @@ class RobawsMapper
             }
         }
         
-        // Add destination - use full port names
+        // Add destination - use appropriate abbreviations
         if ($destinationStr) {
             $normalizedDest = $this->normalizePortNames($destinationStr);
             if (stripos($normalizedDest, 'dar es salaam') !== false) {
                 $parts[] = 'DAR ES SALAAM';
+            } elseif (stripos($normalizedDest, 'lagos') !== false || 
+                      stripos($normalizedDest, 'nigeria') !== false || 
+                      stripos($normalizedDest, 'tin-can') !== false || 
+                      stripos($normalizedDest, 'tin can') !== false) {
+                $parts[] = 'LAGOS';
             } else {
                 $parts[] = strtoupper($normalizedDest);
             }
@@ -1310,6 +1315,13 @@ class RobawsMapper
             'uk' => 'Felixstowe, UK',
             'england' => 'Felixstowe, UK',
             'london' => 'Felixstowe, UK',
+            
+            // Africa - West Coast
+            'nigeria' => 'Lagos, Nigeria',
+            'lagos' => 'Lagos, Nigeria',
+            'tin-can port' => 'Lagos, Nigeria',
+            'tin can port' => 'Lagos, Nigeria',
+            'tincan' => 'Lagos, Nigeria',
             
             // Africa - East Coast
             'tanzania' => 'Dar es Salaam, Tanzania',
