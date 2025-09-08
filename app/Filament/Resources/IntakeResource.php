@@ -643,7 +643,8 @@ class IntakeResource extends Resource
                         }),
                 ]),
             ])
-            ->defaultSort('created_at', 'desc');
+            ->defaultSort('created_at', 'desc')
+            ->poll('5s'); // Auto-refresh every 5 seconds for real-time status updates
     }
     
     public static function infolist(Infolist $infolist): Infolist

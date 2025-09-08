@@ -222,6 +222,7 @@ class RobawsMapper
             'contactEmail'    => $q['contact_email'] ?? null,
             'customerId'      => $clientId !== null ? (int) $clientId : null, // Top-level for Customer binding
             'clientId'        => $clientId !== null ? (int) $clientId : null, // Also set clientId for compatibility
+            'companyId'       => config('services.robaws.default_company_id', config('services.robaws.company_id', 1)),
         ];
 
         $xf = [];
@@ -382,9 +383,30 @@ class RobawsMapper
     {
         // Use the intake's extraction_data attribute (not a relationship)
         $base = $intake->extraction_data ?? [];
+        
+        // Handle case where extraction_data is stored as JSON string
+        if (is_string($base)) {
+            $base = json_decode($base, true) ?? [];
+        }
+        
+        // Ensure $base is always an array
+        if (!is_array($base)) {
+            $base = [];
+        }
 
         foreach ($intake->documents as $doc) {
             $docData = $doc->extraction?->extracted_data ?? [];
+            
+            // Handle case where extracted_data is stored as JSON string
+            if (is_string($docData)) {
+                $docData = json_decode($docData, true) ?? [];
+            }
+            
+            // Ensure $docData is always an array
+            if (!is_array($docData)) {
+                $docData = [];
+            }
+            
             $base = array_replace_recursive($base, $docData);
         }
 

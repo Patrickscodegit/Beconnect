@@ -14,6 +14,9 @@ class ProductionStatsWidget extends BaseWidget
 {
     protected static ?int $sort = 1;
     
+    // Enable automatic polling every 10 seconds for real-time stats
+    protected static ?string $pollingInterval = '10s';
+    
     protected function getStats(): array
     {
         $today = Carbon::today();

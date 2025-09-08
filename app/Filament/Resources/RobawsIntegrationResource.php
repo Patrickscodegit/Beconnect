@@ -164,7 +164,8 @@ class RobawsIntegrationResource extends Resource
                         }),
                 ]),
             ])
-            ->defaultSort('created_at', 'desc');
+            ->defaultSort('created_at', 'desc')
+            ->poll('10s'); // Auto-refresh every 10 seconds for integration status
     }
 
     public static function getPages(): array

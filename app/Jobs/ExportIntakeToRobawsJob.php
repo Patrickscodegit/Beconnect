@@ -13,6 +13,16 @@ class ExportIntakeToRobawsJob implements ShouldQueue
     use Queueable;
 
     public $intake;
+    
+    /**
+     * The number of times the job may be attempted.
+     */
+    public $tries = 3;
+    
+    /**
+     * The maximum number of seconds the job can run before timing out.
+     */
+    public $timeout = 120;
 
     /**
      * Create a new job instance.

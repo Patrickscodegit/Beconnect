@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.bconnect.horizon</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/php</string>
+        <string>artisan</string>
+        <string>horizon</string>
+    </array>
+    
+    <key>WorkingDirectory</key>
+    <string>/Users/patrickhome/Documents/Robaws2025_AI/Bconnect</string>
+    
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <key>KeepAlive</key>
+    <true/>
+    
+    <key>StandardOutPath</key>
+    <string>/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/storage/logs/horizon.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/storage/logs/horizon-error.log</string>
+    
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>

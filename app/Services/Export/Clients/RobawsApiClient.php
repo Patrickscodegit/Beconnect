@@ -871,18 +871,20 @@ final class RobawsApiClient
     public function testConnection(): array
     {
         try {
-            $response = $this->getHttpClient()->get('/api/v2/health');
+            $response = $this->getHttpClient()->get('/api/v2/clients', ['page'=>0,'size'=>1]);
             
             return [
                 'success' => $response->successful(),
                 'status' => $response->status(),
+                'kind' => 'clients-ping',
                 'response_time' => $response->transferStats?->getTransferTime(),
             ];
         } catch (\Exception $e) {
             return [
                 'success' => false,
                 'error' => $e->getMessage(),
-                'status' => 500,
+                'status' => method_exists($e, 'getCode') ? (int)$e->getCode() : 0,
+                'kind' => 'clients-ping',
             ];
         }
     }
@@ -1386,5 +1388,104 @@ final class RobawsApiClient
             ->withHeaders(['Content-Type'=>'application/json','Accept'=>'application/json'])
             ->post("/api/v2/clients/{$clientId}/contacts", $payload)
             ->throw();
+    }
+
+    /**
+     * Find or create a contact for a client and return their ID
+     * This method is used for quotation contact person linking
+     */
+    public function findOrCreateClientContactId(int $clientId, array $c): ?int
+    {
+        $email = isset($c['email']) ? mb_strtolower(trim($c['email'])) : null;
+
+        // A) scan client-scoped contacts (page all; size=100)
+        $page = 0; 
+        $size = 100;
+        
+        do {
+            $res = $this->getHttpClient()
+                ->get("/api/v2/clients/{$clientId}/contacts", ['page'=>$page,'size'=>$size])
+                ->throw()->json();
+
+            foreach (($res['items'] ?? $res ?? []) as $ct) {
+                // Primary match by email
+                if ($email && isset($ct['email']) && mb_strtolower(trim($ct['email'])) === $email) {
+                    return (int)$ct['id'];
+                }
+                
+                // Fallback match by surname + (firstName|name) when no email
+                $sn = mb_strtolower(trim($ct['surname'] ?? ''));
+                $fn = mb_strtolower(trim($ct['firstName'] ?? $ct['name'] ?? ''));
+                if ($sn && $fn && $sn === mb_strtolower(trim($c['last_name'] ?? $c['surname'] ?? ''))
+                         && $fn === mb_strtolower(trim($c['first_name'] ?? $c['firstName'] ?? ''))) {
+                    return (int)$ct['id'];
+                }
+            }
+
+            $page++;
+            $total = (int)($res['totalItems'] ?? 0);
+        } while ($page * $size < $total);
+
+        // B) create contact under the client
+        $payload = array_filter([
+            'title'     => $c['title'] ?? null,
+            'firstName' => $c['first_name'] ?? $c['firstName'] ?? null, // harmless if tenant ignores
+            'surname'   => $c['last_name']  ?? $c['surname']   ?? ($c['name'] ?? null),
+            'function'  => $c['function']   ?? null,
+            'email'     => $c['email']      ?? null,
+            'tel'       => $c['tel']        ?? $c['phone']  ?? null,
+            'gsm'       => $c['gsm']        ?? $c['mobile'] ?? null,
+            'isPrimary' => $c['is_primary'] ?? false,
+            'receivesQuotes'   => $c['receives_quotes']   ?? true,
+            'receivesInvoices' => $c['receives_invoices'] ?? false,
+        ], fn($v) => $v !== null && $v !== '');
+
+        $created = $this->getHttpClient()
+            ->withHeaders(['Content-Type'=>'application/json','Accept'=>'application/json'])
+            ->post("/api/v2/clients/{$clientId}/contacts", $payload)
+            ->throw()->json();
+
+        return isset($created['id']) ? (int)$created['id'] : null;
+    }
+
+    /**
+     * Set the contact on an offer (tries clientContactId, contactPersonId, then contactId)
+     */
+    public function setOfferContact(int $offerId, int $contactId): bool
+    {
+        foreach (['clientContactId','contactPersonId','contactId'] as $key) {
+            $json = json_encode([$key => $contactId], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);
+            $res = $this->getHttpClient()
+                ->withHeaders(['Content-Type'=>'application/merge-patch+json','Accept'=>'application/json'])
+                ->withBody($json, 'application/merge-patch+json')
+                ->patch("/api/v2/offers/{$offerId}");
+            
+            if ($res->successful()) {
+                \Illuminate\Support\Facades\Log::info('Successfully set contact on offer', [
+                    'offer_id' => $offerId,
+                    'contact_id' => $contactId,
+                    'field_used' => $key
+                ]);
+                return true;
+            }
+
+            if ($res->status() === 404) {
+                // Self-heal stale offer IDs - log warning and let caller recreate
+                \Illuminate\Support\Facades\Log::warning('Offer not found while linking contact; clear stored robaws_offer_id and recreate.', [
+                    'offer_id' => $offerId,
+                    'contact_id' => $contactId
+                ]);
+                return false;
+            }
+            
+            if ($res->status() >= 500) break; // don't keep probing on server errors
+        }
+        
+        \Illuminate\Support\Facades\Log::warning('Failed to set contact on offer', [
+            'offer_id' => $offerId,
+            'contact_id' => $contactId
+        ]);
+        
+        return false;
     }
 }

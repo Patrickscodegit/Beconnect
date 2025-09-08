@@ -10,7 +10,9 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class ProcessIntake implements ShouldQueue
 {
@@ -24,6 +26,14 @@ class ProcessIntake implements ShouldQueue
     public function __construct(Intake $intake)
     {
         $this->intake = $intake;
+    }
+
+    /**
+     * Prevent overlapping jobs per intake
+     */
+    public function middleware(): array
+    {
+        return [ (new WithoutOverlapping('intake:'.$this->intake->id))->dontRelease() ];
     }
 
     /**
@@ -64,23 +74,14 @@ class ProcessIntake implements ShouldQueue
             }
 
             // Merge contact data: seeded data takes precedence, extracted fills gaps
-            $contactData = array_merge(
-                (array) data_get($payload, 'contact', []),
-                array_filter([
-                    'name' => $this->intake->customer_name,
-                    'email' => $this->intake->contact_email,
-                    'phone' => $this->intake->contact_phone,
-                ])
-            );
-
-            // Update contact in payload and flat columns
+            $contactData = $this->normalizeContact($payload);
             $payload['contact'] = $contactData;
             
             $this->intake->update([
                 'extraction_data' => $payload,
-                'customer_name' => $contactData['name'] ?? $this->intake->customer_name,
-                'contact_email' => $contactData['email'] ?? $this->intake->contact_email,
-                'contact_phone' => $contactData['phone'] ?? $this->intake->contact_phone,
+                'customer_name'   => $contactData['name']  ?? $this->intake->customer_name,
+                'contact_email'   => $contactData['email'] ?? $this->intake->contact_email,
+                'contact_phone'   => $contactData['phone'] ?? $this->intake->contact_phone,
             ]);
 
             // Try to find or create Robaws client
@@ -88,17 +89,19 @@ class ProcessIntake implements ShouldQueue
             
             if ($robawsClientId) {
                 $this->intake->update([
-                    'robaws_client_id' => (string)$robawsClientId,
-                    'status' => 'completed'
+                    'robaws_client_id' => (string) $robawsClientId,
+                    'status'           => 'export_queued',
                 ]);
                 
-                // Automatically dispatch export job when client is resolved
-                \App\Jobs\ExportIntakeToRobawsJob::dispatch($this->intake->id);
+                // Dispatch export job after the database commit is durable
+                DB::afterCommit(function () {
+                    \App\Jobs\ExportIntakeToRobawsJob::dispatch($this->intake->id);
+                });
                 
-                Log::info('Intake processed with client and export job dispatched', [
+                Log::info('Intake processed and export queued', [
                     'intake_id' => $this->intake->id,
                     'client_id' => $robawsClientId,
-                    'method' => 'auto_resolve_or_create'
+                    'method'    => 'auto_resolve_or_create'
                 ]);
                 
                 return;
@@ -106,19 +109,22 @@ class ProcessIntake implements ShouldQueue
 
             // If client resolution/creation failed, still mark as processed
             // Contact info is no longer mandatory for processing
-            $this->intake->update(['status' => 'processed']);
+            $this->intake->update(['status' => 'export_queued']);
             
             // Dispatch export job even without client (will attempt client creation during export)
-            \App\Jobs\ExportIntakeToRobawsJob::dispatch($this->intake->id);
+            DB::afterCommit(function () {
+                \App\Jobs\ExportIntakeToRobawsJob::dispatch($this->intake->id);
+            });
             
             Log::info('Intake processed without client - export will attempt client creation', [
                 'intake_id' => $this->intake->id,
+                'contact_keys_present' => array_keys($contactData),
             ]);
 
             Log::info('Intake processing completed', [
                 'intake_id' => $this->intake->id,
                 'files_processed' => $files->count(),
-                'ready_for_export' => $hasEmail || $hasPhone,
+                'ready_for_export' => !empty($contactData['email']) || !empty($contactData['phone']),
                 'status' => $this->intake->fresh()->status
             ]);
 
@@ -135,27 +141,50 @@ class ProcessIntake implements ShouldQueue
     }
 
     /**
+     * Normalize contact data with proper name splitting and fallbacks
+     */
+    private function normalizeContact(array $payload): array
+    {
+        $c = (array) data_get($payload, 'contact', []);
+
+        // split "John Smith" if first/last missing
+        if (!empty($c['name']) && (empty($c['first_name']) || empty($c['last_name']))) {
+            [$first, $last] = array_pad(preg_split('/\s+/', trim($c['name']), 2), 2, null);
+            $c['first_name'] = $c['first_name'] ?? $first;
+            $c['last_name']  = $c['last_name']  ?? $last;
+        }
+
+        // fallbacks from flat intake cols / metadata if extractor is sparse
+        $c['email'] = $c['email'] ?? $this->intake->contact_email ?? data_get($this->intake, 'metadata.from_email');
+        $c['phone'] = $c['phone'] ?? $this->intake->contact_phone;
+        $c['name']  = $c['name']  ?? $this->intake->customer_name ?? data_get($this->intake, 'metadata.from_name');
+
+        // clean empties
+        return array_filter($c, fn($v) => $v !== null && $v !== '');
+    }
+
+    /**
      * Find existing client or create a new one with available data
      */
-    private function findOrCreateRobawsClient(array $contactData): ?string
+    private function findOrCreateRobawsClient(array $contactData): ?int
     {
         try {
             $apiClient = app(\App\Services\Export\Clients\RobawsApiClient::class);
             
             // Prepare hints for the robust resolution
             $hints = [
-                'client_name' => $contactData['name'] ?? ($this->intake->metadata['from_name'] ?? null),
-                'email' => $contactData['email'] ?? ($this->intake->metadata['from_email'] ?? null),
-                'phone' => $contactData['phone'] ?? null,
-                'first_name' => $contactData['name'] ?? ($this->intake->contact_name ?? null),
-                'last_name' => $contactData['surname'] ?? null,
-                'contact_email' => $contactData['email'] ?? ($this->intake->contact_email ?? null),
-                'contact_phone' => $contactData['phone'] ?? ($this->intake->contact_phone ?? null),
-                'function' => $contactData['function'] ?? null,
-                'is_primary' => true,
+                'client_name'   => $contactData['company'] ?? $contactData['name'] ?? $this->intake->customer_name,
+                'email'         => $contactData['email'] ?? data_get($this->intake, 'metadata.from_email'),
+                'phone'         => $contactData['phone'] ?? null,
+                'first_name'    => $contactData['first_name'] ?? null,
+                'last_name'     => $contactData['last_name']  ?? $contactData['surname'] ?? null,
+                'contact_email' => $contactData['email'] ?? null,
+                'contact_phone' => $contactData['phone'] ?? null,
+                'function'      => $contactData['function'] ?? null,
+                'is_primary'    => true,
                 'receives_quotes' => true,
-                'language' => 'en',
-                'currency' => 'EUR',
+                'language'      => 'en',
+                'currency'      => 'EUR',
             ];
             
             // Use the robust resolution method that prevents duplicate client creation
@@ -168,7 +197,7 @@ class ProcessIntake implements ShouldQueue
                 'source' => $resolved['source'],
             ]);
             
-            return (string)$resolved['id'];
+            return (int)$resolved['id'];
             
         } catch (\Exception $e) {
             Log::error('Failed to find or create Robaws client', [
@@ -187,21 +216,22 @@ class ProcessIntake implements ShouldQueue
     {
         // Build client data with fallbacks
         $clientPayload = [
-            'name' => $contactData['name'] ?? $this->intake->customer_name ?? 'Customer #' . $this->intake->id,
+            'name' => $contactData['company'] ?? $contactData['name'] ?? $this->intake->customer_name ?? 'Customer #' . $this->intake->id,
             'email' => $contactData['email'] ?? $this->intake->contact_email ?? 'noreply@bconnect.com',
         ];
 
-        // Add optional fields if available
+        // Add optional fields if available  
         if (!empty($contactData['phone']) || !empty($this->intake->contact_phone)) {
-            $clientPayload['phone'] = $contactData['phone'] ?? $this->intake->contact_phone;
+            $clientPayload['tel'] = $contactData['phone'] ?? $this->intake->contact_phone; // Use 'tel' not 'phone' for Robaws
         }
 
         // Add contact person if we have contact data
-        if (!empty($contactData['name']) || !empty($contactData['email']) || !empty($contactData['phone'])) {
+        if (!empty($contactData['first_name']) || !empty($contactData['last_name']) || !empty($contactData['email']) || !empty($contactData['phone'])) {
             $clientPayload['contact_person'] = [
-                'first_name' => $contactData['name'] ?? $this->intake->contact_name ?? null,
+                'first_name' => $contactData['first_name'] ?? null,
+                'last_name' => $contactData['last_name'] ?? $contactData['surname'] ?? null,
                 'email' => $contactData['email'] ?? $this->intake->contact_email ?? null,
-                'phone' => $contactData['phone'] ?? $this->intake->contact_phone ?? null,
+                'tel' => $contactData['phone'] ?? $this->intake->contact_phone ?? null, // Use 'tel' not 'phone' for Robaws
                 'is_primary' => true,
                 'receives_quotes' => true,
             ];

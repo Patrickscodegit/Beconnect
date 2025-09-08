@@ -117,7 +117,7 @@ class RobawsExportService
                 return [
                     'success' => false,
                     'error' => 'Intake was already exported recently. Use force=true to re-export.',
-                    'quotation_id' => $intake->robaws_quotation_id,
+                    'quotation_id' => $intake->robaws_offer_id,
                 ];
             }
 
@@ -154,7 +154,7 @@ class RobawsExportService
             $mapped = $this->mapper->mapIntakeToRobaws($intake, $extractionData);
 
             // Build type-safe payload with proper client ID handling
-            $payload = $this->buildTypeSeafePayload($intake, $extractionData, $mapped, $exportId);
+            $payload = $this->buildTypeSafePayload($intake, $extractionData, $mapped, $exportId);
             
             // Block export if payload is empty
             if (empty($payload)) {
@@ -181,10 +181,10 @@ class RobawsExportService
             $idempotencyKey = $options['idempotency_key'] ?? $this->generateIdempotencyKey($intake, $payloadHash);
 
             // Export to Robaws
-            if ($intake->robaws_quotation_id && !($options['create_new'] ?? false)) {
+            if ($intake->robaws_offer_id && !($options['create_new'] ?? false)) {
                 // Update existing quotation
                 $result = $this->apiClient->updateQuotation(
-                    $intake->robaws_quotation_id, 
+                    $intake->robaws_offer_id, 
                     $payload, 
                     $idempotencyKey
                 );
@@ -217,7 +217,12 @@ class RobawsExportService
                     // Improved client linking verification
                     $linkedIdFromField = (int)($verifyData['clientId'] ?? 0);
                     $linkedIdFromObject = (int)($verifyData['client']['id'] ?? 0);
-                    $expectedClientId = (int)($clientId ?? 0);
+                    $expectedClientId = (int) (
+                        $payload['clientId']
+                        ?? $payload['customerId']
+                        ?? data_get($payload, 'client.id', 0)
+                        ?? 0
+                    );
                     
                     // Consider it linked if either the field or object matches the intended clientId
                     $isLinked = ($linkedIdFromField === $expectedClientId) || ($linkedIdFromObject === $expectedClientId);
@@ -251,15 +256,24 @@ class RobawsExportService
                     ]);
                 }
 
-                // Update intake with export info
-                $updateData = [
-                    'robaws_quotation_id' => $result['quotation_id'],
-                    'exported_at' => now(),
-                    'export_payload_hash' => hash('sha256', json_encode($payload)),
-                    'export_attempt_count' => DB::raw('COALESCE(export_attempt_count, 0) + 1'),
-                ];
+                // Update intake with export info atomically
+                $offerId = (int)($result['quotation_id'] ?? 0);
+                
+                if ($offerId > 0) {
+                    // Write all fields atomically to avoid race conditions
+                    Intake::whereKey($intake->id)->update([
+                        'robaws_offer_id' => $offerId,
+                        'robaws_exported_at' => now(),
+                        'robaws_export_status' => 'exported',
+                        'export_payload_hash' => hash('sha256', json_encode($payload)),
+                    ]);
 
-                $intake->update($updateData);
+                    // Safely increment attempt count
+                    Intake::whereKey($intake->id)->increment('export_attempt_count');
+
+                    // Refresh in-memory model
+                    $intake->refresh();
+                }
 
                 Log::info("Successfully {$action} Robaws quotation", [
                     'export_id' => $exportId,
@@ -270,8 +284,10 @@ class RobawsExportService
                     'idempotency_key' => $result['idempotency_key'],
                 ]);
 
+                // Link contact person to the quotation if we have both client ID and contact data
+                $this->linkContactPersonToQuotation($offerId, $payload, $extractionData, $intake, $exportId);
+
                 // Attach documents after successful offer creation/update
-                $offerId = $result['quotation_id'];
                 $this->attachDocumentsToOffer($intake, $offerId, $exportId);
 
                 return [
@@ -339,7 +355,7 @@ class RobawsExportService
     /**
      * Build a type-safe payload with comprehensive validation and enhanced client creation
      */
-    private function buildTypeSeafePayload($intake, $extractionData, $mapped, $exportId): array
+    private function buildTypeSafePayload($intake, $extractionData, $mapped, $exportId): array
     {
         // Extract enhanced customer data
         $customerData = $mapped['customer_data'] ?? [];
@@ -412,9 +428,11 @@ class RobawsExportService
         if ($validatedClientId) {
             $mapped['client_id'] = $validatedClientId;  // Already validated as integer
             
-            // Use validated email or fallback to prevent empty contactEmail
-            $finalContactEmail = $customerEmail ?: 'sales@truck-time.com';
-            $mapped['contact_email'] = $finalContactEmail;
+            // Use validated email or intake fallback, avoid hardcoded foreign domain
+            $finalContactEmail = $customerEmail ?: ($intake->contact_email ?: null);
+            if ($finalContactEmail) {
+                $mapped['contact_email'] = $finalContactEmail;
+            }
             
             Log::info('Client ID injected into payload', [
                 'export_id' => $exportId,
@@ -617,8 +635,8 @@ class RobawsExportService
             'intake' => [
                 'id' => $intake->id,
                 'customer_name' => $intake->customer_name,
-                'robaws_quotation_id' => $intake->robaws_quotation_id,
-                'exported_at' => $intake->exported_at,
+                'robaws_offer_id' => $intake->robaws_offer_id,
+                'exported_at' => $intake->robaws_exported_at ?? $intake->exported_at,
                 'export_attempt_count' => $intake->export_attempt_count ?? 0,
                 'last_export_error' => $intake->last_export_error,
             ],
@@ -792,11 +810,10 @@ class RobawsExportService
 
     private function wasRecentlyExported(Intake $intake): bool
     {
-        if (!$intake->exported_at) {
-            return false;
-        }
+        $ts = $intake->robaws_exported_at ?? $intake->exported_at;
+        if (!$ts) return false;
         
-        $threshold = Carbon::parse($intake->exported_at)->addMinutes(5);
+        $threshold = \Illuminate\Support\Carbon::parse($ts)->addMinutes(5);
         return now()->lt($threshold);
     }
 
@@ -1080,5 +1097,151 @@ class RobawsExportService
         
         $fi = new \finfo(FILEINFO_MIME_TYPE);
         return $fi->file($file) ?: null;
+    }
+
+    /**
+     * Link contact person to quotation after successful creation
+     */
+    private function linkContactPersonToQuotation(int $offerId, array $payload, array $extractionData, Intake $intake, string $exportId): void
+    {
+        // Derive the client id from multiple possible shapes
+        $clientId = (int) (
+            $payload['clientId']
+            ?? $payload['customerId']
+            ?? data_get($payload, 'client.id', 0)
+            ?? 0
+        );
+
+        // Fallback: read it back from the just-created offer
+        if (!$clientId && $offerId) {
+            $offer = $this->apiClient->getOffer((string)$offerId, ['client']);
+            $clientId = (int) data_get($offer, 'data.client.id', 0);
+        }
+
+        if (!$clientId) {
+            Log::debug('Skipping contact person linking - no client ID', [
+                'export_id'    => $exportId,
+                'offer_id'     => $offerId,
+                'payload_keys' => array_keys($payload),
+            ]);
+            return;
+        }
+
+        try {
+            // Extract contact person data from various sources
+            $contactData = $this->extractContactPersonData($extractionData, $intake);
+            
+            if (empty($contactData)) {
+                Log::debug('Skipping contact person linking - no contact data found', [
+                    'export_id' => $exportId,
+                    'offer_id' => $offerId,
+                    'client_id' => $clientId
+                ]);
+                return;
+            }
+
+            // Find or create the contact person and get their ID
+            $contactId = $this->apiClient->findOrCreateClientContactId($clientId, $contactData);
+            
+            if (!$contactId) {
+                Log::warning('Failed to resolve contact person for quotation linking', [
+                    'export_id' => $exportId,
+                    'offer_id' => $offerId,
+                    'client_id' => $clientId,
+                    'contact_data' => $contactData
+                ]);
+                return;
+            }
+
+            // Set the contact person on the offer
+            $success = $this->apiClient->setOfferContact($offerId, $contactId);
+            
+            if ($success) {
+                Log::info('Successfully linked contact person to quotation', [
+                    'export_id' => $exportId,
+                    'offer_id' => $offerId,
+                    'client_id' => $clientId,
+                    'contact_id' => $contactId,
+                    'contact_email' => $contactData['email'] ?? null
+                ]);
+            } else {
+                Log::warning('Failed to link contact person to quotation', [
+                    'export_id' => $exportId,
+                    'offer_id' => $offerId,
+                    'client_id' => $clientId,
+                    'contact_id' => $contactId
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error linking contact person to quotation', [
+                'export_id' => $exportId,
+                'offer_id' => $offerId,
+                'client_id' => $clientId,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Extract contact person data from extraction data with intake fallback
+     */
+    private function extractContactPersonData(array $extractionData, Intake $intake = null): array
+    {
+        // Try to extract contact person from various data sources
+        $contact = [];
+        
+        // Primary: use contact data from document_data
+        if (!empty($extractionData['document_data']['contact'])) {
+            $contact = $extractionData['document_data']['contact'];
+        }
+        // Fallback: use top-level contact data  
+        elseif (!empty($extractionData['contact'])) {
+            $contact = $extractionData['contact'];
+        }
+        // Last resort: use intake data if no extraction data available
+        elseif ($intake && ($intake->contact_email || $intake->customer_name)) {
+            $contact = [
+                'name' => $intake->customer_name,
+                'email' => $intake->contact_email,
+                'phone' => $intake->contact_phone,
+            ];
+        }
+        
+        // Extract and normalize contact person data
+        $contactPerson = [];
+        
+        if (!empty($contact['email'])) {
+            $contactPerson['email'] = $contact['email'];
+        }
+        
+        if (!empty($contact['name'])) {
+            $contactPerson['name'] = $contact['name'];
+            
+            // Try to split name into first/last
+            $nameParts = explode(' ', trim($contact['name']), 2);
+            $contactPerson['first_name'] = $nameParts[0] ?? null;
+            $contactPerson['last_name'] = $nameParts[1] ?? null;
+        }
+        
+        if (!empty($contact['phone'])) {
+            $contactPerson['phone'] = $contact['phone'];
+        }
+        
+        if (!empty($contact['mobile'])) {
+            $contactPerson['mobile'] = $contact['mobile'];
+        }
+        
+        if (!empty($contact['function']) || !empty($contact['title'])) {
+            $contactPerson['function'] = $contact['function'] ?? $contact['title'];
+        }
+        
+        // Set defaults for new contacts
+        if (!empty($contactPerson)) {
+            $contactPerson['receives_quotes'] = true;
+            $contactPerson['receives_invoices'] = false;
+        }
+        
+        return $contactPerson;
     }
 }

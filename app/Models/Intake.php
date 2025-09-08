@@ -19,6 +19,8 @@ class Intake extends Model
         'robaws_offer_id',
         'robaws_offer_number',
         'robaws_client_id',
+        'robaws_exported_at',
+        'robaws_export_status',
         'extraction_data',
         'export_payload_hash',
         'export_attempt_count',
@@ -32,6 +34,9 @@ class Intake extends Model
     protected $casts = [
         'notes' => 'array',
         'extraction_data' => 'array',
+        'export_attempt_count' => 'integer',
+        'robaws_offer_id' => 'integer',
+        'robaws_exported_at' => 'datetime',
         'last_export_error_at' => 'datetime',
     ];
 
