@@ -1128,6 +1128,11 @@ class RobawsMapper
 
         $lowerPort = strtolower(trim($portName));
         
+        // Special handling for Antwerp to always show full format
+        if ($lowerPort === 'antwerp' || $lowerPort === 'antwerpen') {
+            return 'Antwerp, Belgium';
+        }
+        
         foreach ($normalizations as $variant => $normalized) {
             if (stripos($lowerPort, $variant) !== false) {
                 return str_ireplace($variant, $normalized, $portName);
@@ -1272,6 +1277,8 @@ class RobawsMapper
             'deutschland', 
             'belgium',
             'netherlands',
+            'antwerp',     // Always format Antwerp properly
+            'antwerpen',   // Dutch name for Antwerp
             'nigeria',
             'lagos',
             'tin-can port',
