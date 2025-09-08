@@ -4,6 +4,7 @@ namespace App\Services\Export\Clients;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 final class RobawsApiClient
@@ -37,66 +38,100 @@ final class RobawsApiClient
         return $this->http;
     }
 
-    /** Search clients directly by email using contacts endpoint with include */
+    // === UTILITY METHODS FOR ROBUST RESOLUTION ===
+    
+    private function normEmail(?string $e): ?string {
+        if (!$e) return null;
+        $e = trim(mb_strtolower($e));
+        return filter_var($e, FILTER_VALIDATE_EMAIL) ? $e : null;
+    }
+
+    private function normPhone(?string $p): ?string {
+        if (!$p) return null;
+        $digits = preg_replace('/\D+/', '', $p);
+        return $digits ?: null;
+    }
+
+    private function lockKeyFor(?string $email): ?string {
+        return $email ? 'robaws:resolve:' . sha1(mb_strtolower($email)) : null;
+    }
+
+    /** Search clients by email - robust method that searches through clients and their contacts */
     public function findContactByEmail(string $email): ?array
     {
         try {
-            // Use the fast contacts endpoint with include=client parameter
+            // First try the direct contacts API (but it doesn't seem to filter properly)
             $res = $this->getHttpClient()
                 ->get('/api/v2/contacts', [
                     'email' => $email,
                     'include' => 'client',
                     'page' => 0,
-                    'size' => 1
+                    'size' => 100  // Get more results since filtering doesn't work
                 ])
                 ->throw()
                 ->json();
 
             $contacts = $res['items'] ?? [];
             
-            if (!empty($contacts)) {
-                $contact = $contacts[0];
-                // Return the client data if included, or fetch it separately
-                if (!empty($contact['client'])) {
-                    return $contact['client'];
-                } elseif (!empty($contact['clientId'])) {
-                    return $this->getClientById($contact['clientId']);
+            // Manually filter since API filtering doesn't work
+            foreach ($contacts as $contact) {
+                if (!empty($contact['email']) && strcasecmp($contact['email'], $email) === 0) {
+                    // Found a matching contact, get the client
+                    if (!empty($contact['client'])) {
+                        return $contact['client'];
+                    } elseif (!empty($contact['clientId'])) {
+                        return $this->getClientById($contact['clientId']);
+                    }
                 }
             }
             
-            // Fallback to direct client search if contacts endpoint doesn't work
-            return $this->searchClientsByEmail($email);
+            // If contacts search didn't work, fall back to comprehensive client search
+            return $this->searchClientsByEmailThroughClients($email);
             
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::warning('Error using contacts endpoint, falling back to direct search', [
+            \Illuminate\Support\Facades\Log::warning('Error using contacts endpoint, falling back to client search', [
                 'error' => $e->getMessage(),
                 'email' => $email
             ]);
             
-            // Fallback to direct client search
-            return $this->searchClientsByEmail($email);
+            // Fallback to comprehensive client search
+            return $this->searchClientsByEmailThroughClients($email);
         }
     }
 
-    /** Fallback method to search clients directly by email */
-    private function searchClientsByEmail(string $email): ?array
+    /** Comprehensive fallback: search through all clients and their contacts */
+    private function searchClientsByEmailThroughClients(string $email): ?array
     {
-        // Search through clients directly as fallback
         $page = 0;
-        $size = 100;
-        $maxPages = 10; // reasonable limit
+        $size = 50; // Smaller pages for contact checking
+        $maxPages = 20; // Reasonable limit
         
         do {
             $res = $this->getHttpClient()
-                ->get('/api/v2/clients', ['page' => $page, 'size' => $size, 'sort' => 'name:asc'])
+                ->get('/api/v2/clients', [
+                    'page' => $page, 
+                    'size' => $size, 
+                    'sort' => 'name:asc',
+                    'include' => 'contacts'
+                ])
                 ->throw()
                 ->json();
 
             $clients = $res['items'] ?? [];
             
             foreach ($clients as $client) {
+                // Check client email first
                 if (!empty($client['email']) && strcasecmp($client['email'], $email) === 0) {
                     return $client;
+                }
+                
+                // Check contacts if included
+                if (!empty($client['contacts'])) {
+                    foreach ($client['contacts'] as $contact) {
+                        if (!empty($contact['email']) && strcasecmp($contact['email'], $email) === 0) {
+                            return $client;
+                        }
+                    }
                 }
             }
             
@@ -112,6 +147,117 @@ final class RobawsApiClient
     public function findClientByEmail(string $email): ?array
     {
         return $this->findContactByEmail($email);
+    }
+
+    /**
+     * Try very hard to find the owning client by contact e-mail.
+     * Pages through ALL contacts, filters locally, follows clientId to get client.
+     * Respects Robaws max page size of 100.
+     */
+    public function findClientByEmailRobust(string $email): ?array
+    {
+        $email = $this->normEmail($email);
+        if (!$email) return null;
+
+        $page = 0; $size = 100; // Robaws max size is 100
+        $maxPages = 50;         // safety bound
+        do {
+            $res = $this->getHttpClient()->get('/api/v2/contacts', [
+                'email'   => $email,        // some tenants ignore this filter; we filter locally anyway
+                'include' => 'client',      // some tenants return it; some don't
+                'page'    => $page,
+                'size'    => $size,
+            ])->throw()->json();
+
+            foreach (($res['items'] ?? []) as $contact) {
+                $cEmail = isset($contact['email']) ? mb_strtolower(trim($contact['email'])) : null;
+                if ($cEmail !== $email) continue;
+
+                // If expanded client present, use it; else follow clientId
+                if (!empty($contact['client'])) return $contact['client'];
+                if (!empty($contact['clientId'])) {
+                    $client = $this->getClientById((string)$contact['clientId'], ['contacts']);
+                    if ($client) return $client;
+                }
+            }
+
+            $page++;
+            $total = (int)($res['totalItems'] ?? 0);
+        } while ($page * $size < $total && $page < $maxPages);
+
+        return null;
+    }
+
+    /**
+     * Scan clients across pages with contacts to find email match.
+     * Includes contacts if possible, else fetches per-client contacts.
+     * This is the fallback when findClientByEmailRobust doesn't find anything.
+     */
+    public function scanClientsForEmail(string $email): ?array
+    {
+        $email = $this->normEmail($email);
+        if (!$email) return null;
+
+        $candidates = []; // Collect all matching clients
+        $page = 0; $size = 100; $maxPages = 50; // up to 5,000 clients
+        do {
+            $res = $this->getHttpClient()->get('/api/v2/clients', [
+                'page' => $page, 'size' => $size, 'sort' => 'name:asc',
+                'include' => 'contacts', // works on many tenants; harmless if ignored
+            ])->throw()->json();
+
+            foreach (($res['items'] ?? []) as $client) {
+                $matched = false;
+                
+                // quick check: client-level email
+                $cEmail = isset($client['email']) ? mb_strtolower(trim($client['email'])) : null;
+                if ($cEmail === $email) {
+                    $matched = true;
+                }
+
+                // if contacts already included, check locally
+                if (!$matched) {
+                    $contacts = $client['contacts'] ?? null;
+                    if (is_array($contacts)) {
+                        foreach ($contacts as $ct) {
+                            $e = isset($ct['email']) ? mb_strtolower(trim($ct['email'])) : null;
+                            if ($e === $email) {
+                                $matched = true;
+                                break;
+                            }
+                        }
+                    } else {
+                        // fallback: read client-scoped contacts (bounded)
+                        try {
+                            $list = $this->getHttpClient()
+                                ->get("/api/v2/clients/{$client['id']}/contacts", ['page'=>0,'size'=>100])
+                                ->throw()->json();
+                            foreach (($list['items'] ?? $list ?? []) as $ct) {
+                                $e = isset($ct['email']) ? mb_strtolower(trim($ct['email'])) : null;
+                                if ($e === $email) {
+                                    $matched = true;
+                                    // Make sure we have contacts for chooseBest
+                                    $client['contacts'] = $list['items'] ?? $list ?? [];
+                                    break;
+                                }
+                            }
+                        } catch (\Throwable $_) {
+                            // Skip this client if contacts fetch fails
+                        }
+                    }
+                }
+
+                if ($matched) {
+                    $candidates[] = $client;
+                }
+            }
+
+            $page++;
+            $total = (int)($res['totalItems'] ?? 0);
+        } while ($page * $size < $total && $page < $maxPages);
+
+        // Use chooseBest to select the best candidate
+        return $this->chooseBest($candidates, $email);
     }
 
     public function findClientByPhone(string $phone): ?array
@@ -147,6 +293,51 @@ final class RobawsApiClient
         } while ($page < $maxPages && $page * $size < $totalItems);
 
         return null;
+    }
+
+    public function findClientByPhoneRobust(string $phone): ?array
+    {
+        $needle = $this->normPhone($phone);
+        if (!$needle) return null;
+
+        $res = $this->getHttpClient()->get('/api/v2/clients', [
+            'page'=>0,'size'=>100,'sort'=>'name:asc','include'=>'contacts'
+        ])->throw()->json();
+
+        foreach (($res['items'] ?? []) as $client) {
+            foreach (['tel','gsm'] as $k) {
+                if (!empty($client[$k]) && $this->normPhone($client[$k]) === $needle) return $client;
+            }
+            foreach (($client['contacts'] ?? []) as $c) {
+                foreach (['tel','gsm'] as $k) {
+                    if (!empty($c[$k]) && $this->normPhone($c[$k]) === $needle) return $client;
+                }
+            }
+        }
+        return null;
+    }
+
+    public function findClientByNameFuzzy(string $name): ?array
+    {
+        $name = trim(mb_strtolower($name));
+        if (!$name) return null;
+
+        $best = null; $bestScore = 0.0;
+
+        $res = $this->getHttpClient()->get('/api/v2/clients', [
+            'page'=>0,'size'=>100,'sort'=>'name:asc'
+        ])->throw()->json();
+
+        foreach (($res['items'] ?? []) as $client) {
+            $cand = mb_strtolower(trim($client['name'] ?? ''));
+            if (!$cand) continue;
+
+            // quick similarity (Levenshtein is fine, or simple ratio)
+            similar_text($name, $cand, $pct);
+            if ($pct > $bestScore) { $bestScore = $pct; $best = $client; }
+        }
+
+        return $bestScore >= 80.0 ? $best : null; // threshold
     }
 
     /** Paged slice of clients for local matching */
@@ -361,32 +552,75 @@ final class RobawsApiClient
     }
 
     /**
-     * Update existing client with new data
+     * Update existing client with new data using proper merge-patch
      */
     public function updateClient(int $clientId, array $customerData): ?array
     {
         try {
-            $updateData = $this->toRobawsClientPayload($customerData, true);
-            if (empty($updateData)) return ['id' => $clientId];
+            $update = [];
 
-            // Use proper JSON Merge Patch content type as required by Robaws API
-            $json = json_encode($updateData, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);
-            
-            $response = $this->getHttpClient()
-                ->withHeaders(['Accept' => 'application/json'])
-                ->withBody($json, 'application/merge-patch+json')
-                ->patch("/api/v2/clients/{$clientId}")
-                ->throw()
-                ->json();
+            // Map phone fields to Robaws field names
+            if (!empty($customerData['phone'] ?? $customerData['tel'])) {
+                $update['tel'] = $customerData['phone'] ?? $customerData['tel'];
+            }
+            if (!empty($customerData['mobile'] ?? $customerData['gsm'])) {
+                $update['gsm'] = $customerData['mobile'] ?? $customerData['gsm'];
+            }
+            if (!empty($customerData['website'])) {
+                $update['website'] = $customerData['website'];
+            }
+            if (!empty($customerData['vat_number'])) {
+                $update['vatNumber'] = $customerData['vat_number'];
+            }
+            if (!empty($customerData['company_number'])) {
+                $update['companyNumber'] = $customerData['company_number'];
+            }
 
-            \Illuminate\Support\Facades\Log::info('Updated Robaws client successfully', [
-                'client_id' => $clientId,
-                'updated_fields' => array_keys($updateData)
+            // Handle address if provided
+            $addressFields = array_filter([
+                $customerData['street'] ?? null,
+                $customerData['city'] ?? null,
+                $customerData['postal_code'] ?? null,
+                $customerData['country'] ?? null,
             ]);
 
-            return $response ?? ['id' => $clientId];
-        } catch (\Throwable $e) {
+            if (!empty($addressFields)) {
+                $update['address'] = array_filter([
+                    'street'       => $customerData['street'] ?? null,
+                    'streetNumber' => $customerData['street_number'] ?? null,
+                    'postalCode'   => $customerData['postal_code'] ?? null,
+                    'city'         => $customerData['city'] ?? null,
+                    'country'      => $customerData['country'] ?? null,
+                    'countryCode'  => $customerData['country_code'] ?? null,
+                ]);
+            }
+
+            if (empty($update)) return ['id' => $clientId];
+
+            // Use proper JSON Merge Patch content type
+            $response = $this->getHttpClient()
+                ->withHeaders(['Content-Type' => 'application/merge-patch+json', 'Accept' => 'application/json'])
+                ->patch("/api/v2/clients/{$clientId}", $update);
+
+            if ($response->successful()) {
+                $result = $response->json();
+                \Illuminate\Support\Facades\Log::info('Updated Robaws client successfully', [
+                    'client_id' => $clientId,
+                    'updated_fields' => array_keys($update)
+                ]);
+                return $result ?? ['id' => $clientId];
+            }
+
             \Illuminate\Support\Facades\Log::error('Error updating Robaws client', [
+                'client_id' => $clientId,
+                'status' => $response->status(),
+                'body' => $response->body(),
+                'update_data' => $update,
+            ]);
+            return ['id' => $clientId];
+
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Exception updating Robaws client', [
                 'error' => $e->getMessage(),
                 'client_id' => $clientId,
                 'update_data' => $customerData,
@@ -861,14 +1095,16 @@ final class RobawsApiClient
     }
 
     /**
-     * Try client-scoped contact creation first, fallback to client patch if not supported
+     * Create a contact under a client using the proper client-scoped endpoint
      */
     public function createClientContact(int $clientId, array $contact): ?array
     {
+        // Map our internal fields → Robaws fields (based on Robaws documentation)
+        // Robaws uses 'name' for first name and 'surname' for last name
         $payload = array_filter([
             'title'            => $contact['title'] ?? null,
-            'firstName'        => $contact['first_name'] ?? $contact['firstName'] ?? null,
-            'surname'          => $contact['last_name']  ?? $contact['surname']   ?? null,
+            'name'             => $contact['first_name'] ?? $contact['firstName'] ?? null,  // Robaws uses 'name' for first name
+            'surname'          => $contact['last_name'] ?? $contact['surname'] ?? null,
             'function'         => $contact['function'] ?? null,
             'email'            => $contact['email'] ?? null,
             'tel'              => $contact['tel'] ?? $contact['phone'] ?? null,
@@ -879,7 +1115,7 @@ final class RobawsApiClient
         ], fn($v) => $v !== null && $v !== '');
 
         try {
-            // Try A: client-scoped contact creation
+            // POST to the client-scoped contacts collection
             $response = $this->getHttpClient()
                 ->withHeaders(['Content-Type' => 'application/json', 'Accept' => 'application/json'])
                 ->post("/api/v2/clients/{$clientId}/contacts", $payload);
@@ -894,19 +1130,9 @@ final class RobawsApiClient
                 return $result;
             }
 
-            // If method/path not allowed on this tenant, fall back to B
-            if (in_array($response->status(), [404, 405], true)) {
-                \Illuminate\Support\Facades\Log::info('Client-scoped contact creation not supported, falling back to client patch', [
-                    'client_id' => $clientId,
-                    'status' => $response->status(),
-                    'fallback_method' => 'PATCH client with contactPersons'
-                ]);
-                return $this->appendContactViaClientPatch($clientId, $payload);
-            }
-
             \Illuminate\Support\Facades\Log::error('Create contact failed', [
-                'client_id' => $clientId, 
-                'status' => $response->status(), 
+                'client_id' => $clientId,
+                'status' => $response->status(),
                 'body' => $response->body(),
                 'method' => 'POST /clients/{id}/contacts'
             ]);
@@ -918,87 +1144,73 @@ final class RobawsApiClient
                 'error' => $e->getMessage(),
                 'contact_data' => $contact
             ]);
-            
-            // Try fallback method on exception
-            return $this->appendContactViaClientPatch($clientId, $payload);
+            return null;
         }
     }
 
     /**
-     * Fallback B: merge existing contacts and patch client with complete list
+     * Update a contact using the proper client-scoped endpoint with merge-patch
      */
-    private function appendContactViaClientPatch(int $clientId, array $payload): ?array
+    public function updateClientContact(int|string $clientId, int|string $contactId, array $patch): ?array
     {
+        $body = array_filter([
+            'title'            => $patch['title'] ?? null,
+            'name'             => $patch['first_name'] ?? $patch['firstName'] ?? null,  // Robaws uses 'name' for first name
+            'surname'          => $patch['last_name'] ?? $patch['surname'] ?? null,
+            'function'         => $patch['function'] ?? null,
+            'email'            => $patch['email'] ?? null,
+            'tel'              => $patch['phone'] ?? $patch['tel'] ?? null,
+            'gsm'              => $patch['mobile'] ?? $patch['gsm'] ?? null,
+            'isPrimary'        => $patch['is_primary'] ?? null,
+            'receivesInvoices' => $patch['receives_invoices'] ?? null,
+            'receivesQuotes'   => $patch['receives_quotes'] ?? null,
+        ], fn($v) => $v !== null);
+
         try {
-            // 1) Read current contacts to avoid replacing existing ones
-            $current = $this->getHttpClient()
-                ->get("/api/v2/clients/{$clientId}", ['include' => 'contacts'])
-                ->throw()->json();
-
-            $existing = $current['contacts'] ?? [];
-
-            // Normalize keys if the API returns slightly different casing
-            $new = array_filter([
-                'title'            => $payload['title']         ?? null,
-                'firstName'        => $payload['firstName']     ?? null,
-                'surname'          => $payload['surname']       ?? null,
-                'function'         => $payload['function']      ?? null,
-                'email'            => $payload['email']         ?? null,
-                'tel'              => $payload['tel']           ?? null,
-                'gsm'              => $payload['gsm']           ?? null,
-                'isPrimary'        => $payload['isPrimary']     ?? false,
-                'receivesQuotes'   => $payload['receivesQuotes']   ?? true,
-                'receivesInvoices' => $payload['receivesInvoices'] ?? false,
-            ], fn($v) => $v !== null && $v !== '');
-
-            // 2) Merge and PATCH with correct content type
-            $contactPersons = array_values(array_merge($existing, [$new]));
-            $json = json_encode(['contactPersons' => $contactPersons], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);
-
             $response = $this->getHttpClient()
                 ->withHeaders(['Content-Type' => 'application/merge-patch+json', 'Accept' => 'application/json'])
-                ->withBody($json, 'application/merge-patch+json')
-                ->patch("/api/v2/clients/{$clientId}");
+                ->patch("/api/v2/clients/{$clientId}/contacts/{$contactId}", $body);
 
             if ($response->successful()) {
                 $result = $response->json();
-                \Illuminate\Support\Facades\Log::info('Created contact via client patch fallback', [
+                \Illuminate\Support\Facades\Log::info('Updated contact via client-scoped endpoint', [
                     'client_id' => $clientId,
-                    'existing_contacts' => count($existing),
-                    'total_contacts_after' => count($contactPersons),
-                    'method' => 'PATCH client with contactPersons'
+                    'contact_id' => $contactId,
+                    'updated_fields' => array_keys($body)
                 ]);
                 return $result;
             }
 
-            \Illuminate\Support\Facades\Log::error('Contact creation via client patch failed', [
+            \Illuminate\Support\Facades\Log::error('Update contact failed', [
                 'client_id' => $clientId,
+                'contact_id' => $contactId,
                 'status' => $response->status(),
-                'body' => $response->body(),
-                'method' => 'PATCH client with contactPersons'
+                'body' => $response->body()
             ]);
             return null;
 
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Exception in contact patch fallback', [
+            \Illuminate\Support\Facades\Log::error('Exception updating contact', [
                 'client_id' => $clientId,
-                'error' => $e->getMessage(),
-                'payload' => $payload
+                'contact_id' => $contactId,
+                'error' => $e->getMessage()
             ]);
             return null;
         }
     }
 
+
+
     /**
-     * Smart upsert that uses the robust client-scoped approach with fallback
+     * Create or update a primary contact for a client
      */
     public function upsertPrimaryContact(int $clientId, array $contact): ?array
     {
-        // Try creating the contact using the robust method A -> B fallback
+        // Try creating the contact using the client-scoped endpoint
         $created = $this->createClientContact($clientId, $contact);
         if ($created) return $created;
 
-        // If all creation methods fail and we have email, try to find and update existing contact
+        // If creation fails and we have email, try to find and update existing contact
         if (!empty($contact['email'])) {
             try {
                 \Illuminate\Support\Facades\Log::info('Contact creation failed, attempting to find existing contact by email', [
@@ -1006,6 +1218,7 @@ final class RobawsApiClient
                     'email' => $contact['email']
                 ]);
                 
+                // Search for existing contact by email
                 $res = $this->getHttpClient()->get('/api/v2/contacts', [
                     'email' => $contact['email'], 
                     'include' => 'client', 
@@ -1015,39 +1228,163 @@ final class RobawsApiClient
 
                 $found = $res['items'][0] ?? null;
                 if ($found && (int)($found['clientId'] ?? 0) === (int)$clientId) {
-                    $patch = array_filter([
-                        'title'     => $contact['title'] ?? null,
-                        'firstName' => $contact['first_name'] ?? $contact['firstName'] ?? null,
-                        'surname'   => $contact['last_name']  ?? $contact['surname']    ?? null,
-                        'function'  => $contact['function'] ?? null,
-                        'tel'       => $contact['phone']   ?? $contact['tel'] ?? null,
-                        'gsm'       => $contact['mobile']  ?? $contact['gsm'] ?? null,
-                        'isPrimary' => $contact['is_primary'] ?? null,
-                    ], fn($v) => $v !== null && $v !== '');
-
-                    $json = json_encode($patch, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);
-                    $r = $this->getHttpClient()
-                        ->withHeaders(['Content-Type'=>'application/merge-patch+json','Accept'=>'application/json'])
-                        ->withBody($json, 'application/merge-patch+json')
-                        ->patch("/api/v2/contacts/{$found['id']}");
-                    
-                    if ($r->successful()) {
-                        \Illuminate\Support\Facades\Log::info('Updated existing contact person', [
-                            'client_id' => $clientId,
-                            'contact_id' => $found['id'],
-                            'updated_fields' => array_keys($patch)
-                        ]);
-                        return $r->json();
-                    }
+                    // Update the existing contact
+                    return $this->updateClientContact($clientId, $found['id'], $contact);
                 }
+
             } catch (\Exception $e) {
-                \Illuminate\Support\Facades\Log::warning('Failed to update existing contact', [
-                    'error' => $e->getMessage(),
+                \Illuminate\Support\Facades\Log::warning('Failed to find existing contact', [
                     'client_id' => $clientId,
-                    'email' => $contact['email']
+                    'email' => $contact['email'],
+                    'error' => $e->getMessage()
                 ]);
             }
         }
+
         return null;
+    }
+
+    /**
+     * Choose the best client when multiple candidates match.
+     * Prefers client with more contacts matching the email, then older ID.
+     */
+    private function chooseBest(array $candidates, string $email): ?array
+    {
+        if (empty($candidates)) return null;
+        if (count($candidates) === 1) return $candidates[0];
+        
+        $email = mb_strtolower($email);
+        usort($candidates, function ($a, $b) use ($email) {
+            $score = function ($cl) use ($email) {
+                $hits = 0;
+                foreach (($cl['contacts'] ?? []) as $ct) {
+                    $e = isset($ct['email']) ? mb_strtolower(trim($ct['email'])) : null;
+                    if ($e === $email) $hits++;
+                }
+                return [$hits, -(int)($cl['id'] ?? 0)]; // more hits, then smaller id
+            };
+            return $score($b) <=> $score($a);
+        });
+        return $candidates[0] ?? null;
+    }
+
+    /**
+     * Resolves the correct client, ensures the contact exists,
+     * and guarantees we *never* POST a duplicate client.
+     */
+    public function resolveOrCreateClientAndContact(array $hints): array
+    {
+        $email = $this->normEmail($hints['email'] ?? null);
+        $phone = $this->normPhone($hints['phone'] ?? $hints['tel'] ?? $hints['gsm'] ?? null);
+        $name  = trim($hints['client_name'] ?? $hints['name'] ?? '');
+
+        $lockKey = $this->lockKeyFor($email);
+        $ttl = 25; // seconds
+
+        return Cache::lock($lockKey ?? Str::uuid()->toString(), $ttl)->block($ttl, function () use ($email, $phone, $name, $hints) {
+
+            // 1) Resolve existing client (email > phone > fuzzy name)
+            $client = null;
+            // Email resolution (robust): try contacts first, then scan clients
+            if ($email) {
+                $client = $this->findClientByEmailRobust($email) ?: $this->scanClientsForEmail($email);
+            }
+            if (!$client && $phone) $client = $this->findClientByPhoneRobust($phone);
+            if (!$client && $name)  $client = $this->findClientByNameFuzzy($name);
+
+            // 2) If found → ensure contact exists on it, then return
+            if ($client && !empty($client['id'])) {
+                $clientId = (int)$client['id'];
+                $this->ensureContactExists($clientId, $hints);
+                return ['id' => $clientId, 'created' => false, 'source' => 'resolved'];
+            }
+
+            // 3) Otherwise create a client (idempotent), then add contact
+            $idKey = 'client:create:' . sha1(($name ?: '') . '|' . ($email ?: ''));
+
+            $resp = $this->getHttpClient()
+                ->withHeaders(['Idempotency-Key' => $idKey, 'Content-Type'=>'application/json'])
+                ->post('/api/v2/clients', array_filter([
+                    'name'       => $name ?: ($email ?: 'Unknown'),
+                    'email'      => $email,
+                    'tel'        => $phone,
+                    'language'   => $hints['language'] ?? null,
+                    'currency'   => $hints['currency'] ?? 'EUR',
+                    'vatNumber'  => $hints['vat_number'] ?? null,
+                    'website'    => $hints['website'] ?? null,
+                    'address'    => array_filter([
+                        'street'       => $hints['street'] ?? null,
+                        'streetNumber' => $hints['street_number'] ?? null,
+                        'postalCode'   => $hints['postal_code'] ?? null,
+                        'city'         => $hints['city'] ?? null,
+                        'country'      => $hints['country'] ?? null,
+                        'countryCode'  => $hints['country_code'] ?? null,
+                    ]),
+                ], fn($v) => $v !== null && $v !== ''))
+                ->throw()->json();
+
+            $clientId = (int)($resp['id'] ?? 0);
+            if ($clientId > 0) {
+                $this->ensureContactExists($clientId, $hints);
+                return ['id' => $clientId, 'created' => true, 'source' => 'created'];
+            }
+
+            throw new \RuntimeException('Failed to create or resolve client');
+        });
+    }
+
+    /**
+     * Ensure the contact exists (email is the identity)
+     */
+    public function ensureContactExists(int $clientId, array $hints): void
+    {
+        $email = $this->normEmail($hints['contact_email'] ?? $hints['email'] ?? null);
+        $first = $hints['first_name'] ?? $hints['firstName'] ?? null;
+        $last  = $hints['last_name']  ?? $hints['surname']   ?? null;
+        $tel   = $hints['contact_phone'] ?? $hints['phone'] ?? $hints['tel'] ?? null;
+        $gsm   = $hints['contact_mobile'] ?? $hints['mobile'] ?? $hints['gsm'] ?? null;
+
+        // Load existing contacts once
+        $contacts = $this->getHttpClient()
+            ->get("/api/v2/clients/{$clientId}/contacts", ['page'=>0,'size'=>100])
+            ->throw()->json();
+
+        $items = $contacts['items'] ?? $contacts ?? [];
+        foreach ($items as $c) {
+            $cEmail = isset($c['email']) ? mb_strtolower(trim($c['email'])) : null;
+            if ($email && $cEmail === $email) {
+                // Optional: update missing tel/gsm/function via merge-patch
+                $patch = array_filter([
+                    'function'  => $hints['function'] ?? null,
+                    'tel'       => $tel ?: null,
+                    'gsm'       => $gsm ?: null,
+                ], fn($v) => $v !== null && $v !== '');
+                if ($patch) {
+                    $this->getHttpClient()
+                        ->withHeaders(['Content-Type'=>'application/merge-patch+json'])
+                        ->patch("/api/v2/clients/{$clientId}/contacts/{$c['id']}", $patch);
+                }
+                return; // already exists
+            }
+        }
+
+        // Create new contact on this client (client-scoped endpoint)
+        $payload = array_filter([
+            'title'     => $hints['title'] ?? null,
+            'firstName' => $first,              // if your tenant doesn't persist this, it'll be ignored
+            'surname'   => $last ?? ($hints['contact_name'] ?? null),
+            'function'  => $hints['function'] ?? null,
+            'email'     => $email,
+            'tel'       => $tel,
+            'gsm'       => $gsm,
+            'isPrimary' => $hints['is_primary'] ?? false,
+            'receivesQuotes'   => $hints['receives_quotes']   ?? true,
+            'receivesInvoices' => $hints['receives_invoices'] ?? false,
+        ], fn($v) => $v !== null && $v !== '');
+
+        $this->getHttpClient()
+            ->withHeaders(['Content-Type'=>'application/json','Accept'=>'application/json'])
+            ->post("/api/v2/clients/{$clientId}/contacts", $payload)
+            ->throw();
     }
 }

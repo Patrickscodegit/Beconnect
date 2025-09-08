@@ -140,55 +140,42 @@ class ProcessIntake implements ShouldQueue
     private function findOrCreateRobawsClient(array $contactData): ?string
     {
         try {
-            $resolver = app(\App\Services\Robaws\ClientResolver::class);
-
-            $hints = [
-                'id'    => $this->intake->metadata['robaws_client_id'] ?? null,
-                'email' => $contactData['email'] ?? ($this->intake->metadata['from_email'] ?? null),
-                'phone' => $contactData['phone'] ?? null,
-                'name'  => $contactData['name'] ?? ($this->intake->metadata['from_name'] ?? null),
-            ];
-
-            // Try to find existing client first
-            if ($hit = $resolver->resolve($hints)) {
-                Log::info('Found existing Robaws client', [
-                    'intake_id' => $this->intake->id,
-                    'client_id' => $hit['id'],
-                    'confidence' => $hit['confidence'] ?? null,
-                ]);
-                
-                return (string)$hit['id'];
-            }
-
-            // If no client found, create a new one with whatever info we have
             $apiClient = app(\App\Services\Export\Clients\RobawsApiClient::class);
             
-            $clientId = $this->createRobawsClient($apiClient, $contactData);
+            // Prepare hints for the robust resolution
+            $hints = [
+                'client_name' => $contactData['name'] ?? ($this->intake->metadata['from_name'] ?? null),
+                'email' => $contactData['email'] ?? ($this->intake->metadata['from_email'] ?? null),
+                'phone' => $contactData['phone'] ?? null,
+                'first_name' => $contactData['name'] ?? ($this->intake->contact_name ?? null),
+                'last_name' => $contactData['surname'] ?? null,
+                'contact_email' => $contactData['email'] ?? ($this->intake->contact_email ?? null),
+                'contact_phone' => $contactData['phone'] ?? ($this->intake->contact_phone ?? null),
+                'function' => $contactData['function'] ?? null,
+                'is_primary' => true,
+                'receives_quotes' => true,
+                'language' => 'en',
+                'currency' => 'EUR',
+            ];
             
-            if ($clientId) {
-                Log::info('Created new Robaws client', [
-                    'intake_id' => $this->intake->id,
-                    'client_id' => $clientId,
-                    'data_used' => array_filter($contactData)
-                ]);
-                
-                return (string)$clientId;
-            }
-
-            Log::warning('Failed to find or create Robaws client', [
+            // Use the robust resolution method that prevents duplicate client creation
+            $resolved = $apiClient->resolveOrCreateClientAndContact($hints);
+            
+            Log::info('Client resolution completed', [
                 'intake_id' => $this->intake->id,
-                'contact_data' => $contactData
+                'client_id' => $resolved['id'],
+                'created' => $resolved['created'],
+                'source' => $resolved['source'],
             ]);
-
-            return null;
+            
+            return (string)$resolved['id'];
             
         } catch (\Exception $e) {
-            Log::error('Error in findOrCreateRobawsClient', [
+            Log::error('Failed to find or create Robaws client', [
                 'intake_id' => $this->intake->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'contact_data' => $contactData
             ]);
-            
-            // Don't fail the entire process if client creation fails
             return null;
         }
     }
@@ -207,6 +194,22 @@ class ProcessIntake implements ShouldQueue
         // Add optional fields if available
         if (!empty($contactData['phone']) || !empty($this->intake->contact_phone)) {
             $clientPayload['phone'] = $contactData['phone'] ?? $this->intake->contact_phone;
+        }
+
+        // Add contact person if we have contact data
+        if (!empty($contactData['name']) || !empty($contactData['email']) || !empty($contactData['phone'])) {
+            $clientPayload['contact_person'] = [
+                'first_name' => $contactData['name'] ?? $this->intake->contact_name ?? null,
+                'email' => $contactData['email'] ?? $this->intake->contact_email ?? null,
+                'phone' => $contactData['phone'] ?? $this->intake->contact_phone ?? null,
+                'is_primary' => true,
+                'receives_quotes' => true,
+            ];
+            
+            // Filter out empty values
+            $clientPayload['contact_person'] = array_filter($clientPayload['contact_person'], function($value) {
+                return $value !== null && $value !== '';
+            });
         }
 
         try {
