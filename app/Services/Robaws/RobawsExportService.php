@@ -1215,10 +1215,15 @@ class RobawsExportService
             $contactPerson['email'] = $contact['email'];
         }
         
-        if (!empty($contact['name'])) {
+        // Use pre-parsed first/last names if available, otherwise fall back to splitting full name
+        if (!empty($contact['first_name']) || !empty($contact['last_name'])) {
+            $contactPerson['first_name'] = $contact['first_name'] ?? null;
+            $contactPerson['last_name'] = $contact['last_name'] ?? null;
+            $contactPerson['name'] = trim(($contact['first_name'] ?? '') . ' ' . ($contact['last_name'] ?? ''));
+        } elseif (!empty($contact['name'])) {
             $contactPerson['name'] = $contact['name'];
             
-            // Try to split name into first/last
+            // Try to split name into first/last as fallback
             $nameParts = explode(' ', trim($contact['name']), 2);
             $contactPerson['first_name'] = $nameParts[0] ?? null;
             $contactPerson['last_name'] = $nameParts[1] ?? null;
