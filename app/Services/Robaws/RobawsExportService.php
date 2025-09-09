@@ -367,6 +367,27 @@ class RobawsExportService
         // Validate and sanitize email
         $customerEmail = $this->validateAndSanitizeEmail($customerEmail);
 
+        // Auto-detect country information for customer
+        $countryInfo = $this->detectCountryFromContactData([
+            'phone' => $customerPhone,
+            'email' => $customerEmail,
+            'company' => $customerName,
+            'mobile' => $customerData['mobile'] ?? null,
+        ]);
+        
+        // Add country information to customer data if detected
+        if ($countryInfo && empty($customerData['country'])) {
+            $customerData['country'] = $countryInfo['country'];
+            $customerData['country_code'] = $countryInfo['country_code'];
+            
+            Log::info('Auto-detected country for customer', [
+                'export_id' => $exportId,
+                'customer_name' => $customerName,
+                'detected_country' => $countryInfo['country'],
+                'country_code' => $countryInfo['country_code'],
+            ]);
+        }
+
         // Use pre-resolved client ID if available, otherwise try to find or create client
         $clientId = $intake->robaws_client_id;
         
@@ -383,6 +404,7 @@ class RobawsExportService
                     'has_phone' => !empty($customerPhone),
                     'has_contact_person' => !empty($customerData['contact_person']),
                     'has_address' => !empty($customerData['street']) || !empty($customerData['city']),
+                    'has_country' => !empty($customerData['country']),
                     'client_type' => $customerData['client_type'] ?? 'unknown'
                 ]);
                 
@@ -396,7 +418,8 @@ class RobawsExportService
                     Log::info('Successfully created new client', [
                         'export_id' => $exportId,
                         'client_id' => $clientId,
-                        'customer_name' => $customerName
+                        'customer_name' => $customerName,
+                        'country' => $customerData['country'] ?? null,
                     ]);
                 } else {
                     Log::warning('Failed to create new client', [
@@ -416,6 +439,7 @@ class RobawsExportService
             'display_name' => $customerName,
             'contact_email' => $customerEmail,
             'contact_phone' => $customerPhone,
+            'detected_country' => $customerData['country'] ?? null,
             'pre_resolved_client_id' => $intake->robaws_client_id,
             'resolved_client_id' => $clientId,
             'validated_client_id' => $validatedClientId,
@@ -464,6 +488,7 @@ class RobawsExportService
             'client_reference_debug' => $payload['clientReference'] ?? null,
             'payload_size' => strlen(json_encode($payload)),
             'enhanced_client_creation' => true,
+            'country_detection' => true,
         ]);
 
         return $payload;
@@ -1241,6 +1266,13 @@ class RobawsExportService
             $contactPerson['function'] = $contact['function'] ?? $contact['title'];
         }
         
+        // Auto-detect country from available data
+        $countryInfo = $this->detectCountryFromContactData($contact);
+        if ($countryInfo) {
+            $contactPerson['country'] = $countryInfo['country'];
+            $contactPerson['country_code'] = $countryInfo['country_code'];
+        }
+        
         // Set defaults for new contacts
         if (!empty($contactPerson)) {
             $contactPerson['receives_quotes'] = true;
@@ -1248,5 +1280,285 @@ class RobawsExportService
         }
         
         return $contactPerson;
+    }
+
+    /**
+     * Detect country information from contact data using phone numbers and other clues
+     */
+    private function detectCountryFromContactData(array $contact): ?array
+    {
+        // Try phone number first (most reliable)
+        if (!empty($contact['phone'])) {
+            $country = $this->detectCountryFromPhoneNumber($contact['phone']);
+            if ($country) return $country;
+        }
+        
+        // Try mobile number
+        if (!empty($contact['mobile'])) {
+            $country = $this->detectCountryFromPhoneNumber($contact['mobile']);
+            if ($country) return $country;
+        }
+        
+        // Try email domain for country-specific domains
+        if (!empty($contact['email'])) {
+            $country = $this->detectCountryFromEmailDomain($contact['email']);
+            if ($country) return $country;
+        }
+        
+        // Try company name or address if available
+        if (!empty($contact['company'])) {
+            $country = $this->detectCountryFromCompanyName($contact['company']);
+            if ($country) return $country;
+        }
+        
+        return null;
+    }
+
+    /**
+     * Detect country from phone number prefix
+     */
+    private function detectCountryFromPhoneNumber(string $phone): ?array
+    {
+        // Clean phone number
+        $cleanPhone = preg_replace('/[^\d+]/', '', $phone);
+        
+        // Common international prefixes - focusing on transport/logistics hubs
+        $countryPrefixes = [
+            // Europe
+            '+32' => ['country' => 'Belgium', 'country_code' => 'BE'],
+            '+31' => ['country' => 'Netherlands', 'country_code' => 'NL'],
+            '+33' => ['country' => 'France', 'country_code' => 'FR'],
+            '+49' => ['country' => 'Germany', 'country_code' => 'DE'],
+            '+44' => ['country' => 'United Kingdom', 'country_code' => 'GB'],
+            '+34' => ['country' => 'Spain', 'country_code' => 'ES'],
+            '+39' => ['country' => 'Italy', 'country_code' => 'IT'],
+            '+41' => ['country' => 'Switzerland', 'country_code' => 'CH'],
+            '+43' => ['country' => 'Austria', 'country_code' => 'AT'],
+            '+45' => ['country' => 'Denmark', 'country_code' => 'DK'],
+            '+46' => ['country' => 'Sweden', 'country_code' => 'SE'],
+            '+47' => ['country' => 'Norway', 'country_code' => 'NO'],
+            '+48' => ['country' => 'Poland', 'country_code' => 'PL'],
+            '+351' => ['country' => 'Portugal', 'country_code' => 'PT'],
+            
+            // Africa (major ports/logistics)
+            '+212' => ['country' => 'Morocco', 'country_code' => 'MA'],
+            '+216' => ['country' => 'Tunisia', 'country_code' => 'TN'],
+            '+218' => ['country' => 'Libya', 'country_code' => 'LY'],
+            '+220' => ['country' => 'Gambia', 'country_code' => 'GM'],
+            '+221' => ['country' => 'Senegal', 'country_code' => 'SN'],
+            '+223' => ['country' => 'Mali', 'country_code' => 'ML'],
+            '+224' => ['country' => 'Guinea', 'country_code' => 'GN'],
+            '+225' => ['country' => 'Ivory Coast', 'country_code' => 'CI'],
+            '+226' => ['country' => 'Burkina Faso', 'country_code' => 'BF'],
+            '+227' => ['country' => 'Niger', 'country_code' => 'NE'],
+            '+228' => ['country' => 'Togo', 'country_code' => 'TG'],
+            '+229' => ['country' => 'Benin', 'country_code' => 'BJ'],
+            '+230' => ['country' => 'Mauritius', 'country_code' => 'MU'],
+            '+231' => ['country' => 'Liberia', 'country_code' => 'LR'],
+            '+232' => ['country' => 'Sierra Leone', 'country_code' => 'SL'],
+            '+233' => ['country' => 'Ghana', 'country_code' => 'GH'],
+            '+234' => ['country' => 'Nigeria', 'country_code' => 'NG'],
+            '+235' => ['country' => 'Chad', 'country_code' => 'TD'],
+            '+236' => ['country' => 'Central African Republic', 'country_code' => 'CF'],
+            '+237' => ['country' => 'Cameroon', 'country_code' => 'CM'],
+            '+238' => ['country' => 'Cape Verde', 'country_code' => 'CV'],
+            '+239' => ['country' => 'São Tomé and Príncipe', 'country_code' => 'ST'],
+            '+240' => ['country' => 'Equatorial Guinea', 'country_code' => 'GQ'],
+            '+241' => ['country' => 'Gabon', 'country_code' => 'GA'],
+            '+242' => ['country' => 'Republic of the Congo', 'country_code' => 'CG'],
+            '+243' => ['country' => 'Democratic Republic of the Congo', 'country_code' => 'CD'],
+            '+244' => ['country' => 'Angola', 'country_code' => 'AO'],
+            '+245' => ['country' => 'Guinea-Bissau', 'country_code' => 'GW'],
+            '+246' => ['country' => 'Diego Garcia', 'country_code' => 'IO'],
+            '+248' => ['country' => 'Seychelles', 'country_code' => 'SC'],
+            '+249' => ['country' => 'Sudan', 'country_code' => 'SD'],
+            '+250' => ['country' => 'Rwanda', 'country_code' => 'RW'],
+            '+251' => ['country' => 'Ethiopia', 'country_code' => 'ET'],
+            '+252' => ['country' => 'Somalia', 'country_code' => 'SO'],
+            '+253' => ['country' => 'Djibouti', 'country_code' => 'DJ'],
+            '+254' => ['country' => 'Kenya', 'country_code' => 'KE'],
+            '+255' => ['country' => 'Tanzania', 'country_code' => 'TZ'],
+            '+256' => ['country' => 'Uganda', 'country_code' => 'UG'],
+            '+257' => ['country' => 'Burundi', 'country_code' => 'BI'],
+            '+258' => ['country' => 'Mozambique', 'country_code' => 'MZ'],
+            '+260' => ['country' => 'Zambia', 'country_code' => 'ZM'],
+            '+261' => ['country' => 'Madagascar', 'country_code' => 'MG'],
+            '+262' => ['country' => 'Réunion', 'country_code' => 'RE'],
+            '+263' => ['country' => 'Zimbabwe', 'country_code' => 'ZW'],
+            '+264' => ['country' => 'Namibia', 'country_code' => 'NA'],
+            '+265' => ['country' => 'Malawi', 'country_code' => 'MW'],
+            '+266' => ['country' => 'Lesotho', 'country_code' => 'LS'],
+            '+267' => ['country' => 'Botswana', 'country_code' => 'BW'],
+            '+268' => ['country' => 'Eswatini', 'country_code' => 'SZ'],
+            '+269' => ['country' => 'Comoros', 'country_code' => 'KM'],
+            '+27' => ['country' => 'South Africa', 'country_code' => 'ZA'],
+            
+            // Middle East
+            '+971' => ['country' => 'United Arab Emirates', 'country_code' => 'AE'],
+            '+966' => ['country' => 'Saudi Arabia', 'country_code' => 'SA'],
+            '+974' => ['country' => 'Qatar', 'country_code' => 'QA'],
+            '+965' => ['country' => 'Kuwait', 'country_code' => 'KW'],
+            '+973' => ['country' => 'Bahrain', 'country_code' => 'BH'],
+            '+968' => ['country' => 'Oman', 'country_code' => 'OM'],
+            
+            // Asia Pacific
+            '+86' => ['country' => 'China', 'country_code' => 'CN'],
+            '+91' => ['country' => 'India', 'country_code' => 'IN'],
+            '+65' => ['country' => 'Singapore', 'country_code' => 'SG'],
+            '+60' => ['country' => 'Malaysia', 'country_code' => 'MY'],
+            '+66' => ['country' => 'Thailand', 'country_code' => 'TH'],
+            '+84' => ['country' => 'Vietnam', 'country_code' => 'VN'],
+            '+62' => ['country' => 'Indonesia', 'country_code' => 'ID'],
+            '+63' => ['country' => 'Philippines', 'country_code' => 'PH'],
+            '+852' => ['country' => 'Hong Kong', 'country_code' => 'HK'],
+            '+853' => ['country' => 'Macau', 'country_code' => 'MO'],
+            '+886' => ['country' => 'Taiwan', 'country_code' => 'TW'],
+            '+81' => ['country' => 'Japan', 'country_code' => 'JP'],
+            '+82' => ['country' => 'South Korea', 'country_code' => 'KR'],
+            '+61' => ['country' => 'Australia', 'country_code' => 'AU'],
+            '+64' => ['country' => 'New Zealand', 'country_code' => 'NZ'],
+            
+            // Americas
+            '+1' => ['country' => 'United States', 'country_code' => 'US'],
+            '+55' => ['country' => 'Brazil', 'country_code' => 'BR'],
+            '+54' => ['country' => 'Argentina', 'country_code' => 'AR'],
+            '+56' => ['country' => 'Chile', 'country_code' => 'CL'],
+            '+57' => ['country' => 'Colombia', 'country_code' => 'CO'],
+            '+52' => ['country' => 'Mexico', 'country_code' => 'MX'],
+        ];
+        
+        // Sort by prefix length (longest first for accurate matching)
+        uksort($countryPrefixes, function($a, $b) {
+            return strlen($b) - strlen($a);
+        });
+        
+        foreach ($countryPrefixes as $prefix => $country) {
+            if (str_starts_with($cleanPhone, $prefix)) {
+                Log::info('Country detected from phone number', [
+                    'phone' => $phone,
+                    'prefix' => $prefix,
+                    'country' => $country['country'],
+                    'country_code' => $country['country_code']
+                ]);
+                return $country;
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Detect country from email domain
+     */
+    private function detectCountryFromEmailDomain(string $email): ?array
+    {
+        $domain = strtolower(substr(strrchr($email, '@'), 1));
+        
+        // Country-specific email domains
+        $domainCountries = [
+            // Common country domains in transport/logistics
+            'be' => ['country' => 'Belgium', 'country_code' => 'BE'],
+            'nl' => ['country' => 'Netherlands', 'country_code' => 'NL'],
+            'fr' => ['country' => 'France', 'country_code' => 'FR'],
+            'de' => ['country' => 'Germany', 'country_code' => 'DE'],
+            'uk' => ['country' => 'United Kingdom', 'country_code' => 'GB'],
+            'co.uk' => ['country' => 'United Kingdom', 'country_code' => 'GB'],
+            'it' => ['country' => 'Italy', 'country_code' => 'IT'],
+            'es' => ['country' => 'Spain', 'country_code' => 'ES'],
+            'ch' => ['country' => 'Switzerland', 'country_code' => 'CH'],
+            'at' => ['country' => 'Austria', 'country_code' => 'AT'],
+            'dk' => ['country' => 'Denmark', 'country_code' => 'DK'],
+            'se' => ['country' => 'Sweden', 'country_code' => 'SE'],
+            'no' => ['country' => 'Norway', 'country_code' => 'NO'],
+            'pl' => ['country' => 'Poland', 'country_code' => 'PL'],
+            'ma' => ['country' => 'Morocco', 'country_code' => 'MA'],
+            'za' => ['country' => 'South Africa', 'country_code' => 'ZA'],
+            'ae' => ['country' => 'United Arab Emirates', 'country_code' => 'AE'],
+            'sg' => ['country' => 'Singapore', 'country_code' => 'SG'],
+            'cn' => ['country' => 'China', 'country_code' => 'CN'],
+            'jp' => ['country' => 'Japan', 'country_code' => 'JP'],
+            'au' => ['country' => 'Australia', 'country_code' => 'AU'],
+        ];
+        
+        // Check exact domain match
+        if (isset($domainCountries[$domain])) {
+            return $domainCountries[$domain];
+        }
+        
+        // Check domain endings
+        foreach ($domainCountries as $ccTLD => $country) {
+            if (str_ends_with($domain, '.' . $ccTLD)) {
+                Log::info('Country detected from email domain', [
+                    'email' => $email,
+                    'domain' => $domain,
+                    'country' => $country['country'],
+                    'country_code' => $country['country_code']
+                ]);
+                return $country;
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Detect country from company name patterns
+     */
+    private function detectCountryFromCompanyName(string $company): ?array
+    {
+        $company = strtolower($company);
+        
+        // Company name patterns that indicate specific countries
+        $patterns = [
+            // Belgian patterns
+            '/\b(bvba|sprl|sa|nv)\b/' => ['country' => 'Belgium', 'country_code' => 'BE'],
+            '/\bantwerp|anvers|ghent|gent|bruges|brugge|brussels|bruxelles\b/' => ['country' => 'Belgium', 'country_code' => 'BE'],
+            
+            // Dutch patterns
+            '/\b(bv|nv)\b/' => ['country' => 'Netherlands', 'country_code' => 'NL'],
+            '/\bamsterdam|rotterdam|utrecht|eindhoven|tilburg|groningen|breda\b/' => ['country' => 'Netherlands', 'country_code' => 'NL'],
+            
+            // French patterns
+            '/\b(sarl|sas|sa|eurl|scp|sci)\b/' => ['country' => 'France', 'country_code' => 'FR'],
+            '/\bparis|marseille|lyon|toulouse|nice|nantes|strasbourg|montpellier|bordeaux|lille\b/' => ['country' => 'France', 'country_code' => 'FR'],
+            
+            // German patterns
+            '/\b(gmbh|ag|kg|ohg|gbr)\b/' => ['country' => 'Germany', 'country_code' => 'DE'],
+            '/\bberlin|hamburg|munich|münchen|cologne|köln|frankfurt|stuttgart|düsseldorf|dortmund\b/' => ['country' => 'Germany', 'country_code' => 'DE'],
+            
+            // UK patterns
+            '/\b(ltd|plc|llp)\b/' => ['country' => 'United Kingdom', 'country_code' => 'GB'],
+            '/\blondon|manchester|birmingham|leeds|glasgow|sheffield|bradford|liverpool|edinburgh\b/' => ['country' => 'United Kingdom', 'country_code' => 'GB'],
+            
+            // Italian patterns
+            '/\b(srl|spa|snc|sas)\b/' => ['country' => 'Italy', 'country_code' => 'IT'],
+            '/\brome|roma|milan|milano|naples|napoli|turin|torino|palermo|genoa|genova\b/' => ['country' => 'Italy', 'country_code' => 'IT'],
+            
+            // Spanish patterns
+            '/\b(sl|sa|scp|cb)\b/' => ['country' => 'Spain', 'country_code' => 'ES'],
+            '/\bmadrid|barcelona|valencia|sevilla|zaragoza|málaga|murcia|palma|bilbao\b/' => ['country' => 'Spain', 'country_code' => 'ES'],
+            
+            // African patterns
+            '/\bdakar|senegal\b/' => ['country' => 'Senegal', 'country_code' => 'SN'],
+            '/\babidjan|ivory.coast|côte.d.ivoire\b/' => ['country' => 'Ivory Coast', 'country_code' => 'CI'],
+            '/\bouagadougou|burkina.faso\b/' => ['country' => 'Burkina Faso', 'country_code' => 'BF'],
+            '/\baccra|ghana\b/' => ['country' => 'Ghana', 'country_code' => 'GH'],
+            '/\blagos|nigeria\b/' => ['country' => 'Nigeria', 'country_code' => 'NG'],
+            '/\bcasablanca|rabat|morocco|maroc\b/' => ['country' => 'Morocco', 'country_code' => 'MA'],
+        ];
+        
+        foreach ($patterns as $pattern => $country) {
+            if (preg_match($pattern, $company)) {
+                Log::info('Country detected from company name', [
+                    'company' => $company,
+                    'pattern' => $pattern,
+                    'country' => $country['country'],
+                    'country_code' => $country['country_code']
+                ]);
+                return $country;
+            }
+        }
+        
+        return null;
     }
 }
