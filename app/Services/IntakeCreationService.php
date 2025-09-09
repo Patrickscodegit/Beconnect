@@ -15,8 +15,12 @@ class IntakeCreationService
 {
     public function createFromUploadedFile(TemporaryUploadedFile|UploadedFile $file, array $options = []): Intake
     {
+        // Detect file type and determine initial status
+        $mimeType = $file->getMimeType();
+        $initialStatus = $this->determineInitialStatus($mimeType, $options);
+        
         $intake = Intake::create([
-            'status' => 'pending',
+            'status' => $initialStatus,
             'source' => $options['source'] ?? 'file_upload',
             'notes' => $options['notes'] ?? null,
             'priority' => $options['priority'] ?? 'normal',
@@ -28,12 +32,15 @@ class IntakeCreationService
 
         $this->storeFile($intake, $file, $file->getClientOriginalName());
         
+        // Always process the intake - extraction will handle contact info
         ProcessIntake::dispatch($intake);
         
         Log::info('Created intake from uploaded file', [
             'intake_id' => $intake->id,
             'filename' => $file->getClientOriginalName(),
-            'source' => $intake->source
+            'source' => $intake->source,
+            'mime_type' => $mimeType,
+            'initial_status' => $initialStatus
         ]);
 
         return $intake;
@@ -41,8 +48,19 @@ class IntakeCreationService
 
     public function createFromBase64Image(string $base64Data, string $filename = null, array $options = []): Intake
     {
+        // Remove data URL prefix if present
+        if (preg_match('/^data:([^;]+);base64,(.+)$/', $base64Data, $matches)) {
+            $mimeType = $matches[1];
+            $base64Data = $matches[2];
+        } else {
+            $mimeType = 'image/png'; // Default assumption
+        }
+
+        // Images should always go to extraction
+        $initialStatus = $this->determineInitialStatus($mimeType, $options);
+        
         $intake = Intake::create([
-            'status' => 'pending',
+            'status' => $initialStatus,
             'source' => $options['source'] ?? 'screenshot',
             'notes' => $options['notes'] ?? null,
             'priority' => $options['priority'] ?? 'normal',
@@ -51,14 +69,6 @@ class IntakeCreationService
             'contact_phone' => $options['contact_phone'] ?? null,
             'extraction_data' => $options['extraction_data'] ?? null,
         ]);
-
-        // Remove data URL prefix if present
-        if (preg_match('/^data:([^;]+);base64,(.+)$/', $base64Data, $matches)) {
-            $mimeType = $matches[1];
-            $base64Data = $matches[2];
-        } else {
-            $mimeType = 'image/png'; // Default assumption
-        }
 
         // Generate filename if not provided
         if (!$filename) {
@@ -90,7 +100,9 @@ class IntakeCreationService
         Log::info('Created intake from base64 image', [
             'intake_id' => $intake->id,
             'filename' => $filename,
-            'source' => $intake->source
+            'source' => $intake->source,
+            'mime_type' => $mimeType,
+            'initial_status' => $initialStatus
         ]);
 
         return $intake;
@@ -228,6 +240,48 @@ class IntakeCreationService
 
         // Works for both TemporaryUploadedFile (Livewire) and classic UploadedFile
         return $file->storeAs($dir, $name, $disk);
+    }
+
+    /**
+     * Determine initial status based on file type and metadata
+     * Images and PDFs should go directly to extraction, not block on contact
+     */
+    private function determineInitialStatus(string $mimeType, array $options): string
+    {
+        // If contact info is explicitly provided, proceed directly
+        if (!empty($options['contact_email']) || !empty($options['customer_name'])) {
+            return 'pending';
+        }
+        
+        // Check configuration for file types that skip contact validation
+        $skipContactTypes = config('intake.processing.skip_contact_validation', [
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'message/rfc822'
+        ]);
+        
+        // For configured file types, always proceed to extraction
+        if (in_array($mimeType, $skipContactTypes)) {
+            return 'pending';
+        }
+        
+        // Check if contact validation is disabled globally
+        if (!config('intake.processing.require_contact_info', false)) {
+            return 'pending';
+        }
+        
+        // Default to pending - let the extraction process handle contact requirements
+        return 'pending';
+    }
+
+    /**
+     * Check if mime type should skip contact validation based on configuration
+     */
+    private function shouldSkipContactValidation(string $mimeType): bool
+    {
+        $skipContactTypes = config('intake.processing.skip_contact_validation', [
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'message/rfc822'
+        ]);
+        
+        return in_array($mimeType, $skipContactTypes);
     }
 
     private function getExtensionFromMimeType(string $mimeType): string

@@ -96,6 +96,35 @@ class ExportIntakeToRobawsJob implements ShouldQueue
         }
         
         // Fallback: Try to resolve client now (for legacy intakes)
+        $hasImageOrPdf = $this->intakeHasImageOrPdfFiles();
+        
+        // For images and PDFs, try to create a client with available data
+        if ($hasImageOrPdf) {
+            Log::info('Attempting enhanced client resolution for image/PDF intake', [
+                'intake_id' => $this->intake->id
+            ]);
+            
+            $clientId = $service->resolveOrCreateClientForImage($this->intake, $extractionData);
+            if ($clientId) {
+                $this->intake->robaws_client_id = $clientId;
+                $this->intake->save();
+                return $service->exportIntake($this->intake);
+            }
+            
+            // If we still can't resolve, try with fallback data
+            Log::info('Creating fallback client for image/PDF with minimal data', [
+                'intake_id' => $this->intake->id
+            ]);
+            
+            $fallbackClientId = $service->createFallbackClient($this->intake, $extractionData);
+            if ($fallbackClientId) {
+                $this->intake->robaws_client_id = $fallbackClientId;
+                $this->intake->save();
+                return $service->exportIntake($this->intake);
+            }
+        }
+        
+        // Standard client resolution for non-image files
         $clientId = $service->resolveClientId($extractionData);
         if (!$clientId) {
             return [
@@ -121,10 +150,23 @@ class ExportIntakeToRobawsJob implements ShouldQueue
             'error' => $error
         ]);
         
-        // Determine status based on error type
+        // Determine status based on error type and file type
         $status = 'export_failed';
+        
+        // Check if this intake has images or PDFs that should not be blocked for contact
+        $hasImageOrPdf = $this->intakeHasImageOrPdfFiles();
+        
         if (str_contains(strtolower($error), 'contact') || str_contains(strtolower($error), 'client')) {
-            $status = 'needs_contact';
+            // Only set needs_contact for non-image/PDF files or if explicitly configured
+            if (!$hasImageOrPdf || config('intake.processing.require_contact_info', false)) {
+                $status = 'needs_contact';
+            } else {
+                // For images/PDFs, keep as export_failed to allow retry without contact validation
+                Log::info('Image/PDF intake export failed but not requiring contact', [
+                    'intake_id' => $this->intake->id,
+                    'has_image_or_pdf' => $hasImageOrPdf
+                ]);
+            }
         }
         
         $this->intake->update([
@@ -132,5 +174,18 @@ class ExportIntakeToRobawsJob implements ShouldQueue
             'last_export_error' => $error,
             'last_export_error_at' => now(),
         ]);
+    }
+
+    /**
+     * Check if intake has image or PDF files
+     */
+    private function intakeHasImageOrPdfFiles(): bool
+    {
+        foreach ($this->intake->files as $file) {
+            if (str_starts_with($file->mime_type, 'image/') || $file->mime_type === 'application/pdf') {
+                return true;
+            }
+        }
+        return false;
     }
 }

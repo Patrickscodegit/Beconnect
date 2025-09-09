@@ -1561,4 +1561,356 @@ class RobawsExportService
         
         return null;
     }
+
+    /**
+     * Resolve or create client for image/PDF based intake with VIN detection
+     */
+    public function resolveOrCreateClientForImage(Intake $intake, array $extractionData): ?string
+    {
+        Log::info('Attempting client resolution for image/PDF intake', [
+            'intake_id' => $intake->id,
+            'has_contact' => !empty($extractionData['contact']),
+            'has_vin_candidates' => !empty($extractionData['vin_candidates']),
+            'has_plate_candidates' => !empty($extractionData['plate_candidates'])
+        ]);
+
+        // First try normal contact resolution if we have sufficient contact info
+        $contactData = $extractionData['contact'] ?? [];
+        if (!empty($contactData['email']) || (!empty($contactData['phone']) && !empty($contactData['name']))) {
+            $clientId = $this->resolveClientId($extractionData);
+            if ($clientId) {
+                Log::info('Client resolved via contact data for image intake', [
+                    'intake_id' => $intake->id,
+                    'client_id' => $clientId
+                ]);
+                return $clientId;
+            }
+        }
+
+        // Try VIN-based resolution for vehicle images
+        if (!empty($extractionData['vin_candidates'])) {
+            foreach ($extractionData['vin_candidates'] as $vinCandidate) {
+                $clientId = $this->resolveClientByVin($vinCandidate['vin']);
+                if ($clientId) {
+                    Log::info('Client resolved via VIN for image intake', [
+                        'intake_id' => $intake->id,
+                        'vin' => $vinCandidate['vin'],
+                        'client_id' => $clientId
+                    ]);
+                    return $clientId;
+                }
+            }
+        }
+
+        // If no resolution possible, return null (will trigger fallback client creation)
+        Log::info('No client resolution possible for image intake', [
+            'intake_id' => $intake->id,
+            'will_create_fallback' => true
+        ]);
+        
+        return null;
+    }
+
+    /**
+     * Create fallback client for image/PDF intakes using available data
+     */
+    public function createFallbackClient(Intake $intake, array $extractionData): ?string
+    {
+        Log::info('Creating fallback client for image/PDF intake', [
+            'intake_id' => $intake->id,
+            'extraction_keys' => array_keys($extractionData)
+        ]);
+
+        try {
+            $client = $this->legacy();
+            if (!$client) {
+                Log::error('Cannot create fallback client - Robaws client not available');
+                return null;
+            }
+
+            // Build client data from available information
+            $clientData = [
+                'name' => $this->generateFallbackClientName($intake, $extractionData),
+                'email' => $this->extractFallbackEmail($extractionData),
+                'phone' => $this->extractFallbackPhone($extractionData),
+                'company' => $this->extractFallbackCompany($extractionData),
+                'notes' => $this->generateFallbackNotes($intake, $extractionData),
+                'source' => 'image_upload_fallback',
+                'created_via' => 'bconnect_image_processing'
+            ];
+
+            // Add country detection if possible
+            if (!empty($clientData['company'])) {
+                $countryData = $this->detectCountryFromCompanyName($clientData['company']);
+                if ($countryData) {
+                    $clientData['country'] = $countryData['country'];
+                    $clientData['country_code'] = $countryData['country_code'];
+                }
+            }
+
+            Log::info('Creating fallback client with data', [
+                'intake_id' => $intake->id,
+                'client_data' => array_filter($clientData)
+            ]);
+
+            $response = $client->findOrCreateClient($clientData);
+
+            if ($response && isset($response['id'])) {
+                $clientId = (string) $response['id'];
+                
+                Log::info('Fallback client created successfully', [
+                    'intake_id' => $intake->id,
+                    'client_id' => $clientId,
+                    'client_name' => $clientData['name']
+                ]);
+
+                // Try to create a contact within this client
+                $this->createFallbackContact($clientId, $intake, $extractionData);
+                
+                return $clientId;
+            }
+
+            Log::error('Failed to create fallback client - no ID in response', [
+                'intake_id' => $intake->id,
+                'response' => $response
+            ]);
+            return null;
+
+        } catch (\Exception $e) {
+            Log::error('Exception creating fallback client', [
+                'intake_id' => $intake->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Resolve client by VIN if available in the system
+     */
+    private function resolveClientByVin(string $vin): ?string
+    {
+        try {
+            $client = $this->legacy();
+            if (!$client) {
+                return null;
+            }
+
+            // TODO: Implement VIN-based client search when available in RobawsClient
+            // For now, return null to allow fallback to other methods
+            Log::info('VIN-based client resolution not yet implemented', [
+                'vin' => $vin
+            ]);
+            
+            return null;
+
+        } catch (\Exception $e) {
+            Log::warning('VIN-based client resolution failed', [
+                'vin' => $vin,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Generate fallback client name from available data
+     */
+    private function generateFallbackClientName(Intake $intake, array $extractionData): string
+    {
+        // Try contact name first
+        if (!empty($extractionData['contact']['name'])) {
+            return $extractionData['contact']['name'];
+        }
+
+        // Try company name
+        if (!empty($extractionData['contact']['company'])) {
+            return $extractionData['contact']['company'];
+        }
+
+        // Try VIN-based name with better formatting
+        if (!empty($extractionData['vin_candidates'])) {
+            $vin = $extractionData['vin_candidates'][0]['vin'] ?? $extractionData['vin_candidates'][0];
+            if (is_string($vin) && strlen($vin) >= 8) {
+                return "Client - VIN: " . substr($vin, -8);
+            }
+        }
+
+        // Try to extract vehicle information for a meaningful name
+        if (!empty($extractionData['vehicle']['make']) || !empty($extractionData['vehicle']['model'])) {
+            $make = $extractionData['vehicle']['make'] ?? 'Vehicle';
+            $model = $extractionData['vehicle']['model'] ?? '';
+            return trim("Client - {$make} {$model} Owner");
+        }
+
+        // Check for any identifiable information in OCR text
+        if (!empty($extractionData['ocr_text'])) {
+            // Look for common patterns that might indicate a name
+            $text = $extractionData['ocr_text'];
+            
+            // Look for email patterns to derive name
+            if (preg_match('/([a-zA-Z]+\.[a-zA-Z]+)@/', $text, $matches)) {
+                $nameParts = explode('.', $matches[1]);
+                if (count($nameParts) >= 2) {
+                    return ucfirst($nameParts[0]) . ' ' . ucfirst($nameParts[1]);
+                }
+            }
+            
+            // Look for phone number patterns to create identifier
+            if (preg_match('/(\+?\d{2,3}[\s-]?\d{3}[\s-]?\d{2,3}[\s-]?\d{2,3})/', $text, $matches)) {
+                $phone = preg_replace('/[^\d]/', '', $matches[1]);
+                if (strlen($phone) >= 8) {
+                    return "Client - Phone: " . substr($phone, -4);
+                }
+            }
+        }
+
+        // Use intake customer name if available
+        if (!empty($intake->customer_name)) {
+            return $intake->customer_name;
+        }
+
+        // Use file name if meaningful
+        $firstFile = $intake->files->first();
+        if ($firstFile && $firstFile->original_filename) {
+            $filename = pathinfo($firstFile->original_filename, PATHINFO_FILENAME);
+            if (strlen($filename) > 5 && !preg_match('/^(IMG|DSC|Photo|Screenshot)/', $filename)) {
+                return "Client - " . ucwords(str_replace(['-', '_'], ' ', $filename));
+            }
+        }
+
+        // Create a time-based identifier for uniqueness
+        $timestamp = $intake->created_at->format('Ymd-Hi');
+        return "Image Client - {$timestamp}";
+    }
+
+    /**
+     * Extract fallback email from various sources
+     */
+    private function extractFallbackEmail(array $extractionData): ?string
+    {
+        return $extractionData['contact']['email'] ?? null;
+    }
+
+    /**
+     * Extract fallback phone from various sources
+     */
+    private function extractFallbackPhone(array $extractionData): ?string
+    {
+        return $extractionData['contact']['phone'] ?? null;
+    }
+
+    /**
+     * Extract fallback company from various sources
+     */
+    private function extractFallbackCompany(array $extractionData): ?string
+    {
+        return $extractionData['contact']['company'] ?? null;
+    }
+
+    /**
+     * Generate comprehensive notes for fallback client
+     */
+    private function generateFallbackNotes(Intake $intake, array $extractionData): string
+    {
+        $notes = ["Created from image/PDF upload (Intake ID: {$intake->id})"];
+
+        if (!empty($extractionData['vin_candidates'])) {
+            $vins = array_column($extractionData['vin_candidates'], 'vin');
+            $notes[] = "Detected VIN(s): " . implode(', ', $vins);
+        }
+
+        if (!empty($extractionData['plate_candidates'])) {
+            $plates = array_column($extractionData['plate_candidates'], 'plate');
+            $notes[] = "Detected License Plate(s): " . implode(', ', $plates);
+        }
+
+        if (!empty($extractionData['vehicle'])) {
+            $vehicle = $extractionData['vehicle'];
+            $vehicleInfo = array_filter([
+                $vehicle['make'] ?? null,
+                $vehicle['model'] ?? null,
+                $vehicle['year'] ?? null
+            ]);
+            if ($vehicleInfo) {
+                $notes[] = "Vehicle: " . implode(' ', $vehicleInfo);
+            }
+        }
+
+        if (!empty($extractionData['extraction_confidence'])) {
+            $notes[] = "Extraction confidence: {$extractionData['extraction_confidence']}%";
+        }
+
+        return implode('. ', $notes) . '.';
+    }
+
+    /**
+     * Create a fallback contact within the client
+     */
+    private function createFallbackContact(string $clientId, Intake $intake, array $extractionData): void
+    {
+        try {
+            Log::info('Creating fallback contact for client', [
+                'client_id' => $clientId,
+                'intake_id' => $intake->id
+            ]);
+
+            // For now, we'll log the intention to create a contact
+            // This can be implemented when the RobawsClient has contact creation methods
+            $contactData = [
+                'client_id' => $clientId,
+                'name' => $this->generateFallbackContactName($intake, $extractionData),
+                'email' => $this->extractFallbackEmail($extractionData),
+                'phone' => $this->extractFallbackPhone($extractionData),
+                'notes' => $this->generateFallbackNotes($intake, $extractionData)
+            ];
+
+            Log::info('Contact data prepared (awaiting API implementation)', [
+                'client_id' => $clientId,
+                'contact_data' => array_filter($contactData)
+            ]);
+
+            // TODO: Implement contact creation when RobawsClient supports it
+            // $client = $this->legacy();
+            // $client->createContact($contactData);
+
+        } catch (\Exception $e) {
+            Log::warning('Failed to create fallback contact', [
+                'client_id' => $clientId,
+                'intake_id' => $intake->id,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Generate fallback contact name
+     */
+    private function generateFallbackContactName(Intake $intake, array $extractionData): string
+    {
+        // Try contact name from extraction
+        if (!empty($extractionData['contact']['name'])) {
+            return $extractionData['contact']['name'];
+        }
+
+        // Try to derive from email
+        if (!empty($extractionData['contact']['email'])) {
+            $email = $extractionData['contact']['email'];
+            $localPart = explode('@', $email)[0];
+            if (strpos($localPart, '.') !== false) {
+                $parts = explode('.', $localPart);
+                return ucfirst($parts[0]) . ' ' . ucfirst($parts[1]);
+            }
+            return ucfirst($localPart);
+        }
+
+        // Use intake customer name if available
+        if (!empty($intake->customer_name)) {
+            return $intake->customer_name;
+        }
+
+        // Generic fallback
+        return "Contact";
+    }
 }

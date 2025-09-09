@@ -13,6 +13,7 @@ class Intake extends Model
 
     protected $fillable = [
         'status',
+        'flags',
         'source',
         'notes',
         'priority',
@@ -33,6 +34,7 @@ class Intake extends Model
 
     protected $casts = [
         'notes' => 'array',
+        'flags' => 'array',
         'extraction_data' => 'array',
         'export_attempt_count' => 'integer',
         'robaws_offer_id' => 'integer',
