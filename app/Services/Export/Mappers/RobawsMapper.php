@@ -296,9 +296,16 @@ class RobawsMapper
             // Update/create contact person phone numbers using existing upsert logic
             if ($clientId && ($phone || $mobile) && $this->apiClient) {
                 try {
+                    // Parse full name into first and last name
+                    $fullName = $contact['name'] ?? 'Contact Person';
+                    $nameParts = explode(' ', trim($fullName), 2);
+                    $firstName = $nameParts[0] ?? 'Contact';
+                    $lastName = $nameParts[1] ?? 'Person';
+                    
                     $contactData = array_filter([
                         'email' => $q['contact_email'] ?? null,
-                        'name' => $contact['name'] ?? 'Contact Person',
+                        'first_name' => $firstName,
+                        'last_name' => $lastName,
                         'phone' => $phone ?: null,
                         'mobile' => $mobile ?: null,
                         'isPrimary' => true
