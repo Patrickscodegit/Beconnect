@@ -191,6 +191,7 @@ class RobawsMapper
             'payments' => $this->mapPayments($pricing, $extractionData),
             'offer_extra_info' => $this->mapOfferExtraInfo($extractionData),
             'customer_data' => $customerData, // Pass enhanced customer data for client creation
+            'extraction_data' => $extractionData, // Pass extraction data for placeholder generation
         ];
     }
 
@@ -226,6 +227,106 @@ class RobawsMapper
         ];
 
         $xf = [];
+
+        // --- Client/Customer Template Placeholders ---
+        // Extract customer data directly from extraction_data with enhanced fields
+        if (!empty($mapped['extraction_data'])) {
+            $extractionData = $mapped['extraction_data'];
+            $rawData = $extractionData['raw_data'] ?? [];
+            $contact = $extractionData['contact'] ?? [];
+            
+            // Build customer data directly from extraction
+            $customerName = $rawData['company'] ?? 
+                           $contact['company'] ?? 
+                           $extractionData['customer_name'] ?? 
+                           $contact['name'] ?? 
+                           $q['customer'] ?? 
+                           'Unknown Customer';
+                           
+            $email = $contact['email'] ?? $rawData['email'] ?? $extractionData['email'] ?? '';
+            $phone = $contact['phone'] ?? $rawData['phone'] ?? $extractionData['phone'] ?? '';
+            $mobile = $contact['mobile'] ?? $rawData['mobile'] ?? $extractionData['mobile'] ?? '';
+            
+            // Extract enhanced fields from raw_data
+            $vatNumber = $rawData['vat'] ?? $rawData['vat_number'] ?? $extractionData['vat_number'] ?? '';
+            if ($vatNumber && !str_starts_with($vatNumber, 'BE')) {
+                $vatNumber = 'BE' . preg_replace('/[^0-9]/', '', $vatNumber);
+            }
+            
+            $website = $rawData['website'] ?? $extractionData['website'] ?? '';
+            if ($website && !preg_match('/^https?:\/\//', $website)) {
+                $website = 'www.' . ltrim($website, 'www.');
+            }
+            
+            // Build address
+            $address = $rawData['address'] ?? '';
+            $street = $rawData['street'] ?? '';
+            $city = $rawData['city'] ?? '';
+            $zip = $rawData['zip'] ?? '';
+            $country = $rawData['country'] ?? 'Belgium';
+            
+            // Build full address string if components exist
+            if (!$address && ($street || $city)) {
+                $addressParts = array_filter([$street, $zip . ' ' . $city, $country]);
+                $address = implode(', ', $addressParts);
+            }
+            
+            // Normalize phone numbers
+            $phone = $this->normalizePhoneNumber($phone);
+            $mobile = $this->normalizePhoneNumber($mobile);
+            
+            // Build placeholders directly using correct Robaws template field names
+            $xf = array_merge($xf, array_filter([
+                'client' => $customerName ? ['stringValue' => $customerName] : null,                    // ${client}
+                'clientAddress' => $address ? ['stringValue' => $address] : null,                      // ${clientAddress}
+                'clientStreet' => $street ? ['stringValue' => $street] : null,                         // ${clientStreet}
+                'clientZipcode' => $zip ? ['stringValue' => $zip] : null,                              // ${clientZipcode}
+                'clientCity' => $city ? ['stringValue' => $city] : null,                              // ${clientCity}
+                'clientCountry' => $country ? ['stringValue' => $country] : null,                     // ${clientCountry}
+                'clientTel' => $phone ? ['stringValue' => $phone] : null,                             // ${clientTel}
+                'clientGsm' => $mobile ? ['stringValue' => $mobile] : null,                           // ${clientGsm}
+                'clientEmail' => $email ? ['stringValue' => $email] : null,                           // ${clientEmail}
+                'clientVat' => $vatNumber ? ['stringValue' => $vatNumber] : null,                     // ${clientVat}
+                'CONTACT_NAME' => ($contact['name'] ?? '') ? ['stringValue' => $contact['name']] : null,
+                'CONTACT_EMAIL' => $email ? ['stringValue' => $email] : null,
+                'CONTACT_TEL' => $phone ? ['stringValue' => $phone] : null,
+                'CONTACT_GSM' => $mobile ? ['stringValue' => $mobile] : null,
+            ], fn($v) => $v !== null));
+            
+            // Update contact person phone numbers if we have a client ID and phone data
+            if ($clientId && ($phone || $mobile) && $this->apiClient) {
+                try {
+                    // Find the contact person by email
+                    $clientData = $this->apiClient->getClientById($clientId);
+                    if (!empty($clientData['contacts'])) {
+                        foreach ($clientData['contacts'] as $contactPerson) {
+                            // Find matching contact by email
+                            if (!empty($contactPerson['email']) && 
+                                strcasecmp($contactPerson['email'], $q['contact_email']) === 0) {
+                                
+                                // Update contact with phone numbers
+                                $contactUpdate = array_filter([
+                                    'phone' => $phone ?: null,
+                                    'mobile' => $mobile ?: null,
+                                ]);
+                                
+                                if (!empty($contactUpdate)) {
+                                    $this->apiClient->updateClientContact($clientId, $contactPerson['id'], $contactUpdate);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                } catch (\Exception $e) {
+                    // Log error but don't fail the export
+                    \Illuminate\Support\Facades\Log::warning('Failed to update contact person phone numbers', [
+                        'client_id' => $clientId,
+                        'error' => $e->getMessage(),
+                        'contact_email' => $q['contact_email']
+                    ]);
+                }
+            }
+        }
 
         // --- Routing ---
         $xf['POR']   = $this->wrapExtra('POR',   $r['por']   ?? null);
@@ -486,10 +587,19 @@ class RobawsMapper
      */
     private function mapQuotationInfo(Intake $intake, array $contact, array $vehicle, array $shipping, array $extractionData = []): array
     {
+        // Extract customer name from company first, then fallback to contact name
+        $rawData = $extractionData['raw_data'] ?? [];
+        $customerName = $rawData['company'] ?? 
+                       $contact['company'] ?? 
+                       $extractionData['customer_name'] ?? 
+                       $contact['name'] ?? 
+                       $intake->customer_name ?? 
+                       '';
+
         return [
             'date' => Carbon::now()->toDateString(), // ISO format internally
             'project' => $this->extractProject($vehicle),
-            'customer' => $contact['name'] ?? $intake->customer_name ?? '',
+            'customer' => $customerName,
             'contact' => $this->extractContactPerson($contact, $shipping),
             'endcustomer' => $contact['company'] ?? '',
             'contact_email' => $contact['email'] ?? $intake->customer_email ?? '',
@@ -1391,28 +1501,57 @@ class RobawsMapper
         $contact = $documentData['contact'] ?? $extractionData['contact'] ?? $rawData['contact'] ?? [];
         
         // Extract customer name with fallbacks (prioritize company name over contact person name)
-        $customerName = $extractionData['customer_name'] ?? 
+        $customerName = $rawData['company'] ?? 
+                       $contact['company'] ?? 
+                       $extractionData['customer_name'] ?? 
                        $intake->customer_name ??
                        $contact['name'] ?? 
                        'Unknown Customer';
         
         // Extract email with fallbacks
         $email = $contact['email'] ?? 
+                $rawData['email'] ?? 
                 $extractionData['email'] ?? 
                 $extractionData['customer_email'] ?? 
                 $intake->contact_email ?? 
                 null;
         
-        // Extract phone numbers
+        // Extract phone numbers with enhanced fallbacks
         $phone = $contact['phone'] ?? 
+                $rawData['phone'] ?? 
                 $extractionData['phone'] ?? 
                 $extractionData['customer_phone'] ?? 
                 $intake->contact_phone ?? 
                 null;
         
         $mobile = $contact['mobile'] ?? 
+                 $rawData['mobile'] ?? 
                  $extractionData['mobile'] ?? 
                  null;
+        
+        // Extract VAT number with multiple fallbacks
+        $vatNumber = $rawData['vat'] ?? 
+                    $rawData['vat_number'] ?? 
+                    $extractionData['vat_number'] ?? 
+                    $extractionData['btw'] ?? 
+                    $extractionData['btw_nummer'] ?? 
+                    null;
+        
+        // Normalize Belgian VAT number
+        if ($vatNumber) {
+            $vatNumber = $this->normalizeVatNumber($vatNumber);
+        }
+        
+        // Extract website with fallbacks
+        $website = $rawData['website'] ?? 
+                  $extractionData['website'] ?? 
+                  $extractionData['web'] ?? 
+                  null;
+        
+        // Normalize website URL
+        if ($website && !preg_match('/^https?:\/\//', $website)) {
+            $website = 'www.' . ltrim($website, 'www.');
+        }
         
         // Extract contact person
         $contactPerson = null;
@@ -1423,18 +1562,20 @@ class RobawsMapper
             $contactPerson = $this->formatContactPerson($extractionData['sender']);
         }
         
-        // Extract address information
-        $address = $this->extractAddress($extractionData);
+        // Extract enhanced address information
+        $address = $this->extractEnhancedAddress($extractionData, $rawData);
         
         // Extract company information
         $companyInfo = $this->extractCompanyInfo($extractionData);
         
-        // Build comprehensive customer data
+        // Build comprehensive customer data with enhanced fields
         $customerData = array_merge([
             'name' => trim($customerName),
             'email' => $email,
-            'phone' => $phone,
-            'mobile' => $mobile,
+            'phone' => $this->normalizePhoneNumber($phone),
+            'mobile' => $this->normalizePhoneNumber($mobile),
+            'vat_number' => $vatNumber,
+            'website' => $website,
             'contact_person' => $contactPerson,
             'language' => $this->detectLanguage($extractionData),
             'currency' => $extractionData['currency'] ?? 'EUR',
@@ -1444,6 +1585,153 @@ class RobawsMapper
         return array_filter($customerData, function ($value) {
             return $value !== null && $value !== '' && $value !== [];
         });
+    }
+
+    /**
+     * Extract enhanced address information with better fallback handling
+     */
+    protected function extractEnhancedAddress(array $extractionData, array $rawData): array
+    {
+        $address = [];
+        
+        // Check for structured address data in raw_data first
+        if (!empty($rawData['address'])) {
+            $fullAddress = $rawData['address'];
+            
+            // Try to parse full address string
+            if (is_string($fullAddress)) {
+                $parsed = $this->parseAddressString($fullAddress);
+                $address = array_merge($address, $parsed);
+            }
+        }
+        
+        // Extract individual address components with enhanced fallbacks
+        $street = $rawData['street'] ?? 
+                 $extractionData['street'] ?? 
+                 $address['street'] ?? 
+                 null;
+        
+        $city = $rawData['city'] ?? 
+               $extractionData['city'] ?? 
+               $address['city'] ?? 
+               null;
+        
+        $zip = $rawData['zip'] ?? 
+              $rawData['postal_code'] ?? 
+              $extractionData['postal_code'] ?? 
+              $address['postal_code'] ?? 
+              null;
+        
+        $country = $rawData['country'] ?? 
+                  $extractionData['country'] ?? 
+                  $address['country'] ?? 
+                  'Belgium'; // Default for Belgian companies
+        
+        // Build final address structure
+        $finalAddress = array_filter([
+            'street' => $street,
+            'city' => $city,
+            'postal_code' => $zip,
+            'country' => $this->normalizeCountryName($country),
+        ]);
+        
+        // Fallback: try to extract from shipping origin if address is incomplete
+        if (empty($finalAddress['city']) || empty($finalAddress['country'])) {
+            $origin = $extractionData['shipping']['origin'] ?? 
+                     $extractionData['shipment']['origin'] ?? 
+                     null;
+            
+            if ($origin) {
+                $originParts = $this->parseLocationString($origin);
+                $finalAddress = array_merge($finalAddress, $originParts);
+            }
+        }
+        
+        return $finalAddress;
+    }
+
+    /**
+     * Parse a full address string into components
+     */
+    protected function parseAddressString(string $address): array
+    {
+        $parsed = [];
+        
+        // Look for common patterns
+        // Example: "Kapelsesteenweg 611, B-2180 Antwerp (Ekeren), Belgium"
+        if (preg_match('/^([^,]+),?\s*([A-Z]{0,2}-?\d{4,5})\s+([^,]+)(?:,\s*(.+))?$/i', $address, $matches)) {
+            $parsed['street'] = trim($matches[1]);
+            $parsed['postal_code'] = trim($matches[2]);
+            $parsed['city'] = trim($matches[3]);
+            if (isset($matches[4])) {
+                $parsed['country'] = trim($matches[4]);
+            }
+        }
+        
+        return $parsed;
+    }
+
+    /**
+     * Parse location string (like "Antwerp, Belgium")
+     */
+    protected function parseLocationString(string $location): array
+    {
+        $parts = array_map('trim', explode(',', $location));
+        
+        if (count($parts) >= 2) {
+            return [
+                'city' => $parts[0],
+                'country' => end($parts),
+            ];
+        }
+        
+        return ['city' => $location];
+    }
+
+    /**
+     * Normalize VAT number for Belgian format
+     */
+    protected function normalizeVatNumber(?string $vat): ?string
+    {
+        if (!$vat) return null;
+        
+        // Remove spaces, dots, and other formatting
+        $cleanVat = preg_replace('/[\s\.\-]/', '', $vat);
+        
+        // Belgian VAT format: BE followed by 10 digits
+        if (preg_match('/^(\d{4}\s?\d{3}\s?\d{3})$/', $cleanVat, $matches)) {
+            return 'BE0' . preg_replace('/\s/', '', $matches[1]);
+        }
+        
+        // Already has BE prefix
+        if (preg_match('/^BE\d{10}$/', $cleanVat)) {
+            return $cleanVat;
+        }
+        
+        return $vat; // Return as-is if no pattern matches
+    }
+
+    /**
+     * Normalize phone number for Belgian format
+     */
+    protected function normalizePhoneNumber(?string $phone): ?string
+    {
+        if (!$phone) return null;
+        
+        // Remove formatting characters
+        $cleanPhone = preg_replace('/[\s\(\)\-\.]/', '', $phone);
+        
+        // Belgian phone format: +32 followed by 9 digits
+        if (preg_match('/^\+32(\d{9})$/', $cleanPhone, $matches)) {
+            return '+32' . $matches[1];
+        }
+        
+        // Local Belgian format: 0X XX XX XX XX
+        if (preg_match('/^0(\d{8,9})$/', $cleanPhone, $matches)) {
+            return '+32' . $matches[1];
+        }
+        
+        return $phone; // Return as-is if no normalization applied
     }
 
     /**
@@ -1524,18 +1812,37 @@ class RobawsMapper
      */
     protected function extractCompanyInfo(array $extractionData): array
     {
+        $rawData = $extractionData['raw_data'] ?? [];
         $companyInfo = [];
         
-        if (!empty($extractionData['vat_number'])) {
-            $companyInfo['vat_number'] = $extractionData['vat_number'];
+        // Extract VAT number with enhanced fallbacks
+        $vatNumber = $rawData['vat'] ?? 
+                    $rawData['vat_number'] ?? 
+                    $extractionData['vat_number'] ?? 
+                    $extractionData['btw'] ?? 
+                    $extractionData['btw_nummer'] ?? 
+                    null;
+        
+        if ($vatNumber) {
+            $companyInfo['vat_number'] = $this->normalizeVatNumber($vatNumber);
         }
         
         if (!empty($extractionData['company_number'])) {
             $companyInfo['company_number'] = $extractionData['company_number'];
         }
         
-        if (!empty($extractionData['website'])) {
-            $companyInfo['website'] = $extractionData['website'];
+        // Extract website with enhanced fallbacks
+        $website = $rawData['website'] ?? 
+                  $extractionData['website'] ?? 
+                  $extractionData['web'] ?? 
+                  null;
+        
+        if ($website) {
+            // Normalize website URL
+            if (!preg_match('/^https?:\/\//', $website)) {
+                $website = 'www.' . ltrim($website, 'www.');
+            }
+            $companyInfo['website'] = $website;
         }
         
         // Determine client type
@@ -1631,5 +1938,88 @@ class RobawsMapper
         }
         
         return 'en'; // Default to English
+    }
+
+    /**
+     * Build client display placeholders for template variables
+     * These are used in Robaws templates like ${client}, ${clientAddress}, etc.
+     * Enhanced to handle both CustomerNormalizer format and extractEnhancedCustomerData format
+     */
+    public function buildClientDisplayPlaceholders(array $c): array
+    {
+        // Handle both formats: enhanced customer data and normalized customer data
+        $client = $c['name'] ?? '';
+        
+        // Address handling - check for both formats
+        if (isset($c['address']) && is_array($c['address'])) {
+            // CustomerNormalizer format
+            $street = $c['address']['street'] ?? '';
+            $zip = $c['address']['zip'] ?? '';
+            $city = $c['address']['city'] ?? '';
+            $country = $c['address']['country'] ?? '';
+        } else {
+            // Enhanced customer data format (flat structure)
+            $street = $c['street'] ?? '';
+            $zip = $c['postal_code'] ?? '';
+            $city = $c['city'] ?? '';
+            $country = $c['country'] ?? '';
+        }
+        
+        // Build full address string
+        $addressParts = array_filter([$street, $zip . ' ' . $city, $country]);
+        $addrStr = implode(', ', $addressParts);
+        $addrStr = trim($addrStr, ', ');
+
+        // Phone numbers
+        $tel = $c['phone'] ?? '';
+        $gsm = $c['mobile'] ?? '';
+        $email = $c['email'] ?? '';
+        
+        // Enhanced fields - check for both vat_number and vat
+        $vat = $c['vat_number'] ?? $c['vat'] ?? '';
+        $website = $c['website'] ?? '';
+        
+        // Contact person - handle both formats
+        if (isset($c['contact']) && is_array($c['contact'])) {
+            // CustomerNormalizer format
+            $contactName = $c['contact']['name'] ?? '';
+            $contactEmail = $c['contact']['email'] ?? $email;
+            $contactPhone = $c['contact']['phone'] ?? $tel;
+            $contactMobile = $c['contact']['mobile'] ?? $gsm;
+        } elseif (isset($c['contact_person']) && is_array($c['contact_person'])) {
+            // Enhanced customer data format
+            $contactName = $c['contact_person']['name'] ?? '';
+            $contactEmail = $c['contact_person']['email'] ?? $email;
+            $contactPhone = $c['contact_person']['phone'] ?? $tel;
+            $contactMobile = $c['contact_person']['mobile'] ?? $gsm;
+        } else {
+            // Fallback to main customer data
+            $contactName = $client;
+            $contactEmail = $email;
+            $contactPhone = $tel;
+            $contactMobile = $gsm;
+        }
+
+        // Return extraFields format for Robaws API
+        return array_filter([
+            // Customer fields
+            'CLIENT' => $client ? ['stringValue' => $client] : null,                    // ${client} or ${clientName}
+            'CLIENT_ADDRESS' => $addrStr ? ['stringValue' => $addrStr] : null,          // ${clientAddress}
+            'CLIENT_STREET' => $street ? ['stringValue' => $street] : null,            // ${clientStreet} or ${clientAddressStreet}
+            'CLIENT_ZIPCODE' => $zip ? ['stringValue' => $zip] : null,                 // ${clientZipcode} or ${clientAddressZipcode}
+            'CLIENT_CITY' => $city ? ['stringValue' => $city] : null,                 // ${clientCity} or ${clientAddressCity}
+            'CLIENT_COUNTRY' => $country ? ['stringValue' => $country] : null,        // ${clientCountry}
+            'CLIENT_TEL' => $tel ? ['stringValue' => $tel] : null,                    // ${clientTel}
+            'CLIENT_GSM' => $gsm ? ['stringValue' => $gsm] : null,                    // ${clientGsm}
+            'CLIENT_EMAIL' => $email ? ['stringValue' => $email] : null,              // ${clientEmail}
+            'CLIENT_VAT' => $vat ? ['stringValue' => $vat] : null,                    // ${clientVat}
+            'CLIENT_WEBSITE' => $website ? ['stringValue' => $website] : null,        // ${clientWebsite}
+            
+            // Contact person fields
+            'CONTACT_NAME' => $contactName ? ['stringValue' => $contactName] : null,           // ${contactPersonName} or ${contactPersonFullname}
+            'CONTACT_EMAIL' => $contactEmail ? ['stringValue' => $contactEmail] : null,        // ${contactPersonEmail}
+            'CONTACT_TEL' => $contactPhone ? ['stringValue' => $contactPhone] : null,          // ${contactPersonTel}
+            'CONTACT_GSM' => $contactMobile ? ['stringValue' => $contactMobile] : null,        // ${contactPersonGsm}
+        ], fn($v) => $v !== null);
     }
 }

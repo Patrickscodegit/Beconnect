@@ -211,8 +211,12 @@ class SimpleRobawsIntegration
     /**
      * Map Port of Receipt to appropriate Port of Loading
      */
-    private function mapPortOfLoading(string $por): string
+    private function mapPortOfLoading(?string $por): string
     {
+        if (!$por) {
+            return 'Unknown';
+        }
+        
         // Common mappings from city to actual port
         $portMappings = [
             'Brussels' => 'Antwerp',

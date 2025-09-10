@@ -557,56 +557,22 @@ final class RobawsApiClient
     public function updateClient(int $clientId, array $customerData): ?array
     {
         try {
-            $update = [];
-
-            // Map phone fields to Robaws field names
-            if (!empty($customerData['phone'] ?? $customerData['tel'])) {
-                $update['tel'] = $customerData['phone'] ?? $customerData['tel'];
-            }
-            if (!empty($customerData['mobile'] ?? $customerData['gsm'])) {
-                $update['gsm'] = $customerData['mobile'] ?? $customerData['gsm'];
-            }
-            if (!empty($customerData['website'])) {
-                $update['website'] = $customerData['website'];
-            }
-            if (!empty($customerData['vat_number'])) {
-                $update['vatNumber'] = $customerData['vat_number'];
-            }
-            if (!empty($customerData['company_number'])) {
-                $update['companyNumber'] = $customerData['company_number'];
-            }
-
-            // Handle address if provided
-            $addressFields = array_filter([
-                $customerData['street'] ?? null,
-                $customerData['city'] ?? null,
-                $customerData['postal_code'] ?? null,
-                $customerData['country'] ?? null,
-            ]);
-
-            if (!empty($addressFields)) {
-                $update['address'] = array_filter([
-                    'street'       => $customerData['street'] ?? null,
-                    'streetNumber' => $customerData['street_number'] ?? null,
-                    'postalCode'   => $customerData['postal_code'] ?? null,
-                    'city'         => $customerData['city'] ?? null,
-                    'country'      => $customerData['country'] ?? null,
-                    'countryCode'  => $customerData['country_code'] ?? null,
-                ]);
-            }
-
+            // Use the same payload conversion as createClient for consistency
+            $update = $this->toRobawsClientPayload($customerData, true);
+            
             if (empty($update)) return ['id' => $clientId];
 
-            // Use proper JSON Merge Patch content type
+            // Use regular JSON content type like other operations
             $response = $this->getHttpClient()
-                ->withHeaders(['Content-Type' => 'application/merge-patch+json', 'Accept' => 'application/json'])
+                ->withHeaders(['Content-Type' => 'application/json', 'Accept' => 'application/json'])
                 ->patch("/api/v2/clients/{$clientId}", $update);
 
             if ($response->successful()) {
                 $result = $response->json();
                 \Illuminate\Support\Facades\Log::info('Updated Robaws client successfully', [
                     'client_id' => $clientId,
-                    'updated_fields' => array_keys($update)
+                    'updated_fields' => array_keys($update),
+                    'update_data' => $update
                 ]);
                 return $result ?? ['id' => $clientId];
             }
@@ -1170,7 +1136,7 @@ final class RobawsApiClient
 
         try {
             $response = $this->getHttpClient()
-                ->withHeaders(['Content-Type' => 'application/merge-patch+json', 'Accept' => 'application/json'])
+                ->withHeaders(['Content-Type' => 'application/json', 'Accept' => 'application/json'])
                 ->patch("/api/v2/clients/{$clientId}/contacts/{$contactId}", $body);
 
             if ($response->successful()) {
@@ -1487,5 +1453,47 @@ final class RobawsApiClient
         ]);
         
         return false;
+    }
+
+    /**
+     * Build Robaws client payload from normalized customer data
+     */
+    public function buildRobawsClientPayload(array $c): array
+    {
+        // Build contacts array
+        $contacts = [];
+        if (!empty($c['contact']['name']) || !empty($c['contact']['email']) || !empty($c['contact']['phone'])) {
+            $contacts[] = array_filter([
+                'name' => $c['contact']['name'] ?? null,
+                'email' => $c['contact']['email'] ?? null,
+                'phone' => $c['contact']['phone'] ?? null,
+                'mobile' => $c['contact']['mobile'] ?? null,
+            ]);
+        }
+
+        // Build addresses array
+        $addresses = [];
+        if (!empty($c['address']['street']) || !empty($c['address']['city'])) {
+            $addresses[] = array_filter([
+                'type' => 'billing',
+                'street' => $c['address']['street'] ?? null,
+                'zip' => $c['address']['zip'] ?? null,
+                'city' => $c['address']['city'] ?? null,
+                'country' => $c['address']['country'] ?? null,
+            ]);
+        }
+
+        // Build the main payload
+        return array_filter([
+            'name' => $c['name'] ?? null,
+            'email' => $c['email'] ?? null,
+            'tel' => $c['phone'] ?? null,
+            'gsm' => $c['mobile'] ?? null,
+            'vatNumber' => $c['vat'] ?? null,
+            'website' => $c['website'] ?? null,
+            'clientType' => $c['client_type'] ?? 'company',
+            'addresses' => !empty($addresses) ? $addresses : null,
+            'contacts' => !empty($contacts) ? $contacts : null,
+        ], fn($v) => $v !== null && $v !== [] && $v !== '');
     }
 }

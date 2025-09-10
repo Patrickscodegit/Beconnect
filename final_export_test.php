@@ -8,10 +8,10 @@ echo "🎯 Final BMW Série 7 Export Test\n";
 echo "=================================\n\n";
 
 try {
-    $intake = \App\Models\Intake::latest()->first();
+    $intake = \App\Models\Intake::find(11); // Armos BV test data
     
     if (!$intake) {
-        echo "❌ No intake found\n";
+        echo "❌ Intake ID 11 not found\n";
         exit(1);
     }
     

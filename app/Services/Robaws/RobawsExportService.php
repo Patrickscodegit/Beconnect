@@ -357,6 +357,167 @@ class RobawsExportService
      */
     private function buildTypeSafePayload($intake, $extractionData, $mapped, $exportId): array
     {
+        if (config('extraction.export.use_normalizer', true)) {
+            // 1) Always normalize once, then drive everything from it
+            $customer = app(\App\Support\CustomerNormalizer::class)->normalize($extractionData, [
+                'default_country' => 'BE',
+            ]);
+
+            Log::info('Customer normalized for export', [
+                'export_id' => $exportId,
+                'intake_id' => $intake->id,
+                'normalized_name' => $customer['name'] ?? null,
+                'normalized_email' => $customer['email'] ?? null,
+                'normalized_phone' => $customer['phone'] ?? null,
+                'normalized_vat' => $customer['vat'] ?? null,
+                'normalized_website' => $customer['website'] ?? null,
+            ]);
+
+            // 2) Resolve/create the client with a contacts array
+            $clientPayload = app(\App\Services\Export\Clients\RobawsApiClient::class)
+                ->buildRobawsClientPayload($customer); // includes contacts[0]{name,email,phone}
+
+            // IMPORTANT: null-only filtering; do NOT deep-filter arrays
+            $clientPayload = array_filter($clientPayload, static fn($v) => $v !== null);
+
+            Log::info('Client payload for Robaws', [
+                'export_id' => $exportId,
+                'intake_id' => $intake->id,
+                'payload_keys' => array_keys($clientPayload),
+                'has_contacts' => !empty($clientPayload['contacts']),
+                'contacts_count' => count($clientPayload['contacts'] ?? []),
+                'first_contact' => $clientPayload['contacts'][0] ?? null,
+            ]);
+
+            // v2 preferred; fallback to legacy findOrCreate
+            $clientId = null;
+            try {
+                if (method_exists($this->apiClient, 'createOrFindClient')) {
+                    $client = $this->apiClient->createOrFindClient($clientPayload);
+                    $clientId = $client['id'] ?? null;
+                } else {
+                    // Fallback: try to find existing client first
+                    $clientId = $this->apiClient->findClientId(
+                        $customer['name'] ?? null,
+                        $customer['email'] ?? null,
+                        $customer['phone'] ?? null
+                    );
+                    
+                    // If not found and we have enough data, create new client
+                    if (!$clientId && !empty($clientPayload)) {
+                        try {
+                            $createdClient = $this->apiClient->findOrCreateClient($clientPayload);
+                            $clientId = $createdClient['id'] ?? null;
+                            Log::info('Client created successfully', [
+                                'export_id' => $exportId,
+                                'client_id' => $clientId,
+                                'customer_name' => $customer['name'] ?? null,
+                            ]);
+                        } catch (\Throwable $e) {
+                            Log::warning('Client creation failed', [
+                                'export_id' => $exportId,
+                                'error' => $e->getMessage(),
+                                'customer_name' => $customer['name'] ?? null,
+                            ]);
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Client resolve/create failed', [
+                    'e' => $e->getMessage(), 
+                    'payload' => $clientPayload
+                ]);
+            }
+
+            // 3) Guarantee a CONTACT exists on an existing client
+            if ($clientId) {
+                $this->ensureClientContact($clientId, $customer);
+                $intake->robaws_client_id = $clientId;
+                $intake->save();
+            }
+
+            // Type-safe client ID casting with validation
+            $validatedClientId = $this->validateClientId($clientId, $exportId);
+
+            Log::info('Enhanced client resolution', [
+                'export_id' => $exportId,
+                'intake_id' => $intake->id,
+                'display_name' => $customer['name'] ?? 'Unknown',
+                'contact_email' => $customer['email'] ?? null,
+                'contact_phone' => $customer['phone'] ?? null,
+                'resolved_client_id' => $clientId,
+                'validated_client_id' => $validatedClientId,
+                'binding_status' => $validatedClientId ? 'will_bind_to_client' : 'no_client_binding',
+                'normalizer_used' => true,
+            ]);
+
+            // 4) Feed placeholders + dimensions into the offer payload
+            $mapped['customer_normalized'] = $customer; // ensure it's present
+            $mapped['client_placeholders'] = app(\App\Services\Export\Mappers\RobawsMapper::class)
+                ->buildClientDisplayPlaceholders($customer);
+
+            // Inject client ID and contact email into mapped data
+            if ($validatedClientId) {
+                $mapped['client_id'] = $validatedClientId;  // Already validated as integer
+                
+                // Use normalized email or intake fallback
+                $finalContactEmail = $customer['email'] ?? $intake->contact_email;
+                if ($finalContactEmail) {
+                    $mapped['contact_email'] = $finalContactEmail;
+                }
+                
+                Log::info('Client ID injected into payload', [
+                    'export_id' => $exportId,
+                    'client_id' => $validatedClientId,
+                    'customer_name' => $customer['name'] ?? 'Unknown',
+                    'contact_email' => $finalContactEmail,
+                ]);
+            } else {
+                Log::warning('No unique client match found - export will proceed without client binding', [
+                    'export_id' => $exportId,
+                    'customer_name' => $customer['name'] ?? 'Unknown',
+                    'customer_email' => $customer['email'] ?? null,
+                ]);
+            }
+            
+            // Remove customer_data from mapped data before building payload (it's only for client creation)
+            unset($mapped['customer_data']);
+            
+            // Build final payload with comprehensive logging
+            $payload = $this->mapper->toRobawsApiPayload($mapped);
+            
+            // Merge placeholders if mapper doesn't already:
+            $payload['extraFields'] = array_merge($payload['extraFields'] ?? [], $mapped['client_placeholders'] ?? []);
+
+            // 5) Stop pruning the contacts array - null-only filter
+            $payload = array_filter($payload, static fn($v) => $v !== null);
+            
+            Log::info('Enhanced Robaws payload (api shape)', [
+                'export_id' => $exportId,
+                'intake_id' => $intake->id,
+                'top' => array_keys($payload),
+                'client_id_debug' => $payload['clientId'] ?? null,
+                'contact_email_debug' => $payload['contactEmail'] ?? null,
+                'client_reference_debug' => $payload['clientReference'] ?? null,
+                'extraFields_keys' => array_keys($payload['extraFields'] ?? []),
+                'has_client_placeholders' => !empty($mapped['client_placeholders']),
+                'payload_size' => strlen(json_encode($payload)),
+                'enhanced_client_creation' => true,
+                'customer_normalizer_used' => true,
+            ]);
+
+            return $payload;
+        } else {
+            // Legacy fallback path
+            return $this->buildLegacyTypeSafePayload($intake, $extractionData, $mapped, $exportId);
+        }
+    }
+
+    /**
+     * Legacy payload building method (pre-normalizer)
+     */
+    private function buildLegacyTypeSafePayload($intake, $extractionData, $mapped, $exportId): array
+    {
         // Extract enhanced customer data
         $customerData = $mapped['customer_data'] ?? [];
         
@@ -367,27 +528,6 @@ class RobawsExportService
         // Validate and sanitize email
         $customerEmail = $this->validateAndSanitizeEmail($customerEmail);
 
-        // Auto-detect country information for customer
-        $countryInfo = $this->detectCountryFromContactData([
-            'phone' => $customerPhone,
-            'email' => $customerEmail,
-            'company' => $customerName,
-            'mobile' => $customerData['mobile'] ?? null,
-        ]);
-        
-        // Add country information to customer data if detected
-        if ($countryInfo && empty($customerData['country'])) {
-            $customerData['country'] = $countryInfo['country'];
-            $customerData['country_code'] = $countryInfo['country_code'];
-            
-            Log::info('Auto-detected country for customer', [
-                'export_id' => $exportId,
-                'customer_name' => $customerName,
-                'detected_country' => $countryInfo['country'],
-                'country_code' => $countryInfo['country_code'],
-            ]);
-        }
-
         // Use pre-resolved client ID if available, otherwise try to find or create client
         $clientId = $intake->robaws_client_id;
         
@@ -397,15 +537,11 @@ class RobawsExportService
             
             // If no existing client found and we have enough data, create a new one
             if (!$clientId && !empty($customerData)) {
-                Log::info('Attempting to create new client with enhanced data', [
+                Log::info('Attempting to create new client with enhanced data (legacy)', [
                     'export_id' => $exportId,
                     'customer_name' => $customerName,
                     'has_email' => !empty($customerEmail),
                     'has_phone' => !empty($customerPhone),
-                    'has_contact_person' => !empty($customerData['contact_person']),
-                    'has_address' => !empty($customerData['street']) || !empty($customerData['city']),
-                    'has_country' => !empty($customerData['country']),
-                    'client_type' => $customerData['client_type'] ?? 'unknown'
                 ]);
                 
                 $createdClient = $this->apiClient->findOrCreateClient($customerData);
@@ -415,14 +551,13 @@ class RobawsExportService
                     // Store the client ID for future use
                     $intake->update(['robaws_client_id' => $clientId]);
                     
-                    Log::info('Successfully created new client', [
+                    Log::info('Successfully created new client (legacy)', [
                         'export_id' => $exportId,
                         'client_id' => $clientId,
                         'customer_name' => $customerName,
-                        'country' => $customerData['country'] ?? null,
                     ]);
                 } else {
-                    Log::warning('Failed to create new client', [
+                    Log::warning('Failed to create new client (legacy)', [
                         'export_id' => $exportId,
                         'customer_name' => $customerName
                     ]);
@@ -433,44 +568,15 @@ class RobawsExportService
         // Type-safe client ID casting with validation
         $validatedClientId = $this->validateClientId($clientId, $exportId);
 
-        Log::info('Enhanced client resolution', [
-            'export_id' => $exportId,
-            'intake_id' => $intake->id,
-            'display_name' => $customerName,
-            'contact_email' => $customerEmail,
-            'contact_phone' => $customerPhone,
-            'detected_country' => $customerData['country'] ?? null,
-            'pre_resolved_client_id' => $intake->robaws_client_id,
-            'resolved_client_id' => $clientId,
-            'validated_client_id' => $validatedClientId,
-            'has_contact_person' => !empty($customerData['contact_person']),
-            'has_enhanced_data' => !empty($customerData),
-            'binding_status' => $validatedClientId ? 'will_bind_to_client' : 'no_client_binding',
-        ]);
-
         // Inject client ID and contact email into mapped data
         if ($validatedClientId) {
             $mapped['client_id'] = $validatedClientId;  // Already validated as integer
             
-            // Use validated email or intake fallback, avoid hardcoded foreign domain
+            // Use validated email or intake fallback
             $finalContactEmail = $customerEmail ?: ($intake->contact_email ?: null);
             if ($finalContactEmail) {
                 $mapped['contact_email'] = $finalContactEmail;
             }
-            
-            Log::info('Client ID injected into payload', [
-                'export_id' => $exportId,
-                'client_id' => $validatedClientId,
-                'customer_name' => $customerName,
-                'contact_email' => $finalContactEmail,
-            ]);
-        } else {
-            Log::warning('No unique client match found - export will proceed without client binding', [
-                'export_id' => $exportId,
-                'customer_name' => $customerName,
-                'customer_email' => $customerEmail,
-                'attempted_creation' => !empty($customerData),
-            ]);
         }
         
         // Remove customer_data from mapped data before building payload (it's only for client creation)
@@ -479,16 +585,13 @@ class RobawsExportService
         // Build final payload with comprehensive logging
         $payload = $this->mapper->toRobawsApiPayload($mapped);
         
-        Log::info('Enhanced Robaws payload (api shape)', [
+        Log::info('Legacy Robaws payload (api shape)', [
             'export_id' => $exportId,
             'intake_id' => $intake->id,
             'top' => array_keys($payload),
             'client_id_debug' => $payload['clientId'] ?? null,
-            'contact_email_debug' => $payload['contactEmail'] ?? null,
-            'client_reference_debug' => $payload['clientReference'] ?? null,
             'payload_size' => strlen(json_encode($payload)),
-            'enhanced_client_creation' => true,
-            'country_detection' => true,
+            'legacy_mode' => true,
         ]);
 
         return $payload;
@@ -558,6 +661,34 @@ class RobawsExportService
         ]);
 
         return $intClientId;
+    }
+
+    /**
+     * Guarantee a CONTACT exists on an existing client
+     */
+    private function ensureClientContact(int $clientId, array $customer): void
+    {
+        $email = $customer['contact']['email'] ?? $customer['email'] ?? null;
+        $phone = $customer['contact']['phone'] ?? $customer['phone'] ?? null;
+        $name  = $customer['contact']['name']  ?? null;
+
+        if (!$email && !$phone) return;
+
+        try {
+            if ($email && method_exists($this->apiClient, 'findContactByEmail')) {
+                $contact = $this->apiClient->findContactByEmail($email);
+                if (!empty($contact['id'])) return; // already present
+            }
+            if (method_exists($this->apiClient, 'createContact')) {
+                $this->apiClient->createContact($clientId, array_filter([
+                    'name'  => $name,
+                    'email' => $email,
+                    'phone' => $phone,
+                ], fn($v) => $v !== null));
+            }
+        } catch (\Throwable $e) {
+            Log::info('ensureClientContact failed', ['client_id' => $clientId, 'e' => $e->getMessage()]);
+        }
     }
 
     /**
@@ -808,6 +939,14 @@ class RobawsExportService
                 ]);
             }
         }
+    }
+
+    /**
+     * Load extraction data for intake (alias for compatibility)
+     */
+    public function loadExtractionForIntake(Intake $intake): array
+    {
+        return $this->getExtractionData($intake);
     }
 
     private function getExtractionData(Intake $intake): array
@@ -1178,8 +1317,27 @@ class RobawsExportService
                 return;
             }
 
-            // Set the contact person on the offer
-            $success = $this->apiClient->setOfferContact($offerId, $contactId);
+            // Set the contact person on the offer with enhanced error handling
+            try {
+                if (!method_exists($this->apiClient, 'setOfferContact')) {
+                    Log::error('setOfferContact method does not exist on RobawsApiClient', [
+                        'class' => get_class($this->apiClient),
+                        'methods' => get_class_methods($this->apiClient)
+                    ]);
+                    return;
+                }
+                
+                $success = $this->apiClient->setOfferContact($offerId, $contactId);
+            } catch (\Error $e) {
+                Log::error('Fatal error calling setOfferContact', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                    'class' => get_class($this->apiClient),
+                    'offer_id' => $offerId,
+                    'contact_id' => $contactId
+                ]);
+                return;
+            }
             
             if ($success) {
                 Log::info('Successfully linked contact person to quotation', [

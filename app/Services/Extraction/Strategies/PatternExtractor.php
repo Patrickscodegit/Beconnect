@@ -66,10 +66,10 @@ class PatternExtractor
             'length_labeled' => '/(?:^|\b)(?:vehicle\s+)?length[\s:=]+(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)\b/i',
             'width_labeled' => '/(?:^|\b)(?:vehicle\s+)?width[\s:=]+(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)\b/i',
             'height_labeled' => '/(?:^|\b)(?:vehicle\s+)?height[\s:=]+(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)\b/i',
-            // Single letter labels only when followed by units
-            'length_single_letter' => '/\bL[\s:=]+(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)\b/i',
-            'width_single_letter' => '/\bW[\s:=]+(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)\b/i',
-            'height_single_letter' => '/\bH[\s:=]+(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)\b/i',
+            // Single letter labels - enhanced patterns for Dutch format
+            'length_single_letter' => '/\bL[\s:=]*(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)\b/i',
+            'width_single_letter' => '/\b[WB][\s:=]*(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)\b/i',
+            'height_single_letter' => '/\bH[\s:=]*(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)\b/i',
             // Dimension context patterns
             'dimensions_labeled' => '/(?:dimensions?|size|measurements?)[\s:=]+(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)?/i',
             'dimensions_lwh' => '/(?:L\s*[×x×X*]\s*W\s*[×x×X*]\s*H|LWH)[\s:=]*(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*[×x×X*]\s*(\d+\.?\d*)\s*(m|cm|mm|ft|feet|in|inches)?/i',
