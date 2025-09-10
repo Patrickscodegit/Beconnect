@@ -244,8 +244,32 @@ class RobawsMapper
                            'Unknown Customer';
                            
             $email = $contact['email'] ?? $rawData['email'] ?? $extractionData['email'] ?? '';
+            
+            // Enhanced phone number extraction with fallback logic
             $phone = $contact['phone'] ?? $rawData['phone'] ?? $extractionData['phone'] ?? '';
             $mobile = $contact['mobile'] ?? $rawData['mobile'] ?? $extractionData['mobile'] ?? '';
+            
+            // Fallback: Extract phone numbers from raw text if structured data is insufficient
+            if ((!$phone || !$mobile || !preg_match('/^\+\d/', $phone) || is_numeric($phone)) && isset($extractionData['raw_text'])) {
+                $rawText = $extractionData['raw_text'];
+                
+                // Extract Belgian phone numbers from signature
+                if (preg_match('/Tel\.?:?\s*(\+32\s*\([^)]+\)\s*[\d\s]+)/i', $rawText, $matches)) {
+                    $phone = preg_replace('/\s+/', '', $matches[1]); // Remove extra spaces
+                    // Remove the (0) from Belgian format for proper normalization
+                    $phone = str_replace('(0)', '', $phone);
+                }
+                if (preg_match('/Mobile:?\s*(\+32\s*\([^)]+\)\s*[\d\s]+)/i', $rawText, $matches)) {
+                    $mobile = preg_replace('/\s+/', '', $matches[1]); // Remove extra spaces
+                    // Remove the (0) from Belgian format for proper normalization
+                    $mobile = str_replace('(0)', '', $mobile);
+                }
+                
+                // Alternative pattern for phone numbers
+                if (!$phone && preg_match('/(\+32[\s\(\)]*\d{1,3}[\s\-\.\(\)]*\d{2,3}[\s\-\.\(\)]*\d{2,3}[\s\-\.\(\)]*\d{2,3})/', $rawText, $matches)) {
+                    $phone = $matches[1];
+                }
+            }
             
             // Extract enhanced fields from raw_data
             $vatNumber = $rawData['vat'] ?? $rawData['vat_number'] ?? $extractionData['vat_number'] ?? '';
@@ -289,42 +313,57 @@ class RobawsMapper
                 'clientVat' => $vatNumber ? ['stringValue' => $vatNumber] : null,                     // ${clientVat}
                 'CONTACT_NAME' => ($contact['name'] ?? '') ? ['stringValue' => $contact['name']] : null,
                 'CONTACT_EMAIL' => $email ? ['stringValue' => $email] : null,
-                'CONTACT_TEL' => $phone ? ['stringValue' => $phone] : null,
-                'CONTACT_GSM' => $mobile ? ['stringValue' => $mobile] : null,
+                // Note: CONTACT_TEL and CONTACT_GSM removed - they're template fields only and don't update the contact record
             ], fn($v) => $v !== null));
             
-            // Update contact person phone numbers if we have a client ID and phone data
-            if ($clientId && ($phone || $mobile) && $this->apiClient) {
+            // Single consolidated contact update logic
+            if ($this->apiClient && $clientId && $email && ($phone || $mobile)) {
                 try {
-                    // Find the contact person by email
-                    $clientData = $this->apiClient->getClientById($clientId);
-                    if (!empty($clientData['contacts'])) {
-                        foreach ($clientData['contacts'] as $contactPerson) {
-                            // Find matching contact by email
-                            if (!empty($contactPerson['email']) && 
-                                strcasecmp($contactPerson['email'], $q['contact_email']) === 0) {
-                                
-                                // Update contact with phone numbers
-                                $contactUpdate = array_filter([
-                                    'phone' => $phone ?: null,
-                                    'mobile' => $mobile ?: null,
-                                ]);
-                                
-                                if (!empty($contactUpdate)) {
-                                    $this->apiClient->updateClientContact($clientId, $contactPerson['id'], $contactUpdate);
-                                }
-                                break;
-                            }
-                        }
+                    // Prepare contact data
+                    $contactData = [
+                        'email' => $email,
+                        'first_name' => $contact['name'] ?? '',
+                        'surname' => '', // Will be parsed from full name if needed
+                        'phone' => $phone,
+                        'mobile' => $mobile,
+                        'function' => $contact['role'] ?? '',
+                    ];
+                    
+                    // Parse full name if first_name contains full name
+                    if (!empty($contactData['first_name']) && str_contains($contactData['first_name'], ' ')) {
+                        $nameParts = explode(' ', $contactData['first_name'], 2);
+                        $contactData['first_name'] = $nameParts[0];
+                        $contactData['surname'] = $nameParts[1] ?? '';
+                    }
+                    
+                    \Illuminate\Support\Facades\Log::info('Processing contact person data', [
+                        'client_id' => $clientId,
+                        'contact_email' => $email,
+                        'contact_data' => $contactData
+                    ]);
+                    
+                    // Create or update the contact using the new consolidated method
+                    $contactResult = $this->apiClient->createOrUpdateClientContact($clientId, $contactData);
+                    
+                    if ($contactResult) {
+                        \Illuminate\Support\Facades\Log::info('Contact person processed successfully', [
+                            'client_id' => $clientId,
+                            'contact_id' => $contactResult['id'] ?? null
+                        ]);
                     }
                 } catch (\Exception $e) {
-                    // Log error but don't fail the export
-                    \Illuminate\Support\Facades\Log::warning('Failed to update contact person phone numbers', [
-                        'client_id' => $clientId,
+                    \Illuminate\Support\Facades\Log::error('Failed to process contact person', [
                         'error' => $e->getMessage(),
-                        'contact_email' => $q['contact_email']
+                        'trace' => $e->getTraceAsString()
                     ]);
                 }
+            } else {
+                \Illuminate\Support\Facades\Log::info('Skipping contact update - missing required data', [
+                    'has_api_client' => !is_null($this->apiClient),
+                    'has_client_id' => !is_null($clientId),
+                    'has_email' => !is_null($email),
+                    'has_phone_or_mobile' => !is_null($phone) || !is_null($mobile)
+                ]);
             }
         }
 
@@ -1721,13 +1760,13 @@ class RobawsMapper
         // Remove formatting characters
         $cleanPhone = preg_replace('/[\s\(\)\-\.]/', '', $phone);
         
-        // Belgian phone format: +32 followed by 9 digits
-        if (preg_match('/^\+32(\d{9})$/', $cleanPhone, $matches)) {
+        // Belgian phone format: +32 followed by 8 or 9 digits
+        if (preg_match('/^\+32(\d{8,9})$/', $cleanPhone, $matches)) {
             return '+32' . $matches[1];
         }
         
-        // Local Belgian format: 0X XX XX XX XX
-        if (preg_match('/^0(\d{8,9})$/', $cleanPhone, $matches)) {
+        // Local Belgian format: 0X XX XX XX XX (8-9 digits after the 0)
+        if (preg_match('/^0(\d{7,8})$/', $cleanPhone, $matches)) {
             return '+32' . $matches[1];
         }
         

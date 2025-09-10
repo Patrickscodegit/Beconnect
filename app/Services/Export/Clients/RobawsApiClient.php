@@ -1134,17 +1134,33 @@ final class RobawsApiClient
             'receivesQuotes'   => $patch['receives_quotes'] ?? null,
         ], fn($v) => $v !== null);
 
+        \Illuminate\Support\Facades\Log::info('Sending contact update to Robaws API', [
+            'client_id' => $clientId,
+            'contact_id' => $contactId,
+            'request_body' => $body,
+            'endpoint' => "/api/v2/clients/{$clientId}/contacts/{$contactId}"
+        ]);
+
         try {
             $response = $this->getHttpClient()
                 ->withHeaders(['Content-Type' => 'application/json', 'Accept' => 'application/json'])
                 ->patch("/api/v2/clients/{$clientId}/contacts/{$contactId}", $body);
+
+            \Illuminate\Support\Facades\Log::info('Robaws contact update response', [
+                'client_id' => $clientId,
+                'contact_id' => $contactId,
+                'status_code' => $response->status(),
+                'success' => $response->successful(),
+                'response_body' => $response->body()
+            ]);
 
             if ($response->successful()) {
                 $result = $response->json();
                 \Illuminate\Support\Facades\Log::info('Updated contact via client-scoped endpoint', [
                     'client_id' => $clientId,
                     'contact_id' => $contactId,
-                    'updated_fields' => array_keys($body)
+                    'updated_fields' => array_keys($body),
+                    'response_data' => $result
                 ]);
                 return $result;
             }
@@ -1153,8 +1169,43 @@ final class RobawsApiClient
                 'client_id' => $clientId,
                 'contact_id' => $contactId,
                 'status' => $response->status(),
-                'body' => $response->body()
+                'body' => $response->body(),
+                'request_data' => $body
             ]);
+
+            // Try alternative approach with direct contact endpoint if client-scoped fails
+            if ($response->status() === 404 || $response->status() === 403) {
+                \Illuminate\Support\Facades\Log::info('Trying direct contact endpoint as fallback', [
+                    'contact_id' => $contactId
+                ]);
+                
+                try {
+                    $fallbackResponse = $this->getHttpClient()
+                        ->withHeaders(['Content-Type' => 'application/json', 'Accept' => 'application/json'])
+                        ->patch("/api/v2/contacts/{$contactId}", $body);
+                    
+                    \Illuminate\Support\Facades\Log::info('Fallback contact update response', [
+                        'contact_id' => $contactId,
+                        'status_code' => $fallbackResponse->status(),
+                        'success' => $fallbackResponse->successful()
+                    ]);
+                    
+                    if ($fallbackResponse->successful()) {
+                        $result = $fallbackResponse->json();
+                        \Illuminate\Support\Facades\Log::info('Updated contact via direct endpoint (fallback)', [
+                            'contact_id' => $contactId,
+                            'updated_fields' => array_keys($body)
+                        ]);
+                        return $result;
+                    }
+                } catch (\Exception $fallbackException) {
+                    \Illuminate\Support\Facades\Log::warning('Fallback contact update also failed', [
+                        'contact_id' => $contactId,
+                        'error' => $fallbackException->getMessage()
+                    ]);
+                }
+            }
+            
             return null;
 
         } catch (\Exception $e) {
@@ -1495,5 +1546,105 @@ final class RobawsApiClient
             'addresses' => !empty($addresses) ? $addresses : null,
             'contacts' => !empty($contacts) ? $contacts : null,
         ], fn($v) => $v !== null && $v !== [] && $v !== '');
+    }
+
+    /**
+     * Create or update a contact person for a client
+     * This ensures the contact is properly linked to the client record
+     */
+    public function createOrUpdateClientContact(int $clientId, array $contactData): ?array
+    {
+        try {
+            // First, check if contact exists by email
+            $existingContacts = $this->getClientContacts($clientId);
+            $contactEmail = $contactData['email'] ?? null;
+            $existingContact = null;
+            
+            if ($contactEmail && is_array($existingContacts)) {
+                foreach ($existingContacts as $contact) {
+                    if (($contact['email'] ?? '') === $contactEmail) {
+                        $existingContact = $contact;
+                        break;
+                    }
+                }
+            }
+            
+            // Prepare contact payload
+            $payload = [
+                'email' => $contactEmail,
+                'first_name' => $contactData['first_name'] ?? '',
+                'surname' => $contactData['surname'] ?? $contactData['last_name'] ?? '',
+                'tel' => $contactData['phone'] ?? $contactData['tel'] ?? '',
+                'gsm' => $contactData['mobile'] ?? $contactData['gsm'] ?? '',
+                'function' => $contactData['function'] ?? '',
+            ];
+            
+            // Remove empty fields
+            $payload = array_filter($payload, fn($value) => !empty($value));
+            
+            if ($existingContact) {
+                // Update existing contact
+                \Illuminate\Support\Facades\Log::info('Updating existing contact', [
+                    'client_id' => $clientId,
+                    'contact_id' => $existingContact['id'],
+                    'email' => $contactEmail,
+                    'payload' => $payload
+                ]);
+                
+                $response = $this->getHttpClient()->patch(
+                    "/api/v2/clients/{$clientId}/contacts/{$existingContact['id']}",
+                    $payload
+                )->throw();
+                
+                \Illuminate\Support\Facades\Log::info('Contact updated successfully', [
+                    'response' => $response->json()
+                ]);
+                
+                return $response->json();
+            } else {
+                // Create new contact
+                \Illuminate\Support\Facades\Log::info('Creating new contact', [
+                    'client_id' => $clientId,
+                    'email' => $contactEmail,
+                    'payload' => $payload
+                ]);
+                
+                $response = $this->getHttpClient()->post(
+                    "/api/v2/clients/{$clientId}/contacts",
+                    $payload
+                )->throw();
+                
+                \Illuminate\Support\Facades\Log::info('Contact created successfully', [
+                    'response' => $response->json()
+                ]);
+                
+                return $response->json();
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to create/update contact', [
+                'client_id' => $clientId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return null;
+        }
+    }
+
+    /**
+     * Get client contacts
+     */
+    public function getClientContacts(int $clientId): array
+    {
+        try {
+            $response = $this->getHttpClient()->get("/api/v2/clients/{$clientId}/contacts")->throw();
+            return $response->json() ?? [];
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to get client contacts', [
+                'client_id' => $clientId,
+                'error' => $e->getMessage()
+            ]);
+            return [];
+        }
     }
 }

@@ -1304,18 +1304,21 @@ class RobawsExportService
                 return;
             }
 
-            // Find or create the contact person and get their ID
-            $contactId = $this->apiClient->findOrCreateClientContactId($clientId, $contactData);
+            // Use the new consolidated method to create or update contact with phone numbers
+            $contactResult = $this->apiClient->createOrUpdateClientContact($clientId, $contactData);
             
-            if (!$contactId) {
-                Log::warning('Failed to resolve contact person for quotation linking', [
+            if (!$contactResult || !isset($contactResult['id'])) {
+                Log::warning('Failed to create/update contact person for quotation linking', [
                     'export_id' => $exportId,
                     'offer_id' => $offerId,
                     'client_id' => $clientId,
-                    'contact_data' => $contactData
+                    'contact_data' => $contactData,
+                    'result' => $contactResult
                 ]);
                 return;
             }
+            
+            $contactId = (int) $contactResult['id'];
 
             // Set the contact person on the offer with enhanced error handling
             try {
