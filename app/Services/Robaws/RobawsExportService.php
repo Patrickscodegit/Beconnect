@@ -1304,43 +1304,21 @@ class RobawsExportService
                 return;
             }
 
-            // Use the new consolidated method to create or update contact with phone numbers
-            $contactResult = $this->apiClient->createOrUpdateClientContact($clientId, $contactData);
+            // Find or create the contact person and get their ID
+            $contactId = $this->apiClient->findOrCreateClientContactId($clientId, $contactData);
             
-            if (!$contactResult || !isset($contactResult['id'])) {
-                Log::warning('Failed to create/update contact person for quotation linking', [
+            if (!$contactId) {
+                Log::warning('Failed to resolve contact person for quotation linking', [
                     'export_id' => $exportId,
                     'offer_id' => $offerId,
                     'client_id' => $clientId,
-                    'contact_data' => $contactData,
-                    'result' => $contactResult
+                    'contact_data' => $contactData
                 ]);
                 return;
             }
-            
-            $contactId = (int) $contactResult['id'];
 
-            // Set the contact person on the offer with enhanced error handling
-            try {
-                if (!method_exists($this->apiClient, 'setOfferContact')) {
-                    Log::error('setOfferContact method does not exist on RobawsApiClient', [
-                        'class' => get_class($this->apiClient),
-                        'methods' => get_class_methods($this->apiClient)
-                    ]);
-                    return;
-                }
-                
-                $success = $this->apiClient->setOfferContact($offerId, $contactId);
-            } catch (\Error $e) {
-                Log::error('Fatal error calling setOfferContact', [
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString(),
-                    'class' => get_class($this->apiClient),
-                    'offer_id' => $offerId,
-                    'contact_id' => $contactId
-                ]);
-                return;
-            }
+            // Set the contact person on the offer
+            $success = $this->apiClient->setOfferContact($offerId, $contactId);
             
             if ($success) {
                 Log::info('Successfully linked contact person to quotation', [
