@@ -1724,17 +1724,37 @@ class RobawsMapper
         // Remove formatting characters
         $cleanPhone = preg_replace('/[\s\(\)\-\.]/', '', $phone);
         
-        // Belgian phone format: +32 followed by 9 digits
-        if (preg_match('/^\+32(\d{9})$/', $cleanPhone, $matches)) {
-            return '+32' . $matches[1];
+        // Only normalize Belgian numbers (+32), leave other country codes untouched
+        
+        // Belgian phone format: +320XXXXXXXX (with leading 0)
+        if (preg_match('/^\+320(\d{8,9})$/', $cleanPhone, $matches)) {
+            // Format as +32(0)XXXXXXXX
+            $digits = $matches[1];
+            return '+32(0)' . $digits;
         }
         
-        // Local Belgian format: 0X XX XX XX XX
-        if (preg_match('/^0(\d{8,9})$/', $cleanPhone, $matches)) {
-            return '+32' . $matches[1];
+        // Belgian phone format: +32XXXXXXXX (without leading 0) - add the 0
+        if (preg_match('/^\+32([1-9]\d{7,8})$/', $cleanPhone, $matches)) {
+            // Format as +32(0)XXXXXXXX
+            $digits = $matches[1];
+            return '+32(0)' . $digits;
         }
         
-        return $phone; // Return as-is if no normalization applied
+        // Belgian international format: 0032 followed by digits (Belgium without +)
+        if (preg_match('/^0032(\d{8,9})$/', $cleanPhone, $matches)) {
+            // Convert to +32(0)XXXXXXXX format
+            $digits = $matches[1];
+            return '+32(0)' . $digits;
+        }
+        
+        // Local Belgian format: 0 followed by 8 or 9 digits (but not 0034 which is Spain)
+        if (preg_match('/^0(\d{8,9})$/', $cleanPhone, $matches) && !str_starts_with($cleanPhone, '0034')) {
+            // Convert to +32(0)XXXXXXXX format
+            $digits = $matches[1];
+            return '+32(0)' . $digits;
+        }
+
+        return $phone; // Return as-is if no Belgian pattern matches (could be Spanish, French, etc.)
     }
 
     /**
