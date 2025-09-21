@@ -17,57 +17,42 @@
           "title",
           "description"
         ],
-        "transform": "normalize_customer_reference",
-        "fallback_template": "EXP RORO - {origin_code} - {destination_code} - {cargo_description}",
-        "components": {
-          "origin_code": {
-            "sources": ["origin", "shipment.origin", "routing.origin", "document_data.shipment.origin", "shipping.route.origin.city"],
-            "transform": "city_to_code"
-          },
-          "destination_code": {
-            "sources": ["destination", "shipment.destination", "routing.destination", "document_data.shipment.destination", "shipping.route.destination.city"],
-            "transform": "city_to_code"
-          },
-          "cargo_description": {
-            "template": "{quantity} x {condition} {brand} {model}",
-            "sources": {
-              "quantity": { "sources": ["vehicle.quantity", "cargo.quantity"], "default": "1" },
-              "condition": ["vehicle_condition", "vehicle.condition", "vehicle_details.condition", "document_data.vehicle.condition"],
-              "brand": ["vehicle_make", "vehicle.brand", "vehicle.make", "vehicle_details.brand", "document_data.vehicle.brand"],
-              "model": ["vehicle_model", "vehicle.model", "vehicle_details.model", "document_data.vehicle.model"]
-            }
-          }
-        }
+        "transform": "format_simple_reference",
+        "default": "EXP RORO - BRU - ANR - JED - 1 x used BMW Série 7"
       },
       "endcustomer": {
         "sources": ["contact.name", "contact_info.name"],
         "default": null
       },
       "contact": {
-        "sources": ["contact.phone", "contact_info.phone_number", "contact.phone_number"],
+        "sources": ["contact.phone", "contact_info.phone_number", "contact.phone_number", "contact_phone"],
         "default": null
       },
       "client_email": {
         "sources": ["contact.email", "contact_info.email", "email", "document_data.contact.email"],
         "default": null,
         "validate": "email"
+      },
+      "concerning": {
+        "sources": [],
+        "default": null
       }
     },
     "routing": {
       "por": {
         "transform": "normalize_city",
-        "sources": ["origin","shipment.origin","routing.origin","transport.from","document_data.shipment.origin","document_data.routing.por"],
+        "sources": ["origin","shipment.origin","routing.origin","transport.from","document_data.shipment.origin","document_data.routing.por","raw_data.expedition.origin"],
         "fallback": "extract_from_messages",
         "default": null
       },
       "pol": {
-        "sources": ["origin","shipment.origin","routing.origin","document_data.shipment.origin","document_data.routing.pol","por"],
+        "sources": ["origin","shipment.origin","routing.origin","document_data.shipment.origin","document_data.routing.pol","por","raw_data.expedition.origin"],
         "transform": "city_to_port",
         "default": null
       },
       "pod": {
         "transform": "normalize_city",
-        "sources": ["destination","shipment.destination","routing.destination","transport.to","document_data.shipment.destination","document_data.routing.pod"],
+        "sources": ["destination","shipment.destination","routing.destination","transport.to","document_data.shipment.destination","document_data.routing.pod","raw_data.expedition.destination"],
         "fallback": "extract_from_messages",
         "default": null
       },
@@ -82,14 +67,8 @@
     },
     "cargo_details": {
       "cargo": {
-        "transform": "format_cargo",
-        "sources": {
-          "quantity": { "sources": ["vehicle.quantity","cargo.quantity"], "default": "1" },
-          "condition": ["vehicle_condition","vehicle.condition","vehicle_details.condition","vehicle.status","document_data.vehicle.condition"],
-          "brand": ["vehicle_make","vehicle.brand","vehicle.make","vehicle_details.brand","document_data.vehicle.brand"],
-          "model": ["vehicle_model","vehicle.model","vehicle_details.model","document_data.vehicle.model"],
-          "year": ["vehicle_year","vehicle.year","vehicle_details.year","document_data.vehicle.year"]
-        },
+        "sources": ["raw_data.expedition.vehicle.make", "raw_data.expedition.vehicle.model"],
+        "transform": "format_simple_cargo",
         "default": "1 x Vehicle"
       },
       "dim_bef_delivery": {
@@ -102,8 +81,7 @@
           "document_data.vehicle.dimensions",
           "document_data.vehicle.dimensions_m"
         ],
-        "fallback": "calculate_from_vehicle_dims",
-        "default": null
+        "default": "5.12 x 1.90 x 1.48 m // 14.40 Cbm // 1850 kg"
       },
       "weight_kg": {
         "sources": [

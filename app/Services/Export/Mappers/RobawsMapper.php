@@ -217,7 +217,7 @@ class RobawsMapper
         }
 
         $payload = [
-            'title'           => $q['concerning'] ?? ($q['project'] ?? null),
+            'title'           => $q['customer_reference'] ?? ($q['project'] ?? null),
             'project'         => $q['project'] ?? null,
             'clientReference' => $q['customer_reference'] ?? $q['client_reference'] ?? null,
             'contactEmail'    => $q['contact_email'] ?? null,
@@ -894,60 +894,74 @@ class RobawsMapper
     {
         $parts = [];
         
-        // Start with "EXP RORO" (combined, no dash between them)
+        // Start with "EXP RORO"
         $method = $shipping['method'] ?? 'RORO';
         $parts[] = 'EXP ' . strtoupper($method);
         
-        // Get origin and destination from multiple sources
+        // Get data from raw_data.expedition if available (new structure)
+        $rawData = $extractionData['raw_data'] ?? [];
+        $expedition = $rawData['expedition'] ?? [];
+        
+        // Get origin, POL, and destination from multiple sources
         $documentData = $extractionData['document_data'] ?? [];
         $shipment = $documentData['shipment'] ?? $extractionData['shipment'] ?? [];
         $route = $shipping['route'] ?? [];
         
-        // Priority: top-level extraction -> document_data.shipment -> shipping.route
-        $originStr = $extractionData['origin'] ?? 
+        // Priority: raw_data.expedition -> top-level extraction -> document_data.shipment -> shipping.route
+        $originStr = $expedition['origin'] ?? 
+                     $extractionData['origin'] ?? 
                      $shipment['origin'] ?? 
                      $this->formatLocation($route['origin'] ?? []);
         
-        $destinationStr = $extractionData['destination'] ?? 
+        $destinationStr = $expedition['destination'] ?? 
+                          $extractionData['destination'] ?? 
                           $shipment['destination'] ?? 
                           $this->formatLocation($route['destination'] ?? []);
         
-        // Use abbreviated port names for customer reference
-        if ($originStr) {
-            if (stripos($originStr, 'bruxelles') !== false || stripos($originStr, 'brussels') !== false) {
-                $parts[] = 'BRUSSEL';
-                $parts[] = 'ANR'; // Port of Loading (Antwerp)
-            } elseif (stripos($originStr, 'antwerp') !== false || stripos($originStr, 'antwerpen') !== false) {
-                $parts[] = 'ANR'; // Use abbreviation for customer reference
-            } elseif (stripos($originStr, 'germany') !== false || stripos($originStr, 'deutschland') !== false) {
-                $parts[] = 'ANR'; // Germany ships via Antwerp
-            } else {
-                $parts[] = strtoupper($this->normalizePortNames($originStr));
-            }
+        // Convert cities to codes
+        $originCode = $this->cityToCode($originStr);
+        $polCode = 'ANR'; // Default POL to Antwerp
+        $destinationCode = $this->cityToCode($destinationStr);
+        
+        // Add origin code
+        if ($originCode) {
+            $parts[] = $originCode;
         }
         
-        // Add destination - use appropriate abbreviations
-        if ($destinationStr) {
-            $normalizedDest = $this->normalizePortNames($destinationStr);
-            if (stripos($normalizedDest, 'dar es salaam') !== false) {
-                $parts[] = 'DAR ES SALAAM';
-            } elseif (stripos($normalizedDest, 'lagos') !== false || 
-                      stripos($normalizedDest, 'nigeria') !== false || 
-                      stripos($normalizedDest, 'tin-can') !== false || 
-                      stripos($normalizedDest, 'tin can') !== false) {
-                $parts[] = 'LAGOS';
-            } else {
-                $parts[] = strtoupper($normalizedDest);
-            }
+        // Add POL code (Antwerp)
+        $parts[] = $polCode;
+        
+        // Add destination code
+        if ($destinationCode) {
+            $parts[] = $destinationCode;
         }
         
-        // Add vehicle description (e.g., "1 x BMW Série 7")
+        // Add vehicle description with "used" condition
         $vehicleDesc = $this->generateVehicleDescription($vehicle, $extractionData);
         if ($vehicleDesc) {
             $parts[] = $vehicleDesc;
         }
         
         return implode(' - ', array_filter($parts));
+    }
+
+    /**
+     * Convert city name to code
+     */
+    private function cityToCode(?string $city): string
+    {
+        if (!$city) return '';
+        
+        $map = [
+            'Brussels' => 'BRU',
+            'Bruxelles' => 'BRU',
+            'Antwerp' => 'ANR',
+            'Anvers' => 'ANR',
+            'Jeddah' => 'JED',
+            'Djeddah' => 'JED',
+        ];
+        
+        return $map[$city] ?? strtoupper(substr($city, 0, 3));
     }
 
     /**
@@ -1018,19 +1032,26 @@ class RobawsMapper
             return $vehicleMatch;
         }
         
-        // Fallback to vehicle array data
+        // Fallback to vehicle array data or raw_data.expedition.vehicle
         $condition = $this->getVehicleCondition($vehicle, $rawText);
         
-        if (empty($vehicle['brand']) && empty($vehicle['model'])) {
+        // Check raw_data.expedition.vehicle first (new structure)
+        $rawData = $extractionData['raw_data'] ?? [];
+        $expeditionVehicle = $rawData['expedition']['vehicle'] ?? [];
+        
+        $make = $expeditionVehicle['make'] ?? $vehicle['brand'] ?? $vehicle['make'] ?? '';
+        $model = $expeditionVehicle['model'] ?? $vehicle['model'] ?? '';
+        
+        if (empty($make) && empty($model)) {
             return '1 x ' . $condition . ' Motorgrader'; // Default for heavy machinery
         }
         
         $desc = '1 x ' . $condition;
-        if (!empty($vehicle['brand'])) {
-            $desc .= ' ' . $vehicle['brand'];
+        if (!empty($make)) {
+            $desc .= ' ' . $make;
         }
-        if (!empty($vehicle['model'])) {
-            $desc .= ' ' . $vehicle['model'];
+        if (!empty($model)) {
+            $desc .= ' ' . $model;
         }
         
         return $desc;

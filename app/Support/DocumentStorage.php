@@ -136,6 +136,9 @@ class DocumentStorage
      */
     public static function mirrorToLocal(Document $doc, string $bytes): bool
     {
+        // Disable mirroring to prevent storage_disk override
+        return false;
+        
         if (!App::environment('local')) {
             return false;
         }

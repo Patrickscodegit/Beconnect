@@ -60,7 +60,13 @@ class DocumentConversion
         // Handle different file types
         switch (true) {
             case $this->isEmlFile($document):
-                return $this->convertEmlToPdf($document, $originalPath);
+                // For EML files, upload the original file directly instead of converting to PDF
+                // This avoids memory issues with large converted PDFs
+                Log::info('Using original EML file for upload (no conversion)', [
+                    'document_id' => $document->id,
+                    'original_path' => $originalPath
+                ]);
+                return $originalPath;
                 
             case $this->isHeicFile($mimeType):
                 return $this->convertHeicToJpeg($originalPath);

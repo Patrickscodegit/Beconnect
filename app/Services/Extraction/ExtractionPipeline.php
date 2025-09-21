@@ -4,13 +4,13 @@ namespace App\Services\Extraction;
 
 use App\Models\Document;
 use App\Services\Extraction\Results\ExtractionResult;
-use App\Services\Extraction\Strategies\ExtractionStrategyFactory;
+use App\Services\Extraction\Strategies\ExtractionStrategyFactoryInterface;
 use Illuminate\Support\Facades\Log;
 
 class ExtractionPipeline
 {
     public function __construct(
-        private ExtractionStrategyFactory $strategyFactory
+        private ExtractionStrategyFactoryInterface $strategyFactory
     ) {}
 
     /**

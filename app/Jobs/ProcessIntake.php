@@ -99,10 +99,7 @@ class ProcessIntake implements ShouldQueue
                     'status'           => 'export_queued',
                 ]);
                 
-                // Dispatch export job after the database commit is durable
-                DB::afterCommit(function () {
-                    \App\Jobs\ExportIntakeToRobawsJob::dispatch($this->intake->id);
-                });
+                // Export job removed - individual document processing now handles offer creation
                 
                 Log::info('Intake processed and export queued', [
                     'intake_id' => $this->intake->id,
@@ -133,10 +130,7 @@ class ProcessIntake implements ShouldQueue
                 'flags' => $flags
             ]);
             
-            // Dispatch export job even without client (will attempt client creation during export)
-            DB::afterCommit(function () {
-                \App\Jobs\ExportIntakeToRobawsJob::dispatch($this->intake->id);
-            });
+            // Export job removed - individual document processing now handles offer creation
             
             Log::info('Intake processed without client - export will attempt client creation', [
                 'intake_id' => $this->intake->id,
@@ -149,6 +143,11 @@ class ProcessIntake implements ShouldQueue
                 'ready_for_export' => !empty($contactData['email']) || !empty($contactData['phone']),
                 'status' => $this->intake->fresh()->status
             ]);
+            
+            // Dispatch file upload job after all documents are processed
+            DB::afterCommit(function () {
+                \App\Jobs\ExportIntakeToRobawsJob::dispatch($this->intake->id);
+            });
 
         } catch (\Exception $e) {
             Log::error('Error processing intake', [
@@ -359,7 +358,7 @@ class ProcessIntake implements ShouldQueue
                 'mime_type' => $file->mime_type,
                 'file_size' => $file->file_size,
                 'original_filename' => $file->original_filename,
-                'storage_disk' => 'local', // default
+                'storage_disk' => $file->storage_disk, // Use the same disk as IntakeFile
                 'document_type' => $this->getDocumentType($file->mime_type),
                 'extraction_data' => json_encode($extractionData),
                 'extraction_status' => 'completed',
@@ -375,6 +374,40 @@ class ProcessIntake implements ShouldQueue
                 'document_id' => $document->id,
                 'filename' => $file->filename
             ]);
+
+            // Dispatch Robaws integration for the created document
+            try {
+                $integrationService = app(\App\Services\RobawsIntegration\EnhancedRobawsIntegrationService::class);
+                $success = $integrationService->processDocument($document, $extractionData);
+                
+                Log::info('Robaws integration dispatched for IntakeFile document', [
+                    'document_id' => $document->id,
+                    'intake_id' => $this->intake->id,
+                    'success' => $success
+                ]);
+                
+                // If processing was successful, create the Robaws offer (only if not already created)
+                if ($success && !$document->robaws_quotation_id) {
+                    $offerResult = $integrationService->createOfferFromDocument($document);
+                    if ($offerResult) {
+                        Log::info('Robaws offer created for IntakeFile document', [
+                            'document_id' => $document->id,
+                            'offer_id' => $offerResult['id'] ?? 'unknown'
+                        ]);
+                    }
+                } elseif ($document->robaws_quotation_id) {
+                    Log::info('Robaws offer already exists for IntakeFile document, skipping creation', [
+                        'document_id' => $document->id,
+                        'existing_offer_id' => $document->robaws_quotation_id
+                    ]);
+                }
+            } catch (\Exception $e) {
+                Log::error('Failed to dispatch Robaws integration for IntakeFile document', [
+                    'document_id' => $document->id,
+                    'intake_id' => $this->intake->id,
+                    'error' => $e->getMessage()
+                ]);
+            }
 
         } catch (\Exception $e) {
             Log::error('Failed to create document from IntakeFile', [

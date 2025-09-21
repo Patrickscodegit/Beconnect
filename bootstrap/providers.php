@@ -7,4 +7,5 @@ return [
     App\Providers\Filament\AdminPanelProvider::class,
     App\Providers\HorizonServiceProvider::class,
     App\Providers\RobawsServiceProvider::class,
+    App\Providers\IsolatedExtractionServiceProvider::class,
 ];

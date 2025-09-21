@@ -6,7 +6,7 @@ use App\Models\Document;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
-class ExtractionStrategyFactory
+class ExtractionStrategyFactory implements ExtractionStrategyFactoryInterface
 {
     private Collection $strategies;
 

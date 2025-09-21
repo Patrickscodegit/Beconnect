@@ -47,12 +47,13 @@ class EnhancedRobawsIntegrationService
 
         // Minimal CREATE (no extraFields here)
         $payload = [
-            'title'     => $mapped['customer_reference'] ?? ('Offer - '.($mapped['customer'] ?? 'Unknown')),
-            'date'      => now()->toDateString(),
-            'clientId'  => $this->resolveClientId($mapped),
-            'currency'  => 'EUR',
-            'companyId' => config('services.robaws.default_company_id', config('services.robaws.company_id')),
-            'status'    => 'Draft',
+            'title'           => null, // Leave Concerning field empty for future implementation
+            'clientReference' => $mapped['customer_reference'] ?? null,
+            'date'            => now()->toDateString(),
+            'clientId'        => $this->resolveClientId($mapped),
+            'currency'        => 'EUR',
+            'companyId'       => config('services.robaws.default_company_id', config('services.robaws.company_id')),
+            'status'          => 'Draft',
         ];
 
         Log::channel('robaws')->info('Robaws CREATE offer', ['payload' => $payload]);
@@ -208,7 +209,7 @@ class EnhancedRobawsIntegrationService
             return true; // idempotent no-op
         }
 
-        $result = DB::transaction(function () use ($document, $extractedData) {
+        $result = DB::transaction(function () use ($document, $extractedData, $existing) {
             try {
                 Log::channel('robaws')->info('Processing document with JSON field mapping', [
                     'document_id' => $document->id,

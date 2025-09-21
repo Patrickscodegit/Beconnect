@@ -37,43 +37,72 @@ class ExportIntakeToRobawsJob implements ShouldQueue
      */
     public function handle(): void
     {
-        Log::info('Starting Robaws export', ['intake_id' => $this->intake->id]);
+        Log::info('Starting Robaws file upload and status update', ['intake_id' => $this->intake->id]);
 
         try {
-            $exportService = app(RobawsExportService::class);
+            // Check if offers already exist for this intake's documents
+            $documents = $this->intake->documents;
+            $hasOffers = $documents->whereNotNull('robaws_quotation_id')->count() > 0;
             
-            // Clear previous export errors
-            $this->intake->update([
-                'last_export_error' => null,
-                'last_export_error_at' => null,
-            ]);
-            
-            // Attempt export with clear error handling
-            $result = $this->exportWithErrorHandling($exportService);
-            
-            if ($result['success']) {
-                Log::info('Robaws export successful', [
+            if (!$hasOffers) {
+                Log::warning('No Robaws offers found for intake documents, skipping file upload', [
                     'intake_id' => $this->intake->id,
-                    'quotation_id' => $result['quotation_id'] ?? null
+                    'document_count' => $documents->count()
                 ]);
                 
-                $this->intake->update([
-                    'status' => 'completed',
-                    'robaws_offer_id' => $result['quotation_id'] ?? null,
-                    'robaws_offer_number' => $result['data']['logicId'] ?? null,
-                ]);
-            } else {
-                $this->handleExportError($result['error']);
+                // Update status to completed even if no offers exist
+                $this->intake->update(['status' => 'completed']);
+                return;
             }
+            
+            // Upload files to existing offers
+            $this->uploadFilesToOffers($documents);
+            
+            // Update intake status to completed
+            $this->intake->update(['status' => 'completed']);
+            
+            Log::info('Robaws file upload and status update completed', [
+                'intake_id' => $this->intake->id,
+                'documents_processed' => $documents->count()
+            ]);
 
         } catch (\Exception $e) {
-            Log::error('Exception during Robaws export', [
+            Log::error('Exception during Robaws file upload', [
                 'intake_id' => $this->intake->id,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
             
-            $this->handleExportError('Unexpected error: ' . $e->getMessage());
+            // Still update status to completed even if file upload fails
+            $this->intake->update(['status' => 'completed']);
+        }
+    }
+    
+    /**
+     * Upload files to existing Robaws offers
+     */
+    private function uploadFilesToOffers($documents): void
+    {
+        foreach ($documents as $document) {
+            if ($document->robaws_quotation_id) {
+                try {
+                    Log::info('Uploading file to existing Robaws offer', [
+                        'document_id' => $document->id,
+                        'offer_id' => $document->robaws_quotation_id,
+                        'filename' => $document->filename
+                    ]);
+                    
+                    // Use the existing UploadDocumentToRobaws job
+                    \App\Jobs\UploadDocumentToRobaws::dispatch($document, $document->robaws_quotation_id);
+                    
+                } catch (\Exception $e) {
+                    Log::error('Failed to upload file to Robaws offer', [
+                        'document_id' => $document->id,
+                        'offer_id' => $document->robaws_quotation_id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
         }
     }
 

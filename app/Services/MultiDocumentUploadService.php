@@ -204,22 +204,28 @@ class MultiDocumentUploadService
         
         while ($attempt <= $maxRetries) {
             try {
-                $result = $this->robawsClient->uploadDocument(
+                // Use uploadMultipleDocuments which handles both small and large files automatically
+                $results = $this->robawsClient->uploadMultipleDocuments(
+                    'offer',
                     $quotationId,
-                    [
-                        'file' => $filePath,
-                        'filename' => $filename,
-                        'mime_type' => $contentType,
-                    ]
+                    [$filePath]
                 );
+                
+                // Extract the result for our single file
+                $result = $results[0] ?? null;
+                
+                if (!$result || $result['status'] !== 'success') {
+                    throw new \Exception($result['error'] ?? 'Upload failed');
+                }
                 
                 Log::info('Document upload successful', [
                     'quotation_id' => $quotationId,
                     'filename' => $filename,
-                    'attempt' => $attempt
+                    'attempt' => $attempt,
+                    'method' => $result['method'] ?? 'unknown'
                 ]);
                 
-                return $result;
+                return ['id' => $result['document_id']];
                 
             } catch (\Throwable $e) {
                 $statusCode = method_exists($e, 'getCode') ? $e->getCode() : 500;

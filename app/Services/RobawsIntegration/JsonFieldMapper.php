@@ -420,6 +420,12 @@ class JsonFieldMapper
             case 'ensure_upper':
                 return is_string($value) ? strtoupper($value) : $value;
                 
+            case 'format_simple_cargo':
+                return $this->formatSimpleCargo($value, $fullData);
+                
+            case 'format_simple_reference':
+                return $this->formatSimpleReference($value, $fullData);
+                
             default:
                 return $value;
         }
@@ -889,8 +895,33 @@ class JsonFieldMapper
         $len = $scale($len, $ulen);
         $wid = $scale($wid, $uwid);
         $hei = $scale($hei, $uhei);
+        
         if ($len && $wid && $hei) {
-            return sprintf('%.3f x %.3f x %.3f m', $len, $wid, $hei);
+            $volume = $len * $wid * $hei;
+            
+            // Try to get weight information
+            $weight = $this->pickFirstNumeric([
+                $value['weight_kg'] ?? null,
+                $value['weight'] ?? null,
+                data_get($value, 'vehicle.weight_kg'),
+                data_get($value, 'cargo.weight'),
+            ]);
+            
+            // Format with CBM, LM, and weight if available
+            $formatParts = [sprintf('%.2f x %.2f x %.2f m', $len, $wid, $hei)];
+            $formatParts[] = sprintf('%.2f Cbm', $volume);
+            
+            // Calculate LM (lanemeter) if width is 2.5m or higher
+            if ($wid >= 2.5) {
+                $lm = ($len * $wid) / 2.5;
+                $formatParts[] = sprintf('%.2f LM', $lm);
+            }
+            
+            if ($weight) {
+                $formatParts[] = sprintf('%.0f kg', $weight);
+            }
+            
+            return implode(' // ', $formatParts);
         }
 
         return null;
@@ -950,5 +981,107 @@ class JsonFieldMapper
             }
         }
         return null;
+    }
+    
+    /**
+     * Format simple cargo description from vehicle make/model
+     */
+    private function formatSimpleCargo(mixed $value, array $fullData): ?string
+    {
+        // Try to get vehicle details from the full data
+        $make = data_get($fullData, 'raw_data.expedition.vehicle.make');
+        $model = data_get($fullData, 'raw_data.expedition.vehicle.model');
+        
+        // Check if vehicle is mentioned as "new" in the data
+        $isNew = $this->isVehicleNew($fullData);
+        $condition = $isNew ? 'new' : 'used';
+        
+        if ($make && $model) {
+            return "1 x {$condition} {$make} {$model}";
+        }
+        
+        // Fallback to the value if it's a string
+        if (is_string($value) && !empty($value)) {
+            return "1 x {$condition} {$value}";
+        }
+        
+        return "1 x {$condition} Vehicle";
+    }
+    
+    /**
+     * Format simple customer reference
+     */
+    private function formatSimpleReference(mixed $value, array $fullData): ?string
+    {
+        // Try to get origin, POL, and destination codes
+        $origin = data_get($fullData, 'raw_data.expedition.origin');
+        $pol = data_get($fullData, 'raw_data.expedition.pol') ?? 'Antwerp'; // Default to Antwerp if not specified
+        $destination = data_get($fullData, 'raw_data.expedition.destination');
+        $make = data_get($fullData, 'raw_data.expedition.vehicle.make');
+        $model = data_get($fullData, 'raw_data.expedition.vehicle.model');
+        
+        // Convert cities to codes
+        $originCode = $this->cityToCode($origin);
+        $polCode = $this->cityToCode($pol);
+        $destinationCode = $this->cityToCode($destination);
+        
+        // Check if vehicle is mentioned as "new" in the data
+        $isNew = $this->isVehicleNew($fullData);
+        $condition = $isNew ? 'new' : 'used';
+        
+        $cargoDesc = '';
+        if ($make && $model) {
+            $cargoDesc = "1 x {$condition} {$make} {$model}";
+        } elseif ($make) {
+            $cargoDesc = "1 x {$condition} {$make}";
+        } else {
+            $cargoDesc = "1 x {$condition} Vehicle";
+        }
+        
+        return "EXP RORO - {$originCode} - {$polCode} - {$destinationCode} - {$cargoDesc}";
+    }
+    
+    /**
+     * Check if vehicle is mentioned as "new" in the data
+     */
+    private function isVehicleNew(array $fullData): bool
+    {
+        // Check various fields for "new" indication
+        $fieldsToCheck = [
+            'raw_data.expedition.vehicle.condition',
+            'raw_data.expedition.vehicle.status',
+            'raw_data.expedition.vehicle.type',
+            'raw_data.expedition.cargo.description',
+            'raw_data.expedition.cargo.type',
+        ];
+        
+        foreach ($fieldsToCheck as $field) {
+            $value = data_get($fullData, $field);
+            if (is_string($value) && stripos($value, 'new') !== false) {
+                return true;
+            }
+        }
+        
+        // Default to "used" if not explicitly mentioned as "new"
+        return false;
+    }
+    
+    /**
+     * Convert city name to code
+     */
+    private function cityToCode(?string $city): string
+    {
+        if (!$city) return '';
+        
+        $map = [
+            'Brussels' => 'BRU',
+            'Bruxelles' => 'BRU',
+            'Antwerp' => 'ANR',
+            'Anvers' => 'ANR',
+            'Jeddah' => 'JED',
+            'Djeddah' => 'JED',
+        ];
+        
+        return $map[$city] ?? strtoupper(substr($city, 0, 3));
     }
 }

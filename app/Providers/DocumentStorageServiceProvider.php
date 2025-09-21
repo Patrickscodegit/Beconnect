@@ -15,8 +15,8 @@ class DocumentStorageServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Document::creating(function (Document $document) {
-            // Override if blank OR set to legacy placeholder 'documents'
-            if (blank($document->storage_disk) || $document->storage_disk === 'documents') {
+            // Only override if blank - don't override 'documents' disk
+            if (blank($document->storage_disk)) {
                 $disk = DocumentStorageConfig::getStorageDisk();
                 $document->storage_disk = $disk;
                 
