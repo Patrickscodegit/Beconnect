@@ -5,7 +5,7 @@ namespace App\Services\RobawsIntegration;
 use App\Models\Document;
 use App\Services\RobawsIntegration\JsonFieldMapper;
 use App\Services\RobawsIntegration\RobawsDataValidator;
-use App\Services\RobawsClient;
+use App\Services\Export\Clients\RobawsApiClient;
 use App\Services\MultiDocumentUploadService;
 use App\Services\DocumentConversion;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +18,7 @@ class EnhancedRobawsIntegrationService
 {
     public function __construct(
         private JsonFieldMapper $fieldMapper,
-        private RobawsClient $robawsClient,
+        private RobawsApiClient $robawsClient,
         private MultiDocumentUploadService $uploadService,
         private DocumentConversion $documentConversion
     ) {}
@@ -73,32 +73,35 @@ class EnhancedRobawsIntegrationService
         ];
 
         Log::channel('robaws')->info('Robaws CREATE offer', ['payload' => $payload]);
-        $created = $this->robawsClient->createOffer($payload);
-        $offerId = $created['id'] ?? null;
+        $created = $this->robawsClient->createQuotation($payload);
+        $offerId = $created['quotation_id'] ?? null;
         if (!$offerId) {
-            throw new \RuntimeException('Robaws createOffer returned no id');
+            throw new \RuntimeException('Robaws createQuotation returned no id');
         }
 
         // GET → merge extraFields → PUT full model
         $remote  = $this->robawsClient->getOffer($offerId);
-        $updated = $this->stripOfferReadOnly($remote);
+        $updated = $this->stripOfferReadOnly($remote['data'] ?? []);
         $updated['extraFields'] = array_merge($remote['extraFields'] ?? [], $this->buildExtraFieldsFromMapped($mapped));
 
         Log::channel('robaws')->info('Robaws UPDATE offer (extraFields)', [
             'offer_id' => $offerId,
             'labels'   => array_keys($updated['extraFields'] ?? []),
         ]);
-        $this->robawsClient->updateOffer($offerId, $updated);
+        $this->robawsClient->updateQuotation($offerId, $updated);
         
         // Verify the update by pulling and logging key fields
         $after = $this->robawsClient->getOffer($offerId);
         $L = config('services.robaws.labels');
         Log::channel('robaws')->info('Offer updated & verified', [
             'offer_id' => $offerId,
-            'por' => $after['extraFields'][$L['por']]['stringValue'] ?? null,
-            'pol' => $after['extraFields'][$L['pol']]['stringValue'] ?? null,
-            'pod' => $after['extraFields'][$L['pod']]['stringValue'] ?? null,
-            'cargo' => $after['extraFields'][$L['cargo']]['stringValue'] ?? null,
+            'customer' => $after['data']['client']['name'] ?? 'N/A',
+            'reference' => $after['data']['clientReference'] ?? 'N/A',
+            'concerning' => $after['data']['title'] ?? 'N/A',
+            'por' => $after['data']['extraFields'][$L['por']]['stringValue'] ?? null,
+            'pol' => $after['data']['extraFields'][$L['pol']]['stringValue'] ?? null,
+            'pod' => $after['data']['extraFields'][$L['pod']]['stringValue'] ?? null,
+            'cargo' => $after['data']['extraFields'][$L['cargo']]['stringValue'] ?? null,
         ]);
 
         // Save IDs, status
