@@ -14,6 +14,12 @@ return new class extends Migration
         Schema::table('documents', function (Blueprint $table) {
             // Only drop the column if it exists
             if (Schema::hasColumn('documents', 'upload_status')) {
+                // Drop the index first if it exists
+                try {
+                    $table->dropIndex(['upload_status']);
+                } catch (\Exception $e) {
+                    // Index might not exist, continue
+                }
                 $table->dropColumn('upload_status');
             }
         });
@@ -27,6 +33,9 @@ return new class extends Migration
                 'failed', 
                 'failed_permanent'
             ])->nullable()->after('robaws_upload_attempted_at');
+            
+            // Recreate the index
+            $table->index('upload_status');
         });
     }
 
@@ -37,6 +46,11 @@ return new class extends Migration
     {
         Schema::table('documents', function (Blueprint $table) {
             if (Schema::hasColumn('documents', 'upload_status')) {
+                try {
+                    $table->dropIndex(['upload_status']);
+                } catch (\Exception $e) {
+                    // Index might not exist, continue
+                }
                 $table->dropColumn('upload_status');
             }
         });
@@ -44,6 +58,7 @@ return new class extends Migration
         Schema::table('documents', function (Blueprint $table) {
             // Restore original constraint
             $table->enum('upload_status', ['pending', 'uploaded', 'failed'])->nullable()->after('robaws_upload_attempted_at');
+            $table->index('upload_status');
         });
     }
 };

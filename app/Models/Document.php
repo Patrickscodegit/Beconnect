@@ -46,6 +46,7 @@ class Document extends Model
 
         // Robaws (quotation + sync)
         'robaws_quotation_id',
+        'robaws_client_id',
         'robaws_quotation_data',
         'robaws_formatted_at',
         'robaws_sync_status',

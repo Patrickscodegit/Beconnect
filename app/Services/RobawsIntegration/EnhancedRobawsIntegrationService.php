@@ -88,6 +88,7 @@ class EnhancedRobawsIntegrationService
         // Save IDs, status
         $document->update([
             'robaws_quotation_id' => $offerId,
+            'robaws_client_id'    => $payload['clientId'],
             'robaws_sync_status'  => 'synced',
             'robaws_synced_at'    => now(),
         ]);
