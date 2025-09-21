@@ -104,6 +104,31 @@ class EnhancedRobawsIntegrationService
             'cargo' => $after['data']['extraFields'][$L['cargo']]['stringValue'] ?? null,
         ]);
 
+        // Link contact to the offer if available
+        try {
+            $contactId = $this->robawsClient->findOrCreateClientContactId($payload['clientId'], [
+                'email' => $mapped['client_email'] ?? null,
+                'first_name' => $mapped['contact_first_name'] ?? null,
+                'last_name' => $mapped['contact_last_name'] ?? null,
+                'phone' => $mapped['contact'] ?? null,
+            ]);
+            
+            if ($contactId) {
+                $this->robawsClient->setOfferContact($offerId, $contactId);
+                Log::channel('robaws')->info('Contact linked to offer', [
+                    'offer_id' => $offerId,
+                    'contact_id' => $contactId,
+                    'client_id' => $payload['clientId']
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::channel('robaws')->warning('Failed to link contact to offer', [
+                'offer_id' => $offerId,
+                'client_id' => $payload['clientId'],
+                'error' => $e->getMessage()
+            ]);
+        }
+
         // Save IDs, status
         $document->update([
             'robaws_quotation_id' => $offerId,
