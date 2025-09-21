@@ -1306,54 +1306,94 @@ final class RobawsApiClient
      */
     public function ensureContactExists(int $clientId, array $hints): void
     {
-        $email = $this->normEmail($hints['contact_email'] ?? $hints['email'] ?? null);
-        $first = $hints['first_name'] ?? $hints['firstName'] ?? null;
-        $last  = $hints['last_name']  ?? $hints['surname']   ?? null;
-        $tel   = $hints['contact_phone'] ?? $hints['phone'] ?? $hints['tel'] ?? null;
-        $gsm   = $hints['contact_mobile'] ?? $hints['mobile'] ?? $hints['gsm'] ?? null;
+        try {
+            $email = $this->normEmail($hints['contact_email'] ?? $hints['email'] ?? null);
+            $first = $hints['first_name'] ?? $hints['firstName'] ?? null;
+            $last  = $hints['last_name']  ?? $hints['surname']   ?? null;
+            $tel   = $hints['contact_phone'] ?? $hints['phone'] ?? $hints['tel'] ?? null;
+            $gsm   = $hints['contact_mobile'] ?? $hints['mobile'] ?? $hints['gsm'] ?? null;
 
-        // Load existing contacts once
-        $contacts = $this->getHttpClient()
-            ->get("/api/v2/clients/{$clientId}/contacts", ['page'=>0,'size'=>100])
-            ->throw()->json();
-
-        $items = $contacts['items'] ?? $contacts ?? [];
-        foreach ($items as $c) {
-            $cEmail = isset($c['email']) ? mb_strtolower(trim($c['email'])) : null;
-            if ($email && $cEmail === $email) {
-                // Optional: update missing tel/gsm/function via merge-patch
-                $patch = array_filter([
-                    'function'  => $hints['function'] ?? null,
-                    'tel'       => $tel ?: null,
-                    'gsm'       => $gsm ?: null,
-                ], fn($v) => $v !== null && $v !== '');
-                if ($patch) {
-                    $this->getHttpClient()
-                        ->withHeaders(['Content-Type'=>'application/merge-patch+json'])
-                        ->patch("/api/v2/clients/{$clientId}/contacts/{$c['id']}", $patch);
-                }
-                return; // already exists
+            // Skip if no email provided
+            if (!$email) {
+                \Illuminate\Support\Facades\Log::info('Skipping contact creation - no email provided', [
+                    'client_id' => $clientId,
+                    'hints' => array_keys($hints)
+                ]);
+                return;
             }
+
+            // Load existing contacts once
+            $contacts = $this->getHttpClient()
+                ->get("/api/v2/clients/{$clientId}/contacts", ['page'=>0,'size'=>100])
+                ->throw()->json();
+
+            $items = $contacts['items'] ?? $contacts ?? [];
+            foreach ($items as $c) {
+                $cEmail = isset($c['email']) ? mb_strtolower(trim($c['email'])) : null;
+                if ($email && $cEmail === $email) {
+                    // Optional: update missing tel/gsm/function via merge-patch
+                    $patch = array_filter([
+                        'function'  => $hints['function'] ?? null,
+                        'tel'       => $tel ?: null,
+                        'gsm'       => $gsm ?: null,
+                    ], fn($v) => $v !== null && $v !== '');
+                    if ($patch) {
+                        try {
+                            $this->getHttpClient()
+                                ->withHeaders(['Content-Type'=>'application/merge-patch+json'])
+                                ->patch("/api/v2/clients/{$clientId}/contacts/{$c['id']}", $patch);
+                        } catch (\Exception $e) {
+                            \Illuminate\Support\Facades\Log::warning('Failed to update existing contact', [
+                                'client_id' => $clientId,
+                                'contact_id' => $c['id'],
+                                'error' => $e->getMessage()
+                            ]);
+                        }
+                    }
+                    \Illuminate\Support\Facades\Log::info('Contact already exists', [
+                        'client_id' => $clientId,
+                        'email' => $email,
+                        'contact_id' => $c['id']
+                    ]);
+                    return; // already exists
+                }
+            }
+
+            // Create new contact on this client (client-scoped endpoint)
+            $payload = array_filter([
+                'title'     => $hints['title'] ?? null,
+                'firstName' => $first,              // if your tenant doesn't persist this, it'll be ignored
+                'surname'   => $last ?? ($hints['contact_name'] ?? null),
+                'function'  => $hints['function'] ?? null,
+                'email'     => $email,
+                'tel'       => $tel,
+                'gsm'       => $gsm,
+                'isPrimary' => $hints['is_primary'] ?? false,
+                'receivesQuotes'   => $hints['receives_quotes']   ?? true,
+                'receivesInvoices' => $hints['receives_invoices'] ?? false,
+            ], fn($v) => $v !== null && $v !== '');
+
+            $this->getHttpClient()
+                ->withHeaders(['Content-Type'=>'application/json','Accept'=>'application/json'])
+                ->post("/api/v2/clients/{$clientId}/contacts", $payload)
+                ->throw();
+                
+            \Illuminate\Support\Facades\Log::info('Contact created successfully', [
+                'client_id' => $clientId,
+                'email' => $email,
+                'first_name' => $first,
+                'last_name' => $last
+            ]);
+            
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to ensure contact exists', [
+                'client_id' => $clientId,
+                'email' => $email ?? 'N/A',
+                'error' => $e->getMessage(),
+                'hints' => $hints
+            ]);
+            // Don't re-throw - contact creation failure shouldn't break client creation
         }
-
-        // Create new contact on this client (client-scoped endpoint)
-        $payload = array_filter([
-            'title'     => $hints['title'] ?? null,
-            'firstName' => $first,              // if your tenant doesn't persist this, it'll be ignored
-            'surname'   => $last ?? ($hints['contact_name'] ?? null),
-            'function'  => $hints['function'] ?? null,
-            'email'     => $email,
-            'tel'       => $tel,
-            'gsm'       => $gsm,
-            'isPrimary' => $hints['is_primary'] ?? false,
-            'receivesQuotes'   => $hints['receives_quotes']   ?? true,
-            'receivesInvoices' => $hints['receives_invoices'] ?? false,
-        ], fn($v) => $v !== null && $v !== '');
-
-        $this->getHttpClient()
-            ->withHeaders(['Content-Type'=>'application/json','Accept'=>'application/json'])
-            ->post("/api/v2/clients/{$clientId}/contacts", $payload)
-            ->throw();
     }
 
     /**
