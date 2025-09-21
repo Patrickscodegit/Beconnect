@@ -499,7 +499,41 @@ class DocumentConversion
     private function getDocumentPath(Document $document): string
     {
         $disk = $document->storage_disk ?: 'local';
-        return Storage::disk($disk)->path($document->file_path);
+        
+        // Handle different path formats
+        $filePath = $document->file_path;
+        
+        // For S3/Spaces storage, we need to handle paths differently
+        if ($disk === 'documents' || $disk === 'spaces' || $disk === 's3') {
+            // Check if this is actually S3/Spaces storage
+            $diskConfig = config("filesystems.disks.{$disk}");
+            if (isset($diskConfig['driver']) && $diskConfig['driver'] === 's3') {
+                // For S3/Spaces, we can't get a local path - we need to download the file
+                // Instead, return a temporary path where we'll download the file
+                $tempPath = storage_path('app/temp/' . basename($filePath));
+                
+                // Ensure temp directory exists
+                $tempDir = dirname($tempPath);
+                if (!is_dir($tempDir)) {
+                    mkdir($tempDir, 0755, true);
+                }
+                
+                // Download file from S3/Spaces to temp location
+                if (!file_exists($tempPath)) {
+                    $content = Storage::disk($disk)->get($filePath);
+                    file_put_contents($tempPath, $content);
+                }
+                
+                return $tempPath;
+            }
+        }
+        
+        // For local storage, handle path prefixes
+        if ($disk !== 'local' && str_starts_with($filePath, $disk . '/')) {
+            $filePath = substr($filePath, strlen($disk) + 1); // Remove "documents/" prefix
+        }
+        
+        return Storage::disk($disk)->path($filePath);
     }
 
     private function getConvertedPath(string $originalPath, string $newExtension): string

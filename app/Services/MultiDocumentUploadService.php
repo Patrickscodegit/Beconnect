@@ -270,8 +270,10 @@ class MultiDocumentUploadService
         
         // Only clean up if this is a converted file (different from original)
         if ($uploadPath !== $originalPath && file_exists($uploadPath)) {
-            // Check if it's in temp directory or has "-converted" in name
-            if (str_contains($uploadPath, sys_get_temp_dir()) || str_contains($uploadPath, '-converted')) {
+            // Check if it's in temp directory, has "-converted" in name, or is from S3 download
+            if (str_contains($uploadPath, sys_get_temp_dir()) || 
+                str_contains($uploadPath, '-converted') ||
+                str_contains($uploadPath, storage_path('app/temp/'))) {
                 unlink($uploadPath);
                 Log::debug('Cleaned up temporary file', ['path' => $uploadPath]);
             }
