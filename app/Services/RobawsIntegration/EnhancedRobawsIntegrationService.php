@@ -45,12 +45,28 @@ class EnhancedRobawsIntegrationService
             $mapped = $document->robaws_quotation_data ?? [];
         }
 
+        // Try to use the intake's client ID first to prevent duplicates
+        $clientId = null;
+        if ($document->intake && $document->intake->robaws_client_id) {
+            $clientId = $document->intake->robaws_client_id;
+            Log::channel('robaws')->info('Using intake client ID to prevent duplicates', [
+                'document_id' => $document->id,
+                'intake_id' => $document->intake->id,
+                'client_id' => $clientId
+            ]);
+        }
+        
+        // Fallback to resolving client ID if intake doesn't have one
+        if (!$clientId) {
+            $clientId = $this->resolveClientId($mapped);
+        }
+
         // Minimal CREATE (no extraFields here)
         $payload = [
             'title'           => null, // Leave Concerning field empty for future implementation
             'clientReference' => $mapped['customer_reference'] ?? null,
             'date'            => now()->toDateString(),
-            'clientId'        => $this->resolveClientId($mapped),
+            'clientId'        => $clientId,
             'currency'        => 'EUR',
             'companyId'       => config('services.robaws.default_company_id', config('services.robaws.company_id')),
             'status'          => 'Draft',
@@ -167,18 +183,26 @@ class EnhancedRobawsIntegrationService
         $email = $mapped['client_email'] ?? null;
         $tel   = $mapped['contact'] ?? null;
 
-        $client = $this->robawsClient->findOrCreateClient([
-            'name'  => $name,
-            'email' => $email,
-            'tel'   => $tel,
-            'address' => ['country' => 'BE'],
-        ]);
+        // Use the same robust resolution method as ProcessIntake to prevent duplicates
+        $hints = [
+            'client_name'   => $name,
+            'email'         => $email,
+            'phone'         => $tel,
+            'contact_email' => $email,
+            'contact_phone' => $tel,
+            'is_primary'    => true,
+            'receives_quotes' => true,
+            'language'      => 'en',
+            'currency'      => 'EUR',
+        ];
 
-        if (!isset($client['id'])) {
+        $resolved = $this->robawsClient->resolveOrCreateClientAndContact($hints);
+        
+        if (!isset($resolved['id'])) {
             throw new \RuntimeException('Robaws client creation failed: missing id');
         }
 
-        return $client['id'];
+        return $resolved['id'];
     }
 
     /**

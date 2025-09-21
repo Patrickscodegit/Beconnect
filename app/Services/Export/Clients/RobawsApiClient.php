@@ -1270,25 +1270,34 @@ final class RobawsApiClient
             // 3) Otherwise create a client (idempotent), then add contact
             $idKey = 'client:create:' . sha1(($name ?: '') . '|' . ($email ?: ''));
 
+            // Build address only if we have address data
+            $address = array_filter([
+                'street'       => $hints['street'] ?? null,
+                'streetNumber' => $hints['street_number'] ?? null,
+                'postalCode'   => $hints['postal_code'] ?? null,
+                'city'         => $hints['city'] ?? null,
+                'country'      => $hints['country'] ?? null,
+                'countryCode'  => $hints['country_code'] ?? null,
+            ], fn($v) => $v !== null && $v !== '');
+
+            $payload = array_filter([
+                'name'       => $name ?: ($email ?: 'Unknown'),
+                'email'      => $email,
+                'tel'        => $phone,
+                'language'   => $hints['language'] ?? null,
+                'currency'   => $hints['currency'] ?? 'EUR',
+                'vatNumber'  => $hints['vat_number'] ?? null,
+                'website'    => $hints['website'] ?? null,
+            ], fn($v) => $v !== null && $v !== '');
+
+            // Only add address if we have address data
+            if (!empty($address)) {
+                $payload['address'] = $address;
+            }
+
             $resp = $this->getHttpClient()
                 ->withHeaders(['Idempotency-Key' => $idKey, 'Content-Type'=>'application/json'])
-                ->post('/api/v2/clients', array_filter([
-                    'name'       => $name ?: ($email ?: 'Unknown'),
-                    'email'      => $email,
-                    'tel'        => $phone,
-                    'language'   => $hints['language'] ?? null,
-                    'currency'   => $hints['currency'] ?? 'EUR',
-                    'vatNumber'  => $hints['vat_number'] ?? null,
-                    'website'    => $hints['website'] ?? null,
-                    'address'    => array_filter([
-                        'street'       => $hints['street'] ?? null,
-                        'streetNumber' => $hints['street_number'] ?? null,
-                        'postalCode'   => $hints['postal_code'] ?? null,
-                        'city'         => $hints['city'] ?? null,
-                        'country'      => $hints['country'] ?? null,
-                        'countryCode'  => $hints['country_code'] ?? null,
-                    ]),
-                ], fn($v) => $v !== null && $v !== ''))
+                ->post('/api/v2/clients', $payload)
                 ->throw()->json();
 
             $clientId = (int)($resp['id'] ?? 0);
