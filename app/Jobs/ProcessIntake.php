@@ -329,7 +329,7 @@ class ProcessIntake implements ShouldQueue
     /**
      * Create basic Document record from IntakeFile (fast, no heavy processing)
      */
-    private function createBasicDocumentFromFile(IntakeFile $file): void
+    private function createBasicDocumentFromFile(\App\Models\IntakeFile $file): void
     {
         Log::info('Creating basic document from IntakeFile', [
             'intake_id' => $this->intake->id,
