@@ -71,9 +71,6 @@ class CreateIntake extends CreateRecord
                 'contact_phone' => $data['contact_phone'] ?? null,
             ]);
             
-            // Force redirect to intakes list page
-            $this->redirect($this->getResource()::getUrl('index'));
-            
             return $intake;
         }
 
@@ -124,9 +121,6 @@ class CreateIntake extends CreateRecord
                 ->body($message)
                 ->success()
                 ->send();
-
-            // Force redirect to intakes list page
-            $this->redirect($this->getResource()::getUrl('index'));
 
             return $intake;
             
