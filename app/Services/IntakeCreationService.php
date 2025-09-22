@@ -30,8 +30,11 @@ class IntakeCreationService
             'extraction_data' => $options['extraction_data'] ?? null,
         ]);
 
+        // Convert to UploadedFile for job serialization
+        $uploadedFile = $this->convertToUploadedFile($file);
+        
         // Store file in background job for instant UI response
-        ProcessIntake::dispatch($intake, $file, $file->getClientOriginalName())->onQueue('default');
+        ProcessIntake::dispatch($intake, $uploadedFile, $file->getClientOriginalName())->onQueue('default');
         
         Log::info('Created intake from uploaded file', [
             'intake_id' => $intake->id,
@@ -294,5 +297,36 @@ class IntakeCreationService
         ];
 
         return $extensions[$mimeType] ?? 'png';
+    }
+    
+    /**
+     * Convert TemporaryUploadedFile to UploadedFile for job serialization
+     */
+    private function convertToUploadedFile($file): ?\Illuminate\Http\UploadedFile
+    {
+        if ($file instanceof \Illuminate\Http\UploadedFile) {
+            return $file;
+        }
+
+        if ($file instanceof \Livewire\Features\SupportFileUploads\TemporaryUploadedFile) {
+            try {
+                // Livewire v3 helper to get a Symfony UploadedFile
+                return $file->toUploadedFile();
+            } catch (\Throwable $e) {
+                Log::error('Failed to convert TemporaryUploadedFile', [
+                    'error' => $e->getMessage(),
+                    'file_path' => $file->path(),
+                    'filename' => $file->getClientOriginalName()
+                ]);
+                return null;
+            }
+        }
+
+        Log::warning('ConvertToUploadedFile: Could not convert file', [
+            'file_type' => gettype($file),
+            'file_class' => is_object($file) ? get_class($file) : null,
+        ]);
+
+        return null;
     }
 }
