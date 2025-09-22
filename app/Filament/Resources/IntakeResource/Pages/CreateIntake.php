@@ -111,13 +111,13 @@ class CreateIntake extends CreateRecord
             }
 
             // Show notification about upload results
-            $message = "{$processedCount} file(s) uploaded and processing queued";
+            $message = "{$processedCount} file(s) uploaded and processing started";
             if ($failedCount > 0) {
                 $message .= ". {$failedCount} file(s) failed to process.";
             }
 
             Notification::make()
-                ->title('Intake created')
+                ->title('Intake created successfully')
                 ->body($message)
                 ->success()
                 ->send();

@@ -20,7 +20,7 @@ class IntakeCreationService
         $initialStatus = $this->determineInitialStatus($mimeType, $options);
         
         $intake = Intake::create([
-            'status' => $initialStatus,
+            'status' => 'processing', // More user-friendly status
             'source' => $options['source'] ?? 'file_upload',
             'notes' => $options['notes'] ?? null,
             'priority' => $options['priority'] ?? 'normal',

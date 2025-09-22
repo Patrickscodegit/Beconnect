@@ -90,28 +90,77 @@ class ProcessIntake implements ShouldQueue
                 'contact_phone'   => $contactData['phone'] ?? $this->intake->contact_phone,
             ]);
 
-            // Try to find or create Robaws client
-            $robawsClientId = $this->findOrCreateRobawsClient($contactData);
-            
-            if ($robawsClientId) {
+            // Queue background client creation instead of blocking
+            if (!empty($contactData['email']) || !empty($contactData['phone']) || !empty($contactData['name'])) {
+                // Try to create client synchronously with timeout for better UX
+                try {
+                    $robawsClient = app(\App\Services\Export\Clients\RobawsApiClient::class);
+                    
+                    $hints = [
+                        'client_name'   => $contactData['name'] ?? 'Unknown Client',
+                        'email'         => $contactData['email'] ?? null,
+                        'phone'         => $contactData['phone'] ?? null,
+                        'contact_email' => $contactData['email'] ?? null,
+                        'contact_phone' => $contactData['phone'] ?? null,
+                        'is_primary'    => true,
+                        'receives_quotes' => true,
+                        'language'      => 'en',
+                        'currency'      => 'EUR',
+                    ];
+
+                    // Set a short timeout for synchronous client creation
+                    $originalTimeout = config('services.robaws.timeout', 10);
+                    config(['services.robaws.timeout' => 5]); // 5 second timeout for UX
+                    
+                    $result = $robawsClient->resolveOrCreateClientAndContact($hints);
+                    
+                    // Restore original timeout
+                    config(['services.robaws.timeout' => $originalTimeout]);
+                    
+                    if (isset($result['id'])) {
+                        $this->intake->update([
+                            'robaws_client_id' => (string) $result['id'],
+                            'status' => 'export_queued'
+                        ]);
+                        
+                        Log::info('Synchronous client creation completed', [
+                            'intake_id' => $this->intake->id,
+                            'client_id' => $result['id'],
+                            'created' => $result['created'] ?? false,
+                            'source' => $result['source'] ?? 'unknown'
+                        ]);
+                        
+                        return; // Success - exit early
+                    }
+                } catch (\Exception $e) {
+                    Log::warning('Synchronous client creation failed, falling back to background job', [
+                        'intake_id' => $this->intake->id,
+                        'error' => $e->getMessage()
+                    ]);
+                    
+                    // Restore original timeout
+                    config(['services.robaws.timeout' => $originalTimeout]);
+                }
+                
+                // Fallback: Dispatch background job for client creation
+                \App\Jobs\CreateRobawsClientJob::dispatch($this->intake->id, $contactData);
+                
+                // Update intake status to indicate client creation is pending
                 $this->intake->update([
-                    'robaws_client_id' => (string) $robawsClientId,
-                    'status'           => 'export_queued',
+                    'status' => 'client_pending'
                 ]);
                 
-                // Export job removed - individual document processing now handles offer creation
-                
-                Log::info('Intake processed and export queued', [
+                Log::info('Intake processed, client creation queued (fallback)', [
                     'intake_id' => $this->intake->id,
-                    'client_id' => $robawsClientId,
-                    'method'    => 'auto_resolve_or_create'
+                    'contact_data_keys' => array_keys($contactData),
+                    'method' => 'background_client_creation_fallback'
                 ]);
                 
                 return;
             }
 
-            // Determine final status based on available information
-            $finalStatus = 'export_queued';
+            // Handle case where no contact data is available
+            $finalStatus = 'needs_review';
             $flags = [];
             
             if (!$hasIdentity) {
@@ -130,9 +179,7 @@ class ProcessIntake implements ShouldQueue
                 'flags' => $flags
             ]);
             
-            // Export job removed - individual document processing now handles offer creation
-            
-            Log::info('Intake processed without client - export will attempt client creation', [
+            Log::info('Intake processed without contact data - manual review required', [
                 'intake_id' => $this->intake->id,
                 'contact_keys_present' => array_keys($contactData),
             ]);
