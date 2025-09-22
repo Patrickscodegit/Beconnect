@@ -4,7 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Intake;
 use App\Models\Document;
-use App\Services\RobawsIntegrationService;
+use App\Services\RobawsIntegration\EnhancedRobawsIntegrationService;
 use Illuminate\Console\Command;
 
 class TestRobawsFix extends Command

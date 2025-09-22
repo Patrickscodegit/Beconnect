@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Intake;
-use App\Services\RobawsIntegrationService;
+use App\Services\RobawsIntegration\EnhancedRobawsIntegrationService;
 use Illuminate\Console\Command;
 
 class TestRobawsJsonField extends Command
@@ -11,7 +11,7 @@ class TestRobawsJsonField extends Command
     protected $signature = 'robaws:test-json-field {intake_id}';
     protected $description = 'Test if JSON field is properly sent to Robaws';
 
-    public function handle(RobawsIntegrationService $robawsService)
+    public function handle(EnhancedRobawsIntegrationService $robawsService)
     {
         $intakeId = $this->argument('intake_id');
         $intake = Intake::with(['documents.extractions'])->find($intakeId);

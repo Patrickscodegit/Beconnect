@@ -5,6 +5,11 @@ namespace App\Services;
 use App\Models\Document;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * @deprecated This service is deprecated and will be removed in a future version.
+ * Use EnhancedRobawsIntegrationService instead for all Robaws integration needs.
+ * This service is kept temporarily for backward compatibility with console commands.
+ */
 class SimpleRobawsIntegration
 {
     /**

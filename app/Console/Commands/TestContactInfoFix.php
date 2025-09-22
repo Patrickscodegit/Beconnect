@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Document;
-use App\Services\RobawsIntegrationService;
+use App\Services\RobawsIntegration\EnhancedRobawsIntegrationService;
 use Illuminate\Console\Command;
 
 class TestContactInfoFix extends Command

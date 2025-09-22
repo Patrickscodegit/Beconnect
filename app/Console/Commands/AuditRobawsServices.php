@@ -4,9 +4,8 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Models\Document;
-use App\Services\RobawsIntegrationService;
-use App\Services\SimpleRobawsIntegration;
 use App\Services\RobawsIntegration\EnhancedRobawsIntegrationService;
+use App\Services\SimpleRobawsIntegration;
 
 class AuditRobawsServices extends Command
 {
@@ -54,10 +53,10 @@ class AuditRobawsServices extends Command
     private function checkServiceInstantiation()
     {
         try {
-            $robawsService = app(RobawsIntegrationService::class);
-            $this->line('✅ RobawsIntegrationService - OK');
+            $robawsService = app(EnhancedRobawsIntegrationService::class);
+            $this->line('✅ EnhancedRobawsIntegrationService (consolidated) - OK');
         } catch (\Exception $e) {
-            $this->error("❌ RobawsIntegrationService - FAILED: " . $e->getMessage());
+            $this->error("❌ EnhancedRobawsIntegrationService (consolidated) - FAILED: " . $e->getMessage());
         }
 
         try {
@@ -107,13 +106,13 @@ class AuditRobawsServices extends Command
 
         $this->line("Testing with document: {$document->filename}");
 
-        // Test RobawsIntegrationService
+        // Test EnhancedRobawsIntegrationService (consolidated)
         try {
-            $robawsService = app(RobawsIntegrationService::class);
+            $robawsService = app(EnhancedRobawsIntegrationService::class);
             $offer = $robawsService->createOfferFromDocument($document);
-            $this->line('✅ RobawsIntegrationService::createOfferFromDocument - OK');
+            $this->line('✅ EnhancedRobawsIntegrationService::createOfferFromDocument - OK');
         } catch (\Exception $e) {
-            $this->error("❌ RobawsIntegrationService::createOfferFromDocument - FAILED: " . $e->getMessage());
+            $this->error("❌ EnhancedRobawsIntegrationService::createOfferFromDocument - FAILED: " . $e->getMessage());
         }
 
         // Test SimpleRobawsIntegration
