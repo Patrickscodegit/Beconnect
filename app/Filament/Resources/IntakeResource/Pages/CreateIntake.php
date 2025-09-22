@@ -208,6 +208,14 @@ class CreateIntake extends CreateRecord
             'intake_id' => $this->record->id ?? 'unknown'
         ]);
         
+        // Dispatch ProcessIntake job after redirect (for instant UI response)
+        if ($this->record) {
+            \App\Jobs\ProcessIntake::dispatch($this->record)->onQueue('default');
+            \Log::info('ProcessIntake job dispatched after redirect', [
+                'intake_id' => $this->record->id
+            ]);
+        }
+        
         return $this->getResource()::getUrl('index');
     }
 }
