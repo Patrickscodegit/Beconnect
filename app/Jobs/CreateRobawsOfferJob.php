@@ -50,14 +50,14 @@ class CreateRobawsOfferJob implements ShouldQueue
                     'document_id' => $this->document->id
                 ]);
                 
-                $extraction = $this->document->extractions()->latest()->first();
-                if (!$extraction || !$extraction->extracted_data) {
+                // Check if document has extraction data
+                if (!$this->document->extraction_data) {
                     throw new \RuntimeException('No extraction data found for document');
                 }
 
-                $extractedData = is_array($extraction->extracted_data) 
-                    ? $extraction->extracted_data 
-                    : json_decode($extraction->extracted_data, true);
+                $extractedData = is_array($this->document->extraction_data) 
+                    ? $this->document->extraction_data 
+                    : json_decode($this->document->extraction_data, true);
 
                 $integrationService->processDocument($this->document, $extractedData);
                 $this->document->refresh();
