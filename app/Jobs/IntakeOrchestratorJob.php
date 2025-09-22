@@ -47,7 +47,7 @@ class IntakeOrchestratorJob implements ShouldQueue
                     'intake_id' => $this->intake->id
                 ]);
                 
-                $files = $this->intake->intakeFiles;
+                $files = $this->intake->files;
                 if ($files && $files->isNotEmpty()) {
                     foreach ($files as $file) {
                     $document = \App\Models\Document::create([
