@@ -42,7 +42,7 @@ class IntakeCreationService
         
         Log::info('Created intake from uploaded file', [
             'intake_id' => $intake->id,
-            'filename' => $file->getClientOriginalName(),
+            'filename' => $uploadedFile->getClientOriginalName(),
             'source' => $intake->source,
             'mime_type' => $mimeType,
             'initial_status' => $initialStatus
