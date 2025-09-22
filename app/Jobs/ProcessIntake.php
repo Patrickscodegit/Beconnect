@@ -94,21 +94,20 @@ class ProcessIntake implements ShouldQueue
                 'contact_phone'   => $contactData['phone'] ?? $this->intake->contact_phone,
             ]);
 
-            // Queue background client creation for truly asynchronous processing
+            // Dispatch orchestrator for background processing (fast)
             if (!empty($contactData['email']) || !empty($contactData['phone']) || !empty($contactData['name'])) {
-                // Dispatch background job for client creation
-                \App\Jobs\CreateRobawsClientJob::dispatch($this->intake->id, $contactData)->onQueue('high');
-                
-                // Update intake status to indicate client creation is pending
+                // Update intake status to indicate processing is starting
                 $this->intake->update([
-                    'status' => 'client_pending'
+                    'status' => 'processing'
                 ]);
                 
-                Log::info('Intake processed, client creation queued', [
+                // Dispatch orchestrator for coordinated background processing
+                \App\Jobs\IntakeOrchestratorJob::dispatch($this->intake)->onQueue('default');
+                
+                Log::info('Intake processed, orchestrator dispatched for background processing', [
                     'intake_id' => $this->intake->id,
                     'contact_data_keys' => array_keys($contactData),
-                    'method' => 'background_client_creation',
-                    'queue' => 'high'
+                    'method' => 'orchestrated_background_processing'
                 ]);
                 
                 return;
@@ -377,34 +376,19 @@ class ProcessIntake implements ShouldQueue
                 'filename' => $file->filename
             ]);
 
-            // Dispatch Robaws integration for the created document
+            // Process document for Robaws integration (fast, no API calls)
             try {
                 $integrationService = app(\App\Services\RobawsIntegration\EnhancedRobawsIntegrationService::class);
                 $success = $integrationService->processDocument($document, $extractionData);
                 
-                Log::info('Robaws integration dispatched for IntakeFile document', [
+                Log::info('Document processed for Robaws integration (fast)', [
                     'document_id' => $document->id,
                     'intake_id' => $this->intake->id,
                     'success' => $success
                 ]);
                 
-                // If processing was successful, create the Robaws offer (only if not already created)
-                if ($success && !$document->robaws_quotation_id) {
-                    $offerResult = $integrationService->createOfferFromDocument($document);
-                    if ($offerResult) {
-                        Log::info('Robaws offer created for IntakeFile document', [
-                            'document_id' => $document->id,
-                            'offer_id' => $offerResult['id'] ?? 'unknown'
-                        ]);
-                    }
-                } elseif ($document->robaws_quotation_id) {
-                    Log::info('Robaws offer already exists for IntakeFile document, skipping creation', [
-                        'document_id' => $document->id,
-                        'existing_offer_id' => $document->robaws_quotation_id
-                    ]);
-                }
             } catch (\Exception $e) {
-                Log::error('Failed to dispatch Robaws integration for IntakeFile document', [
+                Log::error('Failed to process document for Robaws integration', [
                     'document_id' => $document->id,
                     'intake_id' => $this->intake->id,
                     'error' => $e->getMessage()
