@@ -54,26 +54,11 @@ class ProcessIntake implements ShouldQueue
             // Start with existing extraction data
             $payload = (array) ($this->intake->extraction_data ?? []);
 
-            // If we have files, extract data from them and create documents
-            if (!$files->isEmpty()) {
-                // Extract data from each file and merge
-                foreach ($files as $file) {
-                    Log::info('Processing file for extraction', [
-                        'intake_id' => $this->intake->id,
-                        'file_id' => $file->id,
-                        'filename' => $file->filename,
-                        'mime_type' => $file->mime_type
-                    ]);
-
-                    // Skip heavy extraction - will be done in orchestrator
-                    // Just create basic document record for now
-                    $this->createBasicDocumentFromFile($file);
-                }
-            } else {
-                Log::info('No files found for intake - processing as manual intake', [
-                    'intake_id' => $this->intake->id
-                ]);
-            }
+            // Skip all file processing - will be done in orchestrator
+            Log::info('Skipping file processing, delegating to orchestrator', [
+                'intake_id' => $this->intake->id,
+                'files_count' => $files->count()
+            ]);
 
             // Update intake status to processing immediately
             $this->intake->update([
