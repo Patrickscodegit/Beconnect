@@ -63,7 +63,19 @@ class CreateRobawsClientJob implements ShouldQueue
                 ]);
                 
                 // Update status to export_queued
-                $intake->update(['status' => 'export_queued']);
+                $updateResult = $intake->update(['status' => 'export_queued']);
+                
+                if (!$updateResult) {
+                    Log::error('Failed to update intake status from client_pending to export_queued', [
+                        'intake_id' => $this->intakeId,
+                        'client_id' => $intake->robaws_client_id
+                    ]);
+                } else {
+                    Log::info('Successfully updated intake status to export_queued', [
+                        'intake_id' => $this->intakeId,
+                        'client_id' => $intake->robaws_client_id
+                    ]);
+                }
                 return;
             }
 

@@ -41,7 +41,11 @@ class ProcessIntake implements ShouldQueue
      */
     public function handle(): void
     {
-        Log::info('Processing intake', ['intake_id' => $this->intake->id]);
+        Log::info('ProcessIntake job started', [
+            'intake_id' => $this->intake->id,
+            'current_status' => $this->intake->status,
+            'job_started_at' => now()
+        ]);
 
         try {
             // Get all files for this intake
@@ -93,7 +97,7 @@ class ProcessIntake implements ShouldQueue
             // Queue background client creation for truly asynchronous processing
             if (!empty($contactData['email']) || !empty($contactData['phone']) || !empty($contactData['name'])) {
                 // Dispatch background job for client creation
-                \App\Jobs\CreateRobawsClientJob::dispatch($this->intake->id, $contactData);
+                \App\Jobs\CreateRobawsClientJob::dispatch($this->intake->id, $contactData)->onQueue('high');
                 
                 // Update intake status to indicate client creation is pending
                 $this->intake->update([
@@ -103,7 +107,8 @@ class ProcessIntake implements ShouldQueue
                 Log::info('Intake processed, client creation queued', [
                     'intake_id' => $this->intake->id,
                     'contact_data_keys' => array_keys($contactData),
-                    'method' => 'background_client_creation'
+                    'method' => 'background_client_creation',
+                    'queue' => 'high'
                 ]);
                 
                 return;
