@@ -30,10 +30,8 @@ class IntakeCreationService
             'extraction_data' => $options['extraction_data'] ?? null,
         ]);
 
-        // Store file immediately (minimal operation)
-        $this->storeFile($intake, $file, $file->getClientOriginalName());
-        
-        // ProcessIntake job will be dispatched after redirect for instant UI response
+        // Store file in background job for instant UI response
+        ProcessIntake::dispatch($intake, $file, $file->getClientOriginalName())->onQueue('default');
         
         Log::info('Created intake from uploaded file', [
             'intake_id' => $intake->id,
