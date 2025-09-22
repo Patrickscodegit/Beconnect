@@ -30,25 +30,16 @@ class IntakeCreationService
             'extraction_data' => $options['extraction_data'] ?? null,
         ]);
 
-        // Convert to UploadedFile for job serialization
-        $uploadedFile = $this->convertToUploadedFile($file);
+        // Get minimal file info for job (ultra-fast operations only)
+        $originalName = $file->getClientOriginalName();
+        $tempPath = $file->path(); // Direct path to temporary file
         
-        if (!$uploadedFile) {
-            throw new \Exception('Failed to convert file for processing');
-        }
-        
-        // Store file path temporarily for background storage
-        $tempPath = $uploadedFile->getPathname();
-        $originalName = $uploadedFile->getClientOriginalName();
-        $mimeType = $uploadedFile->getMimeType();
-        $fileSize = $uploadedFile->getSize();
-        
-        // Dispatch job with file info (file will be stored in background)
-        ProcessIntake::dispatch($intake, $tempPath, $originalName, $mimeType, $fileSize)->onQueue('default');
+        // Dispatch job with minimal data (all heavy operations in background)
+        ProcessIntake::dispatch($intake, $tempPath, $originalName)->onQueue('default');
         
         Log::info('Created intake from uploaded file', [
             'intake_id' => $intake->id,
-            'filename' => $uploadedFile->getClientOriginalName(),
+            'filename' => $originalName,
             'source' => $intake->source,
             'mime_type' => $mimeType,
             'initial_status' => $initialStatus
@@ -309,34 +300,4 @@ class IntakeCreationService
         return $extensions[$mimeType] ?? 'png';
     }
     
-    /**
-     * Convert TemporaryUploadedFile to UploadedFile for job serialization
-     */
-    private function convertToUploadedFile($file): ?\Illuminate\Http\UploadedFile
-    {
-        if ($file instanceof \Illuminate\Http\UploadedFile) {
-            return $file;
-        }
-
-        if ($file instanceof \Livewire\Features\SupportFileUploads\TemporaryUploadedFile) {
-            try {
-                // Livewire v3 helper to get a Symfony UploadedFile
-                return $file->toUploadedFile();
-            } catch (\Throwable $e) {
-                Log::error('Failed to convert TemporaryUploadedFile', [
-                    'error' => $e->getMessage(),
-                    'file_path' => $file->path(),
-                    'filename' => $file->getClientOriginalName()
-                ]);
-                return null;
-            }
-        }
-
-        Log::warning('ConvertToUploadedFile: Could not convert file', [
-            'file_type' => gettype($file),
-            'file_class' => is_object($file) ? get_class($file) : null,
-        ]);
-
-        return null;
-    }
 }

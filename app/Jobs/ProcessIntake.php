@@ -21,19 +21,15 @@ class ProcessIntake implements ShouldQueue
     public $intake;
     public $tempPath;
     public $originalName;
-    public $mimeType;
-    public $fileSize;
 
     /**
      * Create a new job instance.
      */
-    public function __construct(Intake $intake, string $tempPath, string $originalName, string $mimeType, int $fileSize)
+    public function __construct(Intake $intake, string $tempPath, string $originalName)
     {
         $this->intake = $intake;
         $this->tempPath = $tempPath;
         $this->originalName = $originalName;
-        $this->mimeType = $mimeType;
-        $this->fileSize = $fileSize;
     }
 
     /**
@@ -399,6 +395,11 @@ class ProcessIntake implements ShouldQueue
     private function storeFileFromTempPath(): void
     {
         try {
+            // Get file info from temp file (all heavy operations here)
+            $fileContent = file_get_contents($this->tempPath);
+            $mimeType = mime_content_type($this->tempPath);
+            $fileSize = strlen($fileContent);
+            
             $disk = 'documents';
             $dir = '';
             $ext = strtolower(pathinfo($this->originalName, PATHINFO_EXTENSION) ?? '');
@@ -406,7 +407,7 @@ class ProcessIntake implements ShouldQueue
             $storagePath = $dir . '/' . $name;
             
             // Copy file from temp path to storage
-            \Illuminate\Support\Facades\Storage::disk($disk)->put($storagePath, file_get_contents($this->tempPath));
+            \Illuminate\Support\Facades\Storage::disk($disk)->put($storagePath, $fileContent);
             
             // Create IntakeFile record
             \App\Models\IntakeFile::create([
@@ -414,14 +415,16 @@ class ProcessIntake implements ShouldQueue
                 'filename' => $this->originalName,
                 'storage_path' => $storagePath,
                 'storage_disk' => $disk,
-                'mime_type' => $this->mimeType,
-                'file_size' => $this->fileSize,
+                'mime_type' => $mimeType,
+                'file_size' => $fileSize,
             ]);
             
             Log::info('File stored from temp path', [
                 'intake_id' => $this->intake->id,
                 'filename' => $this->originalName,
-                'storage_path' => $storagePath
+                'storage_path' => $storagePath,
+                'mime_type' => $mimeType,
+                'file_size' => $fileSize
             ]);
             
         } catch (\Exception $e) {
