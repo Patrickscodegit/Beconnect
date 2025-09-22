@@ -47,7 +47,7 @@ class IntakeOrchestratorJob implements ShouldQueue
             $jobs = [];
             
             // Add client creation job if needed
-            if ($this->intake->status === 'client_pending' && !$this->intake->robaws_client_id) {
+            if (!$this->intake->robaws_client_id) {
                 $jobs[] = new CreateRobawsClientJob($this->intake->id, $this->getContactData());
             }
 

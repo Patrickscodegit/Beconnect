@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Intake;
 use App\Services\Export\Clients\RobawsApiClient;
+use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -13,7 +14,7 @@ use Illuminate\Support\Facades\Log;
 
 class CreateRobawsClientJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Batchable, Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 120; // 2 minutes for client creation
     public $tries = 3;
