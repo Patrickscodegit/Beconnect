@@ -48,19 +48,7 @@ class ProcessIntake implements ShouldQueue
         ]);
 
         try {
-            // Get all files for this intake
-            $files = $this->intake->files;
-
-            // Start with existing extraction data
-            $payload = (array) ($this->intake->extraction_data ?? []);
-
-            // Skip all file processing - will be done in orchestrator
-            Log::info('Skipping file processing, delegating to orchestrator', [
-                'intake_id' => $this->intake->id,
-                'files_count' => $files->count()
-            ]);
-
-            // Update intake status to processing immediately
+            // Update intake status to processing immediately (minimal operation)
             $this->intake->update([
                 'status' => 'processing'
             ]);
