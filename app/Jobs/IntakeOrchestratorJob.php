@@ -41,11 +41,35 @@ class IntakeOrchestratorJob implements ShouldQueue
             // Get all documents for this intake
             $documents = $this->intake->documents;
             
+            // If no documents exist, create them from intake files
             if ($documents->isEmpty()) {
-                Log::warning('No documents found for intake orchestration', [
+                Log::info('No documents found, creating from intake files', [
                     'intake_id' => $this->intake->id
                 ]);
-                return;
+                
+                $files = $this->intake->intakeFiles;
+                foreach ($files as $file) {
+                    $document = \App\Models\Document::create([
+                        'intake_id' => $this->intake->id,
+                        'filename' => $file->filename,
+                        'file_path' => $file->storage_path,
+                        'mime_type' => $file->mime_type,
+                        'file_size' => $file->file_size,
+                        'storage_disk' => $file->storage_disk,
+                        'original_filename' => $file->original_filename,
+                        'processing_status' => 'pending',
+                        'status' => 'pending',
+                    ]);
+                    
+                    Log::info('Created document from intake file', [
+                        'intake_id' => $this->intake->id,
+                        'document_id' => $document->id,
+                        'filename' => $file->filename
+                    ]);
+                }
+                
+                // Refresh documents collection
+                $documents = $this->intake->fresh()->documents;
             }
 
             // Prepare jobs for batch processing
