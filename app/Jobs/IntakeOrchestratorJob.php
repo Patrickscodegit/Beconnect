@@ -116,13 +116,12 @@ class IntakeOrchestratorJob implements ShouldQueue
                 return;
             }
 
-            // Dispatch batch jobs
-                $batch = Bus::batch($jobs)
-                    ->name("Intake Orchestration - {$this->intake->id}")
-                    ->onQueue('default')
-                    ->dispatch();
+            // Dispatch jobs sequentially (not in batch) to ensure proper order
+            foreach ($jobs as $job) {
+                dispatch($job)->onQueue('default');
+            }
 
-            Log::info('Intake orchestration batch dispatched', [
+            Log::info('Intake orchestration jobs dispatched sequentially', [
                 'intake_id' => $this->intake->id,
                 'jobs_count' => count($jobs)
             ]);
