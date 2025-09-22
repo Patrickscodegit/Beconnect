@@ -19,17 +19,13 @@ class ProcessIntake implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $intake;
-    public $file;
-    public $originalFilename;
 
     /**
      * Create a new job instance.
      */
-    public function __construct(Intake $intake, $file = null, $originalFilename = null)
+    public function __construct(Intake $intake)
     {
         $this->intake = $intake;
-        $this->file = $file;
-        $this->originalFilename = $originalFilename;
     }
 
     /**
@@ -52,11 +48,6 @@ class ProcessIntake implements ShouldQueue
         ]);
 
         try {
-            // Store file if provided (for instant UI response)
-            if ($this->file && $this->originalFilename) {
-                $this->storeFileInBackground();
-            }
-            
             // Update intake status to processing immediately (minimal operation)
             $this->intake->update([
                 'status' => 'processing'
@@ -391,26 +382,4 @@ class ProcessIntake implements ShouldQueue
         return 'document';
     }
     
-    /**
-     * Store file in background (moved from IntakeCreationService for instant UI)
-     */
-    private function storeFileInBackground(): void
-    {
-        try {
-            $intakeCreationService = app(\App\Services\IntakeCreationService::class);
-            $intakeCreationService->storeFile($this->intake, $this->file, $this->originalFilename);
-            
-            Log::info('File stored in background', [
-                'intake_id' => $this->intake->id,
-                'filename' => $this->originalFilename
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Failed to store file in background', [
-                'intake_id' => $this->intake->id,
-                'filename' => $this->originalFilename,
-                'error' => $e->getMessage()
-            ]);
-            throw $e;
-        }
-    }
 }
