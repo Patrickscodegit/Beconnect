@@ -30,16 +30,14 @@ class IntakeCreationService
             'extraction_data' => $options['extraction_data'] ?? null,
         ]);
 
-        // Get minimal file info for job (ultra-fast operations only)
-        $originalName = $file->getClientOriginalName();
-        $tempPath = $file->path(); // Direct path to temporary file
+        // Store file immediately (minimal operation - just move temp file)
+        $this->storeFileMinimal($intake, $file);
         
-        // Dispatch job with minimal data (all heavy operations in background)
-        ProcessIntake::dispatch($intake, $tempPath, $originalName)->onQueue('default');
+        // Dispatch job with just intake (all heavy operations in background)
+        ProcessIntake::dispatch($intake)->onQueue('default');
         
         Log::info('Created intake from uploaded file', [
             'intake_id' => $intake->id,
-            'filename' => $originalName,
             'source' => $intake->source,
             'mime_type' => $mimeType,
             'initial_status' => $initialStatus
@@ -298,6 +296,44 @@ class IntakeCreationService
         ];
 
         return $extensions[$mimeType] ?? 'png';
+    }
+    
+    /**
+     * Store file with minimal operations (ultra-fast)
+     */
+    private function storeFileMinimal(Intake $intake, $file): void
+    {
+        try {
+            // Get minimal info (fastest possible operations)
+            $originalName = $file->getClientOriginalName();
+            $tempPath = $file->path();
+            
+            // Just move the temp file to a permanent location (minimal operation)
+            $disk = 'documents';
+            $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION) ?? '');
+            $name = (string) \Illuminate\Support\Str::uuid() . ($ext ? ".$ext" : '');
+            $storagePath = $name;
+            
+            // Move file (fastest possible operation)
+            \Illuminate\Support\Facades\Storage::disk($disk)->put($storagePath, file_get_contents($tempPath));
+            
+            // Create minimal IntakeFile record
+            \App\Models\IntakeFile::create([
+                'intake_id' => $intake->id,
+                'filename' => $originalName,
+                'storage_path' => $storagePath,
+                'storage_disk' => $disk,
+                'mime_type' => $file->getMimeType(),
+                'file_size' => $file->getSize(),
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Failed to store file minimally', [
+                'intake_id' => $intake->id,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
+        }
     }
     
 }

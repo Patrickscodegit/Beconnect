@@ -19,17 +19,13 @@ class ProcessIntake implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $intake;
-    public $tempPath;
-    public $originalName;
 
     /**
      * Create a new job instance.
      */
-    public function __construct(Intake $intake, string $tempPath, string $originalName)
+    public function __construct(Intake $intake)
     {
         $this->intake = $intake;
-        $this->tempPath = $tempPath;
-        $this->originalName = $originalName;
     }
 
     /**
@@ -52,9 +48,6 @@ class ProcessIntake implements ShouldQueue
         ]);
 
         try {
-            // Store file from temp path (background operation)
-            $this->storeFileFromTempPath();
-            
             // Update intake status to processing immediately (minimal operation)
             $this->intake->update([
                 'status' => 'processing'
@@ -387,54 +380,6 @@ class ProcessIntake implements ShouldQueue
         }
         
         return 'document';
-    }
-    
-    /**
-     * Store file from temporary path (background operation)
-     */
-    private function storeFileFromTempPath(): void
-    {
-        try {
-            // Get file info from temp file (all heavy operations here)
-            $fileContent = file_get_contents($this->tempPath);
-            $mimeType = mime_content_type($this->tempPath);
-            $fileSize = strlen($fileContent);
-            
-            $disk = 'documents';
-            $dir = '';
-            $ext = strtolower(pathinfo($this->originalName, PATHINFO_EXTENSION) ?? '');
-            $name = (string) \Illuminate\Support\Str::uuid() . ($ext ? ".$ext" : '');
-            $storagePath = $dir . '/' . $name;
-            
-            // Copy file from temp path to storage
-            \Illuminate\Support\Facades\Storage::disk($disk)->put($storagePath, $fileContent);
-            
-            // Create IntakeFile record
-            \App\Models\IntakeFile::create([
-                'intake_id' => $this->intake->id,
-                'filename' => $this->originalName,
-                'storage_path' => $storagePath,
-                'storage_disk' => $disk,
-                'mime_type' => $mimeType,
-                'file_size' => $fileSize,
-            ]);
-            
-            Log::info('File stored from temp path', [
-                'intake_id' => $this->intake->id,
-                'filename' => $this->originalName,
-                'storage_path' => $storagePath,
-                'mime_type' => $mimeType,
-                'file_size' => $fileSize
-            ]);
-            
-        } catch (\Exception $e) {
-            Log::error('Failed to store file from temp path', [
-                'intake_id' => $this->intake->id,
-                'filename' => $this->originalName,
-                'error' => $e->getMessage()
-            ]);
-            throw $e;
-        }
     }
     
 }
