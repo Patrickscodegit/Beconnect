@@ -315,7 +315,7 @@ class ProcessIntake implements ShouldQueue
         \App\Models\Document::create([
             'intake_id' => $this->intake->id,
             'filename' => $file->filename,
-            'file_path' => $file->file_path,
+            'file_path' => $file->storage_path,
             'mime_type' => $file->mime_type,
             'file_size' => $file->file_size,
             'storage_disk' => $file->storage_disk,

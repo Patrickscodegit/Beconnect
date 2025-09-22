@@ -533,6 +533,23 @@ class DocumentConversion
             $filePath = substr($filePath, strlen($disk) + 1); // Remove "documents/" prefix
         }
         
+        // Special handling for documents disk - check if file exists with current path
+        if ($disk === 'documents') {
+            $fullPath = Storage::disk($disk)->path($filePath);
+            if (file_exists($fullPath)) {
+                return $fullPath;
+            }
+            
+            // If file doesn't exist, try without the disk prefix
+            if (str_starts_with($filePath, 'documents/')) {
+                $filePath = substr($filePath, 9); // Remove "documents/" prefix
+                $fullPath = Storage::disk($disk)->path($filePath);
+                if (file_exists($fullPath)) {
+                    return $fullPath;
+                }
+            }
+        }
+        
         return Storage::disk($disk)->path($filePath);
     }
 
