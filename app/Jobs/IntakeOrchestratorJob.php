@@ -87,39 +87,10 @@ class IntakeOrchestratorJob implements ShouldQueue
             }
 
             // Dispatch batch jobs
-            Bus::batch($jobs)
-                ->name("Intake Orchestration - {$this->intake->id}")
-                ->onQueue('default')
-                ->then(function (Batch $batch) {
-                    Log::info('Intake orchestration completed successfully', [
-                        'intake_id' => $this->intake->id,
-                        'batch_id' => $batch->id
-                    ]);
-                })
-                ->catch(function (Batch $batch, \Throwable $e) {
-                    Log::error('Intake orchestration failed', [
-                        'intake_id' => $this->intake->id,
-                        'batch_id' => $batch->id,
-                        'error' => $e->getMessage()
-                    ]);
-                    
-                    // Update intake status to failed
-                    $this->intake->update([
-                        'status' => 'processing_failed',
-                        'last_export_error' => 'Orchestration failed: ' . $e->getMessage(),
-                        'last_export_error_at' => now()
-                    ]);
-                })
-                ->finally(function (Batch $batch) {
-                    Log::info('Intake orchestration batch finished', [
-                        'intake_id' => $this->intake->id,
-                        'batch_id' => $batch->id,
-                        'total_jobs' => $batch->totalJobs,
-                        'processed_jobs' => $batch->processedJobs(),
-                        'failed_jobs' => $batch->failedJobs
-                    ]);
-                })
-                ->dispatch();
+                $batch = Bus::batch($jobs)
+                    ->name("Intake Orchestration - {$this->intake->id}")
+                    ->onQueue('default')
+                    ->dispatch();
 
             Log::info('Intake orchestration batch dispatched', [
                 'intake_id' => $this->intake->id,
