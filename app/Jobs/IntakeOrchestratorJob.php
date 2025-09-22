@@ -48,7 +48,8 @@ class IntakeOrchestratorJob implements ShouldQueue
                 ]);
                 
                 $files = $this->intake->intakeFiles;
-                foreach ($files as $file) {
+                if ($files && $files->isNotEmpty()) {
+                    foreach ($files as $file) {
                     $document = \App\Models\Document::create([
                         'intake_id' => $this->intake->id,
                         'filename' => $file->filename,
@@ -65,6 +66,11 @@ class IntakeOrchestratorJob implements ShouldQueue
                         'intake_id' => $this->intake->id,
                         'document_id' => $document->id,
                         'filename' => $file->filename
+                    ]);
+                }
+                } else {
+                    Log::warning('No intake files found for document creation', [
+                        'intake_id' => $this->intake->id
                     ]);
                 }
                 
