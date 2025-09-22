@@ -75,32 +75,17 @@ class ProcessIntake implements ShouldQueue
                 ]);
             }
 
-            // Merge contact data: seeded data takes precedence, extracted fills gaps
-            $contactData = $this->normalizeContact($payload);
-            $payload['contact'] = $contactData;
-            
-            // Check if we have sufficient identity information for images
-            $hasIdentity = $this->hasIdentityInformation($payload, $files);
-            
-            $this->intake->update([
-                'extraction_data' => $payload,
-                'customer_name'   => $contactData['name']  ?? $this->intake->customer_name,
-                'contact_email'   => $contactData['email'] ?? $this->intake->contact_email,
-                'contact_phone'   => $contactData['phone'] ?? $this->intake->contact_phone,
-            ]);
-
-            // Always dispatch orchestrator for background processing
-            // The ExtractDocumentDataJob will handle extraction and populate contact data
+            // Update intake status to processing immediately
             $this->intake->update([
                 'status' => 'processing'
             ]);
             
             // Dispatch orchestrator for coordinated background processing
+            // All heavy work (extraction, client creation, offer creation) happens in background
             \App\Jobs\IntakeOrchestratorJob::dispatch($this->intake)->onQueue('default');
             
             Log::info('Intake processed, orchestrator dispatched for background processing', [
                 'intake_id' => $this->intake->id,
-                'contact_data_keys' => array_keys($contactData),
                 'method' => 'orchestrated_background_processing'
             ]);
             
