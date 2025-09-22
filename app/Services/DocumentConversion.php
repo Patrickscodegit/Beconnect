@@ -54,7 +54,9 @@ class DocumentConversion
             'document_id' => $document->id,
             'filename' => $document->filename,
             'mime_type' => $mimeType,
-            'has_text_layer' => $document->has_text_layer ?? 'unknown'
+            'has_text_layer' => $document->has_text_layer ?? 'unknown',
+            'storage_disk' => $document->storage_disk,
+            'file_path' => $document->file_path
         ]);
 
         // Handle different file types
@@ -520,8 +522,24 @@ class DocumentConversion
                 
                 // Download file from S3/Spaces to temp location
                 if (!file_exists($tempPath)) {
-                    $content = Storage::disk($disk)->get($filePath);
-                    file_put_contents($tempPath, $content);
+                    try {
+                        $content = Storage::disk($disk)->get($filePath);
+                        file_put_contents($tempPath, $content);
+                        
+                        Log::info('Downloaded file from cloud storage for upload', [
+                            'disk' => $disk,
+                            'source_path' => $filePath,
+                            'temp_path' => $tempPath,
+                            'file_size' => strlen($content)
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::error('Failed to download file from cloud storage', [
+                            'disk' => $disk,
+                            'source_path' => $filePath,
+                            'error' => $e->getMessage()
+                        ]);
+                        throw $e;
+                    }
                 }
                 
                 return $tempPath;
