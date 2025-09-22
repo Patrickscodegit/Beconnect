@@ -33,8 +33,12 @@ class IntakeCreationService
         // Convert to UploadedFile for job serialization
         $uploadedFile = $this->convertToUploadedFile($file);
         
+        if (!$uploadedFile) {
+            throw new \Exception('Failed to convert file for processing');
+        }
+        
         // Store file in background job for instant UI response
-        ProcessIntake::dispatch($intake, $uploadedFile, $file->getClientOriginalName())->onQueue('default');
+        ProcessIntake::dispatch($intake, $uploadedFile, $uploadedFile->getClientOriginalName())->onQueue('default');
         
         Log::info('Created intake from uploaded file', [
             'intake_id' => $intake->id,
