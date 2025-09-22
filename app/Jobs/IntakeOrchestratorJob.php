@@ -13,6 +13,11 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Log;
+use App\Jobs\CreateRobawsClientJob;
+use App\Jobs\CreateRobawsOfferJob;
+use App\Jobs\ProcessFileUploadJob;
+use App\Jobs\UpdateIntakeStatusJob;
+use App\Jobs\ExtractDocumentDataJob;
 
 class IntakeOrchestratorJob implements ShouldQueue
 {
@@ -51,12 +56,17 @@ class IntakeOrchestratorJob implements ShouldQueue
                 $jobs[] = new CreateRobawsClientJob($this->intake->id, $this->getContactData());
             }
 
-            // Add offer creation and file upload jobs for each document
+            // Add extraction and processing jobs for each document
             foreach ($documents as $document) {
+                // First extract data and process document
+                $jobs[] = new ExtractDocumentDataJob($document);
+                
+                // Then create offer if no quotation ID
                 if (!$document->robaws_quotation_id) {
                     $jobs[] = new CreateRobawsOfferJob($document);
                 }
                 
+                // Finally upload file if quotation exists and not uploaded
                 if ($document->robaws_quotation_id && $document->upload_status !== 'uploaded') {
                     $jobs[] = new ProcessFileUploadJob($document);
                 }

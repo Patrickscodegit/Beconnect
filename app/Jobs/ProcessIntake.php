@@ -65,14 +65,9 @@ class ProcessIntake implements ShouldQueue
                         'mime_type' => $file->mime_type
                     ]);
 
-                    $fileData = app(ExtractionService::class)->extractFromFile($file);
-                    if ($fileData) {
-                        // Deep merge file data into payload
-                        $payload = array_replace_recursive($payload, $fileData);
-                        
-                        // Create Document record from IntakeFile
-                        $this->createDocumentFromFile($file, $fileData);
-                    }
+                    // Skip heavy extraction - will be done in orchestrator
+                    // Just create basic document record for now
+                    $this->createBasicDocumentFromFile($file);
                 }
             } else {
                 Log::info('No files found for intake - processing as manual intake', [
@@ -329,6 +324,50 @@ class ProcessIntake implements ShouldQueue
             }
         }
         return false;
+    }
+
+    /**
+     * Create basic Document record from IntakeFile (fast, no heavy processing)
+     */
+    private function createBasicDocumentFromFile(IntakeFile $file): void
+    {
+        Log::info('Creating basic document from IntakeFile', [
+            'intake_id' => $this->intake->id,
+            'file_id' => $file->id,
+            'filename' => $file->filename
+        ]);
+
+        // Check if document already exists for this file
+        $existingDoc = \App\Models\Document::where('intake_id', $this->intake->id)
+            ->where('filename', $file->filename)
+            ->first();
+            
+        if ($existingDoc) {
+            Log::info('Document already exists for file', [
+                'intake_id' => $this->intake->id,
+                'file_id' => $file->id,
+                'document_id' => $existingDoc->id
+            ]);
+            return;
+        }
+
+        Document::create([
+            'intake_id' => $this->intake->id,
+            'filename' => $file->filename,
+            'file_path' => $file->file_path,
+            'mime_type' => $file->mime_type,
+            'file_size' => $file->file_size,
+            'storage_disk' => $file->storage_disk,
+            'original_filename' => $file->original_filename,
+            'processing_status' => 'pending',
+            'status' => 'pending',
+        ]);
+
+        Log::info('Basic document created from IntakeFile', [
+            'intake_id' => $this->intake->id,
+            'file_id' => $file->id,
+            'filename' => $file->filename
+        ]);
     }
 
     /**
