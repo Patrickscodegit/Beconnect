@@ -37,11 +37,14 @@ class IntakeCreationService
             throw new \Exception('Failed to convert file for processing');
         }
         
-        // Store file immediately (minimal operation)
-        $this->storeFile($intake, $uploadedFile, $uploadedFile->getClientOriginalName());
+        // Store file path temporarily for background storage
+        $tempPath = $uploadedFile->getPathname();
+        $originalName = $uploadedFile->getClientOriginalName();
+        $mimeType = $uploadedFile->getMimeType();
+        $fileSize = $uploadedFile->getSize();
         
-        // Dispatch job with just intake (file already stored)
-        ProcessIntake::dispatch($intake)->onQueue('default');
+        // Dispatch job with file info (file will be stored in background)
+        ProcessIntake::dispatch($intake, $tempPath, $originalName, $mimeType, $fileSize)->onQueue('default');
         
         Log::info('Created intake from uploaded file', [
             'intake_id' => $intake->id,
