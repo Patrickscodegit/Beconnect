@@ -80,13 +80,25 @@ class CreateRobawsClientJob implements ShouldQueue
                 return;
             }
 
+            // Get fresh contact data from intake (in case extraction updated it)
+            $freshContactData = [
+                'name' => $intake->customer_name,
+                'email' => $intake->contact_email,
+                'phone' => $intake->contact_phone,
+            ];
+            
+            Log::info('Using fresh contact data for client creation', [
+                'intake_id' => $this->intakeId,
+                'fresh_contact_data' => $freshContactData
+            ]);
+            
             // Prepare hints for client resolution
             $hints = [
-                'client_name'   => $this->contactData['name'] ?? 'Unknown Client',
-                'email'         => $this->contactData['email'] ?? null,
-                'phone'         => $this->contactData['phone'] ?? null,
-                'contact_email' => $this->contactData['email'] ?? null,
-                'contact_phone' => $this->contactData['phone'] ?? null,
+                'client_name'   => $freshContactData['name'] ?? 'Unknown Client',
+                'email'         => $freshContactData['email'] ?? null,
+                'phone'         => $freshContactData['phone'] ?? null,
+                'contact_email' => $freshContactData['email'] ?? null,
+                'contact_phone' => $freshContactData['phone'] ?? null,
                 'is_primary'    => true,
                 'receives_quotes' => true,
                 'language'      => 'en',
