@@ -89,61 +89,22 @@ class ProcessIntake implements ShouldQueue
                 'contact_phone'   => $contactData['phone'] ?? $this->intake->contact_phone,
             ]);
 
-            // Dispatch orchestrator for background processing (fast)
-            if (!empty($contactData['email']) || !empty($contactData['phone']) || !empty($contactData['name'])) {
-                // Update intake status to indicate processing is starting
-                $this->intake->update([
-                    'status' => 'processing'
-                ]);
-                
-                // Dispatch orchestrator for coordinated background processing
-                \App\Jobs\IntakeOrchestratorJob::dispatch($this->intake)->onQueue('default');
-                
-                Log::info('Intake processed, orchestrator dispatched for background processing', [
-                    'intake_id' => $this->intake->id,
-                    'contact_data_keys' => array_keys($contactData),
-                    'method' => 'orchestrated_background_processing'
-                ]);
-                
-                return;
-            }
-
-            // Handle case where no contact data is available
-            $finalStatus = 'needs_review';
-            $flags = [];
-            
-            if (!$hasIdentity) {
-                // For images, don't block - flag for review instead
-                if ($this->hasImageFiles($files)) {
-                    $flags[] = 'needs_review';
-                    Log::info('Image intake flagged for review due to missing identity', [
-                        'intake_id' => $this->intake->id
-                    ]);
-                }
-            }
-
-            // Update intake with final status and flags
+            // Always dispatch orchestrator for background processing
+            // The ExtractDocumentDataJob will handle extraction and populate contact data
             $this->intake->update([
-                'status' => $finalStatus,
-                'flags' => $flags
+                'status' => 'processing'
             ]);
             
-            Log::info('Intake processed without contact data - manual review required', [
+            // Dispatch orchestrator for coordinated background processing
+            \App\Jobs\IntakeOrchestratorJob::dispatch($this->intake)->onQueue('default');
+            
+            Log::info('Intake processed, orchestrator dispatched for background processing', [
                 'intake_id' => $this->intake->id,
-                'contact_keys_present' => array_keys($contactData),
-            ]);
-
-            Log::info('Intake processing completed', [
-                'intake_id' => $this->intake->id,
-                'files_processed' => $files->count(),
-                'ready_for_export' => !empty($contactData['email']) || !empty($contactData['phone']),
-                'status' => $this->intake->fresh()->status
+                'contact_data_keys' => array_keys($contactData),
+                'method' => 'orchestrated_background_processing'
             ]);
             
-            // Dispatch file upload job after all documents are processed
-            DB::afterCommit(function () {
-                \App\Jobs\ExportIntakeToRobawsJob::dispatch($this->intake->id);
-            });
+            return;
 
         } catch (\Exception $e) {
             Log::error('Error processing intake', [
