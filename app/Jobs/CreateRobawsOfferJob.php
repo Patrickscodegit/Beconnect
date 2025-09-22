@@ -86,7 +86,7 @@ class CreateRobawsOfferJob implements ShouldQueue
 
             // Update document status to indicate failure
             $this->document->update([
-                'robaws_sync_status' => 'failed',
+                'robaws_sync_status' => 'error',
                 'robaws_last_sync_attempt' => now(),
                 'robaws_last_sync_error' => $e->getMessage()
             ]);

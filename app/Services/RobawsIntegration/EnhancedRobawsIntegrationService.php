@@ -407,7 +407,7 @@ class EnhancedRobawsIntegrationService
                     'error' => $e->getMessage()
                 ]);
                 $document->update([
-                    'robaws_sync_status'     => 'failed',
+                    'robaws_sync_status'     => 'error',
                     'robaws_last_sync_attempt'=> now(),
                 ]);
             }
