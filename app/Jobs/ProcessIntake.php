@@ -90,59 +90,9 @@ class ProcessIntake implements ShouldQueue
                 'contact_phone'   => $contactData['phone'] ?? $this->intake->contact_phone,
             ]);
 
-            // Queue background client creation instead of blocking
+            // Queue background client creation for truly asynchronous processing
             if (!empty($contactData['email']) || !empty($contactData['phone']) || !empty($contactData['name'])) {
-                // Try to create client synchronously with timeout for better UX
-                try {
-                    $robawsClient = app(\App\Services\Export\Clients\RobawsApiClient::class);
-                    
-                    $hints = [
-                        'client_name'   => $contactData['name'] ?? 'Unknown Client',
-                        'email'         => $contactData['email'] ?? null,
-                        'phone'         => $contactData['phone'] ?? null,
-                        'contact_email' => $contactData['email'] ?? null,
-                        'contact_phone' => $contactData['phone'] ?? null,
-                        'is_primary'    => true,
-                        'receives_quotes' => true,
-                        'language'      => 'en',
-                        'currency'      => 'EUR',
-                    ];
-
-                    // Set a short timeout for synchronous client creation
-                    $originalTimeout = config('services.robaws.timeout', 10);
-                    config(['services.robaws.timeout' => 5]); // 5 second timeout for UX
-                    
-                    $result = $robawsClient->resolveOrCreateClientAndContact($hints);
-                    
-                    // Restore original timeout
-                    config(['services.robaws.timeout' => $originalTimeout]);
-                    
-                    if (isset($result['id'])) {
-                        $this->intake->update([
-                            'robaws_client_id' => (string) $result['id'],
-                            'status' => 'export_queued'
-                        ]);
-                        
-                        Log::info('Synchronous client creation completed', [
-                            'intake_id' => $this->intake->id,
-                            'client_id' => $result['id'],
-                            'created' => $result['created'] ?? false,
-                            'source' => $result['source'] ?? 'unknown'
-                        ]);
-                        
-                        return; // Success - exit early
-                    }
-                } catch (\Exception $e) {
-                    Log::warning('Synchronous client creation failed, falling back to background job', [
-                        'intake_id' => $this->intake->id,
-                        'error' => $e->getMessage()
-                    ]);
-                    
-                    // Restore original timeout
-                    config(['services.robaws.timeout' => $originalTimeout]);
-                }
-                
-                // Fallback: Dispatch background job for client creation
+                // Dispatch background job for client creation
                 \App\Jobs\CreateRobawsClientJob::dispatch($this->intake->id, $contactData);
                 
                 // Update intake status to indicate client creation is pending
@@ -150,10 +100,10 @@ class ProcessIntake implements ShouldQueue
                     'status' => 'client_pending'
                 ]);
                 
-                Log::info('Intake processed, client creation queued (fallback)', [
+                Log::info('Intake processed, client creation queued', [
                     'intake_id' => $this->intake->id,
                     'contact_data_keys' => array_keys($contactData),
-                    'method' => 'background_client_creation_fallback'
+                    'method' => 'background_client_creation'
                 ]);
                 
                 return;

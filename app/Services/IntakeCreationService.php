@@ -33,7 +33,8 @@ class IntakeCreationService
         $this->storeFile($intake, $file, $file->getClientOriginalName());
         
         // Always process the intake - extraction will handle contact info
-        ProcessIntake::dispatch($intake);
+        // Use dispatch() for truly asynchronous processing - don't wait for completion
+        ProcessIntake::dispatch($intake)->afterResponse();
         
         Log::info('Created intake from uploaded file', [
             'intake_id' => $intake->id,
