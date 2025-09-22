@@ -306,7 +306,9 @@ class IntakeCreationService
         try {
             // Get minimal info (fastest possible operations)
             $originalName = $file->getClientOriginalName();
-            $tempPath = $file->path();
+            
+            // Use Livewire's proper method to get file content (works in all environments)
+            $fileContent = $file->get();
             
             // Just move the temp file to a permanent location (minimal operation)
             $disk = 'documents';
@@ -315,7 +317,7 @@ class IntakeCreationService
             $storagePath = $name;
             
             // Move file (fastest possible operation)
-            \Illuminate\Support\Facades\Storage::disk($disk)->put($storagePath, file_get_contents($tempPath));
+            \Illuminate\Support\Facades\Storage::disk($disk)->put($storagePath, $fileContent);
             
             // Create minimal IntakeFile record
             \App\Models\IntakeFile::create([
