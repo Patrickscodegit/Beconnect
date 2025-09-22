@@ -351,7 +351,7 @@ class ProcessIntake implements ShouldQueue
             return;
         }
 
-        Document::create([
+        \App\Models\Document::create([
             'intake_id' => $this->intake->id,
             'filename' => $file->filename,
             'file_path' => $file->file_path,
