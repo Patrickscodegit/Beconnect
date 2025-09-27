@@ -53,7 +53,11 @@
         "validate": "email"
       },
       "concerning": {
-        "sources": [],
+        "sources": ["raw_data.transport_details.cargo.description","raw_data.transport_details.type","raw_data.transport_details.mode"],
+        "default": null
+      },
+      "winst": {
+        "sources": ["raw_data.transport_details.cargo.description","raw_data.transport_details.type"],
         "default": null
       }
     },
@@ -65,9 +69,9 @@
         "default": null
       },
       "pol": {
-        "sources": ["origin","shipment.origin","routing.origin","document_data.shipment.origin","document_data.routing.pol","por","raw_data.expedition.origin"],
+        "sources": ["origin","shipment.origin","routing.origin","document_data.shipment.origin","document_data.routing.pol","por","raw_data.expedition.origin","raw_data.transport_details.origin.country"],
         "transform": "city_to_port",
-        "default": null
+        "default": "ANR"
       },
       "pod": {
         "transform": "normalize_city",
@@ -76,11 +80,15 @@
         "default": null
       },
       "pot": {
-        "sources": ["shipment.transshipment","routing.via","document_data.routing.pot"],
+        "sources": ["shipment.transshipment","routing.via","document_data.routing.pot","raw_data.transport_details.transshipment"],
         "default": null
       },
       "fdest": {
         "sources": ["shipment.final_destination","raw_data.request.destination.final_destination.region","raw_data.request.destination.final_destination.country","raw_data.transport_details.destination.final_destination"],
+        "default": null
+      },
+      "in_transit_to": {
+        "sources": ["raw_data.transport_details.destination.final_destination","raw_data.transport_details.destination.city"],
         "default": null
       }
     },
@@ -114,6 +122,10 @@
           "cargo.weight"
         ],
         "transform": "extract_weight_numeric"
+      },
+      "container_nr": {
+        "sources": ["raw_data.transport_details.container_type","raw_data.transport_details.mode"],
+        "default": "RoRo"
       }
     },
     "vehicle_details": {

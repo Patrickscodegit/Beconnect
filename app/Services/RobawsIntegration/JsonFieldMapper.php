@@ -934,9 +934,9 @@ class JsonFieldMapper
     {
         if (!$value) return null;
         
-        // Handle arrays (like origin.country)
+        // Handle arrays (like origin.country) - take the first country
         if (is_array($value)) {
-            $value = implode(', ', $value);
+            $value = $value[0] ?? '';
         }
         
         if (!is_string($value) || $value === '') return is_scalar($value) ? (string)$value : null;
@@ -1112,9 +1112,9 @@ class JsonFieldMapper
     {
         if (!$city) return '';
         
-        // Handle arrays (like origin.country)
+        // Handle arrays (like origin.country) - take the first country
         if (is_array($city)) {
-            $city = implode(', ', $city);
+            $city = $city[0] ?? '';
         }
         
         $map = [
