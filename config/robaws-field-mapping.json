@@ -20,20 +20,20 @@
         "fallback_template": "EXP RORO - {origin_code} - {pol_code} - {destination_code} - {cargo_desc}",
         "components": {
           "origin_code": {
-            "sources": ["raw_data.expedition.origin"],
+            "sources": ["raw_data.expedition.origin", "raw_data.request.origin.country"],
             "transform": "city_to_code"
           },
           "pol_code": {
-            "sources": ["raw_data.expedition.pol"],
+            "sources": ["raw_data.expedition.pol", "raw_data.request.origin.country"],
             "transform": "city_to_code",
             "default": "ANR"
           },
           "destination_code": {
-            "sources": ["raw_data.expedition.destination"],
+            "sources": ["raw_data.expedition.destination", "raw_data.request.destination.city", "raw_data.request.destination.country"],
             "transform": "city_to_code"
           },
           "cargo_desc": {
-            "sources": ["raw_data.expedition.vehicle.make", "raw_data.expedition.vehicle.model"],
+            "sources": ["raw_data.expedition.vehicle.make", "raw_data.expedition.vehicle.model", "raw_data.request.cargo.type", "raw_data.request.cargo.quantity"],
             "transform": "format_simple_cargo"
           }
         },
@@ -60,7 +60,7 @@
     "routing": {
       "por": {
         "transform": "normalize_city",
-        "sources": ["origin","shipment.origin","routing.origin","transport.from","document_data.shipment.origin","document_data.routing.por","raw_data.expedition.origin"],
+        "sources": ["origin","shipment.origin","routing.origin","transport.from","document_data.shipment.origin","document_data.routing.por","raw_data.expedition.origin","raw_data.request.origin.country"],
         "fallback": "extract_from_messages",
         "default": null
       },
@@ -71,7 +71,7 @@
       },
       "pod": {
         "transform": "normalize_city",
-        "sources": ["destination","shipment.destination","routing.destination","transport.to","document_data.shipment.destination","document_data.routing.pod","raw_data.expedition.destination"],
+        "sources": ["destination","shipment.destination","routing.destination","transport.to","document_data.shipment.destination","document_data.routing.pod","raw_data.expedition.destination","raw_data.request.destination.city","raw_data.request.destination.country"],
         "fallback": "extract_from_messages",
         "default": null
       },
@@ -80,13 +80,13 @@
         "default": null
       },
       "fdest": {
-        "sources": ["shipment.final_destination"],
+        "sources": ["shipment.final_destination","raw_data.request.destination.final_destination.region","raw_data.request.destination.final_destination.country"],
         "default": null
       }
     },
     "cargo_details": {
       "cargo": {
-        "sources": ["raw_data.expedition.vehicle.make", "raw_data.expedition.vehicle.model"],
+        "sources": ["raw_data.expedition.vehicle.make", "raw_data.expedition.vehicle.model", "raw_data.request.cargo.type", "raw_data.request.cargo.quantity"],
         "transform": "format_simple_cargo",
         "default": null
       },
@@ -98,7 +98,8 @@
           "cargo.dimensions",
           "shipment.dimensions",
           "document_data.vehicle.dimensions",
-          "document_data.vehicle.dimensions_m"
+          "document_data.vehicle.dimensions_m",
+          "raw_data.request.cargo.dimensions"
         ],
         "default": null
       },

@@ -932,6 +932,13 @@ class JsonFieldMapper
      */
     private function transform_normalize_city($value): ?string
     {
+        if (!$value) return null;
+        
+        // Handle arrays (like origin.country)
+        if (is_array($value)) {
+            $value = implode(', ', $value);
+        }
+        
         if (!is_string($value) || $value === '') return is_scalar($value) ? (string)$value : null;
         $v = trim($value);
         // Normalize common variants
@@ -943,6 +950,13 @@ class JsonFieldMapper
             'Jeddah, Saudi Arabia' => 'Jeddah',
             'Djeddah, Arabie Saoudite' => 'Jeddah',
             'Dubai, UAE' => 'Dubai',
+            'Netherlands, Belgium' => 'Netherlands',
+            'Netherlands' => 'Netherlands',
+            'Belgium' => 'Belgium',
+            'Mersin' => 'Mersin',
+            'Turkey' => 'Turkey',
+            'Iraq' => 'Iraq',
+            'Kurdistan' => 'Kurdistan',
         ];
         return $map[$v] ?? $v;
     }
@@ -991,6 +1005,8 @@ class JsonFieldMapper
         // Try to get vehicle details from the full data
         $make = data_get($fullData, 'raw_data.expedition.vehicle.make');
         $model = data_get($fullData, 'raw_data.expedition.vehicle.model');
+        $cargoType = data_get($fullData, 'raw_data.request.cargo.type');
+        $cargoQuantity = data_get($fullData, 'raw_data.request.cargo.quantity');
         
         // Check if vehicle is mentioned as "new" in the data
         $isNew = $this->isVehicleNew($fullData);
@@ -998,6 +1014,14 @@ class JsonFieldMapper
         
         if ($make && $model) {
             return "1 x {$condition} {$make} {$model}";
+        }
+        
+        if ($cargoType && $cargoQuantity) {
+            return "{$cargoQuantity} x {$condition} {$cargoType}";
+        }
+        
+        if ($cargoType) {
+            return "1 x {$condition} {$cargoType}";
         }
         
         // Fallback to the value if it's a string
@@ -1069,9 +1093,14 @@ class JsonFieldMapper
     /**
      * Convert city name to code
      */
-    private function cityToCode(?string $city): string
+    private function cityToCode($city): string
     {
         if (!$city) return '';
+        
+        // Handle arrays (like origin.country)
+        if (is_array($city)) {
+            $city = implode(', ', $city);
+        }
         
         $map = [
             'Brussels' => 'BRU',
@@ -1080,6 +1109,12 @@ class JsonFieldMapper
             'Anvers' => 'ANR',
             'Jeddah' => 'JED',
             'Djeddah' => 'JED',
+            'Mersin' => 'MER',
+            'Turkey' => 'TUR',
+            'Netherlands' => 'NLD',
+            'Belgium' => 'BEL',
+            'Iraq' => 'IRQ',
+            'Kurdistan' => 'KUR',
         ];
         
         return $map[$city] ?? strtoupper(substr($city, 0, 3));
