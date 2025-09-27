@@ -951,12 +951,17 @@ class JsonFieldMapper
             'Djeddah, Arabie Saoudite' => 'Jeddah',
             'Dubai, UAE' => 'Dubai',
             'Netherlands, Belgium' => 'Netherlands',
+            'Nederland, België' => 'Netherlands',
             'Netherlands' => 'Netherlands',
+            'Nederland' => 'Netherlands',
             'Belgium' => 'Belgium',
+            'België' => 'Belgium',
             'Mersin' => 'Mersin',
             'Turkey' => 'Turkey',
+            'Turkije' => 'Turkey',
             'Iraq' => 'Iraq',
             'Kurdistan' => 'Kurdistan',
+            'Koerdistan' => 'Kurdistan',
         ];
         return $map[$v] ?? $v;
     }
@@ -1007,6 +1012,8 @@ class JsonFieldMapper
         $model = data_get($fullData, 'raw_data.expedition.vehicle.model');
         $cargoType = data_get($fullData, 'raw_data.request.cargo.type');
         $cargoQuantity = data_get($fullData, 'raw_data.request.cargo.quantity');
+        $transportCargoDesc = data_get($fullData, 'raw_data.transport_details.cargo.description');
+        $transportCargoQty = data_get($fullData, 'raw_data.transport_details.cargo.quantity');
         
         // Check if vehicle is mentioned as "new" in the data
         $isNew = $this->isVehicleNew($fullData);
@@ -1014,6 +1021,14 @@ class JsonFieldMapper
         
         if ($make && $model) {
             return "1 x {$condition} {$make} {$model}";
+        }
+        
+        if ($transportCargoDesc && $transportCargoQty) {
+            return "{$transportCargoQty} x {$condition} {$transportCargoDesc}";
+        }
+        
+        if ($transportCargoDesc) {
+            return "1 x {$condition} {$transportCargoDesc}";
         }
         
         if ($cargoType && $cargoQuantity) {
@@ -1111,10 +1126,14 @@ class JsonFieldMapper
             'Djeddah' => 'JED',
             'Mersin' => 'MER',
             'Turkey' => 'TUR',
+            'Turkije' => 'TUR',
             'Netherlands' => 'NLD',
+            'Nederland' => 'NLD',
             'Belgium' => 'BEL',
+            'België' => 'BEL',
             'Iraq' => 'IRQ',
             'Kurdistan' => 'KUR',
+            'Koerdistan' => 'KUR',
         ];
         
         return $map[$city] ?? strtoupper(substr($city, 0, 3));
