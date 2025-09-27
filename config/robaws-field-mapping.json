@@ -25,7 +25,7 @@
           },
           "pol_code": {
             "sources": ["raw_data.expedition.pol", "raw_data.request.origin.country", "raw_data.transport_details.origin.country"],
-            "transform": "city_to_code",
+            "transform": "city_to_port",
             "default": "ANR"
           },
           "destination_code": {

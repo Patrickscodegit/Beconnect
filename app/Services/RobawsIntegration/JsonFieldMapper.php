@@ -348,12 +348,29 @@ class JsonFieldMapper
                 return $this->extractNameFromEmail($value);
                 
             case 'city_to_code':
+                // Handle arrays (like origin.country) - take the first element
+                if (is_array($value)) {
+                    $value = $value[0] ?? '';
+                }
+                
                 if (!is_string($value) || $value === '') return $value;
+                
                 $map = $this->transformations['city_to_code'] ?? [];
                 return $map[$value] ?? $this->extractCodeFromCity($value);
                 
             case 'city_to_port':
+                // Handle arrays (like origin.country) - take the first element
+                if (is_array($value)) {
+                    $value = $value[0] ?? '';
+                }
+                
                 if (!is_string($value) || $value === '') return $value;
+                
+                // Special case: if origin includes both Netherlands and Belgium, use Antwerp
+                if (stripos($value, 'Nederland') !== false && stripos($value, 'België') !== false) {
+                    return 'Antwerp, Belgium';
+                }
+                
                 foreach (($this->transformations['city_to_port'] ?? []) as $city => $port) {
                     if (stripos($value, (string)$city) !== false) {
                         return $port;
