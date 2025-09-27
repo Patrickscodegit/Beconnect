@@ -1220,10 +1220,52 @@ final class RobawsApiClient
     private function chooseBest(array $candidates, string $email): ?array
     {
         if (empty($candidates)) return null;
-        if (count($candidates) === 1) return $candidates[0];
         
+        // Filter out deleted clients first
+        $activeCandidates = array_filter($candidates, function ($client) {
+            // Check if client is deleted - look for common deletion indicators
+            $status = $client['status'] ?? null;
+            $deleted = $client['deleted'] ?? false;
+            $deletedAt = $client['deleted_at'] ?? null;
+            
+            // Skip if explicitly marked as deleted
+            if ($deleted || $deletedAt || $status === 'deleted' || $status === 'DELETED') {
+                \Log::info('Skipping deleted client', [
+                    'client_id' => $client['id'] ?? 'unknown',
+                    'client_name' => $client['name'] ?? 'unknown',
+                    'status' => $status,
+                    'deleted' => $deleted,
+                    'deleted_at' => $deletedAt
+                ]);
+                return false;
+            }
+            
+            return true;
+        });
+        
+        // If no active candidates, return null (will create new client)
+        if (empty($activeCandidates)) {
+            \Log::info('No active clients found, all candidates were deleted', [
+                'total_candidates' => count($candidates),
+                'email' => $email
+            ]);
+            return null;
+        }
+        
+        // If only one active candidate, return it
+        if (count($activeCandidates) === 1) {
+            $client = reset($activeCandidates);
+            \Log::info('Found single active client', [
+                'client_id' => $client['id'] ?? 'unknown',
+                'client_name' => $client['name'] ?? 'unknown',
+                'email' => $email
+            ]);
+            return $client;
+        }
+        
+        // Sort active candidates by best match
         $email = mb_strtolower($email);
-        usort($candidates, function ($a, $b) use ($email) {
+        usort($activeCandidates, function ($a, $b) use ($email) {
             $score = function ($cl) use ($email) {
                 $hits = 0;
                 foreach (($cl['contacts'] ?? []) as $ct) {
@@ -1234,7 +1276,18 @@ final class RobawsApiClient
             };
             return $score($b) <=> $score($a);
         });
-        return $candidates[0] ?? null;
+        
+        $bestClient = $activeCandidates[0] ?? null;
+        if ($bestClient) {
+            \Log::info('Selected best active client', [
+                'client_id' => $bestClient['id'] ?? 'unknown',
+                'client_name' => $bestClient['name'] ?? 'unknown',
+                'email' => $email,
+                'total_active_candidates' => count($activeCandidates)
+            ]);
+        }
+        
+        return $bestClient;
     }
 
     /**
