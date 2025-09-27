@@ -55,7 +55,9 @@ return new class extends Migration
         } catch (\Exception $e) {
             // Index might already exist, continue silently
             if (strpos($e->getMessage(), 'already exists') === false && 
-                strpos($e->getMessage(), 'duplicate key') === false) {
+                strpos($e->getMessage(), 'duplicate key') === false &&
+                strpos($e->getMessage(), 'Duplicate table') === false &&
+                strpos($e->getMessage(), 'relation') === false) {
                 // Re-throw if it's a different error
                 throw $e;
             }
