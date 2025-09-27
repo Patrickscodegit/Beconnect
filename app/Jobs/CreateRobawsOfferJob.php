@@ -50,9 +50,27 @@ class CreateRobawsOfferJob implements ShouldQueue
                     'document_id' => $this->document->id
                 ]);
                 
-                // Check if document has extraction data
-                if (!$this->document->extraction_data) {
-                    throw new \RuntimeException('No extraction data found for document');
+                // Check if document has extraction data, with retry logic
+                $maxRetries = 3;
+                $retryDelay = 2; // seconds
+                
+                for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+                    $this->document->refresh();
+                    
+                    if ($this->document->extraction_data) {
+                        break;
+                    }
+                    
+                    if ($attempt < $maxRetries) {
+                        Log::info('Waiting for extraction data to be available', [
+                            'document_id' => $this->document->id,
+                            'attempt' => $attempt,
+                            'max_retries' => $maxRetries
+                        ]);
+                        sleep($retryDelay);
+                    } else {
+                        throw new \RuntimeException('No extraction data found for document after ' . $maxRetries . ' attempts');
+                    }
                 }
 
                 $extractedData = is_array($this->document->extraction_data) 
