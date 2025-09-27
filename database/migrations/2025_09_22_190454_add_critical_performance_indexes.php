@@ -50,20 +50,32 @@ return new class extends Migration
      */
     private function addIndexIfNotExists(Blueprint $table, string $column, string $indexName): void
     {
-        try {
+        $driver = \DB::getDriverName();
+        $tableName = $table->getTable();
+        
+        // Check if index already exists based on database driver
+        $exists = false;
+        
+        if ($driver === 'pgsql') {
+            $exists = \DB::select("
+                SELECT 1 FROM pg_indexes 
+                WHERE indexname = ? AND tablename = ?
+            ", [$indexName, $tableName]);
+        } elseif ($driver === 'sqlite') {
+            $exists = \DB::select("
+                SELECT 1 FROM sqlite_master 
+                WHERE type = 'index' AND name = ?
+            ", [$indexName]);
+        } elseif ($driver === 'mysql') {
+            $exists = \DB::select("
+                SELECT 1 FROM information_schema.statistics 
+                WHERE table_schema = DATABASE() AND index_name = ? AND table_name = ?
+            ", [$indexName, $tableName]);
+        }
+        
+        if (empty($exists)) {
             $table->index($column, $indexName);
-        } catch (\Exception $e) {
-            // Index might already exist, continue silently
-            $message = $e->getMessage();
-            if (strpos($message, 'already exists') === false && 
-                strpos($message, 'duplicate key') === false &&
-                strpos($message, 'Duplicate table') === false &&
-                strpos($message, 'relation') === false &&
-                strpos($message, 'SQLSTATE[42P07]') === false) {
-                // Re-throw if it's a different error
-                throw $e;
-            }
-            // Log that we're skipping this index
+        } else {
             \Log::info("Skipping index creation for {$indexName} - already exists");
         }
     }
