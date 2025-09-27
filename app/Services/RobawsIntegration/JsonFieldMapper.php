@@ -1045,19 +1045,59 @@ class JsonFieldMapper
         }
         
         if ($transportCargoDesc && $transportCargoQty) {
-            return "{$transportCargoQty} x {$condition} {$transportCargoDesc}";
+            // Check if description already contains "used" or "new" to avoid duplication
+            $cleanDesc = $transportCargoDesc;
+            if (stripos($cleanDesc, 'used') !== false) {
+                $cleanDesc = preg_replace('/\bused\b/i', '', $cleanDesc);
+                $cleanDesc = trim($cleanDesc);
+            }
+            if (stripos($cleanDesc, 'new') !== false) {
+                $cleanDesc = preg_replace('/\bnew\b/i', '', $cleanDesc);
+                $cleanDesc = trim($cleanDesc);
+            }
+            return "{$transportCargoQty} x {$condition} {$cleanDesc}";
         }
         
         if ($transportCargoDesc) {
-            return "1 x {$condition} {$transportCargoDesc}";
+            // Check if description already contains "used" or "new" to avoid duplication
+            $cleanDesc = $transportCargoDesc;
+            if (stripos($cleanDesc, 'used') !== false) {
+                $cleanDesc = preg_replace('/\bused\b/i', '', $cleanDesc);
+                $cleanDesc = trim($cleanDesc);
+            }
+            if (stripos($cleanDesc, 'new') !== false) {
+                $cleanDesc = preg_replace('/\bnew\b/i', '', $cleanDesc);
+                $cleanDesc = trim($cleanDesc);
+            }
+            return "1 x {$condition} {$cleanDesc}";
         }
         
         if ($cargoType && $cargoQuantity) {
-            return "{$cargoQuantity} x {$condition} {$cargoType}";
+            // Check if cargo type already contains "used" or "new" to avoid duplication
+            $cleanCargoType = $cargoType;
+            if (stripos($cleanCargoType, 'used') !== false) {
+                $cleanCargoType = preg_replace('/\bused\b/i', '', $cleanCargoType);
+                $cleanCargoType = trim($cleanCargoType);
+            }
+            if (stripos($cleanCargoType, 'new') !== false) {
+                $cleanCargoType = preg_replace('/\bnew\b/i', '', $cleanCargoType);
+                $cleanCargoType = trim($cleanCargoType);
+            }
+            return "{$cargoQuantity} x {$condition} {$cleanCargoType}";
         }
         
         if ($cargoType) {
-            return "1 x {$condition} {$cargoType}";
+            // Check if cargo type already contains "used" or "new" to avoid duplication
+            $cleanCargoType = $cargoType;
+            if (stripos($cleanCargoType, 'used') !== false) {
+                $cleanCargoType = preg_replace('/\bused\b/i', '', $cleanCargoType);
+                $cleanCargoType = trim($cleanCargoType);
+            }
+            if (stripos($cleanCargoType, 'new') !== false) {
+                $cleanCargoType = preg_replace('/\bnew\b/i', '', $cleanCargoType);
+                $cleanCargoType = trim($cleanCargoType);
+            }
+            return "1 x {$condition} {$cleanCargoType}";
         }
         
         // Fallback to the value if it's a string

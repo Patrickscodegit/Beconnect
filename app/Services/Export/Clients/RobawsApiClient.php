@@ -788,7 +788,8 @@ final class RobawsApiClient
             $http = Http::baseUrl($baseUrl)
                 ->acceptJson()
                 ->asMultipart()
-                ->timeout(config('services.robaws.timeout', 30));
+                ->timeout(config('services.robaws.timeout', 10))
+                ->connectTimeout(config('services.robaws.connect_timeout', 5));
 
             // Configure authentication the same way as the main client
             if (config('services.robaws.auth') === 'basic') {
@@ -887,8 +888,8 @@ final class RobawsApiClient
 
         $http = Http::baseUrl($baseUrl)
             ->withHeaders($headers)
-            ->timeout(config('services.robaws.timeout', 30))
-            ->connectTimeout(config('services.robaws.connect_timeout', 10))
+            ->timeout(config('services.robaws.timeout', 10))
+            ->connectTimeout(config('services.robaws.connect_timeout', 5))
             ->withOptions([
                 'verify' => config('services.robaws.verify_ssl', true),
             ]);
