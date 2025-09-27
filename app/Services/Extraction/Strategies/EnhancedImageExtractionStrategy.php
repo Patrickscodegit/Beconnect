@@ -5,6 +5,7 @@ namespace App\Services\Extraction\Strategies;
 use App\Models\Document;
 use App\Services\AiRouter;
 use App\Services\Extraction\Results\ExtractionResult;
+use App\Services\VehicleDatabase\VehicleDatabaseService;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 
@@ -18,7 +19,8 @@ use Illuminate\Support\Facades\Log;
 class EnhancedImageExtractionStrategy implements ExtractionStrategy
 {
     public function __construct(
-        private AiRouter $aiRouter
+        private AiRouter $aiRouter,
+        private VehicleDatabaseService $vehicleDb
     ) {}
 
     public function getName(): string
@@ -172,6 +174,24 @@ class EnhancedImageExtractionStrategy implements ExtractionStrategy
         // Process the AI result
         if (!empty($aiResult['extracted_data'])) {
             $extractedData = array_merge($extractedData, $aiResult['extracted_data']);
+        } else {
+            // NEW: OCR fallback for text-heavy images when AI vision fails
+            Log::info('AI vision extraction failed, trying OCR fallback', [
+                'document_id' => $document->id,
+                'filename' => $document->filename,
+                'strategy' => 'enhanced_image_extraction'
+            ]);
+            
+            $ocrData = $this->extractWithOCRFallback($imageContent, $document);
+            if (!empty($ocrData)) {
+                $extractedData = array_merge($extractedData, $ocrData);
+                
+                Log::info('OCR fallback extraction successful', [
+                    'document_id' => $document->id,
+                    'extracted_fields' => array_keys($ocrData),
+                    'strategy' => 'enhanced_image_extraction'
+                ]);
+            }
         }
 
         // Enhanced post-processing for images
@@ -193,6 +213,9 @@ class EnhancedImageExtractionStrategy implements ExtractionStrategy
         // Enhanced contact data processing
         if (!empty($extractedData['contact'])) {
             $this->enhanceContactData($extractedData['contact']);
+        } else {
+            // NEW: Fallback contact extraction from filename patterns
+            $extractedData['contact'] = $this->extractContactFromFilename($document->filename);
         }
 
         // Enhanced shipment data processing
@@ -227,6 +250,58 @@ class EnhancedImageExtractionStrategy implements ExtractionStrategy
         // Enhance dimensions if present
         if (!empty($vehicleData['dimensions'])) {
             $this->enhanceDimensions($vehicleData['dimensions']);
+        }
+
+        // NEW: Database enhancement for missing vehicle specs
+        $this->enhanceWithVehicleDatabase($vehicleData);
+    }
+
+    /**
+     * Enhance vehicle data with database lookup
+     */
+    private function enhanceWithVehicleDatabase(array &$vehicleData): void
+    {
+        try {
+            $dbEnhancement = null;
+
+            // Try VIN lookup first (most accurate)
+            if (!empty($vehicleData['vin'])) {
+                Log::info('Enhancing vehicle data with VIN lookup', [
+                    'vin' => $vehicleData['vin'],
+                    'strategy' => 'enhanced_image_extraction'
+                ]);
+                
+                $dbEnhancement = $this->vehicleDb->enhanceByVin($vehicleData['vin']);
+            }
+            // Fallback to make/model lookup
+            elseif (!empty($vehicleData['make']) && !empty($vehicleData['model'])) {
+                Log::info('Enhancing vehicle data with make/model lookup', [
+                    'make' => $vehicleData['make'],
+                    'model' => $vehicleData['model'],
+                    'strategy' => 'enhanced_image_extraction'
+                ]);
+                
+                $dbEnhancement = $this->vehicleDb->enhanceByMakeModel(
+                    $vehicleData['make'], 
+                    $vehicleData['model']
+                );
+            }
+
+            // Merge database enhancement if found
+            if ($dbEnhancement && !empty($dbEnhancement)) {
+                $vehicleData = array_merge($vehicleData, $dbEnhancement);
+                
+                Log::info('Vehicle data enhanced with database lookup', [
+                    'enhanced_fields' => array_keys($dbEnhancement),
+                    'strategy' => 'enhanced_image_extraction'
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            Log::warning('Vehicle database enhancement failed for image extraction', [
+                'error' => $e->getMessage(),
+                'strategy' => 'enhanced_image_extraction'
+            ]);
         }
     }
 
@@ -552,6 +627,109 @@ class EnhancedImageExtractionStrategy implements ExtractionStrategy
         if (!empty($extractedData['pricing'])) $score += 0.1;
         
         return min(1.0, $score);
+    }
+
+    /**
+     * OCR fallback extraction for text-heavy images
+     */
+    private function extractWithOCRFallback(string $imageContent, Document $document): array
+    {
+        $extractedData = [];
+        
+        try {
+            // Use AiRouter with OCR-specific extraction mode
+            $extractionInput = [
+                'bytes' => base64_encode($imageContent),
+                'mime' => $document->mime_type,
+                'filename' => $document->filename
+            ];
+
+            // Try OCR-focused extraction
+            $ocrResult = $this->aiRouter->extractAdvanced($extractionInput, 'ocr_fallback', [
+                'extraction_mode' => 'ocr_text_heavy',
+                'document_type' => 'image',
+                'fallback_mode' => true
+            ]);
+
+            if (!empty($ocrResult['extracted_data'])) {
+                $extractedData = $ocrResult['extracted_data'];
+                
+                // Add OCR-specific metadata
+                $extractedData['_ocr_metadata'] = [
+                    'extraction_method' => 'ocr_fallback',
+                    'fallback_used' => true,
+                    'confidence' => $ocrResult['metadata']['confidence_score'] ?? 0.6
+                ];
+            }
+
+        } catch (\Exception $e) {
+            Log::warning('OCR fallback extraction failed', [
+                'document_id' => $document->id,
+                'filename' => $document->filename,
+                'error' => $e->getMessage(),
+                'strategy' => 'enhanced_image_extraction'
+            ]);
+        }
+        
+        return $extractedData;
+    }
+
+    /**
+     * Extract contact information from filename patterns
+     */
+    private function extractContactFromFilename(string $filename): array
+    {
+        $contact = [];
+        
+        try {
+            // Common WhatsApp screenshot patterns
+            $patterns = [
+                // "IMG_20241227_143022_John_Doe.jpg"
+                '/IMG_\d{8}_\d{6}_(.+?)\./i',
+                // "Screenshot_20241227_143022_John_Doe.jpg"
+                '/Screenshot_\d{8}_\d{6}_(.+?)\./i',
+                // "WhatsApp Image 2024-12-27 at 14.30.22_John_Doe.jpg"
+                '/WhatsApp Image \d{4}-\d{2}-\d{2} at \d{2}\.\d{2}\.\d{2}_(.+?)\./i',
+                // "John_Doe_vehicle_request.jpg"
+                '/(.+?)_vehicle_request\./i',
+                // "John_Doe_transport_quote.jpg"
+                '/(.+?)_transport_quote\./i',
+                // "John_Doe_shipping_inquiry.jpg"
+                '/(.+?)_shipping_inquiry\./i',
+            ];
+            
+            foreach ($patterns as $pattern) {
+                if (preg_match($pattern, $filename, $matches)) {
+                    $name = trim($matches[1]);
+                    
+                    // Clean up the name
+                    $name = str_replace(['_', '-'], ' ', $name);
+                    $name = preg_replace('/\s+/', ' ', $name);
+                    $name = trim($name);
+                    
+                    if (!empty($name) && strlen($name) > 2) {
+                        $contact['name'] = $name;
+                        
+                        Log::info('Contact extracted from filename pattern', [
+                            'filename' => $filename,
+                            'pattern' => $pattern,
+                            'extracted_name' => $name,
+                            'strategy' => 'enhanced_image_extraction'
+                        ]);
+                        break;
+                    }
+                }
+            }
+            
+        } catch (\Exception $e) {
+            Log::warning('Contact extraction from filename failed', [
+                'filename' => $filename,
+                'error' => $e->getMessage(),
+                'strategy' => 'enhanced_image_extraction'
+            ]);
+        }
+        
+        return $contact;
     }
 
     /**
