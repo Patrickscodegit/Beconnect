@@ -17,20 +17,20 @@
           "title",
           "description"
         ],
-        "fallback_template": "EXP RORO - {origin_code} - {pol_code} - {destination_code} - {cargo_desc}",
+        "fallback_template": "EXP RORO - {origin_country} - {pol_code} - {destination_city} - {cargo_desc}",
         "components": {
-          "origin_code": {
+          "origin_country": {
             "sources": ["raw_data.expedition.origin", "raw_data.request.origin.country", "raw_data.transport_details.origin.country"],
-            "transform": "city_to_code"
+            "transform": "normalize_city"
           },
           "pol_code": {
             "sources": ["raw_data.expedition.pol", "raw_data.request.origin.country", "raw_data.transport_details.origin.country"],
             "transform": "city_to_port",
             "default": "ANR"
           },
-          "destination_code": {
+          "destination_city": {
             "sources": ["raw_data.expedition.destination", "raw_data.request.destination.city", "raw_data.request.destination.country", "raw_data.transport_details.destination.city", "raw_data.transport_details.destination.country"],
-            "transform": "city_to_code"
+            "transform": "normalize_city"
           },
           "cargo_desc": {
             "sources": ["raw_data.expedition.vehicle.make", "raw_data.expedition.vehicle.model", "raw_data.request.cargo.type", "raw_data.request.cargo.quantity", "raw_data.transport_details.cargo.description", "raw_data.transport_details.cargo.quantity"],

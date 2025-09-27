@@ -366,9 +366,13 @@ class JsonFieldMapper
                 
                 if (!is_string($value) || $value === '') return $value;
                 
-                // Special case: if origin includes both Netherlands and Belgium, use Antwerp
-                if (stripos($value, 'Nederland') !== false && stripos($value, 'België') !== false) {
-                    return 'Antwerp, Belgium';
+                // European countries - always use Antwerp as POL
+                $europeanCountries = ['Nederland', 'Netherlands', 'België', 'Belgium', 'Germany', 'Duitsland', 'France', 'Frankrijk', 'Italy', 'Italië', 'Spain', 'Spanje', 'Portugal', 'Austria', 'Oostenrijk', 'Switzerland', 'Zwitserland', 'Denmark', 'Denemarken', 'Sweden', 'Zweden', 'Norway', 'Noorwegen', 'Finland', 'Finland', 'Poland', 'Polen', 'Czech Republic', 'Tsjechië', 'Hungary', 'Hongarije', 'Slovakia', 'Slowakije', 'Slovenia', 'Slovenië', 'Croatia', 'Kroatië', 'Romania', 'Roemenië', 'Bulgaria', 'Bulgarije', 'Greece', 'Griekenland', 'Ireland', 'Ierland', 'United Kingdom', 'Verenigd Koninkrijk', 'Luxembourg', 'Luxemburg'];
+                
+                foreach ($europeanCountries as $country) {
+                    if (stripos($value, $country) !== false) {
+                        return 'Antwerp, Belgium';
+                    }
                 }
                 
                 foreach (($this->transformations['city_to_port'] ?? []) as $city => $port) {
