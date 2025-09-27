@@ -20,7 +20,7 @@
         "fallback_template": "EXP RORO - {origin_country} - {pol_code} - {destination_city} - {cargo_desc}",
         "components": {
           "origin_country": {
-            "sources": ["raw_data.expedition.origin", "raw_data.request.origin.country", "raw_data.transport_details.origin.country"],
+            "sources": ["raw_data.transport_details.origin.pickup_address", "raw_data.transport_details.origin.pickup_location", "raw_data.transport_details.origin.address", "raw_data.transport_details.origin.location", "raw_data.request.origin.pickup_address", "raw_data.request.origin.pickup_location", "raw_data.request.origin.address", "raw_data.request.origin.location", "raw_data.expedition.origin", "raw_data.request.origin.country", "raw_data.transport_details.origin.country"],
             "transform": "normalize_city"
           },
           "pol_code": {
@@ -64,7 +64,7 @@
     "routing": {
       "por": {
         "transform": "normalize_city",
-        "sources": ["origin","shipment.origin","routing.origin","transport.from","document_data.shipment.origin","document_data.routing.por","raw_data.expedition.origin","raw_data.request.origin.country","raw_data.transport_details.origin.country"],
+        "sources": ["raw_data.transport_details.origin.pickup_address","raw_data.transport_details.origin.pickup_location","raw_data.transport_details.origin.address","raw_data.transport_details.origin.location","raw_data.request.origin.pickup_address","raw_data.request.origin.pickup_location","raw_data.request.origin.address","raw_data.request.origin.location","origin","shipment.origin","routing.origin","transport.from","document_data.shipment.origin","document_data.routing.por","raw_data.expedition.origin","raw_data.request.origin.country","raw_data.transport_details.origin.country"],
         "fallback": "extract_from_messages",
         "default": null
       },
