@@ -17,8 +17,27 @@
           "title",
           "description"
         ],
-        "transform": "format_simple_reference",
-        "default": "EXP RORO - BRU - ANR - JED - 1 x used BMW Série 7"
+        "fallback_template": "EXP RORO - {origin_code} - {pol_code} - {destination_code} - {cargo_desc}",
+        "components": {
+          "origin_code": {
+            "sources": ["raw_data.expedition.origin"],
+            "transform": "city_to_code"
+          },
+          "pol_code": {
+            "sources": ["raw_data.expedition.pol"],
+            "transform": "city_to_code",
+            "default": "ANR"
+          },
+          "destination_code": {
+            "sources": ["raw_data.expedition.destination"],
+            "transform": "city_to_code"
+          },
+          "cargo_desc": {
+            "sources": ["raw_data.expedition.vehicle.make", "raw_data.expedition.vehicle.model"],
+            "transform": "format_simple_cargo"
+          }
+        },
+        "default": null
       },
       "endcustomer": {
         "sources": ["contact.name", "contact_info.name"],
@@ -69,7 +88,7 @@
       "cargo": {
         "sources": ["raw_data.expedition.vehicle.make", "raw_data.expedition.vehicle.model"],
         "transform": "format_simple_cargo",
-        "default": "1 x Vehicle"
+        "default": null
       },
       "dim_bef_delivery": {
         "transform": "format_dimensions",
@@ -81,7 +100,7 @@
           "document_data.vehicle.dimensions",
           "document_data.vehicle.dimensions_m"
         ],
-        "default": "5.12 x 1.90 x 1.48 m // 14.40 Cbm // 1850 kg"
+        "default": null
       },
       "weight_kg": {
         "sources": [
