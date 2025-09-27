@@ -164,6 +164,12 @@ class EnhancedRobawsIntegrationService
         $xf = [];
         $put = function (string $key, $value, string $type = 'stringValue') use (&$xf, $L) {
             if ($value === null || $value === '') return;
+            
+            // Handle arrays by taking the first element or converting to string
+            if (is_array($value)) {
+                $value = $value[0] ?? '';
+            }
+            
             $label = $L[$key] ?? $key;              // ← map through config
             $xf[$label] = [$type => (string) $value];
         };
