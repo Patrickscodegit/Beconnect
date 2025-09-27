@@ -81,25 +81,27 @@ class IntakeOrchestratorJob implements ShouldQueue
             // Prepare jobs for batch processing
             $jobs = [];
             
-            // Add extraction and processing jobs for each document first
+            // Add extraction jobs for each document first
             foreach ($documents as $document) {
-                // First extract data and process document
                 $jobs[] = new ExtractDocumentDataJob($document);
-                
-                // Then create offer if no quotation ID
-                if (!$document->robaws_quotation_id) {
-                    $jobs[] = new CreateRobawsOfferJob($document);
-                }
-                
-                // Finally upload file if quotation exists and not uploaded
-                if ($document->robaws_quotation_id && $document->upload_status !== 'uploaded') {
-                    $jobs[] = new ProcessFileUploadJob($document);
-                }
             }
             
             // Add client creation job after extraction (so it has updated contact data)
             if (!$this->intake->robaws_client_id) {
                 $jobs[] = new CreateRobawsClientJob($this->intake->id, $this->getContactData());
+            }
+            
+            // Add offer creation and upload jobs after client creation
+            foreach ($documents as $document) {
+                // Create offer if no quotation ID
+                if (!$document->robaws_quotation_id) {
+                    $jobs[] = new CreateRobawsOfferJob($document);
+                }
+                
+                // Upload file if quotation exists and not uploaded
+                if ($document->robaws_quotation_id && $document->upload_status !== 'uploaded') {
+                    $jobs[] = new ProcessFileUploadJob($document);
+                }
             }
 
             // Add status update job

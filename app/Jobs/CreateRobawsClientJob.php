@@ -87,9 +87,44 @@ class CreateRobawsClientJob implements ShouldQueue
                 'phone' => $intake->contact_phone,
             ];
             
+            // If intake contact data is empty, try to get it from document extraction
+            if (empty($freshContactData['name']) && empty($freshContactData['email'])) {
+                $documents = $intake->documents;
+                foreach ($documents as $document) {
+                    if ($document->extraction_data) {
+                        $extraction = is_array($document->extraction_data) 
+                            ? $document->extraction_data 
+                            : json_decode($document->extraction_data, true);
+                        
+                        if (isset($extraction['contact'])) {
+                            $freshContactData['name'] = $freshContactData['name'] ?: $extraction['contact']['name'] ?? null;
+                            $freshContactData['email'] = $freshContactData['email'] ?: $extraction['contact']['email'] ?? null;
+                        }
+                        
+                        if (isset($extraction['contact_email'])) {
+                            $freshContactData['email'] = $freshContactData['email'] ?: $extraction['contact_email'];
+                        }
+                        
+                        if (isset($extraction['customer_name'])) {
+                            $freshContactData['name'] = $freshContactData['name'] ?: $extraction['customer_name'];
+                        }
+                        
+                        // If we found contact data, break
+                        if ($freshContactData['name'] || $freshContactData['email']) {
+                            break;
+                        }
+                    }
+                }
+            }
+            
             Log::info('Using fresh contact data for client creation', [
                 'intake_id' => $this->intakeId,
-                'fresh_contact_data' => $freshContactData
+                'fresh_contact_data' => $freshContactData,
+                'intake_contact_data' => [
+                    'name' => $intake->customer_name,
+                    'email' => $intake->contact_email,
+                    'phone' => $intake->contact_phone,
+                ]
             ]);
             
             // Prepare hints for client resolution
