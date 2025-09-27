@@ -103,6 +103,18 @@ class CreateRobawsClientJob implements ShouldQueue
                                 ? $document->extraction_data 
                                 : json_decode($document->extraction_data, true);
                             
+                            Log::info('Checking extraction data for contact info', [
+                                'intake_id' => $this->intakeId,
+                                'document_id' => $document->id,
+                                'extraction_keys' => array_keys($extraction ?? []),
+                                'has_contact' => isset($extraction['contact']),
+                                'has_contact_email' => isset($extraction['contact_email']),
+                                'has_customer_name' => isset($extraction['customer_name']),
+                                'contact_data' => $extraction['contact'] ?? null,
+                                'contact_email' => $extraction['contact_email'] ?? null,
+                                'customer_name' => $extraction['customer_name'] ?? null,
+                            ]);
+                            
                             if (isset($extraction['contact'])) {
                                 $freshContactData['name'] = $freshContactData['name'] ?: $extraction['contact']['name'] ?? null;
                                 $freshContactData['email'] = $freshContactData['email'] ?: $extraction['contact']['email'] ?? null;
@@ -118,6 +130,11 @@ class CreateRobawsClientJob implements ShouldQueue
                             
                             // If we found contact data, break
                             if ($freshContactData['name'] || $freshContactData['email']) {
+                                Log::info('Found contact data in extraction', [
+                                    'intake_id' => $this->intakeId,
+                                    'document_id' => $document->id,
+                                    'found_contact_data' => $freshContactData
+                                ]);
                                 break 2; // Break out of both loops
                             }
                         }
