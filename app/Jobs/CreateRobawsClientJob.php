@@ -89,30 +89,53 @@ class CreateRobawsClientJob implements ShouldQueue
             
             // If intake contact data is empty, try to get it from document extraction
             if (empty($freshContactData['name']) && empty($freshContactData['email'])) {
-                $documents = $intake->documents;
-                foreach ($documents as $document) {
-                    if ($document->extraction_data) {
-                        $extraction = is_array($document->extraction_data) 
-                            ? $document->extraction_data 
-                            : json_decode($document->extraction_data, true);
-                        
-                        if (isset($extraction['contact'])) {
-                            $freshContactData['name'] = $freshContactData['name'] ?: $extraction['contact']['name'] ?? null;
-                            $freshContactData['email'] = $freshContactData['email'] ?: $extraction['contact']['email'] ?? null;
+                // Wait for extraction data to be available (similar to CreateRobawsOfferJob)
+                $maxRetries = 3;
+                $retryDelay = 2; // seconds
+                
+                for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+                    $intake->refresh(); // Refresh to get latest data
+                    $documents = $intake->documents;
+                    
+                    foreach ($documents as $document) {
+                        if ($document->extraction_data) {
+                            $extraction = is_array($document->extraction_data) 
+                                ? $document->extraction_data 
+                                : json_decode($document->extraction_data, true);
+                            
+                            if (isset($extraction['contact'])) {
+                                $freshContactData['name'] = $freshContactData['name'] ?: $extraction['contact']['name'] ?? null;
+                                $freshContactData['email'] = $freshContactData['email'] ?: $extraction['contact']['email'] ?? null;
+                            }
+                            
+                            if (isset($extraction['contact_email'])) {
+                                $freshContactData['email'] = $freshContactData['email'] ?: $extraction['contact_email'];
+                            }
+                            
+                            if (isset($extraction['customer_name'])) {
+                                $freshContactData['name'] = $freshContactData['name'] ?: $extraction['customer_name'];
+                            }
+                            
+                            // If we found contact data, break
+                            if ($freshContactData['name'] || $freshContactData['email']) {
+                                break 2; // Break out of both loops
+                            }
                         }
-                        
-                        if (isset($extraction['contact_email'])) {
-                            $freshContactData['email'] = $freshContactData['email'] ?: $extraction['contact_email'];
-                        }
-                        
-                        if (isset($extraction['customer_name'])) {
-                            $freshContactData['name'] = $freshContactData['name'] ?: $extraction['customer_name'];
-                        }
-                        
-                        // If we found contact data, break
-                        if ($freshContactData['name'] || $freshContactData['email']) {
-                            break;
-                        }
+                    }
+                    
+                    // If we found contact data, break out of retry loop
+                    if ($freshContactData['name'] || $freshContactData['email']) {
+                        break;
+                    }
+                    
+                    // If this is not the last attempt, wait before retrying
+                    if ($attempt < $maxRetries) {
+                        Log::info('Waiting for extraction data to be available for client creation', [
+                            'intake_id' => $this->intakeId,
+                            'attempt' => $attempt,
+                            'max_retries' => $maxRetries
+                        ]);
+                        sleep($retryDelay);
                     }
                 }
             }
