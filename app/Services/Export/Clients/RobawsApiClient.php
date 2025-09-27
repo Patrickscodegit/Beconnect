@@ -1247,6 +1247,14 @@ final class RobawsApiClient
         $phone = $this->normPhone($hints['phone'] ?? $hints['tel'] ?? $hints['gsm'] ?? null);
         $name  = trim($hints['client_name'] ?? $hints['name'] ?? '');
 
+        // Log the search parameters for debugging
+        \Log::info('Client resolution attempt', [
+            'email' => $email,
+            'phone' => $phone,
+            'name' => $name,
+            'hints' => $hints
+        ]);
+
         $lockKey = $this->lockKeyFor($email);
         $ttl = 25; // seconds
 
@@ -1256,19 +1264,48 @@ final class RobawsApiClient
             $client = null;
             // Email resolution (robust): try contacts first, then scan clients
             if ($email) {
-                $client = $this->findClientByEmailRobust($email) ?: $this->scanClientsForEmail($email);
+                \Log::info('Searching for client by email', ['email' => $email]);
+                $client = $this->findClientByEmailRobust($email);
+                if ($client) {
+                    \Log::info('Found client by email (robust)', ['client_id' => $client['id'] ?? 'unknown', 'client_name' => $client['name'] ?? 'unknown']);
+                } else {
+                    \Log::info('No client found by email (robust), trying scan', ['email' => $email]);
+                    $client = $this->scanClientsForEmail($email);
+                    if ($client) {
+                        \Log::info('Found client by email (scan)', ['client_id' => $client['id'] ?? 'unknown', 'client_name' => $client['name'] ?? 'unknown']);
+                    } else {
+                        \Log::info('No client found by email (scan)', ['email' => $email]);
+                    }
+                }
             }
-            if (!$client && $phone) $client = $this->findClientByPhoneRobust($phone);
-            if (!$client && $name)  $client = $this->findClientByNameFuzzy($name);
+            if (!$client && $phone) {
+                \Log::info('Searching for client by phone', ['phone' => $phone]);
+                $client = $this->findClientByPhoneRobust($phone);
+                if ($client) {
+                    \Log::info('Found client by phone', ['client_id' => $client['id'] ?? 'unknown', 'client_name' => $client['name'] ?? 'unknown']);
+                }
+            }
+            if (!$client && $name) {
+                \Log::info('Searching for client by name', ['name' => $name]);
+                $client = $this->findClientByNameFuzzy($name);
+                if ($client) {
+                    \Log::info('Found client by name', ['client_id' => $client['id'] ?? 'unknown', 'client_name' => $client['name'] ?? 'unknown']);
+                }
+            }
 
             // 2) If found → ensure contact exists on it, then return
             if ($client && !empty($client['id'])) {
                 $clientId = (int)$client['id'];
+                \Log::info('Using existing client', ['client_id' => $clientId, 'client_name' => $client['name'] ?? 'unknown']);
                 $this->ensureContactExists($clientId, $hints);
                 return ['id' => $clientId, 'created' => false, 'source' => 'resolved'];
             }
 
             // 3) Otherwise create a client (idempotent), then add contact
+            \Log::info('No existing client found, creating new client', [
+                'name' => $name ?: ($email ?: 'Unknown'),
+                'email' => $email
+            ]);
             $idKey = 'client:create:' . sha1(($name ?: '') . '|' . ($email ?: ''));
 
             // Build address only if we have address data
@@ -1303,10 +1340,12 @@ final class RobawsApiClient
 
             $clientId = (int)($resp['id'] ?? 0);
             if ($clientId > 0) {
+                \Log::info('Successfully created new client', ['client_id' => $clientId, 'client_name' => $resp['name'] ?? 'unknown']);
                 $this->ensureContactExists($clientId, $hints);
                 return ['id' => $clientId, 'created' => true, 'source' => 'created'];
             }
 
+            \Log::error('Failed to create client - no ID returned', ['response' => $resp]);
             throw new \RuntimeException('Failed to create or resolve client');
         });
     }
