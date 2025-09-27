@@ -54,13 +54,17 @@ return new class extends Migration
             $table->index($column, $indexName);
         } catch (\Exception $e) {
             // Index might already exist, continue silently
-            if (strpos($e->getMessage(), 'already exists') === false && 
-                strpos($e->getMessage(), 'duplicate key') === false &&
-                strpos($e->getMessage(), 'Duplicate table') === false &&
-                strpos($e->getMessage(), 'relation') === false) {
+            $message = $e->getMessage();
+            if (strpos($message, 'already exists') === false && 
+                strpos($message, 'duplicate key') === false &&
+                strpos($message, 'Duplicate table') === false &&
+                strpos($message, 'relation') === false &&
+                strpos($message, 'SQLSTATE[42P07]') === false) {
                 // Re-throw if it's a different error
                 throw $e;
             }
+            // Log that we're skipping this index
+            \Log::info("Skipping index creation for {$indexName} - already exists");
         }
     }
 
