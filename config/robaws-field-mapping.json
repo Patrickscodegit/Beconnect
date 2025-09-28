@@ -5,8 +5,7 @@
     "quotation_info": {
       "customer": {
         "sources": ["contact.name", "contact_info.name", "email_metadata.from", "document_data.contact.name"],
-        "default": "Unknown Customer",
-        "transform": "extract_name"
+        "default": "Unknown Customer"
       },
       "customer_reference": {
         "sources": [
