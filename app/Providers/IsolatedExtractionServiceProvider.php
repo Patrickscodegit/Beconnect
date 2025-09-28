@@ -20,18 +20,8 @@ class IsolatedExtractionServiceProvider extends ServiceProvider
             $useIsolated = config('extraction.use_isolated_strategies', true);
             
             if ($useIsolated) {
-                Log::info('Registering ISOLATED extraction strategy factory', [
-                    'provider' => 'IsolatedExtractionServiceProvider',
-                    'isolation_level' => 'complete'
-                ]);
-                
                 return new IsolatedExtractionStrategyFactory();
             } else {
-                Log::info('Registering SHARED extraction strategy factory', [
-                    'provider' => 'IsolatedExtractionServiceProvider',
-                    'isolation_level' => 'none'
-                ]);
-                
                 return new ExtractionStrategyFactory();
             }
         });
@@ -52,14 +42,7 @@ class IsolatedExtractionServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Log the strategy configuration on boot
-        $strategyMode = config('extraction.strategy_mode', 'isolated');
-        $useIsolated = config('extraction.use_isolated_strategies', true);
-        
-        Log::info('Extraction strategy configuration loaded', [
-            'strategy_mode' => $strategyMode,
-            'use_isolated_strategies' => $useIsolated,
-            'provider' => 'IsolatedExtractionServiceProvider'
-        ]);
+        // Configuration is loaded once during application bootstrap
+        // No need to log on every request
     }
 }

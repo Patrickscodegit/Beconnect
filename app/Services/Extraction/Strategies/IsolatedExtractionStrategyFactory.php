@@ -42,11 +42,6 @@ class IsolatedExtractionStrategyFactory implements ExtractionStrategyFactoryInte
      */
     private function registerIsolatedStrategies(): void
     {
-        Log::info('Registering ISOLATED extraction strategies', [
-            'factory' => 'IsolatedExtractionStrategyFactory',
-            'isolation_level' => 'complete'
-        ]);
-
         // Register isolated email strategy
         $this->register(app(IsolatedEmailExtractionStrategy::class));
 
@@ -62,10 +57,6 @@ class IsolatedExtractionStrategyFactory implements ExtractionStrategyFactoryInte
      */
     private function registerSharedStrategies(): void
     {
-        Log::info('Registering SHARED extraction strategies', [
-            'factory' => 'IsolatedExtractionStrategyFactory',
-            'isolation_level' => 'none'
-        ]);
 
         // Register original strategies
         $this->register(app(EmailExtractionStrategy::class));
