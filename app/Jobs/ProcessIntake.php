@@ -53,13 +53,14 @@ class ProcessIntake implements ShouldQueue
                 'status' => 'processing'
             ]);
             
-            // Dispatch orchestrator for coordinated background processing
-            // All heavy work (extraction, client creation, offer creation) happens in background
-            \App\Jobs\IntakeOrchestratorJob::dispatch($this->intake)->onQueue('default');
+            // Execute orchestrator synchronously to avoid queue context issues
+            // All heavy work (extraction, client creation, offer creation) happens synchronously
+            $orchestratorJob = new \App\Jobs\IntakeOrchestratorJob($this->intake);
+            $orchestratorJob->handle();
             
-            Log::info('Intake processed, orchestrator dispatched for background processing', [
+            Log::info('Intake processed, orchestrator executed synchronously', [
                 'intake_id' => $this->intake->id,
-                'method' => 'orchestrated_background_processing'
+                'method' => 'synchronous_orchestration'
             ]);
             
             return;
