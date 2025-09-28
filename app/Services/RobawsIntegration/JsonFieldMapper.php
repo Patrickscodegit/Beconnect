@@ -366,6 +366,11 @@ class JsonFieldMapper
                 
                 if (!is_string($value) || $value === '') return $value;
                 
+                // Special handling for Beverly Hills Car Club -> Los Angeles
+                if (stripos($value, 'Beverly Hills Car Club') !== false) {
+                    return 'Los Angeles';
+                }
+                
                 // European countries - always use Antwerp as POL
                 $europeanCountries = ['Nederland', 'Netherlands', 'België', 'Belgium', 'Germany', 'Duitsland', 'France', 'Frankrijk', 'Italy', 'Italië', 'Spain', 'Spanje', 'Portugal', 'Austria', 'Oostenrijk', 'Switzerland', 'Zwitserland', 'Denmark', 'Denemarken', 'Sweden', 'Zweden', 'Norway', 'Noorwegen', 'Finland', 'Finland', 'Poland', 'Polen', 'Czech Republic', 'Tsjechië', 'Hungary', 'Hongarije', 'Slovakia', 'Slowakije', 'Slovenia', 'Slovenië', 'Croatia', 'Kroatië', 'Romania', 'Roemenië', 'Bulgaria', 'Bulgarije', 'Greece', 'Griekenland', 'Ireland', 'Ierland', 'United Kingdom', 'Verenigd Koninkrijk', 'Luxembourg', 'Luxemburg'];
                 
@@ -430,7 +435,7 @@ class JsonFieldMapper
                 
             case 'format_dimensions':
                 Log::channel('robaws')->debug('format_dimensions input', ['value' => $value]);
-                return $this->transform_format_dimensions($value);
+                return $this->transform_format_dimensions($value, $fullData);
                 
             case 'normalize_city':
                 return $this->transform_normalize_city($value);
@@ -863,11 +868,15 @@ class JsonFieldMapper
     /**
      * Format dimensions from various inputs
      */
-    private function transform_format_dimensions($value): ?string
+    private function transform_format_dimensions($value, array $fullData = []): ?string
     {
-        // Accept already formatted strings
+        // Accept already formatted strings (but not vehicle names)
         if (is_string($value) && trim($value) !== '') {
-            return $value;
+            // Check if it's already a dimension string (contains 'x' and 'm')
+            if (strpos($value, ' x ') !== false && strpos($value, ' m') !== false) {
+                return $value;
+            }
+            // If it's a vehicle name, continue to dimension lookup
         }
 
         // Accept array/object with length/width/height (meters or mm/cm)
@@ -945,6 +954,75 @@ class JsonFieldMapper
             return implode(' // ', $formatParts);
         }
 
+        // Try to get dimensions from vehicle database or OpenAI
+        // Use fullData to get vehicle information
+        $make = data_get($fullData, 'raw_data.vehicle_make') ?? data_get($fullData, 'vehicle_make');
+        $model = data_get($fullData, 'raw_data.vehicle_model') ?? data_get($fullData, 'vehicle_model');
+        $year = data_get($fullData, 'raw_data.vehicle_year') ?? data_get($fullData, 'vehicle_year');
+        
+        if ($make && $model && $year) {
+            $dimensions = $this->getVehicleDimensions($make, $model, $year);
+            if ($dimensions) {
+                return $dimensions;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Get vehicle dimensions from database or OpenAI
+     */
+    private function getVehicleDimensions(string $make, string $model, string $year): ?string
+    {
+        try {
+            // First try the vehicle database
+            $vehicle = \App\Models\VehicleSpec::where('make', $make)
+                ->where('model', $model)
+                ->where('year', (int)$year)
+                ->first();
+            
+            if ($vehicle && $vehicle->length_m && $vehicle->width_m && $vehicle->height_m) {
+                $volume = $vehicle->length_m * $vehicle->width_m * $vehicle->height_m;
+                return sprintf('%.2f x %.2f x %.2f m // %.2f Cbm', 
+                    $vehicle->length_m, $vehicle->width_m, $vehicle->height_m, $volume);
+            }
+            
+            // Fallback to OpenAI for accurate dimensions
+            $openai = \OpenAI::client(config('services.openai.api_key'));
+            
+            $response = $openai->chat()->create([
+                'model' => 'gpt-4',
+                'messages' => [
+                    [
+                        'role' => 'user',
+                        'content' => "What are the exact dimensions (length, width, height) in meters for a {$year} {$make} {$model}? Please provide the measurements in meters with 2 decimal places in the format: LENGTH x WIDTH x HEIGHT m"
+                    ]
+                ],
+                'max_tokens' => 100
+            ]);
+            
+            $dimensions = trim($response->choices[0]->message->content);
+            
+            // Parse the response to extract dimensions
+            if (preg_match('/(\d+\.?\d*)\s*x\s*(\d+\.?\d*)\s*x\s*(\d+\.?\d*)\s*m/i', $dimensions, $matches)) {
+                $length = (float)$matches[1];
+                $width = (float)$matches[2];
+                $height = (float)$matches[3];
+                $volume = $length * $width * $height;
+                
+                return sprintf('%.2f x %.2f x %.2f m // %.2f Cbm', $length, $width, $height, $volume);
+            }
+            
+        } catch (\Exception $e) {
+            Log::warning('Failed to get vehicle dimensions', [
+                'make' => $make,
+                'model' => $model,
+                'year' => $year,
+                'error' => $e->getMessage()
+            ]);
+        }
+        
         return null;
     }
 
@@ -1028,20 +1106,45 @@ class JsonFieldMapper
      */
     private function formatSimpleCargo(mixed $value, array $fullData): ?string
     {
-        // Try to get vehicle details from the full data
+        // Try to get vehicle details from the full data (EML structure)
         $make = data_get($fullData, 'raw_data.expedition.vehicle.make');
         $model = data_get($fullData, 'raw_data.expedition.vehicle.model');
+        $year = data_get($fullData, 'raw_data.expedition.vehicle.year');
         $cargoType = data_get($fullData, 'raw_data.request.cargo.type');
         $cargoQuantity = data_get($fullData, 'raw_data.request.cargo.quantity');
         $transportCargoDesc = data_get($fullData, 'raw_data.transport_details.cargo.description');
         $transportCargoQty = data_get($fullData, 'raw_data.transport_details.cargo.quantity');
+        
+        // Try to get vehicle details from image data structure
+        $imageMake = data_get($fullData, 'raw_data.vehicle_make');
+        $imageModel = data_get($fullData, 'raw_data.vehicle_model');
+        $imageYear = data_get($fullData, 'raw_data.vehicle_year');
+        $imageCargoDesc = data_get($fullData, 'raw_data.cargo_description');
+        $imageQuantity = data_get($fullData, 'raw_data.quantity');
+        
+        // Try to get year from JSON structure
+        $jsonYear = data_get($fullData, 'raw_data.JSON');
+        if ($jsonYear && is_string($jsonYear)) {
+            $jsonData = json_decode($jsonYear, true);
+            if (isset($jsonData['vehicle_specifications']['year'])) {
+                $year = $year ?: $jsonData['vehicle_specifications']['year'];
+            }
+        }
+        
+        // Use image data if EML data is not available
+        $make = $make ?: $imageMake;
+        $model = $model ?: $imageModel;
+        $year = $year ?: $imageYear;
+        $cargoType = $cargoType ?: $imageCargoDesc;
+        $cargoQuantity = $cargoQuantity ?: $imageQuantity;
         
         // Check if vehicle is mentioned as "new" in the data
         $isNew = $this->isVehicleNew($fullData);
         $condition = $isNew ? 'new' : 'used';
         
         if ($make && $model) {
-            return "1 x {$condition} {$make} {$model}";
+            $yearText = $year ? " {$year}" : '';
+            return "1 x {$condition} {$make} {$model}{$yearText}";
         }
         
         if ($transportCargoDesc && $transportCargoQty) {

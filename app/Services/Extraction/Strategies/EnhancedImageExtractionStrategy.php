@@ -165,11 +165,7 @@ class EnhancedImageExtractionStrategy implements ExtractionStrategy
             'filename' => $document->filename
         ];
 
-        $aiResult = $this->aiRouter->extractAdvanced($extractionInput, 'comprehensive', [
-            'enhancement_mode' => true, // Flag for enhanced processing
-            'document_type' => 'image',
-            'isolation_mode' => true // Flag for isolated processing
-        ]);
+        $aiResult = $this->aiRouter->extractAdvanced($extractionInput, 'comprehensive', 'enhanced_image_extraction');
 
         // Process the AI result
         if (!empty($aiResult['extracted_data'])) {
@@ -211,11 +207,39 @@ class EnhancedImageExtractionStrategy implements ExtractionStrategy
         }
 
         // Enhanced contact data processing
-        if (!empty($extractedData['contact'])) {
+        if (!empty($extractedData['contact']) && !empty($extractedData['contact']['name'])) {
             $this->enhanceContactData($extractedData['contact']);
         } else {
             // NEW: Fallback contact extraction from filename patterns
             $extractedData['contact'] = $this->extractContactFromFilename($document->filename);
+            
+            Log::info('Contact extraction fallback', [
+                'document_id' => $document->id,
+                'filename' => $document->filename,
+                'extracted_contact' => $extractedData['contact'],
+                'strategy' => 'enhanced_image_extraction'
+            ]);
+            
+            // If still no contact, try to get from intake
+            if (empty($extractedData['contact']) || empty($extractedData['contact']['name'])) {
+                $intake = $document->intake;
+                if ($intake && $intake->customer_name) {
+                    $extractedData['contact'] = [
+                        'name' => $intake->customer_name,
+                        'email' => $intake->contact_email,
+                        'phone' => $intake->contact_phone
+                    ];
+                    
+                    Log::info('Contact extraction from intake fallback', [
+                        'document_id' => $document->id,
+                        'intake_id' => $intake->id,
+                        'customer_name' => $intake->customer_name,
+                        'contact_email' => $intake->contact_email,
+                        'final_contact' => $extractedData['contact'],
+                        'strategy' => 'enhanced_image_extraction'
+                    ]);
+                }
+            }
         }
 
         // Enhanced shipment data processing
@@ -262,37 +286,16 @@ class EnhancedImageExtractionStrategy implements ExtractionStrategy
     private function enhanceWithVehicleDatabase(array &$vehicleData): void
     {
         try {
-            $dbEnhancement = null;
-
-            // Try VIN lookup first (most accurate)
-            if (!empty($vehicleData['vin'])) {
-                Log::info('Enhancing vehicle data with VIN lookup', [
-                    'vin' => $vehicleData['vin'],
-                    'strategy' => 'enhanced_image_extraction'
-                ]);
-                
-                $dbEnhancement = $this->vehicleDb->enhanceByVin($vehicleData['vin']);
-            }
-            // Fallback to make/model lookup
-            elseif (!empty($vehicleData['make']) && !empty($vehicleData['model'])) {
-                Log::info('Enhancing vehicle data with make/model lookup', [
-                    'make' => $vehicleData['make'],
-                    'model' => $vehicleData['model'],
-                    'strategy' => 'enhanced_image_extraction'
-                ]);
-                
-                $dbEnhancement = $this->vehicleDb->enhanceByMakeModel(
-                    $vehicleData['make'], 
-                    $vehicleData['model']
-                );
-            }
-
-            // Merge database enhancement if found
-            if ($dbEnhancement && !empty($dbEnhancement)) {
-                $vehicleData = array_merge($vehicleData, $dbEnhancement);
+            // Use the enrichVehicleData method which handles all lookup strategies
+            $enrichedData = $this->vehicleDb->enrichVehicleData($vehicleData);
+            
+            // Only merge if we got meaningful enhancement
+            if ($enrichedData !== $vehicleData && !empty($enrichedData['database_match'])) {
+                $vehicleData = $enrichedData;
                 
                 Log::info('Vehicle data enhanced with database lookup', [
-                    'enhanced_fields' => array_keys($dbEnhancement),
+                    'enhanced_fields' => array_keys($enrichedData),
+                    'database_id' => $enrichedData['database_id'] ?? null,
                     'strategy' => 'enhanced_image_extraction'
                 ]);
             }
@@ -645,11 +648,7 @@ class EnhancedImageExtractionStrategy implements ExtractionStrategy
             ];
 
             // Try OCR-focused extraction
-            $ocrResult = $this->aiRouter->extractAdvanced($extractionInput, 'ocr_fallback', [
-                'extraction_mode' => 'ocr_text_heavy',
-                'document_type' => 'image',
-                'fallback_mode' => true
-            ]);
+            $ocrResult = $this->aiRouter->extractAdvanced($extractionInput, 'ocr_fallback', 'ocr_text_heavy');
 
             if (!empty($ocrResult['extracted_data'])) {
                 $extractedData = $ocrResult['extracted_data'];
@@ -718,6 +717,25 @@ class EnhancedImageExtractionStrategy implements ExtractionStrategy
                         ]);
                         break;
                     }
+                }
+            }
+            
+            // If no pattern matched, try to extract name from filename without extension
+            if (empty($contact['name'])) {
+                $name = pathinfo($filename, PATHINFO_FILENAME);
+                $name = str_replace(['_', '-'], ' ', $name);
+                $name = preg_replace('/\s+/', ' ', $name);
+                $name = trim($name);
+                
+                // Only use if it looks like a person's name (not too long, no numbers)
+                if (!empty($name) && strlen($name) > 2 && strlen($name) < 50 && !preg_match('/\d/', $name)) {
+                    $contact['name'] = $name;
+                    
+                    Log::info('Contact extracted from filename (fallback)', [
+                        'filename' => $filename,
+                        'extracted_name' => $name,
+                        'strategy' => 'enhanced_image_extraction'
+                    ]);
                 }
             }
             

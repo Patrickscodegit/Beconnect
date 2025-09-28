@@ -70,25 +70,59 @@ class EnhancedRobawsIntegrationService
             'currency'        => 'EUR',
             'companyId'       => config('services.robaws.default_company_id', config('services.robaws.company_id')),
             'status'          => 'Draft',
+            // Add unique identifier to force new offer creation
+            'externalId'      => 'bconnect_doc_' . $document->id . '_' . time(),
         ];
 
-        Log::channel('robaws')->info('Robaws CREATE offer', ['payload' => $payload]);
-        $created = $this->robawsClient->createQuotation($payload);
-        $offerId = $created['quotation_id'] ?? null;
+        // Generate unique idempotency key to ensure each document gets its own offer
+        $idempotencyKey = 'bconnect_doc_' . $document->id . '_' . time();
+        
+        Log::channel('robaws')->info('Robaws CREATE offer', [
+            'payload' => $payload,
+            'idempotency_key' => $idempotencyKey
+        ]);
+        $created = $this->robawsClient->createQuotation($payload, $idempotencyKey);
+        
+        // Log the response for debugging
+        Log::channel('robaws')->info('Robaws CREATE offer result', [
+            'success' => $created['success'] ?? false,
+            'quotation_id' => $created['quotation_id'] ?? null,
+            'data' => $created['data'] ?? null,
+            'error' => $created['error'] ?? null,
+            'status' => $created['status'] ?? null,
+        ]);
+        
+        $offerId = $created['quotation_id'] ?? $created['id'] ?? null;
         if (!$offerId) {
-            throw new \RuntimeException('Robaws createQuotation returned no id');
+            throw new \RuntimeException('Robaws createQuotation returned no id: ' . json_encode($created));
         }
 
         // GET → merge extraFields → PUT full model
         $remote  = $this->robawsClient->getOffer($offerId);
         $updated = $this->stripOfferReadOnly($remote['data'] ?? []);
         $updated['extraFields'] = array_merge($remote['extraFields'] ?? [], $this->buildExtraFieldsFromMapped($mapped));
+        
+        // Ensure companyId is present in the update payload
+        if (!isset($updated['companyId'])) {
+            $updated['companyId'] = config('services.robaws.default_company_id', config('services.robaws.company_id'));
+        }
 
         Log::channel('robaws')->info('Robaws UPDATE offer (extraFields)', [
             'offer_id' => $offerId,
             'labels'   => array_keys($updated['extraFields'] ?? []),
+            'extraFields' => $updated['extraFields'] ?? [],
+            'payload_size' => strlen(json_encode($updated)),
+            'payload_keys' => array_keys($updated),
         ]);
-        $this->robawsClient->updateQuotation($offerId, $updated);
+        
+        $updateResult = $this->robawsClient->updateQuotation($offerId, $updated);
+        Log::channel('robaws')->info('Robaws UPDATE result', [
+            'offer_id' => $offerId,
+            'success' => $updateResult['success'] ?? false,
+            'response' => $updateResult['data'] ?? null,
+            'error' => $updateResult['error'] ?? null,
+            'status' => $updateResult['status'] ?? null,
+        ]);
         
         // Verify the update by pulling and logging key fields
         $after = $this->robawsClient->getOffer($offerId);
@@ -191,11 +225,8 @@ class EnhancedRobawsIntegrationService
         $put('cargo', $m['cargo'] ?? null);
         $put('dim_bef_delivery', $m['dim_bef_delivery'] ?? null);
 
-        // Raw JSON — handy in the Robaws JSON field
-        if (!empty($m['JSON'])) {
-            $jsonLabel = $L['json'] ?? 'JSON';
-            $xf[$jsonLabel] = ['stringValue' => $m['JSON']];
-        }
+        // Skip JSON field to avoid payload size issues
+        // Raw JSON is too large and causes 500 errors
         return $xf;
     }
 

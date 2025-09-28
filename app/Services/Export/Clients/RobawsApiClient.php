@@ -668,6 +668,14 @@ final class RobawsApiClient
                 ->withHeaders($headers)
                 ->post('/api/v2/offers', $payload);
 
+            // Log the response for debugging
+            \Log::channel('robaws')->info('Robaws CREATE offer response', [
+                'status' => $response->status(),
+                'successful' => $response->successful(),
+                'body' => $response->body(),
+                'headers' => $response->headers(),
+            ]);
+
             if ($response->successful()) {
                 $data = $response->json();
                 return [
