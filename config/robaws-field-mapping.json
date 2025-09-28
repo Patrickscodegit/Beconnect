@@ -113,7 +113,7 @@
           "raw_data.vehicle_model",
           "raw_data.vehicle_year"
         ],
-        "default": "4.04 x 1.55 x 1.32 m (L x W x H)"
+        "default": null
       },
       "weight_kg": {
         "sources": [
