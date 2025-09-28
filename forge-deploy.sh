@@ -21,18 +21,22 @@ $FORGE_PHP artisan view:clear
 echo "🗄️ Running database migrations..."
 $FORGE_PHP artisan migrate --force
 
-# 4. Cache configuration for production
+# 4. Seed essential data (vehicle specs, WMIs, users)
+echo "🌱 Seeding essential data..."
+$FORGE_PHP artisan db:seed --force
+
+# 5. Cache configuration for production
 echo "⚡ Caching configuration..."
 $FORGE_PHP artisan config:cache
 $FORGE_PHP artisan route:cache
 $FORGE_PHP artisan view:cache
 
-# 5. Set proper storage permissions
+# 6. Set proper storage permissions
 echo "🔐 Setting storage permissions..."
 chmod -R 775 storage
 chmod -R 775 bootstrap/cache
 
-# 6. Ensure storage disk column exists and is populated
+# 7. Ensure storage disk column exists and is populated
 echo "📊 Updating document storage disk values..."
 $FORGE_PHP artisan tinker --execute="
 use Illuminate\Support\Facades\Schema;
@@ -56,7 +60,7 @@ if (!Schema::hasColumn('documents', 'storage_disk')) {
 echo 'Updated ' . \$updated . ' documents with storage_disk = ' . \$disk . PHP_EOL;
 "
 
-# 7. Test Robaws connection
+# 8. Test Robaws connection
 echo "🌐 Testing Robaws connection..."
 $FORGE_PHP artisan tinker --execute="
 try {
@@ -73,7 +77,7 @@ try {
 }
 "
 
-# 8. Restart queue workers if they exist
+# 9. Restart queue workers if they exist
 echo "🔄 Restarting queue workers..."
 if $FORGE_PHP artisan queue:restart >/dev/null 2>&1; then
     echo "✅ Queue workers restarted"
@@ -81,7 +85,7 @@ else
     echo "ℹ️ No queue workers to restart"
 fi
 
-# 9. Run a quick system health check
+# 10. Run a quick system health check
 echo "🏥 Running system health check..."
 $FORGE_PHP artisan tinker --execute="
 echo '🔍 System Health Check:' . PHP_EOL;

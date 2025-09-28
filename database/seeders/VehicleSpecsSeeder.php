@@ -65,20 +65,24 @@ class VehicleSpecsSeeder extends Seeder
                 continue;
             }
 
-            VehicleSpec::create([
-                'make' => $data[0],
-                'model' => $data[1],
-                'variant' => !empty($data[2]) ? $data[2] : null,
-                'year' => (int) $data[3],
-                'length_m' => (float) $data[5],
-                'width_m' => (float) $data[6],
-                'height_m' => (float) $data[7],
-                'wheelbase_m' => (float) $data[8],
-                'weight_kg' => (int) $data[9],
-                'engine_cc' => (int) $data[10],
-                'fuel_type' => strtolower($data[11]), // Convert to lowercase to match our enum
-                'wmi_id' => $wmi->id,
-            ]);
+            VehicleSpec::firstOrCreate(
+                [
+                    'make' => $data[0],
+                    'model' => $data[1],
+                    'year' => (int) $data[3],
+                    'variant' => !empty($data[2]) ? $data[2] : null,
+                ],
+                [
+                    'length_m' => (float) $data[5],
+                    'width_m' => (float) $data[6],
+                    'height_m' => (float) $data[7],
+                    'wheelbase_m' => (float) $data[8],
+                    'weight_kg' => (int) $data[9],
+                    'engine_cc' => (int) $data[10],
+                    'fuel_type' => strtolower($data[11]), // Convert to lowercase to match our enum
+                    'wmi_id' => $wmi->id,
+                ]
+            );
             $count++;
         }
 

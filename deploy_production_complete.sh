@@ -85,6 +85,14 @@ migrate_database() {
     echo "✅ Database migrations complete"
 }
 
+# Function to seed essential data
+seed_database() {
+    echo ""
+    echo "🌱 Seeding essential data..."
+    php artisan db:seed --force
+    echo "✅ Database seeding complete"
+}
+
 # Function to test storage configuration
 test_storage() {
     echo ""
@@ -148,6 +156,7 @@ main() {
     update_environment
     cache_config
     migrate_database
+    seed_database
     test_storage
     cleanup
     
@@ -160,6 +169,7 @@ main() {
     echo "• Storage disk: 'documents' (environment-aware)"
     echo "• Files stored in: bconnect-documents bucket (fra1)"
     echo "• Database migrations applied"
+    echo "• Essential data seeded (vehicle specs, WMIs, users)"
     echo "• Configuration cached"
     echo "• Storage functionality tested"
     echo ""
