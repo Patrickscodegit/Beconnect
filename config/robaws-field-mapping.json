@@ -4,7 +4,7 @@
   "field_mappings": {
     "quotation_info": {
       "customer": {
-        "sources": ["contact.name", "contact_info.name", "email_metadata.from", "document_data.contact.name"],
+        "sources": ["contact.name", "contact_info.name", "email_metadata.from", "document_data.contact.name", "intake.customer_name"],
         "default": "Unknown Customer"
       },
       "customer_reference": {
@@ -43,11 +43,11 @@
         "default": null
       },
       "contact": {
-        "sources": ["contact.phone", "contact_info.phone_number", "contact.phone_number", "contact_phone"],
+        "sources": ["contact.phone", "contact_info.phone_number", "contact.phone_number", "contact_phone", "intake.contact_phone"],
         "default": null
       },
       "client_email": {
-        "sources": ["contact.email", "contact_info.email", "email", "document_data.contact.email"],
+        "sources": ["contact.email", "contact_info.email", "email", "document_data.contact.email", "intake.contact_email"],
         "default": null,
         "validate": "email"
       },

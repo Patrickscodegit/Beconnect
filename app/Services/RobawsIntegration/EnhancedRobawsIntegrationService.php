@@ -342,7 +342,20 @@ class EnhancedRobawsIntegrationService
                 // Map the extracted data using JSON configuration
                 // Include existing robaws data as sources to preserve existing values
                 $existingRobawsData = $document->robaws_quotation_data ?? [];
-                $enrichedData = array_merge($extractedData, $existingRobawsData);
+                
+                // Include intake form data for WhatsApp screenshots and other cases
+                $intakeData = [];
+                if ($document->intake) {
+                    $intakeData = [
+                        'intake' => [
+                            'customer_name' => $document->intake->customer_name,
+                            'contact_email' => $document->intake->contact_email,
+                            'contact_phone' => $document->intake->contact_phone,
+                        ]
+                    ];
+                }
+                
+                $enrichedData = array_merge($extractedData, $existingRobawsData, $intakeData);
                 
                 $robawsData = $this->fieldMapper->mapFields($enrichedData);
                 
