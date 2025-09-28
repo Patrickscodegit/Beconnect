@@ -2,8 +2,10 @@
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 use App\Services\AiRouter;
 use App\Helpers\FileInput;
+use App\Jobs\UpdateVehicleDatabaseJob;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -51,3 +53,6 @@ Artisan::command('test:ai-extraction', function () {
         $this->line('Trace: ' . $e->getTraceAsString());
     }
 })->purpose('Test AI extraction with WhatsApp shipping image');
+
+// Schedule vehicle database maintenance weekly
+Schedule::job(new UpdateVehicleDatabaseJob())->weekly()->sundays()->at('02:00');

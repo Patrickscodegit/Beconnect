@@ -1018,8 +1018,20 @@ class JsonFieldMapper
                 
                 if ($vehicle && $vehicle->length_m && $vehicle->width_m && $vehicle->height_m) {
                     $volume = $vehicle->length_m * $vehicle->width_m * $vehicle->height_m;
-                    return sprintf('%.2f x %.2f x %.2f m // %.2f Cbm', 
+                    $formattedDimensions = sprintf('%.2f x %.2f x %.2f m // %.2f Cbm', 
                         $vehicle->length_m, $vehicle->width_m, $vehicle->height_m, $volume);
+                    
+                    // Log successful database lookup
+                    Log::info('Vehicle dimensions retrieved from database', [
+                        'make' => $normalizedMake,
+                        'model' => $normalizedModel,
+                        'year' => $year,
+                        'dimensions' => $formattedDimensions,
+                        'source' => 'database',
+                        'vehicle_id' => $vehicle->id
+                    ]);
+                    
+                    return $formattedDimensions;
                 }
             }
             
@@ -1031,14 +1043,35 @@ class JsonFieldMapper
             
             if ($vehicle && $vehicle->length_m && $vehicle->width_m && $vehicle->height_m) {
                 $volume = $vehicle->length_m * $vehicle->width_m * $vehicle->height_m;
-                return sprintf('%.2f x %.2f x %.2f m // %.2f Cbm', 
+                $formattedDimensions = sprintf('%.2f x %.2f x %.2f m // %.2f Cbm', 
                     $vehicle->length_m, $vehicle->width_m, $vehicle->height_m, $volume);
+                
+                // Log successful database lookup (fuzzy match)
+                Log::info('Vehicle dimensions retrieved from database (fuzzy match)', [
+                    'make' => $normalizedMake,
+                    'model' => $normalizedModel,
+                    'year' => $year,
+                    'dimensions' => $formattedDimensions,
+                    'source' => 'database_fuzzy',
+                    'vehicle_id' => $vehicle->id,
+                    'matched_year' => $vehicle->year
+                ]);
+                
+                return $formattedDimensions;
             }
             
             // Check cache first to avoid repeated OpenAI calls
             $cacheKey = "vehicle_dimensions_{$normalizedMake}_{$normalizedModel}" . ($year ? "_{$year}" : '');
             $cachedDimensions = \Cache::get($cacheKey);
             if ($cachedDimensions) {
+                // Log cache hit
+                Log::info('Vehicle dimensions retrieved from cache', [
+                    'make' => $normalizedMake,
+                    'model' => $normalizedModel,
+                    'year' => $year,
+                    'dimensions' => $cachedDimensions,
+                    'source' => 'cache'
+                ]);
                 return $cachedDimensions;
             }
             
@@ -1066,9 +1099,33 @@ class JsonFieldMapper
                 $length = (float)$matches[1];
                 $width = (float)$matches[2];
                 $height = (float)$matches[3];
-                $volume = $length * $width * $height;
                 
+                // Validate dimensions
+                $validation = $this->validateVehicleDimensions($length, $width, $height, $normalizedMake, $normalizedModel);
+                if (!$validation['valid']) {
+                    Log::warning('Invalid vehicle dimensions from OpenAI', [
+                        'make' => $normalizedMake,
+                        'model' => $normalizedModel,
+                        'year' => $year,
+                        'dimensions' => "{$length} x {$width} x {$height} m",
+                        'reason' => $validation['reason']
+                    ]);
+                    
+                    // Return null to fall back to default
+                    return null;
+                }
+                
+                $volume = $length * $width * $height;
                 $formattedDimensions = sprintf('%.2f x %.2f x %.2f m // %.2f Cbm', $length, $width, $height, $volume);
+                
+                // Log successful OpenAI lookup
+                Log::info('Vehicle dimensions retrieved from OpenAI', [
+                    'make' => $normalizedMake,
+                    'model' => $normalizedModel,
+                    'year' => $year,
+                    'dimensions' => $formattedDimensions,
+                    'source' => 'openai'
+                ]);
                 
                 // Cache the result for 24 hours
                 \Cache::put($cacheKey, $formattedDimensions, 86400);
@@ -1464,5 +1521,51 @@ class JsonFieldMapper
         ];
         
         return $map[$city] ?? strtoupper(substr($city, 0, 3));
+    }
+
+    /**
+     * Validate vehicle dimensions for sanity checks
+     */
+    private function validateVehicleDimensions(float $length, float $width, float $height, string $make, string $model): array
+    {
+        // Basic sanity checks
+        if ($length < 2.0 || $length > 8.0) {
+            return ['valid' => false, 'reason' => "Length {$length}m is outside reasonable range (2-8m)"];
+        }
+        
+        if ($width < 1.0 || $width > 3.0) {
+            return ['valid' => false, 'reason' => "Width {$width}m is outside reasonable range (1-3m)"];
+        }
+        
+        if ($height < 1.0 || $height > 3.0) {
+            return ['valid' => false, 'reason' => "Height {$height}m is outside reasonable range (1-3m)"];
+        }
+        
+        // Luxury sedan specific validation
+        $luxuryMakes = ['BMW', 'Mercedes-Benz', 'Audi', 'Lexus', 'Porsche', 'Jaguar', 'Bentley', 'Rolls-Royce'];
+        $luxuryModels = ['7 Series', 'S-Class', 'A8', 'LS', 'Panamera', 'XJ', 'Continental', 'Phantom'];
+        
+        $isLuxuryMake = in_array($make, $luxuryMakes);
+        $isLuxuryModel = in_array($model, $luxuryModels);
+        
+        if ($isLuxuryMake || $isLuxuryModel) {
+            // Luxury sedans should be at least 4.5m long
+            if ($length < 4.5) {
+                return ['valid' => false, 'reason' => "Luxury sedan {$make} {$model} length {$length}m is too short (minimum 4.5m)"];
+            }
+            
+            // Luxury sedans should be at least 1.8m wide
+            if ($width < 1.8) {
+                return ['valid' => false, 'reason' => "Luxury sedan {$make} {$model} width {$width}m is too narrow (minimum 1.8m)"];
+            }
+        }
+        
+        // Volume sanity check (should be reasonable for a vehicle)
+        $volume = $length * $width * $height;
+        if ($volume < 5.0 || $volume > 50.0) {
+            return ['valid' => false, 'reason' => "Volume {$volume}m³ is outside reasonable range (5-50m³)"];
+        }
+        
+        return ['valid' => true, 'reason' => 'Dimensions passed all validation checks'];
     }
 }
