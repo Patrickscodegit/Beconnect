@@ -960,10 +960,39 @@ class JsonFieldMapper
         $model = data_get($fullData, 'raw_data.vehicle_model') ?? data_get($fullData, 'vehicle_model');
         $year = data_get($fullData, 'raw_data.vehicle_year') ?? data_get($fullData, 'vehicle_year');
         
-        if ($make && $model && $year) {
-            $dimensions = $this->getVehicleDimensions($make, $model, $year);
+        // Enhanced vehicle dimension lookup with fallbacks
+        if ($make && $model) {
+            // Try with year if available
+            if ($year) {
+                $dimensions = $this->getVehicleDimensions($make, $model, $year);
+                if ($dimensions) {
+                    return $dimensions;
+                }
+            }
+            
+            // Try without year (more flexible)
+            $dimensions = $this->getVehicleDimensions($make, $model, null);
             if ($dimensions) {
                 return $dimensions;
+            }
+        }
+        
+        // Try to extract vehicle info from cargo description if not found
+        $cargoDescription = data_get($fullData, 'raw_data.cargo_description') ?? 
+                           data_get($fullData, 'cargo_description') ?? 
+                           data_get($fullData, 'raw_data.JSON.cargo_description');
+        
+        if ($cargoDescription && is_string($cargoDescription)) {
+            $extractedVehicle = $this->extractVehicleFromDescription($cargoDescription);
+            if ($extractedVehicle['make'] && $extractedVehicle['model']) {
+                $dimensions = $this->getVehicleDimensions(
+                    $extractedVehicle['make'], 
+                    $extractedVehicle['model'], 
+                    $extractedVehicle['year']
+                );
+                if ($dimensions) {
+                    return $dimensions;
+                }
             }
         }
 
@@ -973,13 +1002,31 @@ class JsonFieldMapper
     /**
      * Get vehicle dimensions from database or OpenAI
      */
-    private function getVehicleDimensions(string $make, string $model, string $year): ?string
+    private function getVehicleDimensions(string $make, string $model, ?string $year = null): ?string
     {
         try {
-            // First try the vehicle database
-            $vehicle = \App\Models\VehicleSpec::where('make', $make)
-                ->where('model', $model)
-                ->where('year', (int)$year)
+            // Normalize make and model for better matching
+            $normalizedMake = $this->normalizeVehicleMake($make);
+            $normalizedModel = $this->normalizeVehicleModel($model);
+            
+            // First try the vehicle database (exact match with year)
+            if ($year) {
+                $vehicle = \App\Models\VehicleSpec::where('make', $normalizedMake)
+                    ->where('model', $normalizedModel)
+                    ->where('year', (int)$year)
+                    ->first();
+                
+                if ($vehicle && $vehicle->length_m && $vehicle->width_m && $vehicle->height_m) {
+                    $volume = $vehicle->length_m * $vehicle->width_m * $vehicle->height_m;
+                    return sprintf('%.2f x %.2f x %.2f m // %.2f Cbm', 
+                        $vehicle->length_m, $vehicle->width_m, $vehicle->height_m, $volume);
+                }
+            }
+            
+            // Try database without year (fuzzy match)
+            $vehicle = \App\Models\VehicleSpec::where('make', $normalizedMake)
+                ->where('model', $normalizedModel)
+                ->orderBy('year', 'desc')
                 ->first();
             
             if ($vehicle && $vehicle->length_m && $vehicle->width_m && $vehicle->height_m) {
@@ -988,15 +1035,25 @@ class JsonFieldMapper
                     $vehicle->length_m, $vehicle->width_m, $vehicle->height_m, $volume);
             }
             
+            // Check cache first to avoid repeated OpenAI calls
+            $cacheKey = "vehicle_dimensions_{$normalizedMake}_{$normalizedModel}" . ($year ? "_{$year}" : '');
+            $cachedDimensions = \Cache::get($cacheKey);
+            if ($cachedDimensions) {
+                return $cachedDimensions;
+            }
+            
             // Fallback to OpenAI for accurate dimensions
             $openai = \OpenAI::client(config('services.openai.api_key'));
+            
+            $yearText = $year ? "{$year} " : '';
+            $prompt = "What are the exact dimensions (length, width, height) in meters for a {$yearText}{$normalizedMake} {$normalizedModel}? Please provide the measurements in meters with 2 decimal places in the format: LENGTH x WIDTH x HEIGHT m";
             
             $response = $openai->chat()->create([
                 'model' => 'gpt-4',
                 'messages' => [
                     [
                         'role' => 'user',
-                        'content' => "What are the exact dimensions (length, width, height) in meters for a {$year} {$make} {$model}? Please provide the measurements in meters with 2 decimal places in the format: LENGTH x WIDTH x HEIGHT m"
+                        'content' => $prompt
                     ]
                 ],
                 'max_tokens' => 100
@@ -1011,7 +1068,12 @@ class JsonFieldMapper
                 $height = (float)$matches[3];
                 $volume = $length * $width * $height;
                 
-                return sprintf('%.2f x %.2f x %.2f m // %.2f Cbm', $length, $width, $height, $volume);
+                $formattedDimensions = sprintf('%.2f x %.2f x %.2f m // %.2f Cbm', $length, $width, $height, $volume);
+                
+                // Cache the result for 24 hours
+                \Cache::put($cacheKey, $formattedDimensions, 86400);
+                
+                return $formattedDimensions;
             }
             
         } catch (\Exception $e) {
@@ -1024,6 +1086,107 @@ class JsonFieldMapper
         }
         
         return null;
+    }
+
+    /**
+     * Normalize vehicle make for better database matching
+     */
+    private function normalizeVehicleMake(string $make): string
+    {
+        $make = trim($make);
+        
+        // Common make normalizations
+        $normalizations = [
+            'BMW' => 'BMW',
+            'Mercedes-Benz' => 'Mercedes-Benz',
+            'Mercedes' => 'Mercedes-Benz',
+            'Audi' => 'Audi',
+            'Volkswagen' => 'Volkswagen',
+            'VW' => 'Volkswagen',
+            'Toyota' => 'Toyota',
+            'Honda' => 'Honda',
+            'Ford' => 'Ford',
+            'Chevrolet' => 'Chevrolet',
+            'Chevy' => 'Chevrolet',
+        ];
+        
+        return $normalizations[$make] ?? $make;
+    }
+
+    /**
+     * Normalize vehicle model for better database matching
+     */
+    private function normalizeVehicleModel(string $model): string
+    {
+        $model = trim($model);
+        
+        // Common model normalizations
+        $normalizations = [
+            'Série 7' => '7 Series',
+            'Serie 7' => '7 Series',
+            '7-Series' => '7 Series',
+            '7_Series' => '7 Series',
+            'Série 5' => '5 Series',
+            'Serie 5' => '5 Series',
+            '5-Series' => '5 Series',
+            '5_Series' => '5 Series',
+            'Série 3' => '3 Series',
+            'Serie 3' => '3 Series',
+            '3-Series' => '3 Series',
+            '3_Series' => '3 Series',
+            'S-Class' => 'S-Class',
+            'S_Class' => 'S-Class',
+            'E-Class' => 'E-Class',
+            'E_Class' => 'E-Class',
+            'C-Class' => 'C-Class',
+            'C_Class' => 'C-Class',
+            'A8' => 'A8',
+            'A6' => 'A6',
+            'A4' => 'A4',
+        ];
+        
+        return $normalizations[$model] ?? $model;
+    }
+
+    /**
+     * Extract vehicle information from cargo description
+     */
+    private function extractVehicleFromDescription(string $description): array
+    {
+        $result = ['make' => null, 'model' => null, 'year' => null];
+        
+        // Common patterns for vehicle extraction
+        $patterns = [
+            // "1 x used BMW Série 7"
+            '/(\d+)\s*x\s*(?:used|new)?\s*([A-Za-z]+)\s+([A-Za-z0-9\s\-_]+)/i',
+            // "BMW 7 Series"
+            '/([A-Za-z]+)\s+([A-Za-z0-9\s\-_]+)/i',
+            // "2020 BMW 7 Series"
+            '/(\d{4})\s+([A-Za-z]+)\s+([A-Za-z0-9\s\-_]+)/i',
+        ];
+        
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $description, $matches)) {
+                if (count($matches) >= 4) {
+                    // Pattern with year
+                    $result['year'] = $matches[1];
+                    $result['make'] = $matches[2];
+                    $result['model'] = trim($matches[3]);
+                } elseif (count($matches) >= 3) {
+                    // Pattern without year
+                    $result['make'] = $matches[1];
+                    $result['model'] = trim($matches[2]);
+                }
+                break;
+            }
+        }
+        
+        // Try to extract year separately if not found
+        if (!$result['year'] && preg_match('/(\d{4})/', $description, $yearMatches)) {
+            $result['year'] = $yearMatches[1];
+        }
+        
+        return $result;
     }
 
     /**
