@@ -9,3 +9,59 @@ Tesla,Model 3,1st Gen,2021,Sedan,4.694,1.849,1.443,2.875,1760,0,electric,BEV,Uni
 Ford,F-150,13th Gen,2018,Pickup SC,5.316,2.029,1.961,3.683,2200,3496,petrol,ICE,United States,curb,without_mirrors,2025-08-15,Manufacturer Technical Sheet,1FT
 Volvo,XC90,SPA,2025,SUV,4.953,1.923,1.776,2.984,2180,1969,hybrid,PHEV,Sweden,curb,without_mirrors,2025-08-15,Manufacturer Technical Sheet,YV1
 Honda,Civic,FK,2018,Hatchback,4.518,1.799,1.434,2.7,1316,1498,petrol,ICE,United Kingdom,curb,without_mirrors,2025-08-15,Manufacturer Technical Sheet,SHH
+BMW,7 Series,G11,2015,Sedan,5.39,1.95,1.54,3.21,1800,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,7 Series,G11,2016,Sedan,5.39,1.95,1.54,3.21,1800,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,7 Series,G11,2017,Sedan,5.39,1.95,1.54,3.21,1800,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,7 Series,G11,2018,Sedan,5.39,1.95,1.54,3.21,1800,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,7 Series,G11,2019,Sedan,5.39,1.95,1.54,3.21,1800,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,7 Series,G11,2020,Sedan,5.39,1.95,1.54,3.21,1800,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,7 Series,G11,2021,Sedan,5.39,1.95,1.54,3.21,1800,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,7 Series,G11,2022,Sedan,5.39,1.95,1.54,3.21,1800,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,7 Series,G11,2023,Sedan,5.39,1.95,1.54,3.21,1800,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,7 Series,G11,2024,Sedan,5.39,1.95,1.54,3.21,1800,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+Mercedes-Benz,S-Class,W222,2013,Sedan,5.18,1.92,1.50,3.16,1900,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,S-Class,W222,2014,Sedan,5.18,1.92,1.50,3.16,1900,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,S-Class,W222,2015,Sedan,5.18,1.92,1.50,3.16,1900,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,S-Class,W222,2016,Sedan,5.18,1.92,1.50,3.16,1900,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,S-Class,W222,2017,Sedan,5.18,1.92,1.50,3.16,1900,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,S-Class,W222,2018,Sedan,5.18,1.92,1.50,3.16,1900,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,S-Class,W222,2019,Sedan,5.18,1.92,1.50,3.16,1900,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,S-Class,W222,2020,Sedan,5.18,1.92,1.50,3.16,1900,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,S-Class,W223,2020,Sedan,5.18,1.92,1.50,3.16,1900,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,S-Class,W223,2021,Sedan,5.18,1.92,1.50,3.16,1900,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,S-Class,W223,2022,Sedan,5.18,1.92,1.50,3.16,1900,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,S-Class,W223,2023,Sedan,5.18,1.92,1.50,3.16,1900,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,S-Class,W223,2024,Sedan,5.18,1.92,1.50,3.16,1900,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Audi,A8,D4,2010,Sedan,5.17,1.95,1.47,3.12,1850,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A8,D4,2011,Sedan,5.17,1.95,1.47,3.12,1850,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A8,D4,2012,Sedan,5.17,1.95,1.47,3.12,1850,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A8,D4,2013,Sedan,5.17,1.95,1.47,3.12,1850,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A8,D4,2014,Sedan,5.17,1.95,1.47,3.12,1850,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A8,D4,2015,Sedan,5.17,1.95,1.47,3.12,1850,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A8,D4,2016,Sedan,5.17,1.95,1.47,3.12,1850,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A8,D4,2017,Sedan,5.17,1.95,1.47,3.12,1850,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A8,D5,2017,Sedan,5.17,1.95,1.47,3.12,1850,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A8,D5,2018,Sedan,5.17,1.95,1.47,3.12,1850,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A8,D5,2019,Sedan,5.17,1.95,1.47,3.12,1850,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A8,D5,2020,Sedan,5.17,1.95,1.47,3.12,1850,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A8,D5,2021,Sedan,5.17,1.95,1.47,3.12,1850,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A8,D5,2022,Sedan,5.17,1.95,1.47,3.12,1850,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A8,D5,2023,Sedan,5.17,1.95,1.47,3.12,1850,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A8,D5,2024,Sedan,5.17,1.95,1.47,3.12,1850,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Lexus,LS,XF50,2017,Sedan,5.23,1.90,1.45,3.12,1950,3500,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,LS,XF50,2018,Sedan,5.23,1.90,1.45,3.12,1950,3500,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,LS,XF50,2019,Sedan,5.23,1.90,1.45,3.12,1950,3500,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,LS,XF50,2020,Sedan,5.23,1.90,1.45,3.12,1950,3500,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,LS,XF50,2021,Sedan,5.23,1.90,1.45,3.12,1950,3500,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,LS,XF50,2022,Sedan,5.23,1.90,1.45,3.12,1950,3500,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,LS,XF50,2023,Sedan,5.23,1.90,1.45,3.12,1950,3500,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,LS,XF50,2024,Sedan,5.23,1.90,1.45,3.12,1950,3500,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Porsche,Panamera,971,2016,Sedan,5.05,1.94,1.42,2.95,1750,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Panamera,971,2017,Sedan,5.05,1.94,1.42,2.95,1750,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Panamera,971,2018,Sedan,5.05,1.94,1.42,2.95,1750,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Panamera,971,2019,Sedan,5.05,1.94,1.42,2.95,1750,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Panamera,971,2020,Sedan,5.05,1.94,1.42,2.95,1750,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Panamera,971,2021,Sedan,5.05,1.94,1.42,2.95,1750,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Panamera,971,2022,Sedan,5.05,1.94,1.42,2.95,1750,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Panamera,971,2023,Sedan,5.05,1.94,1.42,2.95,1750,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Panamera,971,2024,Sedan,5.05,1.94,1.42,2.95,1750,3000,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
