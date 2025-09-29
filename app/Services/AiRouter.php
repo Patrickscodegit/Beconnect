@@ -208,11 +208,28 @@ class AiRouter
                 'error' => $e->getMessage()
             ]);
 
-            // Try fallback service
+            // Try fallback service - prevent infinite recursion
             $fallbackService = config('ai.fallback_service');
-            if ($fallbackService && $fallbackService !== $service) {
-                return $this->extract($text, $schema, array_merge($options, ['service' => $fallbackService]));
+            if ($fallbackService && $fallbackService !== $service && !isset($options['_fallback_attempted'])) {
+                $this->logger->info('Attempting fallback to service', [
+                    'from_service' => $service,
+                    'to_service' => $fallbackService
+                ]);
+                
+                // Mark that we've attempted fallback to prevent infinite recursion
+                $fallbackOptions = array_merge($options, [
+                    'service' => $fallbackService,
+                    '_fallback_attempted' => true
+                ]);
+                
+                return $this->extract($text, $schema, $fallbackOptions);
             }
+
+            $this->logger->error('All AI services failed', [
+                'primary_service' => $service,
+                'fallback_service' => $fallbackService,
+                'final_error' => $e->getMessage()
+            ]);
 
             throw $e;
         }
@@ -273,6 +290,13 @@ class AiRouter
     protected function openAiExtract(string $text, array $schema, bool $cheap, array $options): array
     {
         $cfg     = config('services.openai');
+        
+        // Ensure API key is available with fallback
+        $apiKey = $cfg['api_key'] ?? env('OPENAI_API_KEY');
+        if (!$apiKey) {
+            throw new \RuntimeException('OpenAI API key not found in config or environment');
+        }
+        
         $model   = $options['model'] ?? ($cheap ? $cfg['model_cheap'] : $cfg['model']);
         $timeout = (int)($cfg['timeout'] ?? 20);
         
@@ -309,7 +333,7 @@ class AiRouter
             $system .= "\n\nReturn JSON matching this schema:\n" . json_encode($schema);
         }
 
-        $resp = Http::withToken($cfg['api_key'])
+        $resp = Http::withToken($apiKey)
             ->timeout($timeout)
             ->retry(1, 100) // Single retry with 100ms delay
             ->baseUrl(rtrim((string)$cfg['base_url'], '/'))
@@ -330,6 +354,13 @@ class AiRouter
     protected function anthropicExtract(string $text, array $schema, bool $cheap, array $options): array
     {
         $cfg     = config('services.anthropic');
+        
+        // Ensure API key is available with fallback
+        $apiKey = $cfg['api_key'] ?? env('ANTHROPIC_API_KEY');
+        if (!$apiKey) {
+            throw new \RuntimeException('Anthropic API key not found in config or environment');
+        }
+        
         $model   = $options['model'] ?? $cfg['model']; // if you add a cheap model later, choose here
         $timeout = (int)($cfg['timeout'] ?? 20);
 
@@ -340,7 +371,7 @@ class AiRouter
         }
 
         $resp = Http::withHeaders([
-                'x-api-key' => $cfg['api_key'],
+                'x-api-key' => $apiKey,
                 'anthropic-version' => $cfg['version'] ?? '2023-06-01',
                 'content-type' => 'application/json',
             ])

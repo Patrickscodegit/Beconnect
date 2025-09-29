@@ -54,10 +54,31 @@ class CreateRobawsOfferJob implements ShouldQueue
                 $maxRetries = 3;
                 $retryDelay = 2; // seconds
                 
+                Log::info('Checking for extraction data', [
+                    'document_id' => $this->document->id,
+                    'document_extraction_status' => $this->document->extraction_status,
+                    'has_extraction_data' => !empty($this->document->extraction_data),
+                    'intake_id' => $this->document->intake_id
+                ]);
+                
                 for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
                     $this->document->refresh();
                     
+                    Log::info('Extraction data check attempt', [
+                        'document_id' => $this->document->id,
+                        'attempt' => $attempt,
+                        'max_retries' => $maxRetries,
+                        'extraction_status' => $this->document->extraction_status,
+                        'has_extraction_data' => !empty($this->document->extraction_data),
+                        'extraction_data_size' => $this->document->extraction_data ? (is_string($this->document->extraction_data) ? strlen($this->document->extraction_data) : count($this->document->extraction_data)) : 0
+                    ]);
+                    
                     if ($this->document->extraction_data) {
+                        Log::info('Extraction data found', [
+                            'document_id' => $this->document->id,
+                            'attempt' => $attempt,
+                            'extraction_data_size' => is_string($this->document->extraction_data) ? strlen($this->document->extraction_data) : count($this->document->extraction_data)
+                        ]);
                         break;
                     }
                     
@@ -65,10 +86,18 @@ class CreateRobawsOfferJob implements ShouldQueue
                         Log::info('Waiting for extraction data to be available', [
                             'document_id' => $this->document->id,
                             'attempt' => $attempt,
-                            'max_retries' => $maxRetries
+                            'max_retries' => $maxRetries,
+                            'retry_delay' => $retryDelay
                         ]);
                         sleep($retryDelay);
                     } else {
+                        Log::error('No extraction data found after all attempts', [
+                            'document_id' => $this->document->id,
+                            'max_retries' => $maxRetries,
+                            'final_extraction_status' => $this->document->extraction_status,
+                            'intake_id' => $this->document->intake_id,
+                            'document_filename' => $this->document->filename
+                        ]);
                         throw new \RuntimeException('No extraction data found for document after ' . $maxRetries . ' attempts');
                     }
                 }

@@ -956,8 +956,12 @@ class JsonFieldMapper
 
         // Try to get dimensions from vehicle database or OpenAI
         // Use fullData to get vehicle information
-        $make = data_get($fullData, 'raw_data.vehicle_make') ?? data_get($fullData, 'vehicle_make');
-        $model = data_get($fullData, 'raw_data.vehicle_model') ?? data_get($fullData, 'vehicle_model');
+        $make = data_get($fullData, 'raw_data.expedition.vehicle.make') ?? 
+                data_get($fullData, 'raw_data.vehicle_make') ?? 
+                data_get($fullData, 'vehicle_make');
+        $model = data_get($fullData, 'raw_data.expedition.vehicle.model') ?? 
+                 data_get($fullData, 'raw_data.vehicle_model') ?? 
+                 data_get($fullData, 'vehicle_model');
         $year = data_get($fullData, 'raw_data.vehicle_year') ?? data_get($fullData, 'vehicle_year');
         
         // Enhanced vehicle dimension lookup with fallbacks
@@ -1425,7 +1429,22 @@ class JsonFieldMapper
         
         // Fallback to the value if it's a string
         if (is_string($value) && !empty($value)) {
-            return "1 x {$condition} {$value}";
+            // Check if the value already contains "1 x" and condition to avoid duplication
+            $cleanValue = $value;
+            if (preg_match('/^1\s+x\s+(used|new)\s+/i', $cleanValue)) {
+                // Already formatted, return as is
+                return $cleanValue;
+            }
+            // Remove any existing "used" or "new" to avoid duplication
+            if (stripos($cleanValue, 'used') !== false) {
+                $cleanValue = preg_replace('/\bused\b/i', '', $cleanValue);
+                $cleanValue = trim($cleanValue);
+            }
+            if (stripos($cleanValue, 'new') !== false) {
+                $cleanValue = preg_replace('/\bnew\b/i', '', $cleanValue);
+                $cleanValue = trim($cleanValue);
+            }
+            return "1 x {$condition} {$cleanValue}";
         }
         
         return "1 x {$condition} Vehicle";

@@ -319,7 +319,11 @@ class IntakeResource extends Resource
                     ->modalHeading('Extract Document Data')
                     ->modalDescription('This will process all documents in this intake and extract their data using AI.')
                     ->action(function (Intake $record) {
-                        ProcessIntake::dispatch($record);
+                        // Ensure database transaction is committed before dispatching job
+                        \Illuminate\Support\Facades\DB::afterCommit(function () use ($record) {
+                            // Dispatch to a separate queue connection to avoid transaction context issues
+                            ProcessIntake::dispatchSync($record);
+                        });
                         
                         Notification::make()
                             ->title('Extraction Started')
@@ -548,7 +552,11 @@ class IntakeResource extends Resource
                             $count = 0;
                             foreach ($records as $record) {
                                 if ($record->documents()->exists()) {
-                                    ProcessIntake::dispatch($record);
+                                    // Ensure database transaction is committed before dispatching job
+                                    \Illuminate\Support\Facades\DB::afterCommit(function () use ($record) {
+                                        // Dispatch to a separate queue connection to avoid transaction context issues
+                                        ProcessIntake::dispatchSync($record);
+                                    });
                                     $count++;
                                 }
                             }

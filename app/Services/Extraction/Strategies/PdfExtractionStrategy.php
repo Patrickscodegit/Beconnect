@@ -41,8 +41,19 @@ class PdfExtractionStrategy implements ExtractionStrategy
                 'strategy' => $this->getName()
             ]);
 
-            // Read PDF content from storage
-            $pdfContent = Storage::get($document->file_path);
+            // Read PDF content from storage using the correct disk
+            Log::info('Accessing PDF file', [
+                'document_id' => $document->id,
+                'storage_disk' => $document->storage_disk,
+                'file_path' => $document->file_path
+            ]);
+            
+            // Check if file exists before attempting to read
+            if (!Storage::disk($document->storage_disk)->exists($document->file_path)) {
+                throw new \Exception('PDF file not found: ' . $document->file_path);
+            }
+            
+            $pdfContent = Storage::disk($document->storage_disk)->get($document->file_path);
             
             if (!$pdfContent) {
                 throw new \Exception('Could not read PDF file from storage');

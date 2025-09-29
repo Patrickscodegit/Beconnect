@@ -42,15 +42,43 @@ class ExtractDocumentDataJob implements ShouldQueue
                 ->first();
 
             if (!$intakeFile) {
-                Log::warning('No IntakeFile found for document extraction', [
+                Log::error('No IntakeFile found for document extraction', [
                     'document_id' => $this->document->id,
-                    'filename' => $this->document->filename
+                    'filename' => $this->document->filename,
+                    'intake_id' => $this->document->intake_id,
+                    'available_intake_files' => IntakeFile::where('intake_id', $this->document->intake_id)->pluck('filename')->toArray()
+                ]);
+                
+                $this->document->update([
+                    'extraction_status' => 'failed',
+                    'extracted_at' => now(),
                 ]);
                 return;
             }
 
+            Log::info('Found IntakeFile for extraction', [
+                'document_id' => $this->document->id,
+                'intake_file_id' => $intakeFile->id,
+                'storage_path' => $intakeFile->storage_path,
+                'storage_disk' => $intakeFile->storage_disk,
+                'file_size' => $intakeFile->file_size
+            ]);
+
             // Extract data from the file
+            Log::info('Calling extraction service', [
+                'document_id' => $this->document->id,
+                'intake_file_id' => $intakeFile->id,
+                'extraction_service_class' => get_class($extractionService)
+            ]);
+            
             $extractedData = $extractionService->extractFromFile($intakeFile);
+            
+            Log::info('Extraction service result', [
+                'document_id' => $this->document->id,
+                'extraction_successful' => !empty($extractedData),
+                'extracted_data_keys' => $extractedData ? array_keys($extractedData) : [],
+                'extracted_data_size' => $extractedData ? strlen(json_encode($extractedData)) : 0
+            ]);
             
             if ($extractedData) {
                 // Update document with extracted data
@@ -80,9 +108,14 @@ class ExtractDocumentDataJob implements ShouldQueue
                     'has_contact_data' => isset($extractedData['contact'])
                 ]);
             } else {
-                Log::warning('No data extracted from document', [
+                Log::error('No data extracted from document', [
                     'document_id' => $this->document->id,
-                    'filename' => $this->document->filename
+                    'filename' => $this->document->filename,
+                    'intake_file_id' => $intakeFile->id,
+                    'storage_path' => $intakeFile->storage_path,
+                    'storage_disk' => $intakeFile->storage_disk,
+                    'file_size' => $intakeFile->file_size,
+                    'extraction_service_class' => get_class($extractionService)
                 ]);
                 
                 $this->document->update([

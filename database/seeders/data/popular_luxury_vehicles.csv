@@ -1,0 +1,142 @@
+make,model,generation,year,body_style,length_m,width_m,height_m,wheelbase_m,weight_kg,engine_cc,fuel_type,powertrain_type,country_of_manufacture,weight_type,width_basis,verified_at,verified_by,wmi_hint
+BMW,3 Series,G20,2019,Sedan,4.709,1.827,1.442,2.851,1610,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,3 Series,G20,2020,Sedan,4.709,1.827,1.442,2.851,1610,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,3 Series,G20,2021,Sedan,4.709,1.827,1.442,2.851,1610,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,3 Series,G20,2022,Sedan,4.709,1.827,1.442,2.851,1610,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,3 Series,G20,2023,Sedan,4.709,1.827,1.442,2.851,1610,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,3 Series,G20,2024,Sedan,4.709,1.827,1.442,2.851,1610,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,5 Series,G30,2017,Sedan,4.936,1.868,1.479,2.975,1710,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,5 Series,G30,2018,Sedan,4.936,1.868,1.479,2.975,1710,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,5 Series,G30,2019,Sedan,4.936,1.868,1.479,2.975,1710,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,5 Series,G30,2020,Sedan,4.936,1.868,1.479,2.975,1710,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,5 Series,G30,2021,Sedan,4.936,1.868,1.479,2.975,1710,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,5 Series,G30,2022,Sedan,4.936,1.868,1.479,2.975,1710,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,5 Series,G30,2023,Sedan,4.936,1.868,1.479,2.975,1710,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,X3,G01,2018,SUV,4.708,1.891,1.676,2.864,1800,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,X3,G01,2019,SUV,4.708,1.891,1.676,2.864,1800,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,X3,G01,2020,SUV,4.708,1.891,1.676,2.864,1800,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,X3,G01,2021,SUV,4.708,1.891,1.676,2.864,1800,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,X3,G01,2022,SUV,4.708,1.891,1.676,2.864,1800,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,X3,G01,2023,SUV,4.708,1.891,1.676,2.864,1800,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,X3,G01,2024,SUV,4.708,1.891,1.676,2.864,1800,1998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,X7,G07,2019,SUV,5.151,2.000,1.805,3.105,2320,2998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,X7,G07,2020,SUV,5.151,2.000,1.805,3.105,2320,2998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,X7,G07,2021,SUV,5.151,2.000,1.805,3.105,2320,2998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,X7,G07,2022,SUV,5.151,2.000,1.805,3.105,2320,2998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,X7,G07,2023,SUV,5.151,2.000,1.805,3.105,2320,2998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+BMW,X7,G07,2024,SUV,5.151,2.000,1.805,3.105,2320,2998,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WBA
+Mercedes-Benz,C-Class,W205,2015,Sedan,4.686,1.810,1.442,2.840,1610,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,C-Class,W205,2016,Sedan,4.686,1.810,1.442,2.840,1610,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,C-Class,W205,2017,Sedan,4.686,1.810,1.442,2.840,1610,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,C-Class,W205,2018,Sedan,4.686,1.810,1.442,2.840,1610,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,C-Class,W205,2019,Sedan,4.686,1.810,1.442,2.840,1610,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,C-Class,W205,2020,Sedan,4.686,1.810,1.442,2.840,1610,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,C-Class,W205,2021,Sedan,4.686,1.810,1.442,2.840,1610,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,E-Class,W213,2016,Sedan,4.923,1.852,1.468,2.939,1800,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,E-Class,W213,2017,Sedan,4.923,1.852,1.468,2.939,1800,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,E-Class,W213,2018,Sedan,4.923,1.852,1.468,2.939,1800,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,E-Class,W213,2019,Sedan,4.923,1.852,1.468,2.939,1800,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,E-Class,W213,2020,Sedan,4.923,1.852,1.468,2.939,1800,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,E-Class,W213,2021,Sedan,4.923,1.852,1.468,2.939,1800,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,E-Class,W213,2022,Sedan,4.923,1.852,1.468,2.939,1800,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,E-Class,W213,2023,Sedan,4.923,1.852,1.468,2.939,1800,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,GLC,X253,2015,SUV,4.656,1.890,1.639,2.873,1800,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,GLC,X253,2016,SUV,4.656,1.890,1.639,2.873,1800,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,GLC,X253,2017,SUV,4.656,1.890,1.639,2.873,1800,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,GLC,X253,2018,SUV,4.656,1.890,1.639,2.873,1800,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,GLC,X253,2019,SUV,4.656,1.890,1.639,2.873,1800,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,GLC,X253,2020,SUV,4.656,1.890,1.639,2.873,1800,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,GLC,X253,2021,SUV,4.656,1.890,1.639,2.873,1800,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,GLC,X253,2022,SUV,4.656,1.890,1.639,2.873,1800,1991,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,GLS,X167,2019,SUV,5.207,1.956,1.820,3.135,2580,2999,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,GLS,X167,2020,SUV,5.207,1.956,1.820,3.135,2580,2999,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,GLS,X167,2021,SUV,5.207,1.956,1.820,3.135,2580,2999,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,GLS,X167,2022,SUV,5.207,1.956,1.820,3.135,2580,2999,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,GLS,X167,2023,SUV,5.207,1.956,1.820,3.135,2580,2999,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Mercedes-Benz,GLS,X167,2024,SUV,5.207,1.956,1.820,3.135,2580,2999,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WDD
+Audi,A4,B9,2016,Sedan,4.726,1.842,1.427,2.820,1610,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A4,B9,2017,Sedan,4.726,1.842,1.427,2.820,1610,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A4,B9,2018,Sedan,4.726,1.842,1.427,2.820,1610,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A4,B9,2019,Sedan,4.726,1.842,1.427,2.820,1610,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A4,B9,2020,Sedan,4.726,1.842,1.427,2.820,1610,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A4,B9,2021,Sedan,4.726,1.842,1.427,2.820,1610,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A4,B9,2022,Sedan,4.726,1.842,1.427,2.820,1610,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A4,B9,2023,Sedan,4.726,1.842,1.427,2.820,1610,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A6,C8,2018,Sedan,4.939,1.886,1.457,2.924,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A6,C8,2019,Sedan,4.939,1.886,1.457,2.924,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A6,C8,2020,Sedan,4.939,1.886,1.457,2.924,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A6,C8,2021,Sedan,4.939,1.886,1.457,2.924,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A6,C8,2022,Sedan,4.939,1.886,1.457,2.924,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A6,C8,2023,Sedan,4.939,1.886,1.457,2.924,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,A6,C8,2024,Sedan,4.939,1.886,1.457,2.924,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,Q5,FY,2017,SUV,4.663,1.893,1.659,2.819,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,Q5,FY,2018,SUV,4.663,1.893,1.659,2.819,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,Q5,FY,2019,SUV,4.663,1.893,1.659,2.819,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,Q5,FY,2020,SUV,4.663,1.893,1.659,2.819,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,Q5,FY,2021,SUV,4.663,1.893,1.659,2.819,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,Q5,FY,2022,SUV,4.663,1.893,1.659,2.819,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,Q5,FY,2023,SUV,4.663,1.893,1.659,2.819,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,Q8,4M,2018,SUV,4.986,1.995,1.705,2.995,2320,2995,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,Q8,4M,2019,SUV,4.986,1.995,1.705,2.995,2320,2995,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,Q8,4M,2020,SUV,4.986,1.995,1.705,2.995,2320,2995,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,Q8,4M,2021,SUV,4.986,1.995,1.705,2.995,2320,2995,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,Q8,4M,2022,SUV,4.986,1.995,1.705,2.995,2320,2995,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,Q8,4M,2023,SUV,4.986,1.995,1.705,2.995,2320,2995,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Audi,Q8,4M,2024,SUV,4.986,1.995,1.705,2.995,2320,2995,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WAU
+Porsche,911,992,2019,Coupe,4.519,1.852,1.300,2.450,1610,2981,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,911,992,2020,Coupe,4.519,1.852,1.300,2.450,1610,2981,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,911,992,2021,Coupe,4.519,1.852,1.300,2.450,1610,2981,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,911,992,2022,Coupe,4.519,1.852,1.300,2.450,1610,2981,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,911,992,2023,Coupe,4.519,1.852,1.300,2.450,1610,2981,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,911,992,2024,Coupe,4.519,1.852,1.300,2.450,1610,2981,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Cayenne,9YA,2018,SUV,4.918,1.983,1.696,2.895,2100,2995,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Cayenne,9YA,2019,SUV,4.918,1.983,1.696,2.895,2100,2995,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Cayenne,9YA,2020,SUV,4.918,1.983,1.696,2.895,2100,2995,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Cayenne,9YA,2021,SUV,4.918,1.983,1.696,2.895,2100,2995,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Cayenne,9YA,2022,SUV,4.918,1.983,1.696,2.895,2100,2995,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Cayenne,9YA,2023,SUV,4.918,1.983,1.696,2.895,2100,2995,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Cayenne,9YA,2024,SUV,4.918,1.983,1.696,2.895,2100,2995,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Macan,95B,2014,SUV,4.681,1.923,1.624,2.807,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Macan,95B,2015,SUV,4.681,1.923,1.624,2.807,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Macan,95B,2016,SUV,4.681,1.923,1.624,2.807,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Macan,95B,2017,SUV,4.681,1.923,1.624,2.807,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Macan,95B,2018,SUV,4.681,1.923,1.624,2.807,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Macan,95B,2019,SUV,4.681,1.923,1.624,2.807,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Macan,95B,2020,SUV,4.681,1.923,1.624,2.807,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Macan,95B,2021,SUV,4.681,1.923,1.624,2.807,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Macan,95B,2022,SUV,4.681,1.923,1.624,2.807,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Porsche,Macan,95B,2023,SUV,4.681,1.923,1.624,2.807,1800,1984,petrol,ICE,Germany,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,WP0
+Lexus,ES,XV70,2018,Sedan,4.975,1.865,1.445,2.870,1710,2487,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,ES,XV70,2019,Sedan,4.975,1.865,1.445,2.870,1710,2487,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,ES,XV70,2020,Sedan,4.975,1.865,1.445,2.870,1710,2487,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,ES,XV70,2021,Sedan,4.975,1.865,1.445,2.870,1710,2487,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,ES,XV70,2022,Sedan,4.975,1.865,1.445,2.870,1710,2487,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,ES,XV70,2023,Sedan,4.975,1.865,1.445,2.870,1710,2487,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,ES,XV70,2024,Sedan,4.975,1.865,1.445,2.870,1710,2487,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,IS,XE30,2013,Sedan,4.665,1.810,1.430,2.800,1610,2494,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,IS,XE30,2014,Sedan,4.665,1.810,1.430,2.800,1610,2494,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,IS,XE30,2015,Sedan,4.665,1.810,1.430,2.800,1610,2494,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,IS,XE30,2016,Sedan,4.665,1.810,1.430,2.800,1610,2494,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,IS,XE30,2017,Sedan,4.665,1.810,1.430,2.800,1610,2494,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,IS,XE30,2018,Sedan,4.665,1.810,1.430,2.800,1610,2494,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,IS,XE30,2019,Sedan,4.665,1.810,1.430,2.800,1610,2494,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,IS,XE30,2020,Sedan,4.665,1.810,1.430,2.800,1610,2494,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,RX,AL20,2015,SUV,4.890,1.895,1.720,2.790,2100,3456,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,RX,AL20,2016,SUV,4.890,1.895,1.720,2.790,2100,3456,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,RX,AL20,2017,SUV,4.890,1.895,1.720,2.790,2100,3456,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,RX,AL20,2018,SUV,4.890,1.895,1.720,2.790,2100,3456,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,RX,AL20,2019,SUV,4.890,1.895,1.720,2.790,2100,3456,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,RX,AL20,2020,SUV,4.890,1.895,1.720,2.790,2100,3456,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,RX,AL20,2021,SUV,4.890,1.895,1.720,2.790,2100,3456,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,RX,AL20,2022,SUV,4.890,1.895,1.720,2.790,2100,3456,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,GX,J150,2010,SUV,4.801,1.885,1.885,2.790,2320,4608,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,GX,J150,2011,SUV,4.801,1.885,1.885,2.790,2320,4608,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,GX,J150,2012,SUV,4.801,1.885,1.885,2.790,2320,4608,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,GX,J150,2013,SUV,4.801,1.885,1.885,2.790,2320,4608,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,GX,J150,2014,SUV,4.801,1.885,1.885,2.790,2320,4608,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,GX,J150,2015,SUV,4.801,1.885,1.885,2.790,2320,4608,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,GX,J150,2016,SUV,4.801,1.885,1.885,2.790,2320,4608,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,GX,J150,2017,SUV,4.801,1.885,1.885,2.790,2320,4608,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,GX,J150,2018,SUV,4.801,1.885,1.885,2.790,2320,4608,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,GX,J150,2019,SUV,4.801,1.885,1.885,2.790,2320,4608,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH
+Lexus,GX,J150,2020,SUV,4.801,1.885,1.885,2.790,2320,4608,petrol,ICE,Japan,curb,without_mirrors,2025-09-28,Manufacturer Technical Sheet,JTH

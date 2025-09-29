@@ -224,11 +224,22 @@ class HybridExtractionPipeline
         $vehicleRaw = $root['vehicle'] ?? data_get($root, 'shipment.vehicle', []) ?? [];
         $vehicle = $this->normalizeVehicleData($vehicleRaw);
 
+        // --- CARGO NORMALIZATION ---
+        $cargoRaw = $root['cargo'] ?? data_get($root, 'shipment.cargo', []) ?? [];
+        $cargo = array_filter([
+            'description' => $cargoRaw['description'] ?? $cargoRaw['type'] ?? null,
+            'quantity' => $cargoRaw['quantity'] ?? null,
+            'packaging' => $cargoRaw['packaging'] ?? null,
+            'dangerous_goods' => $cargoRaw['dangerous_goods'] ?? null,
+            'special_handling' => $cargoRaw['special_handling'] ?? null,
+        ], fn($v) => $this->filledValue($v));
+
         // --- BUILD NORMALIZED STRUCTURE ---
         $normalized = array_filter([
             'vehicle' => $vehicle,
             'shipment' => $shipment,
             'contact' => $contact,
+            'cargo' => $cargo,
             'pricing' => $root['pricing'] ?? [],
             'dates' => $root['dates'] ?? [],
             'shipping' => $root['shipping'] ?? [],

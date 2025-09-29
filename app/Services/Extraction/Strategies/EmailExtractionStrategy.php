@@ -58,11 +58,16 @@ class EmailExtractionStrategy implements ExtractionStrategy
             // Prepare enriched email content for hybrid pipeline
             $enrichedContent = $this->prepareEmailContextForPipeline($emailData);
 
+            // CRITICAL FIX: Pre-extract cargo information from email content before pipeline processing
+            $preExtractedData = [];
+            $this->extractCargoFromEmailContent($preExtractedData, $emailData['body'] ?? '');
+
             Log::info('Email parsed successfully, using hybrid pipeline', [
                 'document_id' => $document->id,
                 'from_contact' => $emailData['from_name'] . ' <' . $emailData['from_email'] . '>',
                 'subject' => $emailData['subject'],
-                'content_length' => strlen($enrichedContent)
+                'content_length' => strlen($enrichedContent),
+                'pre_extracted_cargo' => !empty($preExtractedData['cargo'])
             ]);
 
             // Use hybrid pipeline to extract structured data with vehicle database enhancement
@@ -70,6 +75,14 @@ class EmailExtractionStrategy implements ExtractionStrategy
 
             // Get the pipeline result data directly (let pipeline handle merging)
             $enhancedData = $pipelineResult['data'];
+
+            // Merge pre-extracted cargo data with pipeline results
+            if (!empty($preExtractedData['cargo'])) {
+                $enhancedData['cargo'] = array_merge($enhancedData['cargo'] ?? [], $preExtractedData['cargo']);
+            }
+            if (!empty($preExtractedData['raw_data'])) {
+                $enhancedData['raw_data'] = array_merge($enhancedData['raw_data'] ?? [], $preExtractedData['raw_data']);
+            }
 
             // CRITICAL FIX: Ensure email sender contact is merged into main contact data
             $this->mergeEmailSenderIntoContact($enhancedData, $emailData);
@@ -433,6 +446,124 @@ class EmailExtractionStrategy implements ExtractionStrategy
         
         // Clean and format company name
         return ucfirst(strtolower($mainDomain));
+    }
+
+    /**
+     * Extract cargo information from email content
+     */
+    private function extractCargoFromEmailContent(array &$enhancedData, string $emailBody): void
+    {
+        // Initialize cargo array if not exists
+        if (!isset($enhancedData['cargo'])) {
+            $enhancedData['cargo'] = [];
+        }
+
+        // Cargo extraction patterns for Dutch/German/English
+        $cargoPatterns = [
+            // Dutch patterns
+            '/\b(\d+)\s*[xX]\s*(gebruikte|nieuwe|tweedehands|secondhand)\s+([^,\n]+?)(?:\s+met\s+afmeting\s+([^,\n]+?))?(?:[,\n]|$)/i',
+            '/\b(\d+)\s*[xX]\s*([^,\n]+?)(?:\s+met\s+afmeting\s+([^,\n]+?))?(?:[,\n]|$)/i',
+            
+            // German patterns
+            '/\b(\d+)\s*[xX]\s*(gebrauchte|neue|zweite)\s+([^,\n]+?)(?:\s+mit\s+Abmessung\s+([^,\n]+?))?(?:[,\n]|$)/i',
+            '/\b(\d+)\s*[xX]\s*([^,\n]+?)(?:\s+mit\s+Abmessung\s+([^,\n]+?))?(?:[,\n]|$)/i',
+            
+            // English patterns
+            '/\b(\d+)\s*[xX]\s*(used|new|second-hand)\s+([^,\n]+?)(?:\s+with\s+dimensions?\s+([^,\n]+?))?(?:[,\n]|$)/i',
+            '/\b(\d+)\s*[xX]\s*([^,\n]+?)(?:\s+with\s+dimensions?\s+([^,\n]+?))?(?:[,\n]|$)/i',
+            
+            // Generic patterns
+            '/\b(\d+)\s*[xX]\s*([^,\n]+?)(?:\s+([^,\n]+?))?(?:[,\n]|$)/i',
+        ];
+
+        $cargoFound = false;
+        
+        foreach ($cargoPatterns as $pattern) {
+            if (preg_match($pattern, $emailBody, $matches)) {
+                $quantity = (int)($matches[1] ?? 1);
+                $description = trim($matches[2] ?? $matches[3] ?? '');
+                $dimensions = trim($matches[4] ?? $matches[3] ?? '');
+                
+                // Clean up description
+                $description = preg_replace('/\s+/', ' ', $description);
+                $description = trim($description, ' .,;');
+                
+                // Extract dimensions if present
+                if (!empty($dimensions)) {
+                    // Try regex pattern first
+                    if (preg_match('/(\d+(?:[.,]\d+)?)\s*[xX×]\s*(\d+(?:[.,]\d+)?)\s*[xX×]\s*(\d+(?:[.,]\d+)?)\s*(m|cm|mm)/i', $dimensions, $dimMatches)) {
+                        $length = (float)str_replace(',', '.', $dimMatches[1]);
+                        $width = (float)str_replace(',', '.', $dimMatches[2]);
+                        $height = (float)str_replace(',', '.', $dimMatches[3]);
+                        $unit = strtolower($dimMatches[4]);
+                    } else {
+                        // Fallback to manual parsing
+                        $parts = preg_split('/\s*x\s*/i', $dimensions);
+                        if (count($parts) >= 3) {
+                            $length = (float)str_replace(',', '.', trim($parts[0]));
+                            $width = (float)str_replace(',', '.', trim($parts[1]));
+                            $height = (float)str_replace(',', '.', trim($parts[2]));
+                            $unit = 'm'; // Default to meters
+                        }
+                    }
+                    
+                    if (isset($length) && isset($width) && isset($height)) {
+                        // Convert to meters
+                        $multiplier = match($unit) {
+                            'cm' => 0.01,
+                            'mm' => 0.001,
+                            default => 1
+                        };
+                        
+                        $enhancedData['cargo']['dimensions'] = [
+                            'length_m' => round($length * $multiplier, 3),
+                            'width_m' => round($width * $multiplier, 3),
+                            'height_m' => round($height * $multiplier, 3),
+                            'unit_source' => $unit
+                        ];
+                    }
+                }
+                
+                // Set cargo information
+                $enhancedData['cargo']['description'] = $description;
+                $enhancedData['cargo']['quantity'] = $quantity;
+                $enhancedData['cargo']['type'] = $description; // For compatibility
+                
+                // Also add to raw_data for field mapping
+                if (!isset($enhancedData['raw_data'])) {
+                    $enhancedData['raw_data'] = [];
+                }
+                $enhancedData['raw_data']['cargo'] = $description;
+                $enhancedData['raw_data']['cargo_quantity'] = $quantity;
+                
+                if (isset($enhancedData['cargo']['dimensions'])) {
+                    $enhancedData['raw_data']['dim_bef_delivery'] = sprintf(
+                        '%.2f x %.2f x %.2f m',
+                        $enhancedData['cargo']['dimensions']['length_m'],
+                        $enhancedData['cargo']['dimensions']['width_m'],
+                        $enhancedData['cargo']['dimensions']['height_m']
+                    );
+                }
+                
+                $cargoFound = true;
+                
+                Log::info('Cargo extracted from email content', [
+                    'description' => $description,
+                    'quantity' => $quantity,
+                    'dimensions' => $enhancedData['cargo']['dimensions'] ?? null,
+                    'pattern_used' => $pattern
+                ]);
+                
+                break; // Use first match
+            }
+        }
+        
+        if (!$cargoFound) {
+            Log::info('No cargo information found in email content', [
+                'content_length' => strlen($emailBody),
+                'content_preview' => substr($emailBody, 0, 200)
+            ]);
+        }
     }
 
 

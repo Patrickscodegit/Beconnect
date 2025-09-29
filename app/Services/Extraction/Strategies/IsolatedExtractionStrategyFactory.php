@@ -45,8 +45,8 @@ class IsolatedExtractionStrategyFactory implements ExtractionStrategyFactoryInte
         // Register isolated email strategy
         $this->register(app(IsolatedEmailExtractionStrategy::class));
 
-        // Register enhanced PDF strategy
-        $this->register(app(EnhancedPdfExtractionStrategy::class));
+        // Register simple PDF strategy (new, reliable approach)
+        $this->register(app(SimplePdfExtractionStrategy::class));
 
         // Register enhanced image strategy
         $this->register(app(EnhancedImageExtractionStrategy::class));

@@ -17,6 +17,7 @@ class DatabaseSeeder extends Seeder
             FilamentUserSeeder::class,
             VinWmiSeeder::class,
             VehicleSpecsSeeder::class,
+            PopularLuxuryVehiclesSeeder::class,
         ]);
     }
 }

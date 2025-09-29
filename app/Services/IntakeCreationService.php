@@ -10,6 +10,7 @@ use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class IntakeCreationService
 {
@@ -33,8 +34,12 @@ class IntakeCreationService
         // Store file immediately (minimal operation - just move temp file)
         $this->storeFileMinimal($intake, $file);
         
-        // Dispatch job with just intake (all heavy operations in background)
-        ProcessIntake::dispatch($intake)->onQueue('default');
+        // Ensure database transaction is committed before dispatching job
+        // Use a separate queue connection to avoid transaction context issues
+        DB::afterCommit(function () use ($intake) {
+            // Dispatch to a separate queue connection to avoid transaction context issues
+            ProcessIntake::dispatchSync($intake);
+        });
         
         Log::info('Created intake from uploaded file', [
             'intake_id' => $intake->id,
@@ -95,7 +100,12 @@ class IntakeCreationService
             'file_size' => strlen($fileData),
         ]);
 
-        ProcessIntake::dispatch($intake);
+        // Ensure database transaction is committed before dispatching job
+        // Use a separate queue connection to avoid transaction context issues
+        DB::afterCommit(function () use ($intake) {
+            // Dispatch to a separate queue connection to avoid transaction context issues
+            ProcessIntake::dispatchSync($intake);
+        });
         
         Log::info('Created intake from base64 image', [
             'intake_id' => $intake->id,
