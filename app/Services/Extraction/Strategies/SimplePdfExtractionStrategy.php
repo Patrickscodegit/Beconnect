@@ -84,6 +84,9 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
 
             // Extract structured data using pattern-based approach
             $extractedData = $this->extractStructuredData($extractedText, $document);
+            
+            // Add raw text to the extracted data for gas inspection detection
+            $extractedData['raw_text'] = $extractedText;
 
             // Calculate confidence based on data completeness
             $confidence = $this->calculateConfidence($extractedData);
@@ -723,16 +726,19 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
             // Check for gas inspection to identify tank truck
             $isTankTruck = stripos($text, 'gas inspection') !== false;
             
-            // Build cargo description - start with quantity and condition
+            // Build cargo description in the requested format
+            $cargoLines = [];
+            
+            // First line: "1 x used truck Renault Premium 270 tank truck"
             $cargoParts = ['1 x'];
             
-            if (!empty($vehicle['condition'])) {
-                $cargoParts[] = $vehicle['condition'];
-            }
+            // Add condition (default to 'used' if not specified)
+            $condition = $vehicle['condition'] ?? 'used';
+            $cargoParts[] = $condition;
+            $cargoParts[] = 'truck';
             
-            // Add vehicle make and model
+            // Add vehicle make and model (avoid duplication)
             if (!empty($vehicle['make']) && !empty($vehicle['model'])) {
-                // Combine make and model, avoiding duplication
                 $make = $vehicle['make'];
                 $model = $vehicle['model'];
                 
@@ -755,8 +761,20 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
                 $cargoParts[] = $vehicle['type'];
             }
             
-            if (!empty($cargoParts)) {
-                $extractedData['cargo'] = implode(' ', $cargoParts);
+            $cargoLines[] = implode(' ', $cargoParts);
+            
+            // Second line: "Year: 2004"
+            if (!empty($vehicle['year'])) {
+                $cargoLines[] = 'Year: ' . $vehicle['year'];
+            }
+            
+            // Third line: "Chassis nr: VF622ACA000109193"
+            if (!empty($vehicle['vin'])) {
+                $cargoLines[] = 'Chassis nr: ' . $vehicle['vin'];
+            }
+            
+            if (!empty($cargoLines)) {
+                $extractedData['cargo'] = implode("\n", $cargoLines);
             }
         }
 
