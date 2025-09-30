@@ -263,9 +263,10 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
         }
 
         // Extract consignee information with full name and address
-        if (preg_match('/Consignee\s+([A-Za-z\s\.&,]+?)\s+Address\s+([A-Za-z0-9\s,]+?)(?:\s+Email|\s+Phone|\s+Destination)/i', $text, $matches)) {
+        // Pattern for PDF text without spaces between fields
+        if (preg_match('/Consignee\s+([A-Za-z\s\.&,]+?)\s+Road\s+(\d+)\s+([A-Za-z0-9\s,]+?)(?:\s+[A-Za-z0-9@\.]+\s+\+\d+)/i', $text, $matches)) {
             $consigneeName = trim($matches[1]);
-            $consigneeAddress = trim($matches[2]);
+            $consigneeAddress = trim($matches[2] . ' ' . $matches[3]);
             if (strlen($consigneeName) > 3 && strlen($consigneeName) < 200) {
                 $extractedData['consignee']['name'] = $consigneeName;
                 $extractedData['consignee']['client_type'] = 'consignee';
@@ -276,9 +277,10 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
         }
 
         // Extract notify party information with full name and address
-        if (preg_match('/Notify\s+([A-Za-z\s\.&,]+?)\s+Address\s+([A-Za-z0-9\s,]+?)(?:\s+Email|\s+Phone|\s+Destination)/i', $text, $matches)) {
+        // Pattern for PDF text without spaces between fields
+        if (preg_match('/Notify\s+([A-Za-z\s\.&,]+?)\s+Road\s+(\d+)\s+([A-Za-z0-9\s,]+?)(?:\s+[A-Za-z0-9@\.]+\s+\+\d+)/i', $text, $matches)) {
             $notifyName = trim($matches[1]);
-            $notifyAddress = trim($matches[2]);
+            $notifyAddress = trim($matches[2] . ' ' . $matches[3]);
             if (strlen($notifyName) > 3 && strlen($notifyName) < 200) {
                 $extractedData['notify']['name'] = $notifyName;
                 $extractedData['notify']['client_type'] = 'notify';
