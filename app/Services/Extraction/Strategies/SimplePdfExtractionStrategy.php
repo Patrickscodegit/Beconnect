@@ -594,13 +594,7 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
             $extractedData['destination'] = $extractedData['shipment']['destination'];
         }
 
-        // Default values based on PDF content
-        if (empty($extractedData['customer_reference'])) {
-            // Build customer reference: EXP RORO - Ede - ANR - Lagos,nigeria
-            $origin = $extractedData['origin'] ?? 'Ede';
-            $destination = $extractedData['destination'] ?? 'Lagos,nigeria';
-            $extractedData['customer_reference'] = "EXP RORO - {$origin} - ANR - {$destination}";
-        }
+        // Customer reference will be set after origin normalization
 
         // Set POR (Port of Receipt) - always the complete shipper address
         if (empty($extractedData['por'])) {
@@ -634,6 +628,13 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
             }
         } else {
             $extractedData['origin'] = 'LAX';
+        }
+
+        // Now set customer reference with the normalized origin (city name)
+        if (empty($extractedData['customer_reference'])) {
+            $origin = $extractedData['origin'] ?? 'Ede';
+            $destination = $extractedData['destination'] ?? 'Lagos,nigeria';
+            $extractedData['customer_reference'] = "EXP RORO - {$origin} - ANR - {$destination}";
         }
 
         if (empty($extractedData['pod']) && !empty($extractedData['destination'])) {
