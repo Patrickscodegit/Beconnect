@@ -253,13 +253,21 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
             }
         }
 
-        // Set shipper as the primary client/contact name
+        // Set shipper as the primary client/contact name and extract address
         if (preg_match('/Shipper\s+([A-Za-z\s\.&,]+?)(?:\s+\d|\s+[A-Z]{2,}|\s+[A-Za-z]+\s+[A-Za-z]+\s+[A-Za-z]+)/', $text, $matches)) {
             $shipper = trim($matches[1]);
             if (strlen($shipper) > 3 && strlen($shipper) < 100) {
                 $extractedData['contact']['name'] = $shipper;
                 $extractedData['contact']['client_type'] = 'shipper';
             }
+        }
+
+        // Extract shipper address - look for address after shipper name, stop at next section
+        if (preg_match('/Shipper\s+[A-Za-z\s\.&,]+\s+([A-Za-z\s]+)\s+(\d+)\s+([A-Za-z0-9\s,]+?)(?=\s+[A-Z]{2,}\s+[A-Za-z]+\s+[A-Za-z]+|\s+Destination|\s+Consignee)/', $text, $matches)) {
+            $street = trim($matches[1]);
+            $number = trim($matches[2]);
+            $city = trim($matches[3]);
+            $extractedData['contact']['address'] = $street . ' ' . $number . ', ' . $city;
         }
 
         // Extract consignee and notify information using section boundaries
