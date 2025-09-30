@@ -213,6 +213,43 @@
       }
     },
     "shipping_parties": {
+      "shipper": {
+        "sources": [
+          "raw_data.contact.name",
+          "contact.name",
+          "raw_data.contact",
+          "contact",
+          "document_data.contact.name",
+          "document_data.contact"
+        ],
+        "transform": "format_contact_textarea",
+        "default": null
+      },
+      "shipper_email": {
+        "sources": [
+          "raw_data.contact.email",
+          "contact.email",
+          "document_data.contact.email"
+        ],
+        "default": null,
+        "validate": "email"
+      },
+      "shipper_phone": {
+        "sources": [
+          "raw_data.contact.phone",
+          "contact.phone",
+          "document_data.contact.phone"
+        ],
+        "default": null
+      },
+      "shipper_address": {
+        "sources": [
+          "raw_data.contact.address",
+          "contact.address",
+          "document_data.contact.address"
+        ],
+        "default": null
+      },
       "consignee": {
         "sources": [
           "raw_data.consignee.name",

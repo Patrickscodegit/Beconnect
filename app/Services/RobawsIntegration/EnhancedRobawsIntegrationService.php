@@ -226,6 +226,10 @@ class EnhancedRobawsIntegrationService
         $put('dim_bef_delivery', $m['dim_bef_delivery'] ?? null);
 
         // Shipping parties
+        $put('shipper', $m['shipper'] ?? null);
+        $put('shipper_email', $m['shipper_email'] ?? null);
+        $put('shipper_phone', $m['shipper_phone'] ?? null);
+        $put('shipper_address', $m['shipper_address'] ?? null);
         $put('consignee', $m['consignee'] ?? null);
         $put('consignee_email', $m['consignee_email'] ?? null);
         $put('consignee_phone', $m['consignee_phone'] ?? null);
