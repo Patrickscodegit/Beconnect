@@ -357,6 +357,7 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
 
         // Vehicle model patterns (improved)
         $modelPatterns = [
+            '/\b(\w+)\s+(Premium\s*\d+)(?=[A-Z]|$)/i',  // Renault Premium 270 (before VIN or end)
             '/\b(\w+)\s+(Series|Class|A\d+|C\d+|E\d+|S\d+|X\d+|i\d+|e\d+)\b/i',
             '/\b(\w+)\s+(Premium|Master|Sprinter|Transit|Ducato|Boxer|Daily|Iveco)\b/i',
             '/\b(\w+)\s+(\w+)\s+(Truck|Van|Car|Vehicle)\b/i',
