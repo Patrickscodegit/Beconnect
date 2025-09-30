@@ -452,6 +452,9 @@ class JsonFieldMapper
             case 'format_simple_reference':
                 return $this->formatSimpleReference($value, $fullData);
                 
+            case 'format_contact_textarea':
+                return $this->formatContactTextarea($value, $fullData);
+                
             default:
                 return $value;
         }
@@ -1586,5 +1589,57 @@ class JsonFieldMapper
         }
         
         return ['valid' => true, 'reason' => 'Dimensions passed all validation checks'];
+    }
+    
+    /**
+     * Format contact information for textarea fields
+     */
+    private function formatContactTextarea($value, array $fullData): ?string
+    {
+        if (!$value) return null;
+        
+        // If it's already a formatted string, return as-is
+        if (is_string($value) && strpos($value, "\n") !== false) {
+            return $value;
+        }
+        
+        // Extract contact information from full data
+        $name = null;
+        $address = null;
+        $email = null;
+        $phone = null;
+        
+        // Try to get name from the value or full data
+        if (is_string($value)) {
+            $name = trim($value);
+        }
+        
+        // Look for additional contact info in full data
+        if (isset($fullData['consignee'])) {
+            $consignee = $fullData['consignee'];
+            if (is_array($consignee)) {
+                $name = $name ?: ($consignee['name'] ?? null);
+                $address = $consignee['address'] ?? null;
+                $email = $consignee['email'] ?? null;
+                $phone = $consignee['phone'] ?? null;
+            }
+        } elseif (isset($fullData['notify'])) {
+            $notify = $fullData['notify'];
+            if (is_array($notify)) {
+                $name = $name ?: ($notify['name'] ?? null);
+                $address = $notify['address'] ?? null;
+                $email = $notify['email'] ?? null;
+                $phone = $notify['phone'] ?? null;
+            }
+        }
+        
+        // Build textarea content
+        $lines = [];
+        if ($name) $lines[] = $name;
+        if ($address) $lines[] = $address;
+        if ($email) $lines[] = $email;
+        if ($phone) $lines[] = $phone;
+        
+        return $lines ? implode("\n", $lines) : $value;
     }
 }

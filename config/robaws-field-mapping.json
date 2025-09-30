@@ -222,6 +222,7 @@
           "document_data.consignee.name",
           "document_data.consignee"
         ],
+        "transform": "format_contact_textarea",
         "default": null
       },
       "consignee_email": {
@@ -258,6 +259,7 @@
           "document_data.notify.name",
           "document_data.notify"
         ],
+        "transform": "format_contact_textarea",
         "default": null
       },
       "notify_email": {
