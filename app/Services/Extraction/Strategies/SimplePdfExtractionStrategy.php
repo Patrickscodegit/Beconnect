@@ -667,10 +667,20 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
             $extractedData['origin'] = 'LAX';
         }
 
-        // Now set customer reference with the normalized origin (city name)
+        // Fix destination capitalization BEFORE generating customer reference
+        if (!empty($extractedData['destination'])) {
+            $destination = $extractedData['destination'];
+            if (stripos($destination, 'lagos,nigeria') !== false || stripos($destination, 'lagos, nigeria') !== false) {
+                $extractedData['destination'] = 'Lagos, Nigeria';
+            } elseif (stripos($destination, 'lagos') !== false) {
+                $extractedData['destination'] = 'Lagos, Nigeria';
+            }
+        }
+
+        // Now set customer reference with the normalized origin and capitalized destination
         if (empty($extractedData['customer_reference'])) {
             $origin = $extractedData['origin'] ?? 'Ede';
-            $destination = $extractedData['destination'] ?? 'Lagos,nigeria';
+            $destination = $extractedData['destination'] ?? 'Lagos, Nigeria';
             $extractedData['customer_reference'] = "EXP RORO - {$origin} - ANR - {$destination}";
         }
 
@@ -683,16 +693,6 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
                 $extractedData['pod'] = 'Nigeria';
             } else {
                 $extractedData['pod'] = $destination;
-            }
-        }
-
-        // Fix destination capitalization
-        if (!empty($extractedData['destination'])) {
-            $destination = $extractedData['destination'];
-            if (stripos($destination, 'lagos,nigeria') !== false) {
-                $extractedData['destination'] = 'Lagos, Nigeria';
-            } elseif (stripos($destination, 'lagos') !== false) {
-                $extractedData['destination'] = 'Lagos, Nigeria';
             }
         }
     }
