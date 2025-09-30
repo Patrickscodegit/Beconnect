@@ -78,7 +78,7 @@ class ExtractionService
                 'extraction_strategy' => $result->getStrategy()
             ]);
             
-            return $this->formatExtractionData($result->getData(), $file);
+            return $this->formatExtractionData($result->getData(), $file, $result->getStrategy());
         } else {
             Log::warning('Extraction failed', [
                 'file_id' => $file->id,
@@ -92,7 +92,7 @@ class ExtractionService
     /**
      * Format extraction data for consistent structure
      */
-    private function formatExtractionData(array $data, IntakeFile $file): array
+    private function formatExtractionData(array $data, IntakeFile $file, string $strategy = 'unknown'): array
     {
         // Extract contact data from nested structure (supports both flat and nested formats)
         $contactEmail = $data['contact_email'] ?? $data['contact']['email'] ?? null;
@@ -108,6 +108,7 @@ class ExtractionService
             'customer_name' => $customerName,
             'contact' => $data['contact'] ?? [], // Preserve nested contact data for ProcessIntake
             'raw_data' => $data,
+            'service' => $strategy, // Include the strategy name for ExtractDocumentDataJob
             'extracted_at' => now()->toISOString(),
         ];
     }

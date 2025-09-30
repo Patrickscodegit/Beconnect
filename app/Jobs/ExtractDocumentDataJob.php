@@ -90,6 +90,29 @@ class ExtractDocumentDataJob implements ShouldQueue
                     'extracted_at' => now(),
                 ]);
 
+                // Map the extracted data to Robaws fields with textarea formatting
+                $rawData = $extractedData['raw_data'] ?? [];
+                if (!empty($rawData)) {
+                    $mapper = app('App\Services\RobawsIntegration\JsonFieldMapper');
+                    $mapped = $mapper->mapFields($rawData);
+                    
+                    // Update document with mapped data
+                    $this->document->update([
+                        'robaws_quotation_data' => $mapped,
+                        'robaws_formatted_at' => now(),
+                        'robaws_sync_status' => 'ready'
+                    ]);
+                    
+                    Log::info('Document mapped to Robaws fields', [
+                        'document_id' => $this->document->id,
+                        'mapped_fields_count' => count($mapped),
+                        'has_consignee' => isset($mapped['consignee']),
+                        'has_notify' => isset($mapped['notify']),
+                        'consignee_has_newlines' => isset($mapped['consignee']) && strpos($mapped['consignee'], "\n") !== false,
+                        'notify_has_newlines' => isset($mapped['notify']) && strpos($mapped['notify'], "\n") !== false
+                    ]);
+                }
+
                 // Update intake with contact data if available
                 $intake = $this->document->intake;
                 if (isset($extractedData['contact'])) {
@@ -105,7 +128,8 @@ class ExtractDocumentDataJob implements ShouldQueue
                 Log::info('Document data extraction completed successfully', [
                     'document_id' => $this->document->id,
                     'extraction_confidence' => $extractedData['confidence'] ?? null,
-                    'has_contact_data' => isset($extractedData['contact'])
+                    'has_contact_data' => isset($extractedData['contact']),
+                    'has_mapped_data' => !empty($rawData)
                 ]);
             } else {
                 Log::error('No data extracted from document', [
