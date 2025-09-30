@@ -225,6 +225,16 @@ class EnhancedRobawsIntegrationService
         $put('cargo', $m['cargo'] ?? null);
         $put('dim_bef_delivery', $m['dim_bef_delivery'] ?? null);
 
+        // Shipping parties
+        $put('consignee', $m['consignee'] ?? null);
+        $put('consignee_email', $m['consignee_email'] ?? null);
+        $put('consignee_phone', $m['consignee_phone'] ?? null);
+        $put('consignee_address', $m['consignee_address'] ?? null);
+        $put('notify', $m['notify'] ?? null);
+        $put('notify_email', $m['notify_email'] ?? null);
+        $put('notify_phone', $m['notify_phone'] ?? null);
+        $put('notify_address', $m['notify_address'] ?? null);
+
         // Skip JSON field to avoid payload size issues
         // Raw JSON is too large and causes 500 errors
         return $xf;
