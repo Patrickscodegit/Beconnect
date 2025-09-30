@@ -59,7 +59,7 @@
         "default": null
       },
       "pol": {
-        "sources": ["raw_data.pol", "raw_data.transport_details.origin.pickup_address", "raw_data.transport_details.origin.pickup_location", "raw_data.transport_details.origin.address", "raw_data.transport_details.origin.location", "raw_data.request.origin.pickup_address", "raw_data.request.origin.pickup_location", "raw_data.request.origin.address", "raw_data.request.origin.location", "origin","shipment.origin","routing.origin","document_data.shipment.origin","document_data.routing.pol","por","raw_data.expedition.origin","raw_data.transport_details.origin.country","raw_data.origin"],
+        "sources": ["pol", "raw_data.pol", "raw_data.transport_details.origin.pickup_address", "raw_data.transport_details.origin.pickup_location", "raw_data.transport_details.origin.address", "raw_data.transport_details.origin.location", "raw_data.request.origin.pickup_address", "raw_data.request.origin.pickup_location", "raw_data.request.origin.address", "raw_data.request.origin.location", "shipment.origin","routing.origin","document_data.shipment.origin","document_data.routing.pol","por","raw_data.expedition.origin","raw_data.transport_details.origin.country","origin","raw_data.origin"],
         "transform": "city_to_port",
         "default": "Los Angeles"
       },
