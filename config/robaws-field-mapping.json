@@ -212,6 +212,80 @@
         "default": null
       }
     },
+    "shipping_parties": {
+      "consignee": {
+        "sources": [
+          "raw_data.consignee.name",
+          "consignee.name",
+          "raw_data.consignee",
+          "consignee",
+          "document_data.consignee.name",
+          "document_data.consignee"
+        ],
+        "default": null
+      },
+      "consignee_email": {
+        "sources": [
+          "raw_data.consignee.email",
+          "consignee.email",
+          "document_data.consignee.email"
+        ],
+        "default": null,
+        "validate": "email"
+      },
+      "consignee_phone": {
+        "sources": [
+          "raw_data.consignee.phone",
+          "consignee.phone",
+          "document_data.consignee.phone"
+        ],
+        "default": null
+      },
+      "consignee_address": {
+        "sources": [
+          "raw_data.consignee.address",
+          "consignee.address",
+          "document_data.consignee.address"
+        ],
+        "default": null
+      },
+      "notify": {
+        "sources": [
+          "raw_data.notify.name",
+          "notify.name",
+          "raw_data.notify",
+          "notify",
+          "document_data.notify.name",
+          "document_data.notify"
+        ],
+        "default": null
+      },
+      "notify_email": {
+        "sources": [
+          "raw_data.notify.email",
+          "notify.email",
+          "document_data.notify.email"
+        ],
+        "default": null,
+        "validate": "email"
+      },
+      "notify_phone": {
+        "sources": [
+          "raw_data.notify.phone",
+          "notify.phone",
+          "document_data.notify.phone"
+        ],
+        "default": null
+      },
+      "notify_address": {
+        "sources": [
+          "raw_data.notify.address",
+          "notify.address",
+          "document_data.notify.address"
+        ],
+        "default": null
+      }
+    },
     "metadata": {
       "email_subject": {
         "sources": ["email_metadata.subject"],

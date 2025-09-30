@@ -271,6 +271,14 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
             }
         }
 
+        // Extract consignee address
+        if (preg_match('/Road\s+(\d+)\s+([A-Za-z\s,]+?)(?:\s+[A-Za-z]+\s+[A-Za-z]+)/', $text, $matches)) {
+            $address = trim($matches[0]);
+            if (strlen($address) > 5 && strlen($address) < 200) {
+                $extractedData['consignee']['address'] = $address;
+            }
+        }
+
         // Extract notify party information separately
         if (preg_match('/Notify\s+([A-Za-z\s\.&,]+?)(?:\s+\d|\s+[A-Z]{2,}|\s+[A-Za-z]+\s+[A-Za-z]+\s+[A-Za-z]+)/', $text, $matches)) {
             $notify = trim($matches[1]);
@@ -278,6 +286,11 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
                 $extractedData['notify']['name'] = $notify;
                 $extractedData['notify']['client_type'] = 'notify';
             }
+        }
+
+        // Extract notify address (same as consignee if not specified separately)
+        if (empty($extractedData['notify']['address']) && !empty($extractedData['consignee']['address'])) {
+            $extractedData['notify']['address'] = $extractedData['consignee']['address'];
         }
 
         // Name patterns (look for common name indicators)
