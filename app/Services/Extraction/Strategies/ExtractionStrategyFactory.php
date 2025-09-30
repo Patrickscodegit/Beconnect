@@ -91,8 +91,8 @@ class ExtractionStrategyFactory implements ExtractionStrategyFactoryInterface
         // Register email strategy
         $this->register(app(EmailExtractionStrategy::class));
 
-        // Register PDF strategy
-        $this->register(app(PdfExtractionStrategy::class));
+        // Register simple PDF strategy (consolidated approach)
+        $this->register(app(SimplePdfExtractionStrategy::class));
 
         // Register image strategy
         $this->register(app(ImageExtractionStrategy::class));

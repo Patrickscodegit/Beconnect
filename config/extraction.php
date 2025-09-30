@@ -43,7 +43,7 @@ return [
      */
     'isolation' => [
         'email_strategy' => 'isolated', // 'isolated' or 'shared'
-        'pdf_strategy' => 'enhanced',   // 'enhanced' or 'shared'
+        'pdf_strategy' => 'simple',     // 'simple' - consolidated to SimplePdfExtractionStrategy
         'image_strategy' => 'enhanced', // 'enhanced' or 'shared'
     ],
 
@@ -88,10 +88,10 @@ return [
             'mime_parser' => 'zbateson/mail-mime-parser',
         ],
         'pdf' => [
-            'use_hybrid_pipeline' => false, // Enhanced strategy doesn't use shared pipeline
-            'text_extraction_method' => 'smalot/pdfparser',
+            'use_hybrid_pipeline' => false, // Simple strategy doesn't use shared pipeline
+            'text_extraction_method' => 'pdf_service',
             'fallback_extraction' => true,
-            'enhanced_cleanup' => true,
+            'pattern_based_extraction' => true,
         ],
         'image' => [
             'use_hybrid_pipeline' => false, // Enhanced strategy doesn't use shared pipeline

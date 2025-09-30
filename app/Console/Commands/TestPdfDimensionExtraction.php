@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Document;
-use App\Services\Extraction\Strategies\PdfExtractionStrategy;
+use App\Services\Extraction\Strategies\SimplePdfExtractionStrategy;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
 
@@ -41,7 +41,7 @@ class TestPdfDimensionExtraction extends Command
         $this->newLine();
         
         // Test the PDF extraction strategy
-        $strategy = app(PdfExtractionStrategy::class);
+        $strategy = app(SimplePdfExtractionStrategy::class);
         
         $this->info('🔍 Starting PDF extraction...');
         $result = $strategy->extract($document);

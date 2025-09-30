@@ -57,10 +57,9 @@ class IsolatedExtractionStrategyFactory implements ExtractionStrategyFactoryInte
      */
     private function registerSharedStrategies(): void
     {
-
         // Register original strategies
         $this->register(app(EmailExtractionStrategy::class));
-        $this->register(app(PdfExtractionStrategy::class));
+        $this->register(app(SimplePdfExtractionStrategy::class)); // Use simple strategy in legacy mode too
         $this->register(app(ImageExtractionStrategy::class));
     }
 
