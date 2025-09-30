@@ -257,6 +257,8 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
         if (preg_match('/Shipper\s+([A-Za-z\s\.&,]+?)(?:\s+\d|\s+[A-Z]{2,}|\s+[A-Za-z]+\s+[A-Za-z]+\s+[A-Za-z]+)/', $text, $matches)) {
             $shipper = trim($matches[1]);
             if (strlen($shipper) > 3 && strlen($shipper) < 100) {
+                // Remove street name from company name (e.g., "JB Trading B.V. Marconistraat" -> "JB Trading B.V.")
+                $shipper = preg_replace('/\s+[A-Za-z]+$/', '', $shipper);
                 $extractedData['contact']['name'] = $shipper;
                 $extractedData['contact']['client_type'] = 'shipper';
             }
