@@ -262,33 +262,33 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
             }
         }
 
-        // Extract consignee information separately
-        if (preg_match('/Consignee\s+([A-Za-z\s\.&,]+?)(?:\s+\d|\s+[A-Z]{2,}|\s+[A-Za-z]+\s+[A-Za-z]+\s+[A-Za-z]+)/', $text, $matches)) {
-            $consignee = trim($matches[1]);
-            if (strlen($consignee) > 3 && strlen($consignee) < 100) {
-                $extractedData['consignee']['name'] = $consignee;
+        // Extract consignee information with full name and address
+        if (preg_match('/Consignee\s+([A-Za-z\s\.&,]+?)\s+Address\s+([A-Za-z0-9\s,]+?)(?:\s+Email|\s+Phone|\s+Destination)/i', $text, $matches)) {
+            $consigneeName = trim($matches[1]);
+            $consigneeAddress = trim($matches[2]);
+            if (strlen($consigneeName) > 3 && strlen($consigneeName) < 200) {
+                $extractedData['consignee']['name'] = $consigneeName;
                 $extractedData['consignee']['client_type'] = 'consignee';
             }
-        }
-
-        // Extract consignee address
-        if (preg_match('/Road\s+(\d+)\s+([A-Za-z\s,]+?)(?:\s+[A-Za-z]+\s+[A-Za-z]+)/', $text, $matches)) {
-            $address = trim($matches[0]);
-            if (strlen($address) > 5 && strlen($address) < 200) {
-                $extractedData['consignee']['address'] = $address;
+            if (strlen($consigneeAddress) > 5 && strlen($consigneeAddress) < 200) {
+                $extractedData['consignee']['address'] = $consigneeAddress;
             }
         }
 
-        // Extract notify party information separately
-        if (preg_match('/Notify\s+([A-Za-z\s\.&,]+?)(?:\s+\d|\s+[A-Z]{2,}|\s+[A-Za-z]+\s+[A-Za-z]+\s+[A-Za-z]+)/', $text, $matches)) {
-            $notify = trim($matches[1]);
-            if (strlen($notify) > 3 && strlen($notify) < 100) {
-                $extractedData['notify']['name'] = $notify;
+        // Extract notify party information with full name and address
+        if (preg_match('/Notify\s+([A-Za-z\s\.&,]+?)\s+Address\s+([A-Za-z0-9\s,]+?)(?:\s+Email|\s+Phone|\s+Destination)/i', $text, $matches)) {
+            $notifyName = trim($matches[1]);
+            $notifyAddress = trim($matches[2]);
+            if (strlen($notifyName) > 3 && strlen($notifyName) < 200) {
+                $extractedData['notify']['name'] = $notifyName;
                 $extractedData['notify']['client_type'] = 'notify';
             }
+            if (strlen($notifyAddress) > 5 && strlen($notifyAddress) < 200) {
+                $extractedData['notify']['address'] = $notifyAddress;
+            }
         }
 
-        // Extract notify address (same as consignee if not specified separately)
+        // Fallback: if notify address not found separately, use consignee address
         if (empty($extractedData['notify']['address']) && !empty($extractedData['consignee']['address'])) {
             $extractedData['notify']['address'] = $extractedData['consignee']['address'];
         }
