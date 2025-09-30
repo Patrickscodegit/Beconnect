@@ -278,7 +278,7 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
 
         // Extract notify party information with full name and address
         // Pattern for PDF text without spaces between fields
-        if (preg_match('/Notify\s+([A-Za-z\s\.&,]+?)\s+Road\s+(\d+)\s+([A-Za-z0-9\s,]+?)(?:\s+[A-Za-z0-9@\.]+\s+\+\d+)/i', $text, $matches)) {
+        if (preg_match('/Notify\s+([A-Za-z\s\.&,]+?)\s+Road\s+(\d+)\s+([A-Za-z0-9\s,]+?)(?:\s+([A-Za-z0-9@\.]+)\s+(\+\d+))?/i', $text, $matches)) {
             $notifyName = trim($matches[1]);
             $notifyAddress = trim($matches[2] . ' ' . $matches[3]);
             if (strlen($notifyName) > 3 && strlen($notifyName) < 200) {
@@ -288,11 +288,28 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
             if (strlen($notifyAddress) > 5 && strlen($notifyAddress) < 200) {
                 $extractedData['notify']['address'] = $notifyAddress;
             }
+            // Extract email and phone if present
+            if (isset($matches[4]) && !empty($matches[4])) {
+                $extractedData['notify']['email'] = trim($matches[4]);
+            }
+            if (isset($matches[5]) && !empty($matches[5])) {
+                $extractedData['notify']['phone'] = trim($matches[5]);
+            }
         }
 
         // Fallback: if notify address not found separately, use consignee address
         if (empty($extractedData['notify']['address']) && !empty($extractedData['consignee']['address'])) {
             $extractedData['notify']['address'] = $extractedData['consignee']['address'];
+        }
+        
+        // Fallback: if notify email not found separately, use consignee email
+        if (empty($extractedData['notify']['email']) && !empty($extractedData['consignee']['email'])) {
+            $extractedData['notify']['email'] = $extractedData['consignee']['email'];
+        }
+        
+        // Fallback: if notify phone not found separately, use consignee phone
+        if (empty($extractedData['notify']['phone']) && !empty($extractedData['consignee']['phone'])) {
+            $extractedData['notify']['phone'] = $extractedData['consignee']['phone'];
         }
 
         // Name patterns (look for common name indicators)
