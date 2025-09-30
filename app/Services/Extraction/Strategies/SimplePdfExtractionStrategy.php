@@ -262,55 +262,46 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
             }
         }
 
-        // Extract consignee information with full name and address
-        // Pattern for PDF text without spaces between fields
-        if (preg_match('/Consignee\s+([A-Za-z\s\.&,]+?)\s+Road\s+(\d+)\s+([A-Za-z0-9\s,]+?)(?:\s+[A-Za-z0-9@\.]+\s+\+\d+)/i', $text, $matches)) {
-            $consigneeName = trim($matches[1]);
-            $consigneeAddress = trim($matches[2] . ' ' . $matches[3]);
-            if (strlen($consigneeName) > 3 && strlen($consigneeName) < 200) {
-                $extractedData['consignee']['name'] = $consigneeName;
+        // Extract consignee and notify information using section boundaries
+        // Much simpler approach - find sections and extract data between them
+        
+        // Find consignee section
+        $consigneeStart = strpos($text, 'Consignee');
+        $notifyStart = strpos($text, 'Notify');
+        $destinationStart = strpos($text, 'Destination');
+        
+        if ($consigneeStart !== false && $notifyStart !== false) {
+            // Extract consignee data between Consignee and Notify
+            $consigneeSection = substr($text, $consigneeStart + 9, $notifyStart - $consigneeStart - 9);
+            $consigneeSection = trim($consigneeSection);
+            
+            // Parse consignee data: "Silver Univer Oil and Gas LTD Road 12 Goodnews Estate Lekki Lagos, Nigeria Firstmann92@gmail.com +234 8107043965"
+            if (preg_match('/^([A-Za-z\s\.&,]+?)\s+Road\s+(\d+)\s+([A-Za-z0-9\s,]+?)\s+([A-Za-z0-9@\.]+)\s+(\+\d+\s+\d+)/', $consigneeSection, $matches)) {
+                $extractedData['consignee']['name'] = trim($matches[1]);
                 $extractedData['consignee']['client_type'] = 'consignee';
-            }
-            if (strlen($consigneeAddress) > 5 && strlen($consigneeAddress) < 200) {
-                $extractedData['consignee']['address'] = $consigneeAddress;
+                $extractedData['consignee']['address'] = trim($matches[2] . ' ' . $matches[3]);
+                $extractedData['consignee']['email'] = trim($matches[4]);
+                $extractedData['consignee']['phone'] = trim($matches[5]);
             }
         }
-
-        // Extract notify party information with full name and address
-        // Pattern for PDF text without spaces between fields
-        if (preg_match('/Notify\s+([A-Za-z\s\.&,]+?)\s+Road\s+(\d+)\s+([A-Za-z0-9\s,]+?)(?:\s+([A-Za-z0-9@\.]+)\s+(\+\d+))?/i', $text, $matches)) {
-            $notifyName = trim($matches[1]);
-            $notifyAddress = trim($matches[2] . ' ' . $matches[3]);
-            if (strlen($notifyName) > 3 && strlen($notifyName) < 200) {
-                $extractedData['notify']['name'] = $notifyName;
+        
+        if ($notifyStart !== false && $destinationStart !== false) {
+            // Extract notify data between Notify and Destination
+            $notifySection = substr($text, $notifyStart + 6, $destinationStart - $notifyStart - 6);
+            $notifySection = trim($notifySection);
+            
+            // Parse notify data: "Silver Univer Oil and Gas LTD Road 12 Goodnews Estate Lekki Lagos, Nigeria Firstmann92@gmail.com +234 8107043965"
+            if (preg_match('/^([A-Za-z\s\.&,]+?)\s+Road\s+(\d+)\s+([A-Za-z0-9\s,]+?)\s+([A-Za-z0-9@\.]+)\s+(\+\d+\s+\d+)/', $notifySection, $matches)) {
+                $extractedData['notify']['name'] = trim($matches[1]);
                 $extractedData['notify']['client_type'] = 'notify';
-            }
-            if (strlen($notifyAddress) > 5 && strlen($notifyAddress) < 200) {
-                $extractedData['notify']['address'] = $notifyAddress;
-            }
-            // Extract email and phone if present
-            if (isset($matches[4]) && !empty($matches[4])) {
+                $extractedData['notify']['address'] = trim($matches[2] . ' ' . $matches[3]);
                 $extractedData['notify']['email'] = trim($matches[4]);
-            }
-            if (isset($matches[5]) && !empty($matches[5])) {
                 $extractedData['notify']['phone'] = trim($matches[5]);
             }
         }
 
-        // Fallback: if notify address not found separately, use consignee address
-        if (empty($extractedData['notify']['address']) && !empty($extractedData['consignee']['address'])) {
-            $extractedData['notify']['address'] = $extractedData['consignee']['address'];
-        }
-        
-        // Fallback: if notify email not found separately, use consignee email
-        if (empty($extractedData['notify']['email']) && !empty($extractedData['consignee']['email'])) {
-            $extractedData['notify']['email'] = $extractedData['consignee']['email'];
-        }
-        
-        // Fallback: if notify phone not found separately, use consignee phone
-        if (empty($extractedData['notify']['phone']) && !empty($extractedData['consignee']['phone'])) {
-            $extractedData['notify']['phone'] = $extractedData['consignee']['phone'];
-        }
+        // No fallback logic - extract notify information precisely as shown in PDF
+        // Each party's information should be extracted independently
 
         // Name patterns (look for common name indicators)
         $namePatterns = [
