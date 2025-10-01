@@ -283,7 +283,7 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
         // Find consignee section
         $consigneeStart = strpos($text, 'Consignee');
         $notifyStart = strpos($text, 'Notify');
-        $invoiceStart = strpos($text, 'Send invoice to:');
+        $invoiceStart = strpos($text, 'Send invoice to');
         
         if ($consigneeStart !== false && $notifyStart !== false) {
             // Extract consignee data between Consignee and Notify
@@ -306,12 +306,23 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
             $notifySection = trim($notifySection);
             
             // Parse notify data: "Mahez Global Resources LTD No. 8 Kajode street (ppmc depot) Apapa Lagos, Nigeria mahezgr@gmail.com +234 8033533588"
+            // Updated regex to handle single-line text without requiring line breaks
             if (preg_match('/^([A-Za-z\s\.&,]+?)\s+No\.\s+(\d+)\s+([A-Za-z0-9\s,()]+?)\s+([A-Za-z\s,]+?)\s+([A-Za-z0-9@\.]+)\s+(\+\d+\s+\d+)/', $notifySection, $matches)) {
                 $extractedData['notify']['name'] = trim($matches[1]);
                 $extractedData['notify']['client_type'] = 'notify';
                 $extractedData['notify']['address'] = 'No. ' . trim($matches[2]) . ' ' . trim($matches[3]) . ' ' . trim($matches[4]);
                 $extractedData['notify']['email'] = trim($matches[5]);
                 $extractedData['notify']['phone'] = trim($matches[6]);
+            } else {
+                // Fallback: try to extract notify data using a simpler pattern for single-line text
+                // Look for the pattern: "Notify [Company Name] [Address] [Email] [Phone]"
+                if (preg_match('/Notify\s+([A-Za-z\s\.&,]+?)\s+No\.\s+(\d+)\s+([A-Za-z0-9\s,()]+?)\s+([A-Za-z\s,]+?)\s+([A-Za-z0-9@\.]+)\s+(\+\d+\s+\d+)/', $text, $matches)) {
+                    $extractedData['notify']['name'] = trim($matches[1]);
+                    $extractedData['notify']['client_type'] = 'notify';
+                    $extractedData['notify']['address'] = 'No. ' . trim($matches[2]) . ' ' . trim($matches[3]) . ' ' . trim($matches[4]);
+                    $extractedData['notify']['email'] = trim($matches[5]);
+                    $extractedData['notify']['phone'] = trim($matches[6]);
+                }
             }
         }
 
