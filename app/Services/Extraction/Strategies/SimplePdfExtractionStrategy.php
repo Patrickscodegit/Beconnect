@@ -231,7 +231,9 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
                 if (preg_match($pattern, $text, $matches)) {
                     $phone = trim($matches[0]);
                     // Don't use booking numbers as phone numbers
-                    if (strlen($phone) >= 10 && !preg_match('/^250927083150$/', $phone)) {
+                    if (strlen($phone) >= 10 && 
+                        !preg_match('/^250927083150$/', $phone) && 
+                        !preg_match('/^251001115946$/', $phone)) {
                         $extractedData['contact']['phone'] = $phone;
                         break;
                     }
