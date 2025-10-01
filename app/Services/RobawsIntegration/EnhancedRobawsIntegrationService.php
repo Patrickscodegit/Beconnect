@@ -245,6 +245,91 @@ class EnhancedRobawsIntegrationService
     }
 
     /**
+     * Update existing offer with new field types (e.g., LONG_TEXT for textarea fields)
+     */
+    public function updateExistingOffer(Document $document): bool
+    {
+        if (!$document->robaws_quotation_id) {
+            Log::channel('robaws')->warning('Cannot update offer: no quotation ID', [
+                'document_id' => $document->id
+            ]);
+            return false;
+        }
+
+        $mapped = $document->robaws_quotation_data ?? [];
+        if (empty($mapped)) {
+            Log::channel('robaws')->warning('Cannot update offer: no mapped data', [
+                'document_id' => $document->id
+            ]);
+            return false;
+        }
+
+        try {
+            Log::channel('robaws')->info('Updating existing offer with new field types', [
+                'document_id' => $document->id,
+                'quotation_id' => $document->robaws_quotation_id
+            ]);
+
+            // GET current offer
+            $remote = $this->robawsClient->getOffer($document->robaws_quotation_id);
+            $updated = $this->stripOfferReadOnly($remote['data'] ?? []);
+            
+            // Build new extraFields with LONG_TEXT types
+            $newExtraFields = $this->buildExtraFieldsFromMapped($mapped);
+            
+            // Merge with existing extraFields, but prioritize new ones
+            $updated['extraFields'] = array_merge($remote['extraFields'] ?? [], $newExtraFields);
+            
+            // Ensure companyId is present
+            if (!isset($updated['companyId'])) {
+                $updated['companyId'] = config('services.robaws.default_company_id', config('services.robaws.company_id'));
+            }
+
+            Log::channel('robaws')->info('Robaws UPDATE existing offer (extraFields)', [
+                'offer_id' => $document->robaws_quotation_id,
+                'labels' => array_keys($updated['extraFields'] ?? []),
+                'extraFields' => $updated['extraFields'] ?? [],
+                'payload_size' => strlen(json_encode($updated)),
+                'payload_keys' => array_keys($updated),
+            ]);
+            
+            $updateResult = $this->robawsClient->updateQuotation($document->robaws_quotation_id, $updated);
+            
+            Log::channel('robaws')->info('Robaws UPDATE existing offer result', [
+                'offer_id' => $document->robaws_quotation_id,
+                'success' => $updateResult['success'] ?? false,
+                'response' => $updateResult['data'] ?? null,
+                'error' => $updateResult['error'] ?? null,
+                'status' => $updateResult['status'] ?? null,
+            ]);
+
+            if ($updateResult['success'] ?? false) {
+                Log::channel('robaws')->info('Successfully updated existing offer', [
+                    'document_id' => $document->id,
+                    'quotation_id' => $document->robaws_quotation_id
+                ]);
+                return true;
+            } else {
+                Log::channel('robaws')->error('Failed to update existing offer', [
+                    'document_id' => $document->id,
+                    'quotation_id' => $document->robaws_quotation_id,
+                    'error' => $updateResult['error'] ?? 'Unknown error'
+                ]);
+                return false;
+            }
+
+        } catch (\Exception $e) {
+            Log::channel('robaws')->error('Exception updating existing offer', [
+                'document_id' => $document->id,
+                'quotation_id' => $document->robaws_quotation_id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return false;
+        }
+    }
+
+    /**
      * Strip offer read-only fields to avoid 415/422 errors
      */
     private function stripOfferReadOnly(array $offer): array
