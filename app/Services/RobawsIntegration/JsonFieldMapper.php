@@ -10,6 +10,7 @@ class JsonFieldMapper
     private array $mappingConfig;
     private array $transformations;
     private array $validationRules;
+    private ?string $currentFieldName = null;
     
     public function __construct()
     {
@@ -57,6 +58,8 @@ class JsonFieldMapper
         
         foreach ($this->mappingConfig as $section => $fields) {
             foreach ($fields as $targetField => $config) {
+                // Set current field name for context-aware transformations
+                $this->currentFieldName = $targetField;
                 $value = $this->extractFieldValue($extractedData, $config);
                 
                 // POL fallback: if POL is empty but we have POR, try to map POR to port
@@ -453,7 +456,7 @@ class JsonFieldMapper
                 return $this->formatSimpleReference($value, $fullData);
                 
             case 'format_contact_textarea':
-                return $this->formatContactTextarea($value, $fullData);
+                return $this->formatContactTextarea($value, $fullData, $this->currentFieldName ?? null);
                 
             default:
                 return $value;
@@ -1594,7 +1597,7 @@ class JsonFieldMapper
     /**
      * Format contact information for textarea fields
      */
-    private function formatContactTextarea($value, array $fullData): ?string
+    private function formatContactTextarea($value, array $fullData, ?string $fieldName = null): ?string
     {
         if (!$value) return null;
         
@@ -1614,37 +1617,39 @@ class JsonFieldMapper
             $name = trim($value);
         }
         
-        // Determine which contact type to use based on the value content
+        // Determine which contact type to use based on the field name
         $contactData = null;
         
-        // Check if this is shipper data (contact field) - look for JB Trading
-        if (isset($fullData['contact']) && is_array($fullData['contact']) && 
-            (strpos($name, 'JB Trading') !== false || strpos($name, 'Marconistraat') !== false)) {
-            $contactData = $fullData['contact'];
+        if ($fieldName) {
+            // Select contact data based on field name
+            if (strpos($fieldName, 'shipper') !== false) {
+                $contactData = $fullData['contact'] ?? null;
+            } elseif (strpos($fieldName, 'consignee') !== false) {
+                $contactData = $fullData['consignee'] ?? null;
+            } elseif (strpos($fieldName, 'notify') !== false) {
+                $contactData = $fullData['notify'] ?? null;
+            }
         }
-        // Check if this is consignee data - look for Silver Univer
-        elseif (isset($fullData['consignee']) && is_array($fullData['consignee']) && 
-                 strpos($name, 'Silver Univer') !== false) {
-            $contactData = $fullData['consignee'];
-        }
-        // Check if this is notify data - look for Silver Univer
-        elseif (isset($fullData['notify']) && is_array($fullData['notify']) && 
-                 strpos($name, 'Silver Univer') !== false) {
-            $contactData = $fullData['notify'];
-        }
-        // Fallback: use the first available contact data
-        elseif (isset($fullData['contact']) && is_array($fullData['contact'])) {
-            $contactData = $fullData['contact'];
-        }
-        elseif (isset($fullData['consignee']) && is_array($fullData['consignee'])) {
-            $contactData = $fullData['consignee'];
-        }
-        elseif (isset($fullData['notify']) && is_array($fullData['notify'])) {
-            $contactData = $fullData['notify'];
+        
+        // Fallback: try to match by name content if field context is unclear
+        if (!$contactData) {
+            if (isset($fullData['contact']) && is_array($fullData['contact']) && 
+                isset($fullData['contact']['name']) && 
+                strpos($name, $fullData['contact']['name']) !== false) {
+                $contactData = $fullData['contact'];
+            } elseif (isset($fullData['consignee']) && is_array($fullData['consignee']) && 
+                      isset($fullData['consignee']['name']) && 
+                      strpos($name, $fullData['consignee']['name']) !== false) {
+                $contactData = $fullData['consignee'];
+            } elseif (isset($fullData['notify']) && is_array($fullData['notify']) && 
+                      isset($fullData['notify']['name']) && 
+                      strpos($name, $fullData['notify']['name']) !== false) {
+                $contactData = $fullData['notify'];
+            }
         }
         
         // Extract contact details from the appropriate source
-        if ($contactData) {
+        if ($contactData && is_array($contactData)) {
             $name = $name ?: ($contactData['name'] ?? null);
             $address = $contactData['address'] ?? null;
             $email = $contactData['email'] ?? null;

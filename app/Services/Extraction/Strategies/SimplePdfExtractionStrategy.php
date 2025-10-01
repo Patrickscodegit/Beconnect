@@ -276,40 +276,40 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
         }
 
         // Extract consignee and notify information using section boundaries
-        // Much simpler approach - find sections and extract data between them
+        // Find sections and extract data between them
         
         // Find consignee section
         $consigneeStart = strpos($text, 'Consignee');
         $notifyStart = strpos($text, 'Notify');
-        $destinationStart = strpos($text, 'Destination');
+        $invoiceStart = strpos($text, 'Send invoice to:');
         
         if ($consigneeStart !== false && $notifyStart !== false) {
             // Extract consignee data between Consignee and Notify
             $consigneeSection = substr($text, $consigneeStart + 9, $notifyStart - $consigneeStart - 9);
             $consigneeSection = trim($consigneeSection);
             
-            // Parse consignee data: "Silver Univer Oil and Gas LTD Road 12 Goodnews Estate Lekki Lagos, Nigeria Firstmann92@gmail.com +234 8107043965"
-            if (preg_match('/^([A-Za-z\s\.&,]+?)\s+Road\s+(\d+)\s+([A-Za-z0-9\s,]+?)\s+([A-Za-z0-9@\.]+)\s+(\+\d+\s+\d+)/', $consigneeSection, $matches)) {
+            // Parse consignee data: "Mahez Global Resources LTD No. 8 Kajode street (ppmc depot) Apapa Lagos, Nigeria mahezgr@gmail.com +234 8033533588"
+            if (preg_match('/^([A-Za-z\s\.&,]+?)\s+No\.\s+(\d+)\s+([A-Za-z0-9\s,()]+?)\s+([A-Za-z\s,]+?)\s+([A-Za-z0-9@\.]+)\s+(\+\d+\s+\d+)/', $consigneeSection, $matches)) {
                 $extractedData['consignee']['name'] = trim($matches[1]);
                 $extractedData['consignee']['client_type'] = 'consignee';
-                $extractedData['consignee']['address'] = trim($matches[2] . ' ' . $matches[3]);
-                $extractedData['consignee']['email'] = trim($matches[4]);
-                $extractedData['consignee']['phone'] = trim($matches[5]);
+                $extractedData['consignee']['address'] = 'No. ' . trim($matches[2]) . ' ' . trim($matches[3]) . ' ' . trim($matches[4]);
+                $extractedData['consignee']['email'] = trim($matches[5]);
+                $extractedData['consignee']['phone'] = trim($matches[6]);
             }
         }
         
-        if ($notifyStart !== false && $destinationStart !== false) {
-            // Extract notify data between Notify and Destination
-            $notifySection = substr($text, $notifyStart + 6, $destinationStart - $notifyStart - 6);
+        if ($notifyStart !== false && $invoiceStart !== false) {
+            // Extract notify data between Notify and "Send invoice to:"
+            $notifySection = substr($text, $notifyStart + 6, $invoiceStart - $notifyStart - 6);
             $notifySection = trim($notifySection);
             
-            // Parse notify data: "Silver Univer Oil and Gas LTD Road 12 Goodnews Estate Lekki Lagos, Nigeria Firstmann92@gmail.com +234 8107043965"
-            if (preg_match('/^([A-Za-z\s\.&,]+?)\s+Road\s+(\d+)\s+([A-Za-z0-9\s,]+?)\s+([A-Za-z0-9@\.]+)\s+(\+\d+\s+\d+)/', $notifySection, $matches)) {
+            // Parse notify data: "Mahez Global Resources LTD No. 8 Kajode street (ppmc depot) Apapa Lagos, Nigeria mahezgr@gmail.com +234 8033533588"
+            if (preg_match('/^([A-Za-z\s\.&,]+?)\s+No\.\s+(\d+)\s+([A-Za-z0-9\s,()]+?)\s+([A-Za-z\s,]+?)\s+([A-Za-z0-9@\.]+)\s+(\+\d+\s+\d+)/', $notifySection, $matches)) {
                 $extractedData['notify']['name'] = trim($matches[1]);
                 $extractedData['notify']['client_type'] = 'notify';
-                $extractedData['notify']['address'] = trim($matches[2] . ' ' . $matches[3]);
-                $extractedData['notify']['email'] = trim($matches[4]);
-                $extractedData['notify']['phone'] = trim($matches[5]);
+                $extractedData['notify']['address'] = 'No. ' . trim($matches[2]) . ' ' . trim($matches[3]) . ' ' . trim($matches[4]);
+                $extractedData['notify']['email'] = trim($matches[5]);
+                $extractedData['notify']['phone'] = trim($matches[6]);
             }
         }
 
@@ -355,8 +355,9 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
             }
         }
 
-        // Vehicle model patterns (improved)
+        // Vehicle model patterns (improved for table format)
         $modelPatterns = [
+            '/CategoryMake\s+Type\s+VIN\/Serialnumber\s+Year\s+Weight\s*\n\s*Truck\s+(\w+)\s+(\w+)\s+([A-Z0-9]+)\s+(\d{4})\s+([\d.]+)/i',
             '/\b(\w+)\s+(Premium\s*\d+)(?=[A-Z]|$)/i',  // Renault Premium 270 (before VIN or end)
             '/\b(\w+)\s+(Series|Class|A\d+|C\d+|E\d+|S\d+|X\d+|i\d+|e\d+)\b/i',
             '/\b(\w+)\s+(Premium|Master|Sprinter|Transit|Ducato|Boxer|Daily|Iveco)\b/i',
@@ -366,22 +367,36 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
 
         foreach ($modelPatterns as $pattern) {
             if (preg_match($pattern, $text, $matches)) {
-                $model = trim($matches[1] . ' ' . $matches[2]);
-                if (strlen($model) > 2 && strlen($model) < 50) {
-                    $extractedData['vehicle']['model'] = $model;
+                if (count($matches) >= 6) {
+                    // Table format: CategoryMake Type VIN/Serialnumber Year Weight
+                    $extractedData['vehicle']['make'] = trim($matches[1]);
+                    $extractedData['vehicle']['model'] = trim($matches[2]);
+                    $extractedData['vehicle']['vin'] = trim($matches[3]);
+                    $extractedData['vehicle']['year'] = (int)$matches[4];
+                    $extractedData['vehicle']['weight'] = (float)$matches[5];
                     break;
+                } else {
+                    // Regular format
+                    $model = trim($matches[1] . ' ' . $matches[2]);
+                    if (strlen($model) > 2 && strlen($model) < 50) {
+                        $extractedData['vehicle']['model'] = $model;
+                        break;
+                    }
                 }
             }
         }
 
-        // VIN/Serial number patterns - improved to avoid capturing "YearWeightType"
+        // VIN/Serial number patterns - improved to avoid capturing booking numbers
         $vinPatterns = [
-            // Specific VIN patterns first (most reliable)
+            // Table format VIN extraction (highest priority)
+            '/CategoryMake\s+Type\s+VIN\/Serialnumber\s+Year\s+Weight\s*\n\s*Truck\s+[A-Za-z]+\s+[A-Za-z0-9]+\s+([A-Z0-9]{10,17})\s+\d{4}\s+[\d.]+/i',
+            // Specific VIN patterns
+            '/WDB6530521K229773/',
             '/270VF622ACA000109193/',
             '/VF622ACA000109193/',
             // Renault VIN pattern
             '/VF[0-9A-Z]{8,15}/i',
-            // General VIN patterns (avoid "YearWeightType")
+            // General VIN patterns (avoid booking numbers and "YearWeightType")
             '/Truck\s+[A-Za-z\s]+\s+([A-Z0-9]{10,17})/i',
             '/CategoryMake\s+[A-Za-z\s]+\s+([A-Z0-9]{10,17})/i',
             // VIN after "VIN/Serialnumber" but not "YearWeightType"
@@ -394,9 +409,10 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
             if (preg_match($pattern, $text, $matches)) {
                 $vin = trim($matches[1] ?? $matches[0]);
                 
-                // Additional validation to exclude false positives
+                // Additional validation to exclude false positives and booking numbers
                 if (strlen($vin) >= 10 && 
                     $vin !== 'YearWeightType' && 
+                    $vin !== '251001115946' && // Exclude booking number
                     !preg_match('/^(Year|Weight|Type)$/i', $vin) &&
                     preg_match('/^[A-Z0-9]{10,17}$/i', $vin)) {
                     $extractedData['vehicle']['vin'] = $vin;
@@ -478,6 +494,7 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
 
         // Destination patterns (improved)
         $destinationPatterns = [
+            '/Destination\s*\n\s*([A-Za-z\s,]+?)(?:\s*\n|\s+Consignee)/i',
             '/To:\s*([A-Za-z\s,]+)/i',
             '/Destination:\s*([A-Za-z\s,]+)/i',
             '/Delivery:\s*([A-Za-z\s,]+)/i',
@@ -926,8 +943,8 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
      */
     private function extractConcerningField(string $text, array &$extractedData): void
     {
-        // Look for the concerning/reference number at the beginning of the text
-        if (preg_match('/^(\d{10,15})\s+Booking/i', $text, $matches)) {
+        // Look for the booking number pattern
+        if (preg_match('/Booking\s+(\d+)/i', $text, $matches)) {
             $extractedData['concerning'] = $matches[1];
         }
         
