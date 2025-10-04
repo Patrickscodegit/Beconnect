@@ -458,6 +458,9 @@ class JsonFieldMapper
             case 'format_contact_textarea':
                 return $this->formatContactTextarea($value, $fullData, $this->currentFieldName ?? null);
                 
+            case 'extract_cargo_summary':
+                return $this->transform_extract_cargo_summary($value);
+                
             default:
                 return $value;
         }
@@ -852,6 +855,34 @@ class JsonFieldMapper
         $qty = trim((string)($inputs['quantity'] ?? '1'));
         $core = $this->transform_format_cargo_core($inputs);
         return $core ? "{$qty} x {$core}" : "{$qty} x Vehicle";
+    }
+
+    /**
+     * Extract cargo summary for customer reference (first line only)
+     */
+    private function transform_extract_cargo_summary($value): ?string
+    {
+        if (!$value) return null;
+        
+        // If it's already a string, take the first line
+        if (is_string($value)) {
+            $lines = explode("\n", $value);
+            return trim($lines[0]);
+        }
+        
+        // If it's an array, try to build a summary
+        if (is_array($value)) {
+            $parts = [];
+            if (!empty($value['quantity'])) $parts[] = $value['quantity'];
+            if (!empty($value['condition'])) $parts[] = $value['condition'];
+            if (!empty($value['brand'])) $parts[] = $value['brand'];
+            if (!empty($value['model'])) $parts[] = $value['model'];
+            if (!empty($value['type'])) $parts[] = $value['type'];
+            
+            return !empty($parts) ? implode(' ', $parts) : null;
+        }
+        
+        return null;
     }
 
     /**

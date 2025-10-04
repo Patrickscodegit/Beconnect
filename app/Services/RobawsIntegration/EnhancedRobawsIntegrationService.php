@@ -280,6 +280,11 @@ class EnhancedRobawsIntegrationService
             // Merge with existing extraFields, but prioritize new ones
             $updated['extraFields'] = array_merge($remote['extraFields'] ?? [], $newExtraFields);
             
+            // Update main offer fields (not just extraFields)
+            if (isset($mapped['customer_reference'])) {
+                $updated['clientReference'] = $mapped['customer_reference'];
+            }
+            
             // Ensure companyId is present
             if (!isset($updated['companyId'])) {
                 $updated['companyId'] = config('services.robaws.default_company_id', config('services.robaws.company_id'));

@@ -17,7 +17,7 @@
           "title",
           "description"
         ],
-        "fallback_template": "EXP RORO - {origin_address} - ANR - {destination_city}",
+        "fallback_template": "EXP RORO - {origin_address} - ANR - {destination_city} - {cargo_summary}",
         "components": {
           "origin_address": {
             "sources": ["raw_data.por", "por", "raw_data.transport_details.origin.pickup_address", "raw_data.transport_details.origin.pickup_location", "raw_data.transport_details.origin.address", "raw_data.transport_details.origin.location", "raw_data.request.origin.pickup_address", "raw_data.request.origin.pickup_location", "raw_data.request.origin.address", "raw_data.request.origin.location", "raw_data.expedition.origin", "raw_data.request.origin.country", "raw_data.transport_details.origin.country", "raw_data.origin"],
@@ -26,6 +26,10 @@
           "destination_city": {
             "sources": ["raw_data.destination", "raw_data.expedition.destination", "raw_data.request.destination.city", "raw_data.request.destination.country", "raw_data.transport_details.destination.city", "raw_data.transport_details.destination.country"],
             "transform": "normalize_city"
+          },
+          "cargo_summary": {
+            "sources": ["raw_data.cargo", "cargo", "raw_data.transport_details.cargo.description"],
+            "transform": "extract_cargo_summary"
           }
         },
         "default": null

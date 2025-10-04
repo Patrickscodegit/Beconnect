@@ -179,10 +179,31 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
         // Extract cargo and dimension fields
         $this->extractCargoAndDimensions($text, $extractedData);
 
+        // Update customer reference with cargo summary after cargo is extracted
+        $this->updateCustomerReferenceWithCargo($extractedData);
+
         // Extract concerning field
         $this->extractConcerningField($text, $extractedData);
 
         return $extractedData;
+    }
+
+    /**
+     * Update customer reference with cargo summary after cargo is extracted
+     */
+    private function updateCustomerReferenceWithCargo(array &$extractedData): void
+    {
+        if (!empty($extractedData['cargo'])) {
+            // Extract first line of cargo for summary
+            $cargoLines = explode("\n", $extractedData['cargo']);
+            $cargoSummary = ' - ' . trim($cargoLines[0]);
+            
+            // Check if cargo summary is already included
+            $currentRef = $extractedData['customer_reference'] ?? '';
+            if (strpos($currentRef, $cargoSummary) === false) {
+                $extractedData['customer_reference'] = $currentRef . $cargoSummary;
+            }
+        }
     }
 
     /**
@@ -742,10 +763,32 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
         }
 
         // Now set customer reference with the normalized origin and capitalized destination
-        if (empty($extractedData['customer_reference'])) {
+        if (empty($extractedData['customer_reference']) || strpos($extractedData['customer_reference'], 'EXP RORO - - ANR') !== false) {
             $origin = $extractedData['origin'] ?? 'Ede';
             $destination = $extractedData['destination'] ?? 'Lagos, Nigeria';
-            $extractedData['customer_reference'] = "EXP RORO - {$origin} - ANR - {$destination}";
+            
+            // Add cargo summary to customer reference
+            $cargoSummary = '';
+            if (!empty($extractedData['cargo'])) {
+                // Extract first line of cargo for summary
+                $cargoLines = explode("\n", $extractedData['cargo']);
+                $cargoSummary = ' - ' . trim($cargoLines[0]);
+            }
+            
+            $extractedData['customer_reference'] = "EXP RORO - {$origin} - ANR - {$destination}{$cargoSummary}";
+        } else {
+            // Customer reference exists but might be missing cargo summary
+            $currentRef = $extractedData['customer_reference'];
+            if (!empty($extractedData['cargo'])) {
+                // Extract first line of cargo for summary
+                $cargoLines = explode("\n", $extractedData['cargo']);
+                $cargoSummary = ' - ' . trim($cargoLines[0]);
+                
+                // Check if cargo summary is already included
+                if (strpos($currentRef, $cargoSummary) === false) {
+                    $extractedData['customer_reference'] = $currentRef . $cargoSummary;
+                }
+            }
         }
 
         if (empty($extractedData['pod']) && !empty($extractedData['destination'])) {
