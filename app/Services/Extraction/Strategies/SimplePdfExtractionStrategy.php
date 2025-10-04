@@ -290,23 +290,14 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
             $consigneeSection = substr($text, $consigneeStart + 9, $notifyStart - $consigneeStart - 9);
             $consigneeSection = trim($consigneeSection);
             
-            // Parse consignee data: "Silver Univer Oil and Gas LTD Road 12 Goodnews Estate Lekki Lagos, Nigeria Firstmann92@gmail.com +234 8107043965"
-            if (preg_match('/^([A-Za-z\s\.&,]+?)\s+(?:No\.\s+(\d+)\s+([A-Za-z0-9\s,()]+?)\s+([A-Za-z\s,]+?)|Road\s+(\d+)\s+([A-Za-z0-9\s,()]+?)\s+([A-Za-z\s,]+?))\s+([A-Za-z0-9@\.]+)\s+(\+\d+\s+\d+)/', $consigneeSection, $matches)) {
+            // Parse consignee data: "Mahez Global Resources LTD No. 8 Kajode street (ppmc depot) Apapa Lagos, Nigeria mahezgr@gmail.com +234 8033533588"
+            // Simplified regex to capture: Company Name + Address + Email + Phone
+            if (preg_match('/^([A-Za-z\s\.&,]+?)\s+(No\.\s+\d+\s+[A-Za-z0-9\s,()]+?)\s+([A-Za-z\s,]+?)\s+([A-Za-z0-9@\.]+)\s+(\+\d+\s+\d+)/', $consigneeSection, $matches)) {
                 $extractedData['consignee']['name'] = trim($matches[1]);
                 $extractedData['consignee']['client_type'] = 'consignee';
-                
-                // Handle both "No. X" and "Road X" patterns
-                if (!empty($matches[2])) {
-                    // "No. X" pattern
-                    $extractedData['consignee']['address'] = 'No. ' . trim($matches[2]) . ' ' . trim($matches[3]) . ' ' . trim($matches[4]);
-                    $extractedData['consignee']['email'] = trim($matches[5]);
-                    $extractedData['consignee']['phone'] = trim($matches[6]);
-                } else {
-                    // "Road X" pattern
-                    $extractedData['consignee']['address'] = 'Road ' . trim($matches[5]) . ' ' . trim($matches[6]) . ' ' . trim($matches[7]);
-                    $extractedData['consignee']['email'] = trim($matches[8]);
-                    $extractedData['consignee']['phone'] = trim($matches[9]);
-                }
+                $extractedData['consignee']['address'] = trim($matches[2]) . ' ' . trim($matches[3]);
+                $extractedData['consignee']['email'] = trim($matches[4]);
+                $extractedData['consignee']['phone'] = trim($matches[5]);
             }
         }
         
@@ -315,43 +306,23 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
             $notifySection = substr($text, $notifyStart + 6, $invoiceStart - $notifyStart - 6);
             $notifySection = trim($notifySection);
             
-            // Parse notify data: "Silver Univer Oil and Gas LTD Road 12 Goodnews Estate Lekki Lagos, Nigeria Firstmann92@gmail.com +234 8107043965"
-            // Updated regex to handle both "No. X" and "Road X" patterns
-            if (preg_match('/^([A-Za-z\s\.&,]+?)\s+(?:No\.\s+(\d+)\s+([A-Za-z0-9\s,()]+?)\s+([A-Za-z\s,]+?)|Road\s+(\d+)\s+([A-Za-z0-9\s,()]+?)\s+([A-Za-z\s,]+?))\s+([A-Za-z0-9@\.]+)\s+(\+\d+\s+\d+)/', $notifySection, $matches)) {
+            // Parse notify data: "Mahez Global Resources LTD No. 8 Kajode street (ppmc depot) Apapa Lagos, Nigeria mahezgr@gmail.com +234 8033533588"
+            // Simplified regex to capture: Company Name + Address + Email + Phone
+            if (preg_match('/^([A-Za-z\s\.&,]+?)\s+(No\.\s+\d+\s+[A-Za-z0-9\s,()]+?)\s+([A-Za-z\s,]+?)\s+([A-Za-z0-9@\.]+)\s+(\+\d+\s+\d+)/', $notifySection, $matches)) {
                 $extractedData['notify']['name'] = trim($matches[1]);
                 $extractedData['notify']['client_type'] = 'notify';
-                
-                // Handle both "No. X" and "Road X" patterns
-                if (!empty($matches[2])) {
-                    // "No. X" pattern
-                    $extractedData['notify']['address'] = 'No. ' . trim($matches[2]) . ' ' . trim($matches[3]) . ' ' . trim($matches[4]);
-                    $extractedData['notify']['email'] = trim($matches[5]);
-                    $extractedData['notify']['phone'] = trim($matches[6]);
-                } else {
-                    // "Road X" pattern
-                    $extractedData['notify']['address'] = 'Road ' . trim($matches[5]) . ' ' . trim($matches[6]) . ' ' . trim($matches[7]);
-                    $extractedData['notify']['email'] = trim($matches[8]);
-                    $extractedData['notify']['phone'] = trim($matches[9]);
-                }
+                $extractedData['notify']['address'] = trim($matches[2]) . ' ' . trim($matches[3]);
+                $extractedData['notify']['email'] = trim($matches[4]);
+                $extractedData['notify']['phone'] = trim($matches[5]);
             } else {
                 // Fallback: try to extract notify data using a simpler pattern for single-line text
                 // Look for the pattern: "Notify [Company Name] [Address] [Email] [Phone]"
-                if (preg_match('/Notify\s+([A-Za-z\s\.&,]+?)\s+(?:No\.\s+(\d+)\s+([A-Za-z0-9\s,()]+?)\s+([A-Za-z\s,]+?)|Road\s+(\d+)\s+([A-Za-z0-9\s,()]+?)\s+([A-Za-z\s,]+?))\s+([A-Za-z0-9@\.]+)\s+(\+\d+\s+\d+)/', $text, $matches)) {
+                if (preg_match('/Notify\s+([A-Za-z\s\.&,]+?)\s+(No\.\s+\d+\s+[A-Za-z0-9\s,()]+?)\s+([A-Za-z\s,]+?)\s+([A-Za-z0-9@\.]+)\s+(\+\d+\s+\d+)/', $text, $matches)) {
                     $extractedData['notify']['name'] = trim($matches[1]);
                     $extractedData['notify']['client_type'] = 'notify';
-                    
-                    // Handle both "No. X" and "Road X" patterns
-                    if (!empty($matches[2])) {
-                        // "No. X" pattern
-                        $extractedData['notify']['address'] = 'No. ' . trim($matches[2]) . ' ' . trim($matches[3]) . ' ' . trim($matches[4]);
-                        $extractedData['notify']['email'] = trim($matches[5]);
-                        $extractedData['notify']['phone'] = trim($matches[6]);
-                    } else {
-                        // "Road X" pattern
-                        $extractedData['notify']['address'] = 'Road ' . trim($matches[5]) . ' ' . trim($matches[6]) . ' ' . trim($matches[7]);
-                        $extractedData['notify']['email'] = trim($matches[8]);
-                        $extractedData['notify']['phone'] = trim($matches[9]);
-                    }
+                    $extractedData['notify']['address'] = trim($matches[2]) . ' ' . trim($matches[3]);
+                    $extractedData['notify']['email'] = trim($matches[4]);
+                    $extractedData['notify']['phone'] = trim($matches[5]);
                 }
             }
         }
