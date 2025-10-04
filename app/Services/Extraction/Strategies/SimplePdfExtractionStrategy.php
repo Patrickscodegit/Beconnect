@@ -770,7 +770,6 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
             // Add condition (default to 'used' if not specified)
             $condition = $vehicle['condition'] ?? 'used';
             $cargoParts[] = $condition;
-            $cargoParts[] = 'truck';
             
             // Add vehicle make and model (avoid duplication)
             if (!empty($vehicle['make']) && !empty($vehicle['model'])) {
@@ -789,7 +788,7 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
                 $cargoParts[] = $vehicle['model'];
             }
             
-            // Add tank truck if gas inspection is mentioned
+            // Add tank truck if gas inspection is mentioned, otherwise add vehicle type
             if ($isTankTruck) {
                 $cargoParts[] = 'tank truck';
             } elseif (!empty($vehicle['type'])) {
