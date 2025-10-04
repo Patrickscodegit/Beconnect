@@ -113,6 +113,7 @@ class IsolatedEmailExtractionStrategy implements ExtractionStrategy
     /**
      * DEDICATED EMAIL DATA EXTRACTION
      * This method is completely isolated and won't be affected by PDF/Image changes
+     * Uses sophisticated pattern-based extraction like the original EmailExtractionStrategy
      */
     private function extractEmailData(array $emailData): array
     {
@@ -122,7 +123,8 @@ class IsolatedEmailExtractionStrategy implements ExtractionStrategy
             'shipment' => [],
             'pricing' => [],
             'dates' => [],
-            'cargo' => []
+            'cargo' => [],
+            'raw_data' => []
         ];
 
         // Extract contact information from email headers
@@ -133,10 +135,16 @@ class IsolatedEmailExtractionStrategy implements ExtractionStrategy
             $extractedData['contact']['name'] = $emailData['from_name'];
         }
 
+        // CRITICAL: Pre-extract cargo information from email content before AI processing
+        $this->extractCargoFromEmailContent($extractedData, $emailData['body'] ?? '');
+
         // Extract data from email body using AI (isolated call)
         $bodyContent = $emailData['body'] ?? '';
         if (!empty($bodyContent)) {
-            $aiResult = $this->aiRouter->extract($bodyContent, [], [
+            // Prepare enriched email content for AI processing
+            $enrichedContent = $this->prepareEmailContextForPipeline($emailData);
+            
+            $aiResult = $this->aiRouter->extract($enrichedContent, [], [
                 'cheap' => true, // Use cheap model for email processing
                 'reasoning' => false,
                 'isolation_mode' => true // Flag for isolated processing
@@ -148,10 +156,239 @@ class IsolatedEmailExtractionStrategy implements ExtractionStrategy
             }
         }
 
-        // Ensure email sender contact is preserved
-        $this->preserveEmailSenderContact($extractedData, $emailData);
+        // CRITICAL: Ensure email sender contact is merged into main contact data
+        $this->mergeEmailSenderIntoContact($extractedData, $emailData);
 
         return $extractedData;
+    }
+
+    /**
+     * Prepare email content for AI processing (isolated version)
+     */
+    private function prepareEmailContextForPipeline(array $emailData): string
+    {
+        $context = '';
+        
+        // Add email metadata as context
+        if (!empty($emailData['from_name']) || !empty($emailData['from_email'])) {
+            $fromInfo = trim(($emailData['from_name'] ?? '') . ' <' . ($emailData['from_email'] ?? '') . '>');
+            $context .= "SENDER: " . $fromInfo . "\n";
+        }
+        
+        if (!empty($emailData['to_email'])) {
+            $context .= "RECIPIENT: " . $emailData['to_email'] . "\n";
+        }
+        
+        if (!empty($emailData['subject'])) {
+            $context .= "SUBJECT: " . $emailData['subject'] . "\n";
+        }
+        
+        if (!empty($emailData['date'])) {
+            $context .= "DATE: " . $emailData['date'] . "\n";
+        }
+        
+        $context .= "\n--- EMAIL CONTENT ---\n";
+        $context .= $emailData['body'] ?? '';
+        
+        return $context;
+    }
+
+    /**
+     * CRITICAL FIX: Merge email sender information into contact data
+     * This ensures the sender (customer) email/name is properly extracted as the contact
+     */
+    private function mergeEmailSenderIntoContact(array &$enhancedData, array $emailData): void
+    {
+        // If no contact extracted or contact is incomplete, use email sender as primary contact
+        $currentContact = $enhancedData['contact'] ?? [];
+        
+        // Email sender has high confidence as the customer/contact
+        $emailSender = [
+            'name' => $emailData['from_name'] ?? null,
+            'email' => $emailData['from_email'] ?? null,
+        ];
+        
+        // Clean sender name
+        if ($emailSender['name']) {
+            $emailSender['name'] = trim($emailSender['name'], ' "\'');
+        }
+        
+        // Merge strategy: Email sender wins if current contact is empty/incomplete
+        $mergedContact = [];
+        
+        // Use sender name if current name is missing or looks generic
+        if (empty($currentContact['name']) || 
+            in_array(strtolower($currentContact['name'] ?? ''), ['unknown', 'customer', 'client', 'sender'])) {
+            $mergedContact['name'] = $emailSender['name'];
+        } else {
+            $mergedContact['name'] = $currentContact['name'];
+        }
+        
+        // Use sender email if current email is missing
+        if (empty($currentContact['email'])) {
+            $mergedContact['email'] = $emailSender['email'];
+        } else {
+            $mergedContact['email'] = $currentContact['email'];
+        }
+        
+        // Preserve other contact fields
+        $mergedContact['phone'] = $currentContact['phone'] ?? null;
+        $mergedContact['company'] = $currentContact['company'] ?? null;
+        
+        // Infer company from email domain if missing
+        if (empty($mergedContact['company']) && !empty($mergedContact['email'])) {
+            $mergedContact['company'] = $this->inferCompanyFromEmail($mergedContact['email']);
+        }
+        
+        // Remove empty values
+        $enhancedData['contact'] = array_filter($mergedContact, fn($v) => !is_null($v) && $v !== '');
+        
+        Log::info('Email sender merged into contact data', [
+            'sender_name' => $emailSender['name'],
+            'sender_email' => $emailSender['email'],
+            'final_contact' => $enhancedData['contact']
+        ]);
+    }
+    
+    /**
+     * Infer company name from email domain
+     */
+    private function inferCompanyFromEmail(string $email): ?string
+    {
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return null;
+        }
+        
+        $domain = explode('@', $email)[1] ?? '';
+        $domainParts = explode('.', $domain);
+        $mainDomain = $domainParts[0] ?? '';
+        
+        // Skip common personal email providers
+        $personalProviders = ['gmail', 'yahoo', 'hotmail', 'outlook', 'live', 'icloud', 'aol'];
+        if (in_array(strtolower($mainDomain), $personalProviders)) {
+            return null;
+        }
+        
+        // Clean and format company name
+        return ucfirst(strtolower($mainDomain));
+    }
+
+    /**
+     * Extract cargo information from email content (isolated version)
+     */
+    private function extractCargoFromEmailContent(array &$enhancedData, string $emailBody): void
+    {
+        // Initialize cargo array if not exists
+        if (!isset($enhancedData['cargo'])) {
+            $enhancedData['cargo'] = [];
+        }
+
+        // Cargo extraction patterns for Dutch/German/English
+        $cargoPatterns = [
+            // Dutch patterns
+            '/\b(\d+)\s*[xX]\s*(gebruikte|nieuwe|tweedehands|secondhand)\s+([^,\n]+?)(?:\s+met\s+afmeting\s+([^,\n]+?))?(?:[,\n]|$)/i',
+            '/\b(\d+)\s*[xX]\s*([^,\n]+?)(?:\s+met\s+afmeting\s+([^,\n]+?))?(?:[,\n]|$)/i',
+            
+            // German patterns
+            '/\b(\d+)\s*[xX]\s*(gebrauchte|neue|zweite)\s+([^,\n]+?)(?:\s+mit\s+Abmessung\s+([^,\n]+?))?(?:[,\n]|$)/i',
+            '/\b(\d+)\s*[xX]\s*([^,\n]+?)(?:\s+mit\s+Abmessung\s+([^,\n]+?))?(?:[,\n]|$)/i',
+            
+            // English patterns
+            '/\b(\d+)\s*[xX]\s*(used|new|second-hand)\s+([^,\n]+?)(?:\s+with\s+dimensions?\s+([^,\n]+?))?(?:[,\n]|$)/i',
+            '/\b(\d+)\s*[xX]\s*([^,\n]+?)(?:\s+with\s+dimensions?\s+([^,\n]+?))?(?:[,\n]|$)/i',
+            
+            // Generic patterns
+            '/\b(\d+)\s*[xX]\s*([^,\n]+?)(?:\s+([^,\n]+?))?(?:[,\n]|$)/i',
+        ];
+
+        $cargoFound = false;
+        
+        foreach ($cargoPatterns as $pattern) {
+            if (preg_match($pattern, $emailBody, $matches)) {
+                $quantity = (int)($matches[1] ?? 1);
+                $description = trim($matches[2] ?? $matches[3] ?? '');
+                $dimensions = trim($matches[4] ?? $matches[3] ?? '');
+                
+                // Clean up description
+                $description = preg_replace('/\s+/', ' ', $description);
+                $description = trim($description, ' .,;');
+                
+                // Extract dimensions if present
+                if (!empty($dimensions)) {
+                    // Try regex pattern first
+                    if (preg_match('/(\d+(?:[.,]\d+)?)\s*[xX×]\s*(\d+(?:[.,]\d+)?)\s*[xX×]\s*(\d+(?:[.,]\d+)?)\s*(m|cm|mm)/i', $dimensions, $dimMatches)) {
+                        $length = (float)str_replace(',', '.', $dimMatches[1]);
+                        $width = (float)str_replace(',', '.', $dimMatches[2]);
+                        $height = (float)str_replace(',', '.', $dimMatches[3]);
+                        $unit = strtolower($dimMatches[4]);
+                    } else {
+                        // Fallback to manual parsing
+                        $parts = preg_split('/\s*x\s*/i', $dimensions);
+                        if (count($parts) >= 3) {
+                            $length = (float)str_replace(',', '.', trim($parts[0]));
+                            $width = (float)str_replace(',', '.', trim($parts[1]));
+                            $height = (float)str_replace(',', '.', trim($parts[2]));
+                            $unit = 'm'; // Default to meters
+                        }
+                    }
+                    
+                    if (isset($length) && isset($width) && isset($height)) {
+                        // Convert to meters
+                        $multiplier = match($unit) {
+                            'cm' => 0.01,
+                            'mm' => 0.001,
+                            default => 1
+                        };
+                        
+                        $enhancedData['cargo']['dimensions'] = [
+                            'length_m' => round($length * $multiplier, 3),
+                            'width_m' => round($width * $multiplier, 3),
+                            'height_m' => round($height * $multiplier, 3),
+                            'unit_source' => $unit
+                        ];
+                    }
+                }
+                
+                // Set cargo information
+                $enhancedData['cargo']['description'] = $description;
+                $enhancedData['cargo']['quantity'] = $quantity;
+                $enhancedData['cargo']['type'] = $description; // For compatibility
+                
+                // Also add to raw_data for field mapping
+                if (!isset($enhancedData['raw_data'])) {
+                    $enhancedData['raw_data'] = [];
+                }
+                $enhancedData['raw_data']['cargo'] = $description;
+                $enhancedData['raw_data']['cargo_quantity'] = $quantity;
+                
+                if (isset($enhancedData['cargo']['dimensions'])) {
+                    $enhancedData['raw_data']['dim_bef_delivery'] = sprintf(
+                        '%.2f x %.2f x %.2f m',
+                        $enhancedData['cargo']['dimensions']['length_m'],
+                        $enhancedData['cargo']['dimensions']['width_m'],
+                        $enhancedData['cargo']['dimensions']['height_m']
+                    );
+                }
+                
+                $cargoFound = true;
+                
+                Log::info('Cargo extracted from email content', [
+                    'description' => $description,
+                    'quantity' => $quantity,
+                    'dimensions' => $enhancedData['cargo']['dimensions'] ?? null,
+                    'pattern_used' => $pattern
+                ]);
+                
+                break; // Use first match
+            }
+        }
+        
+        if (!$cargoFound) {
+            Log::info('No cargo information found in email content', [
+                'content_length' => strlen($emailBody),
+                'content_preview' => substr($emailBody, 0, 200)
+            ]);
+        }
     }
 
     /**
@@ -342,111 +579,6 @@ class IsolatedEmailExtractionStrategy implements ExtractionStrategy
         return min(1.0, $score);
     }
 
-    /**
-     * Preserve email sender information in contact data
-     */
-    private function preserveEmailSenderContact(array &$extractedData, array $emailData): void
-    {
-        $currentContact = $extractedData['contact'] ?? [];
-        
-        $emailSender = [
-            'name' => $emailData['from_name'] ?? null,
-            'email' => $emailData['from_email'] ?? null,
-        ];
-        
-        // Clean sender name
-        if ($emailSender['name']) {
-            $emailSender['name'] = trim($emailSender['name'], ' "\'');
-        }
-        
-        // Merge strategy: Email sender wins if current contact is empty/incomplete
-        $mergedContact = [];
-        
-        // Use sender name if current name is missing or looks generic
-        $currentName = $currentContact['name'] ?? '';
-        
-        // Handle case where name might be an array (convert to string)
-        if (is_array($currentName)) {
-            $currentName = is_string($currentName[0] ?? '') ? $currentName[0] : '';
-        }
-        
-        // Ensure currentName is a string
-        $currentName = is_string($currentName) ? $currentName : '';
-        
-        if (empty($currentName) || 
-            in_array(strtolower($currentName), ['unknown', 'customer', 'client', 'sender'])) {
-            $mergedContact['name'] = $emailSender['name'];
-        } else {
-            $mergedContact['name'] = $currentName;
-        }
-        
-        // Use sender email if current email is missing
-        $currentEmail = $currentContact['email'] ?? '';
-        
-        // Handle case where email might be an array (convert to string)
-        if (is_array($currentEmail)) {
-            $currentEmail = is_string($currentEmail[0] ?? '') ? $currentEmail[0] : '';
-        }
-        
-        // Ensure currentEmail is a string
-        $currentEmail = is_string($currentEmail) ? $currentEmail : '';
-        
-        if (empty($currentEmail)) {
-            $mergedContact['email'] = $emailSender['email'];
-        } else {
-            $mergedContact['email'] = $currentEmail;
-        }
-        
-        // Preserve other contact fields (handle arrays)
-        $currentPhone = $currentContact['phone'] ?? null;
-        if (is_array($currentPhone)) {
-            $currentPhone = is_string($currentPhone[0] ?? null) ? $currentPhone[0] : null;
-        }
-        $mergedContact['phone'] = $currentPhone;
-        
-        $currentCompany = $currentContact['company'] ?? null;
-        if (is_array($currentCompany)) {
-            $currentCompany = is_string($currentCompany[0] ?? null) ? $currentCompany[0] : null;
-        }
-        $mergedContact['company'] = $currentCompany;
-        
-        // Infer company from email domain if missing
-        if (empty($mergedContact['company']) && !empty($mergedContact['email'])) {
-            $mergedContact['company'] = $this->inferCompanyFromEmail($mergedContact['email']);
-        }
-        
-        // Remove empty values
-        $extractedData['contact'] = array_filter($mergedContact, fn($v) => !is_null($v) && $v !== '');
-        
-        Log::info('Email sender preserved in contact data (ISOLATED)', [
-            'sender_name' => $emailSender['name'],
-            'sender_email' => $emailSender['email'],
-            'final_contact' => $extractedData['contact']
-        ]);
-    }
-    
-    /**
-     * Infer company name from email domain
-     */
-    private function inferCompanyFromEmail(string $email): ?string
-    {
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            return null;
-        }
-        
-        $domain = explode('@', $email)[1] ?? '';
-        $domainParts = explode('.', $domain);
-        $mainDomain = $domainParts[0] ?? '';
-        
-        // Skip common personal email providers
-        $personalProviders = ['gmail', 'yahoo', 'hotmail', 'outlook', 'live', 'icloud', 'aol'];
-        if (in_array(strtolower($mainDomain), $personalProviders)) {
-            return null;
-        }
-        
-        // Clean and format company name
-        return ucfirst(strtolower($mainDomain));
-    }
 
     /**
      * Helper: Infer a name from email local part if missing
