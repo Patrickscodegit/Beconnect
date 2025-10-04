@@ -369,8 +369,11 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
             }
         }
 
-        // Vehicle model patterns (improved for table format)
+        // Vehicle model patterns (improved for table format and single-line format)
         $modelPatterns = [
+            // Single-line format: "1 CategoryMake VIN/Serialnumber YearWeightType Truck Mercedes 2531 WDB6530521K229773 199713.000"
+            '/CategoryMake\s+VIN\/Serialnumber\s+YearWeightType\s+Truck\s+(\w+)\s+(\w+)\s+([A-Z0-9]+)\s+(\d{4})([\d.]+)/i',
+            // Table format with line breaks
             '/CategoryMake\s+Type\s+VIN\/Serialnumber\s+Year\s+Weight\s*\n\s*Truck\s+(\w+)\s+(\w+)\s+([A-Z0-9]+)\s+(\d{4})\s+([\d.]+)/i',
             '/\b(\w+)\s+(Premium\s*\d+)(?=[A-Z]|$)/i',  // Renault Premium 270 (before VIN or end)
             '/\b(\w+)\s+(Series|Class|A\d+|C\d+|E\d+|S\d+|X\d+|i\d+|e\d+)\b/i',
