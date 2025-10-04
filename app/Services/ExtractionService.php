@@ -67,6 +67,14 @@ class ExtractionService
             return null;
         }
 
+        Log::info('Processing file through extraction pipeline', [
+            'file_id' => $file->id,
+            'filename' => $file->filename,
+            'mime_type' => $file->mime_type,
+            'storage_path' => $file->storage_path,
+            'storage_disk' => $file->storage_disk
+        ]);
+
         // Run extraction using the existing pipeline
         $result = $this->extractionPipeline->process($tempDocument);
 
@@ -75,7 +83,8 @@ class ExtractionService
                 'file_id' => $file->id,
                 'data_extracted' => !empty($result->getData()),
                 'is_image' => str_starts_with($file->mime_type, 'image/'),
-                'extraction_strategy' => $result->getStrategy()
+                'extraction_strategy' => $result->getStrategy(),
+                'extracted_data_keys' => array_keys($result->getData())
             ]);
             
             return $this->formatExtractionData($result->getData(), $file, $result->getStrategy());
@@ -83,7 +92,8 @@ class ExtractionService
             Log::warning('Extraction failed', [
                 'file_id' => $file->id,
                 'error' => $result->getErrorMessage(),
-                'is_image' => str_starts_with($file->mime_type, 'image/')
+                'is_image' => str_starts_with($file->mime_type, 'image/'),
+                'strategy_used' => $result->getStrategy()
             ]);
             return null;
         }

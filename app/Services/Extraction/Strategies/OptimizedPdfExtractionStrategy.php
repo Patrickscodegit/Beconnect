@@ -68,10 +68,23 @@ class OptimizedPdfExtractionStrategy implements ExtractionStrategy
             'document_id' => $document->id,
             'filename' => $document->filename,
             'file_size' => $this->getFileSize($document),
-            'strategy' => $this->getName()
+            'strategy' => $this->getName(),
+            'is_temporary' => str_starts_with($document->id, 'temp_')
         ]);
 
         try {
+            // Check if this is a temporary document (from ExtractionService)
+            if (str_starts_with($document->id, 'temp_')) {
+                Log::info('Processing temporary document, using fallback to SimplePdfExtractionStrategy', [
+                    'document_id' => $document->id,
+                    'reason' => 'Temporary documents not supported by optimized strategy'
+                ]);
+                
+                // Fall back to SimplePdfExtractionStrategy for temporary documents
+                $simpleStrategy = app(\App\Services\Extraction\Strategies\SimplePdfExtractionStrategy::class);
+                return $simpleStrategy->extract($document);
+            }
+
             // Phase 1: Analyze PDF characteristics
             $pdfCharacteristics = $this->pdfAnalyzer->analyzePdf($document);
             Log::info('PDF analysis completed', [
@@ -131,11 +144,28 @@ class OptimizedPdfExtractionStrategy implements ExtractionStrategy
                 'trace' => $e->getTraceAsString()
             ]);
 
-            return ExtractionResult::failure(
-                $this->getName(),
-                $e->getMessage(),
-                ['document_id' => $document->id, 'error_type' => get_class($e)]
-            );
+            // Fall back to SimplePdfExtractionStrategy on error
+            try {
+                Log::info('Falling back to SimplePdfExtractionStrategy due to error', [
+                    'document_id' => $document->id,
+                    'original_error' => $e->getMessage()
+                ]);
+                
+                $simpleStrategy = app(\App\Services\Extraction\Strategies\SimplePdfExtractionStrategy::class);
+                return $simpleStrategy->extract($document);
+                
+            } catch (\Exception $fallbackError) {
+                Log::error('Fallback strategy also failed', [
+                    'document_id' => $document->id,
+                    'fallback_error' => $fallbackError->getMessage()
+                ]);
+                
+                return ExtractionResult::failure(
+                    $this->getName(),
+                    $e->getMessage(),
+                    ['document_id' => $document->id, 'error_type' => get_class($e)]
+                );
+            }
         } finally {
             $this->memoryMonitor->stopMonitoring();
             $this->tempManager->cleanup();
