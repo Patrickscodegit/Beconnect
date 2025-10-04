@@ -51,7 +51,7 @@ class OptimizedPdfExtractionStrategy implements ExtractionStrategy
 
     public function getPriority(): int
     {
-        return 95; // Higher priority than SimplePdfExtractionStrategy
+        return 96; // Higher priority than SimplePdfExtractionStrategy (95)
     }
 
     public function supports(Document $document): bool

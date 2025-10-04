@@ -21,8 +21,26 @@ class AppServiceProvider extends ServiceProvider
         // Register extraction strategies
         $this->app->bind(\App\Services\Extraction\Strategies\EmailExtractionStrategy::class);
         
+        // Register Phase 1 optimization services
+        $this->registerPhase1OptimizationServices();
+        
         // Register Robaws services with proper DI
         $this->registerRobawsServices();
+    }
+
+    /**
+     * Register Phase 1 optimization services
+     */
+    private function registerPhase1OptimizationServices(): void
+    {
+        // Register Phase 1 optimization classes as singletons
+        $this->app->singleton(\App\Services\Extraction\Strategies\CompiledPatternEngine::class);
+        $this->app->singleton(\App\Services\Extraction\Strategies\TempFileManager::class);
+        $this->app->singleton(\App\Services\Extraction\Strategies\MemoryMonitor::class);
+        $this->app->singleton(\App\Services\Extraction\Strategies\PdfAnalyzer::class);
+        
+        // Register OptimizedPdfExtractionStrategy
+        $this->app->bind(\App\Services\Extraction\Strategies\OptimizedPdfExtractionStrategy::class);
     }
 
     /**
