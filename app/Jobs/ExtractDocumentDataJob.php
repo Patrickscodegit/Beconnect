@@ -108,8 +108,8 @@ class ExtractDocumentDataJob implements ShouldQueue
                         'mapped_fields_count' => count($mapped),
                         'has_consignee' => isset($mapped['consignee']),
                         'has_notify' => isset($mapped['notify']),
-                        'consignee_has_newlines' => isset($mapped['consignee']) && strpos($mapped['consignee'], "\n") !== false,
-                        'notify_has_newlines' => isset($mapped['notify']) && strpos($mapped['notify'], "\n") !== false
+                        'consignee_has_newlines' => isset($mapped['consignee']) && is_string($mapped['consignee']) && strpos($mapped['consignee'], "\n") !== false,
+                        'notify_has_newlines' => isset($mapped['notify']) && is_string($mapped['notify']) && strpos($mapped['notify'], "\n") !== false
                     ]);
                 }
 

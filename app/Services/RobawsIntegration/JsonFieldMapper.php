@@ -1659,7 +1659,21 @@ class JsonFieldMapper
         // Build textarea content
         $lines = [];
         if ($name) $lines[] = $name;
-        if ($address) $lines[] = $address;
+        if ($address) {
+            if (is_array($address)) {
+                // Format address array as a single line
+                $addressParts = array_filter([
+                    $address['street'] ?? null,
+                    $address['city'] ?? null,
+                    $address['country'] ?? null
+                ]);
+                if (!empty($addressParts)) {
+                    $lines[] = implode(', ', $addressParts);
+                }
+            } else {
+                $lines[] = $address;
+            }
+        }
         if ($email) $lines[] = $email;
         if ($phone) $lines[] = $phone;
         

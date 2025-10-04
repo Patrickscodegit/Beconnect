@@ -14,7 +14,9 @@ class AppServiceProvider extends ServiceProvider
         // Register extraction services
         $this->app->singleton(\App\Services\Extraction\ExtractionPipeline::class);
         $this->app->singleton(\App\Services\Extraction\IntegrationDispatcher::class);
-        $this->app->singleton(\App\Services\Extraction\Strategies\ExtractionStrategyFactory::class);
+        $this->app->singleton(\App\Services\Extraction\Strategies\ExtractionStrategyFactoryInterface::class, function ($app) {
+            return new \App\Services\Extraction\Strategies\IsolatedExtractionStrategyFactory();
+        });
         
         // Register extraction strategies
         $this->app->bind(\App\Services\Extraction\Strategies\EmailExtractionStrategy::class);
