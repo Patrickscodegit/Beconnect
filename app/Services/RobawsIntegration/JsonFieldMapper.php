@@ -1376,6 +1376,11 @@ class JsonFieldMapper
         $transportCargoDesc = data_get($fullData, 'raw_data.transport_details.cargo.description');
         $transportCargoQty = data_get($fullData, 'raw_data.transport_details.cargo.quantity');
         
+        // Try to get vehicle details from new EML structure (HybridExtractionPipeline)
+        $newMake = data_get($fullData, 'vehicle.brand');
+        $newModel = data_get($fullData, 'vehicle.model');
+        $newYear = data_get($fullData, 'vehicle.year');
+        
         // Try to get vehicle details from image data structure
         $imageMake = data_get($fullData, 'raw_data.vehicle_make');
         $imageModel = data_get($fullData, 'raw_data.vehicle_model');
@@ -1392,10 +1397,10 @@ class JsonFieldMapper
             }
         }
         
-        // Use image data if EML data is not available
-        $make = $make ?: $imageMake;
-        $model = $model ?: $imageModel;
-        $year = $year ?: $imageYear;
+        // Use new EML structure first, then fallback to old structures
+        $make = $newMake ?: $make ?: $imageMake;
+        $model = $newModel ?: $model ?: $imageModel;
+        $year = $newYear ?: $year ?: $imageYear;
         $cargoType = $cargoType ?: $imageCargoDesc;
         $cargoQuantity = $cargoQuantity ?: $imageQuantity;
         
@@ -1404,7 +1409,11 @@ class JsonFieldMapper
         $condition = $isNew ? 'new' : 'used';
         
         if ($make && $model) {
-            $yearText = $year ? " {$year}" : '';
+            // Only include year if it's explicitly mentioned in the email content
+            $yearText = '';
+            if ($year && $this->isYearMentionedInContent($year, $fullData)) {
+                $yearText = " {$year}";
+            }
             return "1 x {$condition} {$make} {$model}{$yearText}";
         }
         
@@ -1518,6 +1527,23 @@ class JsonFieldMapper
         }
         
         return "EXP RORO - {$originCode} - {$polCode} - {$destinationCode} - {$cargoDesc}";
+    }
+    
+    /**
+     * Check if year is explicitly mentioned in the email content
+     */
+    private function isYearMentionedInContent(string $year, array $data): bool
+    {
+        // Get the raw email content
+        $content = data_get($data, 'raw_text') ?? '';
+        
+        // Check if the year appears in the content
+        if (empty($content)) {
+            return false;
+        }
+        
+        // Look for the year in the content (with word boundaries to avoid partial matches)
+        return preg_match('/\b' . preg_quote($year, '/') . '\b/', $content) === 1;
     }
     
     /**

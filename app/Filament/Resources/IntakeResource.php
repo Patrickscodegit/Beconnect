@@ -826,7 +826,23 @@ class IntakeResource extends Resource
         // Extract key sections
         $contact = $extractedData['contact'] ?? $extractedData['contact_info'] ?? [];
         $shipment = $extractedData['shipment'] ?? [];
+        
+        // Handle both nested (EML) and flat (Image) vehicle structures
         $vehicle = $extractedData['vehicle'] ?? $extractedData['vehicle_details'] ?? [];
+        if (empty($vehicle) && isset($extractedData['vehicle_make'])) {
+            // Convert flat image structure to nested structure for compatibility
+            $vehicle = [
+                'brand' => $extractedData['vehicle_make'] ?? null,
+                'model' => $extractedData['vehicle_model'] ?? null,
+                'year' => $extractedData['vehicle_year'] ?? null,
+                'condition' => $extractedData['vehicle_condition'] ?? 'used',
+                'dimensions' => [
+                    'length' => $extractedData['length'] ?? null,
+                    'width' => $extractedData['width'] ?? null,
+                    'height' => $extractedData['height'] ?? null,
+                ]
+            ];
+        }
         
         // Map customer information (Quotation Info section)
         if (!empty($contact)) {
@@ -988,9 +1004,9 @@ class IntakeResource extends Resource
         // Add export type
         $parts[] = 'EXP RORO';
         
-        // Add route info
-        $origin = $extractedData['shipment']['origin'] ?? self::extractOriginFromMessages($extractedData);
-        $destination = $extractedData['shipment']['destination'] ?? self::extractDestinationFromMessages($extractedData);
+        // Add route info - handle both nested (EML) and flat (Image) structures
+        $origin = $extractedData['shipment']['origin'] ?? $extractedData['origin'] ?? self::extractOriginFromMessages($extractedData);
+        $destination = $extractedData['shipment']['destination'] ?? $extractedData['destination'] ?? self::extractDestinationFromMessages($extractedData);
         
         if ($origin && $destination) {
             // Simplify location names for reference
@@ -999,14 +1015,14 @@ class IntakeResource extends Resource
             $parts[] = $originShort . ' - ' . $destinationShort;
         }
         
-        // Add vehicle info
+        // Add vehicle info - handle both nested (EML) and flat (Image) structures
         $vehicle = $extractedData['vehicle'] ?? [];
-        if (!empty($vehicle)) {
-            $vehicleDesc = '1 x ';
-            if (!empty($vehicle['condition'])) {
-                $vehicleDesc .= ucfirst($vehicle['condition']) . ' ';
-            }
-            $vehicleDesc .= ($vehicle['brand'] ?? 'Vehicle') . ' ' . ($vehicle['model'] ?? '');
+        $vehicleMake = $vehicle['brand'] ?? $extractedData['vehicle_make'] ?? null;
+        $vehicleModel = $vehicle['model'] ?? $extractedData['vehicle_model'] ?? null;
+        $vehicleCondition = $vehicle['condition'] ?? $extractedData['vehicle_condition'] ?? 'used';
+        
+        if ($vehicleMake && $vehicleModel) {
+            $vehicleDesc = '1 x ' . ucfirst($vehicleCondition) . ' ' . $vehicleMake . ' ' . $vehicleModel;
             $parts[] = $vehicleDesc;
         }
         
