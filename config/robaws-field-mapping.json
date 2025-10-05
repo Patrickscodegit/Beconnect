@@ -20,15 +20,15 @@
         "fallback_template": "EXP RORO - {origin_address} - ANR - {destination_city} - {cargo_summary}",
         "components": {
           "origin_address": {
-            "sources": ["shipment.origin", "raw_data.por", "por", "raw_data.transport_details.origin.pickup_address", "raw_data.transport_details.origin.pickup_location", "raw_data.transport_details.origin.address", "raw_data.transport_details.origin.location", "raw_data.request.origin.pickup_address", "raw_data.request.origin.pickup_location", "raw_data.request.origin.address", "raw_data.request.origin.location", "raw_data.expedition.origin", "raw_data.request.origin.country", "raw_data.transport_details.origin.country", "raw_data.origin"],
+            "sources": ["shipment.origin", "origin", "raw_data.por", "por", "raw_data.transport_details.origin.pickup_address", "raw_data.transport_details.origin.pickup_location", "raw_data.transport_details.origin.address", "raw_data.transport_details.origin.location", "raw_data.request.origin.pickup_address", "raw_data.request.origin.pickup_location", "raw_data.request.origin.address", "raw_data.request.origin.location", "raw_data.expedition.origin", "raw_data.request.origin.country", "raw_data.transport_details.origin.country", "raw_data.origin"],
             "transform": "normalize_city"
           },
           "destination_city": {
-            "sources": ["shipment.destination", "raw_data.destination", "raw_data.expedition.destination", "raw_data.request.destination.city", "raw_data.request.destination.country", "raw_data.transport_details.destination.city", "raw_data.transport_details.destination.country"],
+            "sources": ["shipment.destination", "destination", "raw_data.destination", "raw_data.expedition.destination", "raw_data.request.destination.city", "raw_data.request.destination.country", "raw_data.transport_details.destination.city", "raw_data.transport_details.destination.country"],
             "transform": "normalize_city"
           },
           "cargo_summary": {
-            "sources": ["vehicle.brand", "vehicle.model", "raw_data.cargo", "cargo", "raw_data.transport_details.cargo.description"],
+            "sources": ["vehicle.brand", "vehicle.model", "vehicle_make", "vehicle_model", "raw_data.cargo", "cargo", "raw_data.transport_details.cargo.description"],
             "transform": "extract_cargo_summary"
           }
         },
@@ -88,7 +88,7 @@
     },
     "cargo_details": {
       "cargo": {
-        "sources": ["cargo", "raw_data.cargo", "vehicle.brand", "vehicle.model", "raw_data.expedition.vehicle.make", "raw_data.expedition.vehicle.model", "raw_data.request.cargo.type", "raw_data.request.cargo.quantity", "raw_data.transport_details.cargo.description", "raw_data.transport_details.cargo.quantity", "raw_data.vehicle_make", "raw_data.vehicle_model", "raw_data.cargo_description", "raw_data.quantity"],
+        "sources": ["cargo", "raw_data.cargo", "vehicle.brand", "vehicle.model", "vehicle_make", "vehicle_model", "raw_data.expedition.vehicle.make", "raw_data.expedition.vehicle.model", "raw_data.request.cargo.type", "raw_data.request.cargo.quantity", "raw_data.transport_details.cargo.description", "raw_data.transport_details.cargo.quantity", "raw_data.vehicle_make", "raw_data.vehicle_model", "raw_data.cargo_description", "raw_data.quantity"],
         "transform": "format_simple_cargo",
         "default": null
       },
