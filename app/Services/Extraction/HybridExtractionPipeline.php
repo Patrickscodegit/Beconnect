@@ -244,7 +244,13 @@ class HybridExtractionPipeline
             'dates' => $root['dates'] ?? [],
             'shipping' => $root['shipping'] ?? [],
             'database_validation' => $root['database_validation'] ?? [],
-        ], fn($v) => !empty($v));
+        ], function($v, $key) {
+            // Don't filter out cargo if it has a description
+            if ($key === 'cargo' && is_array($v) && !empty($v['description'])) {
+                return true;
+            }
+            return !empty($v);
+        }, ARRAY_FILTER_USE_BOTH);
 
         // Apply legacy field mappings for compatibility
         $this->applyLegacyMappings($normalized, $root);
