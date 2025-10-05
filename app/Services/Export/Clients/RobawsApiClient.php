@@ -322,22 +322,142 @@ final class RobawsApiClient
         $name = trim(mb_strtolower($name));
         if (!$name) return null;
 
+        // Try API filtering first (most efficient)
+        $result = $this->findClientByNameFiltered($name);
+        if ($result) {
+            return $result;
+        }
+
+        // Fallback to pagination if filtering fails
+        return $this->findClientByNamePagination($name);
+    }
+
+    /**
+     * Enhanced client search using API filtering
+     */
+    private function findClientByNameFiltered(string $name): ?array
+    {
+        $name = trim(mb_strtolower($name));
+        if (!$name) return null;
+
+        try {
+            // Try different filter syntaxes that Robaws API might support
+            $filterOptions = [
+                "name:like:{$name}",
+                "name:contains:{$name}",
+                "name:ilike:{$name}",
+                "search:{$name}"
+            ];
+
+            foreach ($filterOptions as $filter) {
+                try {
+                    $res = $this->getHttpClient()->get('/api/v2/clients', [
+                        'page' => 0,
+                        'size' => 100,
+                        'filter' => $filter
+                    ])->throw()->json();
+
+                    $items = $res['items'] ?? [];
+                    if (!empty($items)) {
+                        \Log::info('Client filtering successful', [
+                            'filter' => $filter,
+                            'found_clients' => count($items),
+                            'search_name' => $name
+                        ]);
+                        
+                        $match = $this->findBestMatch($name, $items);
+                        if ($match && $match['score'] >= 80.0) {
+                            return $match['client'];
+                        }
+                    }
+                } catch (\Exception $e) {
+                    \Log::debug('Filter failed', ['filter' => $filter, 'error' => $e->getMessage()]);
+                    continue;
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::warning('All filtering attempts failed', ['error' => $e->getMessage()]);
+        }
+
+        return null;
+    }
+
+    /**
+     * Fallback client search using pagination
+     */
+    private function findClientByNamePagination(string $name): ?array
+    {
+        $name = trim(mb_strtolower($name));
+        if (!$name) return null;
+
+        $best = null; $bestScore = 0.0;
+        $page = 0;
+
+        \Log::info('Starting pagination search for client', ['name' => $name]);
+
+        do {
+            try {
+                $res = $this->getHttpClient()->get('/api/v2/clients', [
+                    'page' => $page,
+                    'size' => 100,
+                    'sort' => 'name:asc'
+                ])->throw()->json();
+
+                $items = $res['items'] ?? [];
+                if (empty($items)) break;
+
+                $match = $this->findBestMatch($name, $items);
+                if ($match && $match['score'] > $bestScore) {
+                    $best = $match['client'];
+                    $bestScore = $match['score'];
+                }
+
+                \Log::debug('Pagination search page', [
+                    'page' => $page,
+                    'items_count' => count($items),
+                    'best_score' => $bestScore
+                ]);
+
+                $page++;
+            } catch (\Exception $e) {
+                \Log::error('Pagination search failed', [
+                    'page' => $page,
+                    'error' => $e->getMessage()
+                ]);
+                break;
+            }
+        } while (count($items) === 100); // Continue if full page
+
+        \Log::info('Pagination search completed', [
+            'name' => $name,
+            'pages_searched' => $page,
+            'best_score' => $bestScore,
+            'found' => $bestScore >= 80.0
+        ]);
+
+        return $bestScore >= 80.0 ? $best : null;
+    }
+
+    /**
+     * Find the best matching client from a list of clients
+     */
+    private function findBestMatch(string $searchName, array $clients): ?array
+    {
         $best = null; $bestScore = 0.0;
 
-        $res = $this->getHttpClient()->get('/api/v2/clients', [
-            'page'=>0,'size'=>100,'sort'=>'name:asc'
-        ])->throw()->json();
-
-        foreach (($res['items'] ?? []) as $client) {
+        foreach ($clients as $client) {
             $cand = mb_strtolower(trim($client['name'] ?? ''));
             if (!$cand) continue;
 
-            // quick similarity (Levenshtein is fine, or simple ratio)
-            similar_text($name, $cand, $pct);
-            if ($pct > $bestScore) { $bestScore = $pct; $best = $client; }
+            // Calculate similarity score
+            similar_text($searchName, $cand, $pct);
+            if ($pct > $bestScore) {
+                $bestScore = $pct;
+                $best = $client;
+            }
         }
 
-        return $bestScore >= 80.0 ? $best : null; // threshold
+        return $best ? ['client' => $best, 'score' => $bestScore] : null;
     }
 
     /** Paged slice of clients for local matching */
