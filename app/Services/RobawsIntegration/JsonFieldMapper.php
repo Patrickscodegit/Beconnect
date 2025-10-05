@@ -1534,8 +1534,14 @@ class JsonFieldMapper
      */
     private function isYearMentionedInContent(string $year, array $data): bool
     {
-        // Get the raw email content
-        $content = data_get($data, 'raw_text') ?? '';
+        // Get the raw email content from various possible fields
+        $content = data_get($data, 'raw_text') 
+            ?? data_get($data, 'raw_data.raw_text')
+            ?? data_get($data, 'raw_data.body')
+            ?? data_get($data, 'raw_data.content')
+            ?? data_get($data, 'raw_data.email_content')
+            ?? data_get($data, 'metadata.raw_text')
+            ?? '';
         
         // Check if the year appears in the content
         if (empty($content)) {

@@ -624,7 +624,8 @@ class HybridExtractionPipeline
                 'database_validated' => !empty($validated['vehicle']['database_match']),
                 'processing_time_ms' => round($totalTime * 1000, 2),
                 'strategy_times' => array_map(fn($time) => round($time * 1000, 2), $strategyTimes),
-                'extraction_pipeline_version' => '1.0'
+                'extraction_pipeline_version' => '1.0',
+                'raw_text' => $content // Store original content for year detection
             ]
         ];
     }

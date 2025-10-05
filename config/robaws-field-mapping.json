@@ -28,7 +28,7 @@
             "transform": "normalize_city"
           },
           "cargo_summary": {
-            "sources": ["vehicle.brand", "vehicle.model", "vehicle_make", "vehicle_model", "raw_data.cargo", "cargo", "raw_data.transport_details.cargo.description"],
+            "sources": ["raw_data.cargo", "cargo", "raw_data.transport_details.cargo.description"],
             "transform": "extract_cargo_summary"
           }
         },
