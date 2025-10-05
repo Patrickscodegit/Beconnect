@@ -1587,17 +1587,47 @@ class JsonFieldMapper
             return false;
         }
         
-        // Look for the year in the content (with word boundaries to avoid partial matches)
-        $found = preg_match('/\b' . preg_quote($year, '/') . '\b/', $content) === 1;
+        // Remove email headers and dates to avoid false positives
+        $cleanContent = $this->removeEmailHeadersAndDates($content);
+        
+        // Look for the year in the clean content (with word boundaries to avoid partial matches)
+        $found = preg_match('/\b' . preg_quote($year, '/') . '\b/', $cleanContent) === 1;
         
         \Log::info('Year detection result', [
             'year' => $year,
             'content_length' => strlen($content),
+            'clean_content_length' => strlen($cleanContent),
             'content_preview' => substr($content, 0, 200),
+            'clean_content_preview' => substr($cleanContent, 0, 200),
             'found' => $found
         ]);
         
         return $found;
+    }
+    
+    /**
+     * Remove email headers and dates to avoid false positives in year detection
+     */
+    private function removeEmailHeadersAndDates(string $content): string
+    {
+        // Remove email headers
+        $content = preg_replace('/^SENDER:.*$/m', '', $content);
+        $content = preg_replace('/^RECIPIENT:.*$/m', '', $content);
+        $content = preg_replace('/^SUBJECT:.*$/m', '', $content);
+        $content = preg_replace('/^DATE:.*$/m', '', $content);
+        
+        // Remove email date patterns (like "Wed, 27 Aug 2025 14:44:32 +0300")
+        $content = preg_replace('/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s+\d+\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+[+-]\d{4}\b/', '', $content);
+        
+        // Remove other common date patterns
+        $content = preg_replace('/\b\d{1,2}\/\d{1,2}\/\d{4}\b/', '', $content); // MM/DD/YYYY or DD/MM/YYYY
+        $content = preg_replace('/\b\d{4}-\d{2}-\d{2}\b/', '', $content); // YYYY-MM-DD
+        
+        // Clean up extra whitespace
+        $content = preg_replace('/\s+/', ' ', $content);
+        $content = trim($content);
+        
+        return $content;
     }
     
     /**
