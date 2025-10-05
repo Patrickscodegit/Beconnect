@@ -865,15 +865,7 @@ class JsonFieldMapper
      */
     private function transform_extract_vehicle_from_cargo($value): ?string
     {
-        \Log::info('extract_vehicle_from_cargo called', [
-            'input_value' => $value,
-            'input_type' => gettype($value)
-        ]);
-        
-        if (!$value) {
-            \Log::info('extract_vehicle_from_cargo: empty value');
-            return null;
-        }
+        if (!$value) return null;
         
         // If it's a string like "1 x used BMW Série 7 2025", extract "BMW Série 7"
         if (is_string($value)) {
@@ -888,12 +880,6 @@ class JsonFieldMapper
             
             // Clean up any extra spaces
             $cleaned = trim($cleaned);
-            
-            \Log::info('extract_vehicle_from_cargo result', [
-                'original' => $value,
-                'cleaned' => $cleaned,
-                'will_return' => !empty($cleaned) && !in_array(strtolower($cleaned), ['truck', 'car', 'vehicle'])
-            ]);
             
             // Return if we have something meaningful
             if (!empty($cleaned) && !in_array(strtolower($cleaned), ['truck', 'car', 'vehicle'])) {
