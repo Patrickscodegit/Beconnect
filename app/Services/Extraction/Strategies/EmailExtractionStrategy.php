@@ -78,7 +78,8 @@ class EmailExtractionStrategy implements ExtractionStrategy
 
             // Merge pre-extracted cargo data with pipeline results
             if (!empty($preExtractedData['cargo'])) {
-                $enhancedData['cargo'] = array_merge($enhancedData['cargo'] ?? [], $preExtractedData['cargo']);
+                // Direct assignment since HybridExtractionPipeline doesn't produce cargo field
+                $enhancedData['cargo'] = $preExtractedData['cargo'];
             }
             if (!empty($preExtractedData['raw_data'])) {
                 $enhancedData['raw_data'] = array_merge($enhancedData['raw_data'] ?? [], $preExtractedData['raw_data']);
