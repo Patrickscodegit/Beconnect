@@ -234,6 +234,21 @@ class HybridExtractionPipeline
             'special_handling' => $cargoRaw['special_handling'] ?? null,
         ], fn($v) => $this->filledValue($v));
 
+        // FALLBACK: If cargo pre-extraction failed but we have vehicle data, construct cargo
+        if (empty($cargo['description']) && !empty($vehicle['brand']) && !empty($vehicle['model'])) {
+            $year = $vehicle['year'] ?? '';
+            $cargo['description'] = "1 x used {$vehicle['brand']} {$vehicle['model']}" . ($year ? " {$year}" : "");
+            $cargo['quantity'] = 1;
+            $cargo['type'] = "{$vehicle['brand']} {$vehicle['model']}";
+            
+            Log::info('Cargo constructed from vehicle data', [
+                'brand' => $vehicle['brand'],
+                'model' => $vehicle['model'],
+                'year' => $year,
+                'constructed_description' => $cargo['description']
+            ]);
+        }
+
         // --- BUILD NORMALIZED STRUCTURE ---
         $normalized = array_filter([
             'vehicle' => $vehicle,
