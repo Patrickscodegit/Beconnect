@@ -869,18 +869,21 @@ class JsonFieldMapper
         
         // If it's a string like "1 x used BMW Série 7 2025", extract "BMW Série 7"
         if (is_string($value)) {
-            // Pattern to match: "1 x used BMW Série 7 2025" -> "BMW Série 7"
-            if (preg_match('/\d+\s*x\s*(?:used|new)\s+([A-Za-zÀ-ÿ\s]+?)(?:\s+\d{4})?/', $value, $matches)) {
-                return trim($matches[1]);
-            }
+            // Simple approach: remove the quantity and condition, then clean up
+            $cleaned = $value;
             
-            // Fallback: try to extract brand and model from common patterns
-            if (preg_match('/([A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)*)/', $value, $matches)) {
-                $vehicle = trim($matches[1]);
-                // Skip common words that aren't vehicle names
-                if (!in_array(strtolower($vehicle), ['used', 'new', 'truck', 'car', 'vehicle'])) {
-                    return $vehicle;
-                }
+            // Remove "1 x used" or "1 x new" from the beginning
+            $cleaned = preg_replace('/^\d+\s*x\s*(?:used|new)\s+/i', '', $cleaned);
+            
+            // Remove year at the end if present
+            $cleaned = preg_replace('/\s+\d{4}$/', '', $cleaned);
+            
+            // Clean up any extra spaces
+            $cleaned = trim($cleaned);
+            
+            // Return if we have something meaningful
+            if (!empty($cleaned) && !in_array(strtolower($cleaned), ['truck', 'car', 'vehicle'])) {
+                return $cleaned;
             }
         }
         
