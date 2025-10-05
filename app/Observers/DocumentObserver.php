@@ -29,6 +29,10 @@ class DocumentObserver
      */
     public function updated(Document $document): void
     {
+        // Temporarily disabled to prevent upload to non-existent offers
+        // TODO: Re-enable after fixing Robaws offer creation
+        return;
+        
         // Check if Robaws quotation was just created
         if ($document->wasChanged('robaws_quotation_id') && $document->robaws_quotation_id) {
             Log::info('Robaws quotation added to document, uploading file', [

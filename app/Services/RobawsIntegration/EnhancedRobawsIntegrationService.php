@@ -71,11 +71,11 @@ class EnhancedRobawsIntegrationService
             'companyId'       => config('services.robaws.default_company_id', config('services.robaws.company_id')),
             'status'          => 'Draft',
             // Add unique identifier to force new offer creation
-            'externalId'      => 'bconnect_doc_' . $document->id . '_' . time(),
+            'externalId'      => 'bconnect_doc_' . $document->id . '_' . time() . '_' . uniqid(),
         ];
 
         // Generate unique idempotency key to ensure each document gets its own offer
-        $idempotencyKey = 'bconnect_doc_' . $document->id . '_' . time();
+        $idempotencyKey = 'bconnect_doc_' . $document->id . '_' . time() . '_' . uniqid();
         
         Log::channel('robaws')->info('Robaws CREATE offer', [
             'payload' => $payload,
