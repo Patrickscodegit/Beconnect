@@ -461,6 +461,9 @@ class JsonFieldMapper
             case 'extract_cargo_summary':
                 return $this->transform_extract_cargo_summary($value);
                 
+            case 'extract_vehicle_from_cargo':
+                return $this->transform_extract_vehicle_from_cargo($value);
+                
             default:
                 return $value;
         }
@@ -855,6 +858,33 @@ class JsonFieldMapper
         $qty = trim((string)($inputs['quantity'] ?? '1'));
         $core = $this->transform_format_cargo_core($inputs);
         return $core ? "{$qty} x {$core}" : "{$qty} x Vehicle";
+    }
+
+    /**
+     * Extract vehicle make and model from cargo string for customer reference
+     */
+    private function transform_extract_vehicle_from_cargo($value): ?string
+    {
+        if (!$value) return null;
+        
+        // If it's a string like "1 x used BMW Série 7 2025", extract "BMW Série 7"
+        if (is_string($value)) {
+            // Pattern to match: "1 x used BMW Série 7 2025" -> "BMW Série 7"
+            if (preg_match('/\d+\s*x\s*(?:used|new)\s+([A-Za-zÀ-ÿ\s]+?)(?:\s+\d{4})?/', $value, $matches)) {
+                return trim($matches[1]);
+            }
+            
+            // Fallback: try to extract brand and model from common patterns
+            if (preg_match('/([A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+)*)/', $value, $matches)) {
+                $vehicle = trim($matches[1]);
+                // Skip common words that aren't vehicle names
+                if (!in_array(strtolower($vehicle), ['used', 'new', 'truck', 'car', 'vehicle'])) {
+                    return $vehicle;
+                }
+            }
+        }
+        
+        return null;
     }
 
     /**
@@ -1543,13 +1573,28 @@ class JsonFieldMapper
             ?? data_get($data, 'metadata.raw_text')
             ?? '';
         
-        // Check if the year appears in the content
+        // Debug logging to see what we're working with
         if (empty($content)) {
+            \Log::info('Year detection: No content found', [
+                'year' => $year,
+                'available_fields' => array_keys($data),
+                'raw_data_fields' => isset($data['raw_data']) ? array_keys($data['raw_data']) : 'no_raw_data',
+                'metadata_fields' => isset($data['metadata']) ? array_keys($data['metadata']) : 'no_metadata'
+            ]);
             return false;
         }
         
         // Look for the year in the content (with word boundaries to avoid partial matches)
-        return preg_match('/\b' . preg_quote($year, '/') . '\b/', $content) === 1;
+        $found = preg_match('/\b' . preg_quote($year, '/') . '\b/', $content) === 1;
+        
+        \Log::info('Year detection result', [
+            'year' => $year,
+            'content_length' => strlen($content),
+            'content_preview' => substr($content, 0, 200),
+            'found' => $found
+        ]);
+        
+        return $found;
     }
     
     /**

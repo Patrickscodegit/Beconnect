@@ -29,7 +29,7 @@
           },
           "cargo_summary": {
             "sources": ["raw_data.cargo", "cargo", "raw_data.transport_details.cargo.description"],
-            "transform": "extract_cargo_summary"
+            "transform": "extract_vehicle_from_cargo"
           }
         },
         "default": null
