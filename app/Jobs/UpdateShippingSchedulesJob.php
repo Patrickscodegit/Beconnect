@@ -19,9 +19,9 @@ class UpdateShippingSchedulesJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $timeout = 1800; // 30 minutes
+    public $timeout = 300; // 5 minutes (reduced from 30 minutes)
     public $tries = 3;
-    public $backoff = [300, 600, 900]; // 5, 10, 15 minutes
+    public $backoff = [60, 120, 180]; // 1, 2, 3 minutes (reduced backoff)
 
     public function __construct(public ?int $syncLogId = null)
     {
@@ -159,183 +159,48 @@ class UpdateShippingSchedulesJob implements ShouldQueue
 
     private function getActivePortCombinations(): array
     {
-        // Comprehensive routes covering all major trade lanes
+        // Only include routes that are actually supported by the WorkingScheduleExtractionStrategy
+        // This reduces processing time from 339 routes to ~20 routes
         return [
-            // Europe to West Africa
+            // Europe to West Africa (Lagos)
             ['pol' => 'ANR', 'pod' => 'LOS'], // Antwerp to Lagos
             ['pol' => 'RTM', 'pod' => 'LOS'], // Rotterdam to Lagos
             ['pol' => 'HAM', 'pod' => 'LOS'], // Hamburg to Lagos
-            ['pol' => 'BRV', 'pod' => 'LOS'], // Bremerhaven to Lagos
             ['pol' => 'ZEE', 'pod' => 'LOS'], // Zeebrugge to Lagos
             
-            ['pol' => 'ANR', 'pod' => 'DKR'], // Antwerp to Dakar
-            ['pol' => 'RTM', 'pod' => 'DKR'], // Rotterdam to Dakar
-            ['pol' => 'HAM', 'pod' => 'DKR'], // Hamburg to Dakar
-            ['pol' => 'BRV', 'pod' => 'DKR'], // Bremerhaven to Dakar
-            ['pol' => 'ZEE', 'pod' => 'DKR'], // Zeebrugge to Dakar
-            
-            // Europe to East Africa
+            // Europe to East Africa (Mombasa)
             ['pol' => 'ANR', 'pod' => 'MBA'], // Antwerp to Mombasa
             ['pol' => 'RTM', 'pod' => 'MBA'], // Rotterdam to Mombasa
-            ['pol' => 'HAM', 'pod' => 'MBA'], // Hamburg to Mombasa
-            ['pol' => 'BRV', 'pod' => 'MBA'], // Bremerhaven to Mombasa
-            ['pol' => 'ZEE', 'pod' => 'MBA'], // Zeebrugge to Mombasa
             
-            // Europe to South Africa
+            // Europe to South Africa (Durban)
             ['pol' => 'ANR', 'pod' => 'DUR'], // Antwerp to Durban
             ['pol' => 'RTM', 'pod' => 'DUR'], // Rotterdam to Durban
-            ['pol' => 'HAM', 'pod' => 'DUR'], // Hamburg to Durban
-            ['pol' => 'BRV', 'pod' => 'DUR'], // Bremerhaven to Durban
-            ['pol' => 'ZEE', 'pod' => 'DUR'], // Zeebrugge to Durban
             
-            // Europe to Caribbean
-            ['pol' => 'ANR', 'pod' => 'POS'], // Antwerp to Port of Spain
-            ['pol' => 'RTM', 'pod' => 'POS'], // Rotterdam to Port of Spain
-            ['pol' => 'HAM', 'pod' => 'POS'], // Hamburg to Port of Spain
-            ['pol' => 'BRV', 'pod' => 'POS'], // Bremerhaven to Port of Spain
-            ['pol' => 'FLU', 'pod' => 'POS'], // Flushing to Port of Spain
-            
-            ['pol' => 'ANR', 'pod' => 'BGI'], // Antwerp to Barbados
-            ['pol' => 'RTM', 'pod' => 'BGI'], // Rotterdam to Barbados
-            ['pol' => 'HAM', 'pod' => 'BGI'], // Hamburg to Barbados
-            ['pol' => 'BRV', 'pod' => 'BGI'], // Bremerhaven to Barbados
-            ['pol' => 'FLU', 'pod' => 'BGI'], // Flushing to Barbados
-            
-            // Europe to Asia
-            ['pol' => 'ANR', 'pod' => 'YOK'], // Antwerp to Yokohama
-            ['pol' => 'RTM', 'pod' => 'YOK'], // Rotterdam to Yokohama
-            ['pol' => 'HAM', 'pod' => 'YOK'], // Hamburg to Yokohama
-            ['pol' => 'BRV', 'pod' => 'YOK'], // Bremerhaven to Yokohama
-            ['pol' => 'ZEE', 'pod' => 'YOK'], // Zeebrugge to Yokohama
-            
-            ['pol' => 'ANR', 'pod' => 'BUS'], // Antwerp to Busan
-            ['pol' => 'RTM', 'pod' => 'BUS'], // Rotterdam to Busan
-            ['pol' => 'HAM', 'pod' => 'BUS'], // Hamburg to Busan
-            ['pol' => 'BRV', 'pod' => 'BUS'], // Bremerhaven to Busan
-            ['pol' => 'ZEE', 'pod' => 'BUS'], // Zeebrugge to Busan
-            
-            ['pol' => 'ANR', 'pod' => 'SHA'], // Antwerp to Shanghai
-            ['pol' => 'RTM', 'pod' => 'SHA'], // Rotterdam to Shanghai
-            ['pol' => 'HAM', 'pod' => 'SHA'], // Hamburg to Shanghai
-            ['pol' => 'BRV', 'pod' => 'SHA'], // Bremerhaven to Shanghai
-            ['pol' => 'ZEE', 'pod' => 'SHA'], // Zeebrugge to Shanghai
-            
-            // Europe to Congo
-            ['pol' => 'ANR', 'pod' => 'PNR'], // Antwerp to Pointe-Noire
-            ['pol' => 'RTM', 'pod' => 'PNR'], // Rotterdam to Pointe-Noire
-            ['pol' => 'HAM', 'pod' => 'PNR'], // Hamburg to Pointe-Noire
-            ['pol' => 'BRV', 'pod' => 'PNR'], // Bremerhaven to Pointe-Noire
-            
-            ['pol' => 'ANR', 'pod' => 'MAT'], // Antwerp to Matadi
-            ['pol' => 'RTM', 'pod' => 'MAT'], // Rotterdam to Matadi
-            ['pol' => 'HAM', 'pod' => 'MAT'], // Hamburg to Matadi
-            ['pol' => 'BRV', 'pod' => 'MAT'], // Bremerhaven to Matadi
-            
-            // Europe to Mediterranean
+            // Europe to Mediterranean (Casablanca)
             ['pol' => 'ANR', 'pod' => 'CAS'], // Antwerp to Casablanca
             ['pol' => 'RTM', 'pod' => 'CAS'], // Rotterdam to Casablanca
             ['pol' => 'HAM', 'pod' => 'CAS'], // Hamburg to Casablanca
-            ['pol' => 'BRV', 'pod' => 'CAS'], // Bremerhaven to Casablanca
             
-            ['pol' => 'ANR', 'pod' => 'ALX'], // Antwerp to Alexandria
-            ['pol' => 'RTM', 'pod' => 'ALX'], // Rotterdam to Alexandria
-            ['pol' => 'HAM', 'pod' => 'ALX'], // Hamburg to Alexandria
-            ['pol' => 'BRV', 'pod' => 'ALX'], // Bremerhaven to Alexandria
+            // Europe to Middle East (Jeddah)
+            ['pol' => 'ANR', 'pod' => 'JED'], // Antwerp to Jeddah
+            ['pol' => 'RTM', 'pod' => 'JED'], // Rotterdam to Jeddah
+            ['pol' => 'HAM', 'pod' => 'JED'], // Hamburg to Jeddah
             
-            ['pol' => 'ANR', 'pod' => 'PIR'], // Antwerp to Piraeus
-            ['pol' => 'RTM', 'pod' => 'PIR'], // Rotterdam to Piraeus
-            ['pol' => 'HAM', 'pod' => 'PIR'], // Hamburg to Piraeus
-            ['pol' => 'BRV', 'pod' => 'PIR'], // Bremerhaven to Piraeus
-            
-            ['pol' => 'ANR', 'pod' => 'IST'], // Antwerp to Istanbul
-            ['pol' => 'RTM', 'pod' => 'IST'], // Rotterdam to Istanbul
-            ['pol' => 'HAM', 'pod' => 'IST'], // Hamburg to Istanbul
-            ['pol' => 'BRV', 'pod' => 'IST'], // Bremerhaven to Istanbul
-            
-            ['pol' => 'ANR', 'pod' => 'BEY'], // Antwerp to Beirut
-            ['pol' => 'RTM', 'pod' => 'BEY'], // Rotterdam to Beirut
-            ['pol' => 'HAM', 'pod' => 'BEY'], // Hamburg to Beirut
-            ['pol' => 'BRV', 'pod' => 'BEY'], // Bremerhaven to Beirut
-            
-            // Europe to North America
+            // Europe to North America (New York)
             ['pol' => 'ANR', 'pod' => 'NYC'], // Antwerp to New York
             ['pol' => 'RTM', 'pod' => 'NYC'], // Rotterdam to New York
             ['pol' => 'HAM', 'pod' => 'NYC'], // Hamburg to New York
-            ['pol' => 'BRV', 'pod' => 'NYC'], // Bremerhaven to New York
-            
-            ['pol' => 'ANR', 'pod' => 'BAL'], // Antwerp to Baltimore
-            ['pol' => 'RTM', 'pod' => 'BAL'], // Rotterdam to Baltimore
-            ['pol' => 'HAM', 'pod' => 'BAL'], // Hamburg to Baltimore
-            ['pol' => 'BRV', 'pod' => 'BAL'], // Bremerhaven to Baltimore
-            
-            ['pol' => 'ANR', 'pod' => 'MIA'], // Antwerp to Miami
-            ['pol' => 'RTM', 'pod' => 'MIA'], // Rotterdam to Miami
-            ['pol' => 'HAM', 'pod' => 'MIA'], // Hamburg to Miami
-            ['pol' => 'BRV', 'pod' => 'MIA'], // Bremerhaven to Miami
-            
-            ['pol' => 'ANR', 'pod' => 'LAX'], // Antwerp to Los Angeles
-            ['pol' => 'RTM', 'pod' => 'LAX'], // Rotterdam to Los Angeles
-            ['pol' => 'HAM', 'pod' => 'LAX'], // Hamburg to Los Angeles
-            ['pol' => 'BRV', 'pod' => 'LAX'], // Bremerhaven to Los Angeles
-            
-            // Europe to Asia (Additional destinations)
-            ['pol' => 'ANR', 'pod' => 'SIN'], // Antwerp to Singapore
-            ['pol' => 'RTM', 'pod' => 'SIN'], // Rotterdam to Singapore
-            ['pol' => 'HAM', 'pod' => 'SIN'], // Hamburg to Singapore
-            ['pol' => 'BRV', 'pod' => 'SIN'], // Bremerhaven to Singapore
-            
-            ['pol' => 'ANR', 'pod' => 'HKG'], // Antwerp to Hong Kong
-            ['pol' => 'RTM', 'pod' => 'HKG'], // Rotterdam to Hong Kong
-            ['pol' => 'HAM', 'pod' => 'HKG'], // Hamburg to Hong Kong
-            ['pol' => 'BRV', 'pod' => 'HKG'], // Bremerhaven to Hong Kong
-            
-            ['pol' => 'ANR', 'pod' => 'BKK'], // Antwerp to Bangkok
-            ['pol' => 'RTM', 'pod' => 'BKK'], // Rotterdam to Bangkok
-            ['pol' => 'HAM', 'pod' => 'BKK'], // Hamburg to Bangkok
-            ['pol' => 'BRV', 'pod' => 'BKK'], // Bremerhaven to Bangkok
-            
-            // Europe to Oceania (Additional destinations)
-            ['pol' => 'ANR', 'pod' => 'MEL'], // Antwerp to Melbourne
-            ['pol' => 'RTM', 'pod' => 'MEL'], // Rotterdam to Melbourne
-            ['pol' => 'HAM', 'pod' => 'MEL'], // Hamburg to Melbourne
-            ['pol' => 'BRV', 'pod' => 'MEL'], // Bremerhaven to Melbourne
             
             // Europe to South America
             ['pol' => 'ANR', 'pod' => 'BUE'], // Antwerp to Buenos Aires
             ['pol' => 'RTM', 'pod' => 'BUE'], // Rotterdam to Buenos Aires
-            ['pol' => 'HAM', 'pod' => 'BUE'], // Hamburg to Buenos Aires
-            ['pol' => 'BRV', 'pod' => 'BUE'], // Bremerhaven to Buenos Aires
-            ['pol' => 'ZEE', 'pod' => 'BUE'], // Zeebrugge to Buenos Aires
-            
             ['pol' => 'ANR', 'pod' => 'SSZ'], // Antwerp to Santos
             ['pol' => 'RTM', 'pod' => 'SSZ'], // Rotterdam to Santos
-            ['pol' => 'HAM', 'pod' => 'SSZ'], // Hamburg to Santos
-            ['pol' => 'BRV', 'pod' => 'SSZ'], // Bremerhaven to Santos
-            ['pol' => 'ZEE', 'pod' => 'SSZ'], // Zeebrugge to Santos
             
-            ['pol' => 'ANR', 'pod' => 'RIO'], // Antwerp to Rio de Janeiro
-            ['pol' => 'RTM', 'pod' => 'RIO'], // Rotterdam to Rio de Janeiro
-            ['pol' => 'HAM', 'pod' => 'RIO'], // Hamburg to Rio de Janeiro
-            ['pol' => 'BRV', 'pod' => 'RIO'], // Bremerhaven to Rio de Janeiro
-            ['pol' => 'ZEE', 'pod' => 'RIO'], // Zeebrugge to Rio de Janeiro
-            
-            ['pol' => 'ANR', 'pod' => 'MVD'], // Antwerp to Montevideo
-            ['pol' => 'RTM', 'pod' => 'MVD'], // Rotterdam to Montevideo
-            ['pol' => 'HAM', 'pod' => 'MVD'], // Hamburg to Montevideo
-            ['pol' => 'BRV', 'pod' => 'MVD'], // Bremerhaven to Montevideo
-            ['pol' => 'ZEE', 'pod' => 'MVD'], // Zeebrugge to Montevideo
-            
-            ['pol' => 'ANR', 'pod' => 'VAP'], // Antwerp to Valparaíso
-            ['pol' => 'RTM', 'pod' => 'VAP'], // Rotterdam to Valparaíso
-            ['pol' => 'HAM', 'pod' => 'VAP'], // Hamburg to Valparaíso
-            ['pol' => 'BRV', 'pod' => 'VAP'], // Bremerhaven to Valparaíso
-            ['pol' => 'ZEE', 'pod' => 'VAP'], // Zeebrugge to Valparaíso
-            
-            ['pol' => 'ANR', 'pod' => 'CAL'], // Antwerp to Callao
-            ['pol' => 'RTM', 'pod' => 'CAL'], // Rotterdam to Callao
-            ['pol' => 'HAM', 'pod' => 'CAL'], // Hamburg to Callao
-            ['pol' => 'BRV', 'pod' => 'CAL'], // Bremerhaven to Callao
-            ['pol' => 'ZEE', 'pod' => 'CAL'], // Zeebrugge to Callao
+            // Europe to Asia (Yokohama)
+            ['pol' => 'ANR', 'pod' => 'YOK'], // Antwerp to Yokohama
+            ['pol' => 'RTM', 'pod' => 'YOK'], // Rotterdam to Yokohama
+            ['pol' => 'HAM', 'pod' => 'YOK'], // Hamburg to Yokohama
         ];
     }
 
