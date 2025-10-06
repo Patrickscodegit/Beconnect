@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\ScheduleUpdatesLog;
+use App\Models\ScheduleSyncLog;
 use App\Services\ScheduleExtraction\ScheduleExtractionPipeline;
 use App\Services\ScheduleExtraction\RealNmtScheduleExtractionStrategy;
 use App\Services\ScheduleExtraction\RealGrimaldiScheduleExtractionStrategy;
@@ -22,14 +23,21 @@ class UpdateShippingSchedulesJob implements ShouldQueue
     public $tries = 3;
     public $backoff = [300, 600, 900]; // 5, 10, 15 minutes
 
-    public function __construct()
+    public function __construct(public ?int $syncLogId = null)
     {
         $this->onQueue('schedules'); // Use separate queue for schedule updates
     }
 
     public function handle(): void
     {
-        Log::info('Starting REAL DATA shipping schedule update');
+        $syncLog = null;
+        if ($this->syncLogId) {
+            $syncLog = ScheduleSyncLog::find($this->syncLogId);
+        }
+
+        Log::info('Starting REAL DATA shipping schedule update', [
+            'sync_log_id' => $this->syncLogId
+        ]);
         
         $pipeline = new ScheduleExtractionPipeline();
         
@@ -47,17 +55,38 @@ class UpdateShippingSchedulesJob implements ShouldQueue
         Log::info('Registered real data extraction strategies');
         
         $portCombinations = $this->getActivePortCombinations();
+        $totalSchedulesUpdated = 0;
+        $carriersProcessed = 0;
         
         foreach ($portCombinations as $combination) {
-            $this->updateSchedulesForRoute($pipeline, $combination);
+            $result = $this->updateSchedulesForRoute($pipeline, $combination);
+            $totalSchedulesUpdated += $result['schedules'];
+            $carriersProcessed += $result['carriers'];
+        }
+        
+        // Update sync log if provided
+        if ($syncLog) {
+            $syncLog->update([
+                'status' => 'success',
+                'schedules_updated' => $totalSchedulesUpdated,
+                'carriers_processed' => $carriersProcessed,
+                'completed_at' => now(),
+                'details' => array_merge($syncLog->details ?? [], [
+                    'routes_processed' => count($portCombinations),
+                    'total_schedules' => $totalSchedulesUpdated
+                ])
+            ]);
         }
         
         Log::info('Scheduled shipping schedule update completed', [
-            'routes_processed' => count($portCombinations)
+            'routes_processed' => count($portCombinations),
+            'total_schedules_updated' => $totalSchedulesUpdated,
+            'carriers_processed' => $carriersProcessed,
+            'sync_log_id' => $this->syncLogId
         ]);
     }
 
-    private function updateSchedulesForRoute(ScheduleExtractionPipeline $pipeline, array $combination): void
+    private function updateSchedulesForRoute(ScheduleExtractionPipeline $pipeline, array $combination): array
     {
         $pol = $combination['pol'];
         $pod = $combination['pod'];
@@ -75,6 +104,9 @@ class UpdateShippingSchedulesJob implements ShouldQueue
             $pipeline->updateSchedulesInDatabase($schedules, $pol, $pod);
             
             $totalSchedules = array_sum(array_map('count', $schedules));
+            $carriersProcessed = count(array_filter($schedules, function($carrierSchedules) {
+                return !empty($carrierSchedules);
+            }));
             
             $logEntry->update([
                 'schedules_found' => $totalSchedules,
@@ -86,8 +118,14 @@ class UpdateShippingSchedulesJob implements ShouldQueue
             Log::info('Schedule update completed for route', [
                 'pol' => $pol,
                 'pod' => $pod,
-                'schedules_found' => $totalSchedules
+                'schedules_found' => $totalSchedules,
+                'carriers_processed' => $carriersProcessed
             ]);
+            
+            return [
+                'schedules' => $totalSchedules,
+                'carriers' => $carriersProcessed
+            ];
             
         } catch (\Exception $e) {
             $logEntry->update([
@@ -102,7 +140,10 @@ class UpdateShippingSchedulesJob implements ShouldQueue
                 'error' => $e->getMessage()
             ]);
             
-            throw $e; // Re-throw to trigger retry mechanism
+            return [
+                'schedules' => 0,
+                'carriers' => 0
+            ];
         }
     }
 

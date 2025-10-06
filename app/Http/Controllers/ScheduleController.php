@@ -6,6 +6,9 @@ use Illuminate\Http\Request;
 use App\Models\ShippingSchedule;
 use App\Models\Port;
 use App\Models\ShippingCarrier;
+use App\Models\ScheduleSyncLog;
+use App\Jobs\UpdateShippingSchedulesJob;
+use Illuminate\Support\Facades\Log;
 
 class ScheduleController extends Controller
 {
@@ -44,7 +47,11 @@ class ScheduleController extends Controller
         $serviceType = $request->get('service_type', '');
         $offerId = $request->get('offer_id', '');
 
-        return view('schedules.index', compact('schedules', 'ports', 'carriers', 'pol', 'pod', 'serviceType', 'offerId'));
+        // Get sync information
+        $lastSyncTime = ScheduleSyncLog::getFormattedLastSyncTime();
+        $isSyncRunning = ScheduleSyncLog::isSyncRunning();
+
+        return view('schedules.index', compact('schedules', 'ports', 'carriers', 'pol', 'pod', 'serviceType', 'offerId', 'lastSyncTime', 'isSyncRunning'));
     }
 
     public function updateOffer(Request $request)
@@ -70,6 +77,83 @@ class ScheduleController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update schedule: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get sync status information
+     */
+    public function getSyncStatus()
+    {
+        $lastSyncTime = ScheduleSyncLog::getFormattedLastSyncTime();
+        $isSyncRunning = ScheduleSyncLog::isSyncRunning();
+        $latestSync = ScheduleSyncLog::getLatestSync();
+
+        return response()->json([
+            'lastSyncTime' => $lastSyncTime,
+            'isSyncRunning' => $isSyncRunning,
+            'latestSync' => $latestSync ? [
+                'id' => $latestSync->id,
+                'sync_type' => $latestSync->sync_type,
+                'schedules_updated' => $latestSync->schedules_updated,
+                'carriers_processed' => $latestSync->carriers_processed,
+                'status' => $latestSync->status,
+                'duration' => $latestSync->duration,
+                'completed_at' => $latestSync->completed_at?->format('M j, Y \a\t g:i A')
+            ] : null
+        ]);
+    }
+
+    /**
+     * Trigger manual sync
+     */
+    public function triggerSync(Request $request)
+    {
+        try {
+            // Check if sync is already running
+            if (ScheduleSyncLog::isSyncRunning()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Sync is already running. Please wait for it to complete.'
+                ], 409);
+            }
+
+            // Create sync log entry
+            $syncLog = ScheduleSyncLog::create([
+                'sync_type' => 'manual',
+                'status' => 'running',
+                'started_at' => now(),
+                'details' => [
+                    'triggered_by' => 'user',
+                    'user_agent' => $request->userAgent(),
+                    'ip_address' => $request->ip()
+                ]
+            ]);
+
+            // Dispatch the job
+            UpdateShippingSchedulesJob::dispatch($syncLog->id);
+
+            Log::info('Manual schedule sync triggered', [
+                'sync_log_id' => $syncLog->id,
+                'user_ip' => $request->ip()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Sync started successfully',
+                'syncLogId' => $syncLog->id
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to trigger manual sync', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to start sync: ' . $e->getMessage()
             ], 500);
         }
     }

@@ -5,6 +5,18 @@
     <div class="page-header">
         <h1>Shipping Schedules</h1>
         <p class="page-description">Find and update shipping schedules for your Robaws offers</p>
+        
+        <div class="sync-status">
+            <div class="sync-info">
+                <span class="last-sync">Last updated: <strong id="last-sync-time">{{ $lastSyncTime }}</strong></span>
+                <button id="sync-button" class="btn btn-primary {{ $isSyncRunning ? 'disabled' : '' }}" 
+                        {{ $isSyncRunning ? 'disabled' : '' }}>
+                    <i class="fas fa-sync-alt" id="sync-icon"></i>
+                    <span id="sync-text">{{ $isSyncRunning ? 'Syncing...' : 'Sync Now' }}</span>
+                </button>
+            </div>
+            <div id="sync-status" class="sync-status-message"></div>
+        </div>
     </div>
     
     <div class="schedule-filters">
@@ -92,6 +104,52 @@
 .page-description {
     color: #7f8c8d;
     font-size: 16px;
+    margin-bottom: 20px;
+}
+
+.sync-status {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 20px;
+    text-align: left;
+}
+
+.sync-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.last-sync {
+    color: #6c757d;
+    font-size: 14px;
+}
+
+.sync-status-message {
+    margin-top: 10px;
+}
+
+.sync-status-message .alert {
+    margin-bottom: 0;
+    padding: 10px 15px;
+    border-radius: 4px;
+}
+
+.btn.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.fa-spin {
+    animation: fa-spin 1s infinite linear;
+}
+
+@keyframes fa-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 .schedule-filters {
@@ -487,6 +545,121 @@ ETA: ${schedule.eta_pod || 'TBA'}
             });
         }
     });
+    
+    // Sync functionality
+    document.getElementById('sync-button').addEventListener('click', function() {
+        const button = this;
+        const icon = document.getElementById('sync-icon');
+        const text = document.getElementById('sync-text');
+        const statusDiv = document.getElementById('sync-status');
+        
+        // Disable button and show loading state
+        button.disabled = true;
+        icon.classList.add('fa-spin');
+        text.textContent = 'Syncing...';
+        statusDiv.innerHTML = '<div class="alert alert-info">Starting sync...</div>';
+        
+        fetch('/schedules/sync', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                statusDiv.innerHTML = '<div class="alert alert-success">Sync started successfully! This may take a few minutes.</div>';
+                
+                // Start polling for status updates
+                pollSyncStatus(data.syncLogId);
+            } else {
+                statusDiv.innerHTML = `<div class="alert alert-danger">Error: ${data.message}</div>`;
+                resetSyncButton();
+            }
+        })
+        .catch(error => {
+            statusDiv.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+            resetSyncButton();
+        });
+    });
+    
+    function pollSyncStatus(syncLogId) {
+        const statusDiv = document.getElementById('sync-status');
+        const lastSyncTime = document.getElementById('last-sync-time');
+        
+        const pollInterval = setInterval(() => {
+            fetch('/schedules/sync-status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.latestSync && data.latestSync.id === syncLogId) {
+                    if (data.latestSync.status === 'success') {
+                        clearInterval(pollInterval);
+                        statusDiv.innerHTML = `
+                            <div class="alert alert-success">
+                                Sync completed successfully! 
+                                Updated ${data.latestSync.schedules_updated} schedules from ${data.latestSync.carriers_processed} carriers.
+                                Duration: ${data.latestSync.duration}
+                            </div>
+                        `;
+                        lastSyncTime.textContent = data.latestSync.completed_at;
+                        resetSyncButton();
+                    } else if (data.latestSync.status === 'error') {
+                        clearInterval(pollInterval);
+                        statusDiv.innerHTML = '<div class="alert alert-danger">Sync failed. Please try again.</div>';
+                        resetSyncButton();
+                    }
+                }
+                
+                // Update sync running status
+                if (!data.isSyncRunning) {
+                    clearInterval(pollInterval);
+                    resetSyncButton();
+                }
+            })
+            .catch(error => {
+                console.error('Error polling sync status:', error);
+                clearInterval(pollInterval);
+                resetSyncButton();
+            });
+        }, 5000); // Poll every 5 seconds
+    }
+    
+    function resetSyncButton() {
+        const button = document.getElementById('sync-button');
+        const icon = document.getElementById('sync-icon');
+        const text = document.getElementById('sync-text');
+        
+        button.disabled = false;
+        icon.classList.remove('fa-spin');
+        text.textContent = 'Sync Now';
+    }
+    
+    // Auto-refresh sync status every 30 seconds
+    setInterval(() => {
+        fetch('/schedules/sync-status')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('last-sync-time').textContent = data.lastSyncTime;
+            
+            const button = document.getElementById('sync-button');
+            const icon = document.getElementById('sync-icon');
+            const text = document.getElementById('sync-text');
+            
+            if (data.isSyncRunning) {
+                button.disabled = true;
+                icon.classList.add('fa-spin');
+                text.textContent = 'Syncing...';
+            } else {
+                button.disabled = false;
+                icon.classList.remove('fa-spin');
+                text.textContent = 'Sync Now';
+            }
+        })
+        .catch(error => {
+            console.error('Error refreshing sync status:', error);
+        });
+    }, 30000);
 });
 </script>
 @endsection
