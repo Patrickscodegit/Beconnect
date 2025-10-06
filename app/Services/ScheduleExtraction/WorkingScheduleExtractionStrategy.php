@@ -40,8 +40,14 @@ class WorkingScheduleExtractionStrategy extends RealDataExtractionStrategy
 
     protected function parseRealSchedules(array $realData, string $polCode, string $podCode): array
     {
-        // The realData is already in the correct format from fetchRealSchedules
-        return $realData;
+        // Convert the grouped schedules to the format expected by the pipeline
+        $schedules = [];
+        
+        foreach ($realData as $carrierCode => $scheduleData) {
+            $schedules[$carrierCode] = [$scheduleData]; // Wrap in array as expected by pipeline
+        }
+        
+        return $schedules;
     }
 
     private function getCarriersForRoute(string $polCode, string $podCode): array

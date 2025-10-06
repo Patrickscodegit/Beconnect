@@ -79,6 +79,9 @@ class PortSeeder extends Seeder
             ['name' => 'Callao', 'code' => 'CAL', 'country' => 'Peru', 'region' => 'South America'],
             ['name' => 'Cartagena', 'code' => 'CTG', 'country' => 'Colombia', 'region' => 'South America'],
             ['name' => 'La Guaira', 'code' => 'LAG', 'country' => 'Venezuela', 'region' => 'South America'],
+
+            // Asian Ports
+            ['name' => 'Yokohama', 'code' => 'YOK', 'country' => 'Japan', 'region' => 'Asia'],
         ];
         
         foreach ($ports as $port) {
