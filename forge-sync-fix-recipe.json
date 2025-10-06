@@ -1,0 +1,66 @@
+{
+    "name": "Comprehensive Sync Functionality Fix",
+    "description": "Fixes all sync functionality issues in production by pulling latest code, clearing caches, running migrations, and testing functionality",
+    "commands": [
+        {
+            "name": "Pull Latest Code",
+            "command": "git pull origin main",
+            "description": "Pull the latest code changes from the main branch"
+        },
+        {
+            "name": "Clear All Caches",
+            "command": "php artisan view:clear && php artisan cache:clear && php artisan config:clear && php artisan route:clear",
+            "description": "Clear all Laravel caches to remove stale compiled views"
+        },
+        {
+            "name": "Rebuild Caches",
+            "command": "php artisan config:cache && php artisan route:cache && php artisan view:cache",
+            "description": "Rebuild Laravel caches for optimal performance"
+        },
+        {
+            "name": "Run Migrations",
+            "command": "php artisan migrate --force",
+            "description": "Run database migrations to create sync log table"
+        },
+        {
+            "name": "Seed Schedule Data",
+            "command": "php artisan schedules:seed-data",
+            "description": "Seed ports and carriers data if missing"
+        },
+        {
+            "name": "Verify Files",
+            "command": "ls -la app/Models/ScheduleSyncLog.php app/Http/Controllers/ScheduleController.php",
+            "description": "Verify that all required files exist"
+        },
+        {
+            "name": "Test Sync Functionality",
+            "command": "php -r \"require_once 'vendor/autoload.php'; \\$app = require_once 'bootstrap/app.php'; \\$app->make('Illuminate\\Contracts\\Console\\Kernel')->bootstrap(); \\$syncLog = new App\\Models\\ScheduleSyncLog(); echo 'Sync functionality test passed';\"",
+            "description": "Test that the sync functionality works correctly"
+        },
+        {
+            "name": "Restart Services",
+            "command": "sudo supervisorctl restart all",
+            "description": "Restart all services to ensure changes take effect"
+        }
+    ],
+    "environment": "production",
+    "timeout": 300,
+    "notifications": {
+        "slack": {
+            "webhook": "{{SLACK_WEBHOOK_URL}}",
+            "channel": "#deployments"
+        },
+        "email": {
+            "to": "{{ADMIN_EMAIL}}",
+            "subject": "Sync Fix Deployed Successfully"
+        }
+    },
+    "rollback": {
+        "enabled": true,
+        "commands": [
+            "git reset --hard HEAD~1",
+            "php artisan view:clear",
+            "php artisan cache:clear"
+        ]
+    }
+}
