@@ -38,7 +38,13 @@ class ScheduleController extends Controller
         $ports = Port::orderBy('name')->get();
         $carriers = ShippingCarrier::orderBy('name')->get();
 
-        return view('schedules.index', compact('schedules', 'ports', 'carriers'));
+        // Get filter values for form
+        $pol = $request->get('pol', '');
+        $pod = $request->get('pod', '');
+        $serviceType = $request->get('service_type', '');
+        $offerId = $request->get('offer_id', '');
+
+        return view('schedules.index', compact('schedules', 'ports', 'carriers', 'pol', 'pod', 'serviceType', 'offerId'));
     }
 
     public function updateOffer(Request $request)
