@@ -18,6 +18,9 @@ class DatabaseSeeder extends Seeder
             VinWmiSeeder::class,
             VehicleSpecsSeeder::class,
             PopularLuxuryVehiclesSeeder::class,
+            // Schedule system seeders
+            ShippingCarrierSeeder::class,
+            PortSeeder::class,
         ]);
     }
 }

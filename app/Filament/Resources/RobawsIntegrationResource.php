@@ -28,6 +28,8 @@ class RobawsIntegrationResource extends Resource
     protected static ?string $modelLabel = 'Document';
     
     protected static ?string $pluralModelLabel = 'Robaws Integration';
+    
+    protected static bool $shouldRegisterNavigation = false;
 
     public static function getEloquentQuery(): Builder
     {

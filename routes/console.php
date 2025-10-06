@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Schedule;
 use App\Services\AiRouter;
 use App\Helpers\FileInput;
 use App\Jobs\UpdateVehicleDatabaseJob;
+use App\Jobs\UpdateShippingSchedulesJob;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -56,3 +57,6 @@ Artisan::command('test:ai-extraction', function () {
 
 // Schedule vehicle database maintenance weekly
 Schedule::job(new UpdateVehicleDatabaseJob())->weekly()->sundays()->at('02:00');
+
+// Schedule shipping schedule updates daily
+Schedule::job(new UpdateShippingSchedulesJob())->daily()->at('03:00');

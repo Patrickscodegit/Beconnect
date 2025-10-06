@@ -5,6 +5,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ResultsController;
 use App\Http\Controllers\RobawsOfferController;
 use App\Http\Controllers\ApiIntakeController;
+use App\Http\Controllers\ScheduleController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -45,6 +46,11 @@ Route::middleware('auth')->group(function () {
         ->name('robaws.quotations.upload-status');
     Route::post('/robaws/quotations/{quotationId}/retry-uploads', [RobawsOfferController::class, 'retryFailedUploads'])
         ->name('robaws.quotations.retry-uploads');
+    
+    // Schedule routes
+    Route::get('/schedules', [ScheduleController::class, 'index'])->name('schedules.index');
+    Route::get('/schedules/search', [ScheduleController::class, 'searchSchedules'])->name('schedules.search');
+    Route::post('/schedules/update-offer', [ScheduleController::class, 'updateOffer'])->name('schedules.update-offer');
 });
 
 // Webhook endpoint (no auth required)
