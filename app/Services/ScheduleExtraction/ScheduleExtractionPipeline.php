@@ -24,7 +24,22 @@ class ScheduleExtractionPipeline
             try {
                 if ($strategy->supports($pol, $pod)) {
                     $schedules = $strategy->extractSchedules($pol, $pod);
-                    $results[$carrierCode] = $schedules;
+                    
+                    // If schedules are nested by carrier code, flatten them
+                    if (is_array($schedules) && !empty($schedules)) {
+                        $firstSchedule = reset($schedules);
+                        if (is_array($firstSchedule) && !isset($firstSchedule['service_name'])) {
+                            // This is nested by carrier code, flatten it
+                            foreach ($schedules as $nestedCarrierCode => $nestedSchedules) {
+                                $results[$nestedCarrierCode] = [$nestedSchedules];
+                            }
+                        } else {
+                            // This is a flat array of schedules
+                            $results[$carrierCode] = $schedules;
+                        }
+                    } else {
+                        $results[$carrierCode] = $schedules;
+                    }
                     
                     Log::info("Schedule extraction completed for {$carrierCode}", [
                         'pol' => $pol,

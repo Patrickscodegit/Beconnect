@@ -106,6 +106,50 @@ class ScheduleController extends Controller
     }
 
     /**
+     * Search schedules (AJAX endpoint)
+     */
+    public function searchSchedules(Request $request)
+    {
+        try {
+            $query = ShippingSchedule::with(['pol', 'pod', 'carrier']);
+
+            // Apply filters
+            if ($request->filled('pol')) {
+                $query->where('pol_code', $request->pol);
+            }
+
+            if ($request->filled('pod')) {
+                $query->where('pod_code', $request->pod);
+            }
+
+            if ($request->filled('carrier')) {
+                $query->where('carrier_code', $request->carrier);
+            }
+
+            if ($request->filled('service_type')) {
+                $query->where('service_type', $request->service_type);
+            }
+
+            $schedules = $query->orderBy('pol_code')
+                              ->orderBy('pod_code')
+                              ->orderBy('carrier_name')
+                              ->get();
+
+            return response()->json([
+                'success' => true,
+                'schedules' => $schedules,
+                'count' => $schedules->count()
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error searching schedules: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Trigger manual sync
      */
     public function triggerSync(Request $request)

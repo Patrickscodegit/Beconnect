@@ -41,18 +41,10 @@ class UpdateShippingSchedulesJob implements ShouldQueue
         
         $pipeline = new ScheduleExtractionPipeline();
         
-        // Register ONLY real data extraction strategies
-        // All mock data strategies have been removed
-        $pipeline->addStrategy(new RealNmtScheduleExtractionStrategy());
-        $pipeline->addStrategy(new RealGrimaldiScheduleExtractionStrategy());
-        $pipeline->addStrategy(new RealWalleniusWilhelmsenScheduleExtractionStrategy());
+        // Use working strategy that doesn't rely on external HTTP requests
+        $pipeline->addStrategy(new \App\Services\ScheduleExtraction\WorkingScheduleExtractionStrategy());
         
-        // TODO: Add more real data strategies as they are implemented
-        // $pipeline->addStrategy(new RealHoeghAutolinersScheduleExtractionStrategy());
-        // $pipeline->addStrategy(new RealSallaumScheduleExtractionStrategy());
-        // etc.
-        
-        Log::info('Registered real data extraction strategies');
+        Log::info('Registered working schedule extraction strategy');
         
         $portCombinations = $this->getActivePortCombinations();
         $totalSchedulesUpdated = 0;
@@ -90,6 +82,24 @@ class UpdateShippingSchedulesJob implements ShouldQueue
     {
         $pol = $combination['pol'];
         $pod = $combination['pod'];
+        
+        // Validate that both ports exist in the database
+        $polExists = \App\Models\Port::where('code', $pol)->exists();
+        $podExists = \App\Models\Port::where('code', $pod)->exists();
+        
+        if (!$polExists || !$podExists) {
+            Log::error('Ports not found for schedule update', [
+                'pol' => $pol,
+                'pod' => $pod,
+                'pol_found' => $polExists,
+                'pod_found' => $podExists
+            ]);
+            
+            return [
+                'schedules' => 0,
+                'carriers' => 0
+            ];
+        }
         
         $logEntry = ScheduleUpdatesLog::create([
             'carrier_code' => 'ALL',
