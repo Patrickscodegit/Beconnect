@@ -18,11 +18,15 @@ class ScheduleController extends Controller
 
         // Apply filters
         if ($request->filled('pol')) {
-            $query->where('pol_code', $request->pol);
+            $query->whereHas('polPort', function($q) use ($request) {
+                $q->where('code', $request->pol);
+            });
         }
 
         if ($request->filled('pod')) {
-            $query->where('pod_code', $request->pod);
+            $query->whereHas('podPort', function($q) use ($request) {
+                $q->where('code', $request->pod);
+            });
         }
 
         if ($request->filled('carrier')) {
@@ -33,9 +37,8 @@ class ScheduleController extends Controller
             $query->where('service_type', $request->service_type);
         }
 
-        $schedules = $query->orderBy('pol_code')
-                          ->orderBy('pod_code')
-                          ->orderBy('carrier_name')
+        $schedules = $query->orderBy('vessel_name')
+                          ->orderBy('ets_pol')
                           ->paginate(50);
 
         // Get POL and POD ports separately
@@ -117,11 +120,15 @@ class ScheduleController extends Controller
 
             // Apply filters
             if ($request->filled('pol')) {
-                $query->where('pol_code', $request->pol);
+                $query->whereHas('polPort', function($q) use ($request) {
+                    $q->where('code', $request->pol);
+                });
             }
 
             if ($request->filled('pod')) {
-                $query->where('pod_code', $request->pod);
+                $query->whereHas('podPort', function($q) use ($request) {
+                    $q->where('code', $request->pod);
+                });
             }
 
             if ($request->filled('carrier')) {
