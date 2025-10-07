@@ -161,24 +161,10 @@ class UpdateShippingSchedulesJob implements ShouldQueue
 
     private function getActivePortCombinations(): array
     {
-        // Focus on the most important routes that we know exist in reality
-        // These are the routes that carriers actually serve
-        return [
-            // Europe to West Africa (Lagos) - Major trade route
-            ['pol' => 'ANR', 'pod' => 'LOS'], // Antwerp to Lagos
-            
-            // Europe to East Africa (Mombasa) - Major trade route  
-            ['pol' => 'ANR', 'pod' => 'MBA'], // Antwerp to Mombasa
-            
-            // Europe to South Africa (Durban) - Major trade route
-            ['pol' => 'ANR', 'pod' => 'DUR'], // Antwerp to Durban
-            
-            // Europe to Mediterranean (Casablanca) - Major trade route
-            ['pol' => 'ANR', 'pod' => 'CAS'], // Antwerp to Casablanca
-            
-            // Europe to Middle East (Jeddah) - Major trade route
-            ['pol' => 'ANR', 'pod' => 'JED'], // Antwerp to Jeddah
-        ];
+        // NO ROUTES YET - We will add PODs and routes one by one as we implement real carriers
+        // This prevents generating any fake data
+        
+        return [];
     }
 
     public function failed(\Throwable $exception): void

@@ -90,6 +90,13 @@ class RealNmtScheduleExtractionStrategy extends RealDataExtractionStrategy
 
     public function supports(string $polCode, string $podCode): bool
     {
+        // Only support the 3 required POLs: Antwerp, Zeebrugge, Flushing
+        $supportedPols = ['ANR', 'ZEE', 'FLU'];
+        
+        if (!in_array($polCode, $supportedPols)) {
+            return false;
+        }
+        
         // Only return true if we can verify the route exists on NMT website
         return $this->validateRouteExists($polCode, $podCode);
     }
