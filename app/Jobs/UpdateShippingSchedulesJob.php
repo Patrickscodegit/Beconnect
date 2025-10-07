@@ -166,15 +166,13 @@ class UpdateShippingSchedulesJob implements ShouldQueue
         // Only use the 3 required POLs: Antwerp, Zeebrugge, Flushing
         $pols = ['ANR', 'ZEE', 'FLU'];
         
-        // Sallaum Lines - West Africa routes (REAL DATA ONLY)
+        // Sallaum Lines - West Africa routes (REAL DATA ONLY - verified from their schedule page)
         $sallaumPods = [
-            'LOS', // Lagos, Nigeria
             'DKR', // Dakar, Senegal
-            'ABJ', // Abidjan, Côte d'Ivoire
-            'TEM', // Tema, Ghana
             'CKY', // Conakry, Guinea
             'LFW', // Lomé, Togo
             'COO', // Cotonou, Benin
+            'LOS', // Lagos, Nigeria (limited service)
         ];
         
         $combinations = [];

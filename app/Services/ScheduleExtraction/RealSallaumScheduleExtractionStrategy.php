@@ -50,15 +50,13 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
         $schedules = [];
         
         try {
-            // Map port codes to Sallaum's port names
+            // Map port codes to Sallaum's port names (ONLY ports that actually exist on their schedule)
             $portNameMapping = [
                 'ANR' => 'Antwerp',
                 'ZEE' => 'Zeebrugge',
                 'FLU' => 'Amsterdam', // Flushing is close to Amsterdam
                 'LOS' => 'Lagos',
                 'DKR' => 'Dakar',
-                'ABJ' => 'Abidjan',
-                'TEM' => 'Tema',
                 'CKY' => 'Conakry',
                 'LFW' => 'Lome',
                 'COO' => 'Cotonou',
@@ -328,14 +326,13 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
 
     protected function checkRouteExistsInContent(string $content, string $polCode, string $podCode): bool
     {
-        // Map port codes to Sallaum's port names
+        // Map port codes to Sallaum's port names (ONLY ports that actually exist on their schedule)
         $portNameMapping = [
             'ANR' => 'Antwerp',
             'ZEE' => 'Zeebrugge',
             'FLU' => 'Amsterdam',
             'LOS' => 'Lagos',
             'DKR' => 'Dakar',
-            'ABJ' => 'Abidjan',
             'CKY' => 'Conakry',
             'LFW' => 'Lome',
             'COO' => 'Cotonou',
