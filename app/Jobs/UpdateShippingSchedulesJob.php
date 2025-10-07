@@ -8,6 +8,7 @@ use App\Services\ScheduleExtraction\ScheduleExtractionPipeline;
 use App\Services\ScheduleExtraction\RealNmtScheduleExtractionStrategy;
 use App\Services\ScheduleExtraction\RealGrimaldiScheduleExtractionStrategy;
 use App\Services\ScheduleExtraction\RealWalleniusWilhelmsenScheduleExtractionStrategy;
+use App\Services\ScheduleExtraction\RealSallaumScheduleExtractionStrategy;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -42,6 +43,7 @@ class UpdateShippingSchedulesJob implements ShouldQueue
         $pipeline = new ScheduleExtractionPipeline();
         
         // Use REAL DATA extraction strategies only - no mock data!
+        $pipeline->addStrategy(new RealSallaumScheduleExtractionStrategy()); // West Africa specialist
         $pipeline->addStrategy(new RealNmtScheduleExtractionStrategy());
         $pipeline->addStrategy(new RealGrimaldiScheduleExtractionStrategy());
         $pipeline->addStrategy(new RealWalleniusWilhelmsenScheduleExtractionStrategy());
@@ -161,10 +163,30 @@ class UpdateShippingSchedulesJob implements ShouldQueue
 
     private function getActivePortCombinations(): array
     {
-        // NO ROUTES YET - We will add PODs and routes one by one as we implement real carriers
-        // This prevents generating any fake data
+        // Only use the 3 required POLs: Antwerp, Zeebrugge, Flushing
+        $pols = ['ANR', 'ZEE', 'FLU'];
         
-        return [];
+        // Sallaum Lines - West Africa routes (REAL DATA ONLY)
+        $sallaumPods = [
+            'LOS', // Lagos, Nigeria
+            'DKR', // Dakar, Senegal
+            'ABJ', // Abidjan, Côte d'Ivoire
+            'TEM', // Tema, Ghana
+            'CKY', // Conakry, Guinea
+            'LFW', // Lomé, Togo
+            'COO', // Cotonou, Benin
+        ];
+        
+        $combinations = [];
+        
+        // Generate all combinations of the 3 POLs with Sallaum West Africa PODs
+        foreach ($pols as $pol) {
+            foreach ($sallaumPods as $pod) {
+                $combinations[] = ['pol' => $pol, 'pod' => $pod];
+            }
+        }
+        
+        return $combinations;
     }
 
     public function failed(\Throwable $exception): void
