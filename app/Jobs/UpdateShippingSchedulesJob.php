@@ -41,10 +41,12 @@ class UpdateShippingSchedulesJob implements ShouldQueue
         
         $pipeline = new ScheduleExtractionPipeline();
         
-        // Use working strategy that doesn't rely on external HTTP requests
-        $pipeline->addStrategy(new \App\Services\ScheduleExtraction\WorkingScheduleExtractionStrategy());
+        // Use REAL DATA extraction strategies only - no mock data!
+        $pipeline->addStrategy(new RealNmtScheduleExtractionStrategy());
+        $pipeline->addStrategy(new RealGrimaldiScheduleExtractionStrategy());
+        $pipeline->addStrategy(new RealWalleniusWilhelmsenScheduleExtractionStrategy());
         
-        Log::info('Registered working schedule extraction strategy');
+        Log::info('Registered REAL DATA schedule extraction strategies (no mock data)');
         
         $portCombinations = $this->getActivePortCombinations();
         $totalSchedulesUpdated = 0;
@@ -159,48 +161,23 @@ class UpdateShippingSchedulesJob implements ShouldQueue
 
     private function getActivePortCombinations(): array
     {
-        // Only include routes that are actually supported by the WorkingScheduleExtractionStrategy
-        // This reduces processing time from 339 routes to ~20 routes
+        // Focus on the most important routes that we know exist in reality
+        // These are the routes that carriers actually serve
         return [
-            // Europe to West Africa (Lagos)
+            // Europe to West Africa (Lagos) - Major trade route
             ['pol' => 'ANR', 'pod' => 'LOS'], // Antwerp to Lagos
-            ['pol' => 'RTM', 'pod' => 'LOS'], // Rotterdam to Lagos
-            ['pol' => 'HAM', 'pod' => 'LOS'], // Hamburg to Lagos
-            ['pol' => 'ZEE', 'pod' => 'LOS'], // Zeebrugge to Lagos
             
-            // Europe to East Africa (Mombasa)
+            // Europe to East Africa (Mombasa) - Major trade route  
             ['pol' => 'ANR', 'pod' => 'MBA'], // Antwerp to Mombasa
-            ['pol' => 'RTM', 'pod' => 'MBA'], // Rotterdam to Mombasa
             
-            // Europe to South Africa (Durban)
+            // Europe to South Africa (Durban) - Major trade route
             ['pol' => 'ANR', 'pod' => 'DUR'], // Antwerp to Durban
-            ['pol' => 'RTM', 'pod' => 'DUR'], // Rotterdam to Durban
             
-            // Europe to Mediterranean (Casablanca)
+            // Europe to Mediterranean (Casablanca) - Major trade route
             ['pol' => 'ANR', 'pod' => 'CAS'], // Antwerp to Casablanca
-            ['pol' => 'RTM', 'pod' => 'CAS'], // Rotterdam to Casablanca
-            ['pol' => 'HAM', 'pod' => 'CAS'], // Hamburg to Casablanca
             
-            // Europe to Middle East (Jeddah)
+            // Europe to Middle East (Jeddah) - Major trade route
             ['pol' => 'ANR', 'pod' => 'JED'], // Antwerp to Jeddah
-            ['pol' => 'RTM', 'pod' => 'JED'], // Rotterdam to Jeddah
-            ['pol' => 'HAM', 'pod' => 'JED'], // Hamburg to Jeddah
-            
-            // Europe to North America (New York)
-            ['pol' => 'ANR', 'pod' => 'NYC'], // Antwerp to New York
-            ['pol' => 'RTM', 'pod' => 'NYC'], // Rotterdam to New York
-            ['pol' => 'HAM', 'pod' => 'NYC'], // Hamburg to New York
-            
-            // Europe to South America
-            ['pol' => 'ANR', 'pod' => 'BUE'], // Antwerp to Buenos Aires
-            ['pol' => 'RTM', 'pod' => 'BUE'], // Rotterdam to Buenos Aires
-            ['pol' => 'ANR', 'pod' => 'SSZ'], // Antwerp to Santos
-            ['pol' => 'RTM', 'pod' => 'SSZ'], // Rotterdam to Santos
-            
-            // Europe to Asia (Yokohama)
-            ['pol' => 'ANR', 'pod' => 'YOK'], // Antwerp to Yokohama
-            ['pol' => 'RTM', 'pod' => 'YOK'], // Rotterdam to Yokohama
-            ['pol' => 'HAM', 'pod' => 'YOK'], // Hamburg to Yokohama
         ];
     }
 
