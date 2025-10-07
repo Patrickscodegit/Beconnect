@@ -25,7 +25,7 @@
                 <label for="pol">Port of Loading (POL):</label>
                 <select name="pol" id="pol" class="form-select">
                     <option value="">Select POL</option>
-                    @foreach($ports as $port)
+                    @foreach($polPorts as $port)
                         <option value="{{ $port->code }}" {{ $pol == $port->code ? 'selected' : '' }}>
                             {{ $port->name }} ({{ $port->code }})
                         </option>
@@ -37,11 +37,15 @@
                 <label for="pod">Port of Discharge (POD):</label>
                 <select name="pod" id="pod" class="form-select">
                     <option value="">Select POD</option>
-                    @foreach($ports as $port)
-                        <option value="{{ $port->code }}" {{ $pod == $port->code ? 'selected' : '' }}>
-                            {{ $port->name }} ({{ $port->code }})
-                        </option>
-                    @endforeach
+                    @if($podPorts->isEmpty())
+                        <option value="" disabled>No PODs yet - add carriers first</option>
+                    @else
+                        @foreach($podPorts as $port)
+                            <option value="{{ $port->code }}" {{ $pod == $port->code ? 'selected' : '' }}>
+                                {{ $port->name }} ({{ $port->code }})
+                            </option>
+                        @endforeach
+                    @endif
                 </select>
             </div>
             

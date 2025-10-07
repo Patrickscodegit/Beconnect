@@ -15,9 +15,9 @@ class MinimalPortsSeeder extends Seeder
         // Only seed the 3 required POLs - NO PODs yet
         // PODs will be added one by one as we implement real carriers
         $ports = [
-            ['code' => 'ANR', 'name' => 'Antwerp', 'country' => 'Belgium', 'region' => 'Europe'],
-            ['code' => 'ZEE', 'name' => 'Zeebrugge', 'country' => 'Belgium', 'region' => 'Europe'],
-            ['code' => 'FLU', 'name' => 'Flushing', 'country' => 'Netherlands', 'region' => 'Europe'],
+            ['code' => 'ANR', 'name' => 'Antwerp', 'country' => 'Belgium', 'region' => 'Europe', 'type' => 'pol'],
+            ['code' => 'ZEE', 'name' => 'Zeebrugge', 'country' => 'Belgium', 'region' => 'Europe', 'type' => 'pol'],
+            ['code' => 'FLU', 'name' => 'Flushing', 'country' => 'Netherlands', 'region' => 'Europe', 'type' => 'pol'],
         ];
 
         foreach ($ports as $portData) {

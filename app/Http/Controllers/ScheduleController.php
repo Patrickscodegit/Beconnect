@@ -38,7 +38,9 @@ class ScheduleController extends Controller
                           ->orderBy('carrier_name')
                           ->paginate(50);
 
-        $ports = Port::orderBy('name')->get();
+        // Get POL and POD ports separately
+        $polPorts = Port::whereIn('type', ['pol', 'both'])->orderBy('name')->get();
+        $podPorts = Port::whereIn('type', ['pod', 'both'])->orderBy('name')->get();
         $carriers = ShippingCarrier::orderBy('name')->get();
 
         // Get filter values for form
@@ -51,7 +53,7 @@ class ScheduleController extends Controller
         $lastSyncTime = ScheduleSyncLog::getFormattedLastSyncTime();
         $isSyncRunning = ScheduleSyncLog::isSyncRunning();
 
-        return view('schedules.index', compact('schedules', 'ports', 'carriers', 'pol', 'pod', 'serviceType', 'offerId', 'lastSyncTime', 'isSyncRunning'));
+        return view('schedules.index', compact('schedules', 'polPorts', 'podPorts', 'carriers', 'pol', 'pod', 'serviceType', 'offerId', 'lastSyncTime', 'isSyncRunning'));
     }
 
     public function updateOffer(Request $request)
