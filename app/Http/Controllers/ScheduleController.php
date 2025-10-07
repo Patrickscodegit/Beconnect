@@ -14,7 +14,7 @@ class ScheduleController extends Controller
 {
     public function index(Request $request)
     {
-        $query = ShippingSchedule::with(['pol', 'pod', 'carrier']);
+        $query = ShippingSchedule::with(['polPort', 'podPort', 'carrier']);
 
         // Apply filters
         if ($request->filled('pol')) {
@@ -113,7 +113,7 @@ class ScheduleController extends Controller
     public function searchSchedules(Request $request)
     {
         try {
-            $query = ShippingSchedule::with(['pol', 'pod', 'carrier']);
+            $query = ShippingSchedule::with(['polPort', 'podPort', 'carrier']);
 
             // Apply filters
             if ($request->filled('pol')) {
