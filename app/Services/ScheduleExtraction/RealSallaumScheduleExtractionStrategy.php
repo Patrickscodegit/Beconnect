@@ -58,7 +58,7 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
                 'LOS' => 'Lagos',
                 'DKR' => 'Dakar',
                 'ABJ' => 'Abidjan',
-                'TEM' => 'Tema', // Not on this route
+                'TEM' => 'Tema',
                 'CKY' => 'Conakry',
                 'LFW' => 'Lome',
                 'COO' => 'Cotonou',
@@ -71,57 +71,99 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
             if (preg_match('/<table[^>]*>(.*?)<\/table>/is', $html, $tableMatch)) {
                 $tableHtml = $tableMatch[1];
                 
-                // Extract vessel names from header row
-                preg_match_all('/<th[^>]*>([^<]+)<\/th>/i', $tableHtml, $vesselMatches);
-                $vessels = $vesselMatches[1];
+                // Extract vessel names from first row (header with vessel names)
+                preg_match_all('/<tr[^>]*>(.*?)<\/tr>/is', $tableHtml, $allRows);
                 
-                // Remove empty vessels and clean up
-                $vessels = array_filter($vessels, function($v) {
-                    return !empty(trim($v)) && strlen(trim($v)) > 2;
-                });
+                $vessels = [];
+                $voyageNumbers = [];
                 
-                // Extract rows
-                preg_match_all('/<tr[^>]*>(.*?)<\/tr>/is', $tableHtml, $rowMatches);
+                if (isset($allRows[1][0])) {
+                    // First row contains vessel names
+                    preg_match_all('/<t[dh][^>]*>(.*?)<\/t[dh]>/is', $allRows[1][0], $vesselCells);
+                    foreach ($vesselCells[1] as $cell) {
+                        $vesselName = trim(strip_tags($cell));
+                        if (!empty($vesselName) && $vesselName !== 'ETA') {
+                            $vessels[] = $vesselName;
+                        }
+                    }
+                }
                 
+                if (isset($allRows[1][1])) {
+                    // Second row contains voyage numbers
+                    preg_match_all('/<t[dh][^>]*>(.*?)<\/t[dh]>/is', $allRows[1][1], $voyageCells);
+                    foreach ($voyageCells[1] as $cell) {
+                        $voyageNo = trim(strip_tags($cell));
+                        if (!empty($voyageNo) && $voyageNo !== 'ETA') {
+                            $voyageNumbers[] = $voyageNo;
+                        }
+                    }
+                }
+                
+                Log::info("Sallaum Lines: Found " . count($vessels) . " vessels", ['vessels' => $vessels]);
+                
+                // Find POL and POD rows
                 $polDates = [];
                 $podDates = [];
                 
-                foreach ($rowMatches[1] as $rowHtml) {
+                foreach ($allRows[1] as $rowHtml) {
                     // Check if this row contains our POL
                     if (stripos($rowHtml, $polName) !== false) {
-                        preg_match_all('/<td[^>]*>([^<]*)<\/td>/i', $rowHtml, $cellMatches);
-                        $polDates = $cellMatches[1];
+                        // Extract ALL content from cells (including nested spans/divs)
+                        preg_match_all('/<td[^>]*>(.*?)<\/td>/is', $rowHtml, $cells);
+                        foreach ($cells[1] as $cellContent) {
+                            $dateText = $this->extractDateFromCell($cellContent);
+                            $polDates[] = $dateText;
+                        }
+                        Log::info("Sallaum Lines: Found POL row for {$polName}", ['dates_count' => count($polDates)]);
                     }
                     
                     // Check if this row contains our POD
                     if (stripos($rowHtml, $podName) !== false) {
-                        preg_match_all('/<td[^>]*>([^<]*)<\/td>/i', $rowHtml, $cellMatches);
-                        $podDates = $cellMatches[1];
+                        preg_match_all('/<td[^>]*>(.*?)<\/td>/is', $rowHtml, $cells);
+                        foreach ($cells[1] as $cellContent) {
+                            $dateText = $this->extractDateFromCell($cellContent);
+                            $podDates[] = $dateText;
+                        }
+                        Log::info("Sallaum Lines: Found POD row for {$podName}", ['dates_count' => count($podDates)]);
                     }
                 }
                 
                 // Match POL and POD dates for each vessel
-                foreach ($vessels as $index => $vessel) {
-                    $vesselName = trim($vessel);
-                    $polDate = isset($polDates[$index]) ? trim(strip_tags($polDates[$index])) : null;
-                    $podDate = isset($podDates[$index]) ? trim(strip_tags($podDates[$index])) : null;
+                $vesselCount = count($vessels);
+                for ($i = 0; $i < $vesselCount; $i++) {
+                    $vesselName = $vessels[$i] ?? null;
+                    $voyageNo = $voyageNumbers[$i] ?? null;
+                    // Skip first cell (port name cell) when accessing dates
+                    $polDate = $polDates[$i + 1] ?? null;
+                    $podDate = $podDates[$i + 1] ?? null;
                     
-                    // Only create schedule if both POL and POD dates exist
-                    if (!empty($polDate) && !empty($podDate) && $polDate !== 'ETA') {
-                        $schedules[] = [
-                            'pol_code' => $polCode,
-                            'pod_code' => $podCode,
-                            'carrier_code' => 'SALLAUM',
-                            'carrier_name' => 'Sallaum Lines',
-                            'service_type' => 'RORO',
-                            'service_name' => "Europe to Africa - {$vesselName}",
-                            'vessel_name' => $vesselName,
-                            'ets_pol' => $this->parseDate($polDate),
-                            'eta_pod' => $this->parseDate($podDate),
-                            'frequency' => 'As per schedule',
-                            'data_source' => 'website_table',
-                            'source_url' => 'https://sallaumlines.com/schedules/europe-to-west-and-south-africa/'
-                        ];
+                    if ($vesselName && $polDate && $podDate && !empty($polDate) && !empty($podDate)) {
+                        $parsedPolDate = $this->parseDate($polDate);
+                        $parsedPodDate = $this->parseDate($podDate);
+                        
+                        if ($parsedPolDate && $parsedPodDate) {
+                            $schedules[] = [
+                                'pol_code' => $polCode,
+                                'pod_code' => $podCode,
+                                'carrier_code' => 'SALLAUM',
+                                'carrier_name' => 'Sallaum Lines',
+                                'service_type' => 'RORO',
+                                'service_name' => "Europe to Africa",
+                                'vessel_name' => $vesselName,
+                                'voyage_number' => $voyageNo,
+                                'ets_pol' => $parsedPolDate,
+                                'eta_pod' => $parsedPodDate,
+                                'frequency' => 'Weekly',
+                                'data_source' => 'website_table',
+                                'source_url' => 'https://sallaumlines.com/schedules/europe-to-west-and-south-africa/'
+                            ];
+                            
+                            Log::info("Sallaum Lines: Created schedule", [
+                                'vessel' => $vesselName,
+                                'pol_date' => $parsedPolDate,
+                                'pod_date' => $parsedPodDate
+                            ]);
+                        }
                     }
                 }
             }
@@ -129,10 +171,54 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
             Log::info("Sallaum Lines: Extracted " . count($schedules) . " schedules for {$polCode}->{$podCode}");
             
         } catch (\Exception $e) {
-            Log::error("Sallaum Lines: Failed to parse schedule table for {$polCode}->{$podCode}: " . $e->getMessage());
+            Log::error("Sallaum Lines: Failed to parse schedule table for {$polCode}->{$podCode}: " . $e->getMessage(), [
+                'exception' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
         }
         
         return $schedules;
+    }
+    
+    protected function extractDateFromCell(string $cellHtml): ?string
+    {
+        // Extract date from cell HTML, handling complex nested structure
+        // Format: <strong>27</strong> August 2025 (split across spans)
+        
+        $day = null;
+        $monthYear = null;
+        
+        // Extract day from <strong> tag
+        if (preg_match('/<strong[^>]*>(\d+)<\/strong>/i', $cellHtml, $dayMatch)) {
+            $day = $dayMatch[1];
+        }
+        
+        // Extract month and year - look for month names
+        $months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        foreach ($months as $month) {
+            if (stripos($cellHtml, $month) !== false) {
+                // Extract year after month
+                if (preg_match('/' . $month . '\s*(\d{4})/i', $cellHtml, $yearMatch)) {
+                    $monthYear = $month . ' ' . $yearMatch[1];
+                    break;
+                }
+            }
+        }
+        
+        // Combine day and month/year
+        if ($day && $monthYear) {
+            return $day . ' ' . $monthYear;
+        }
+        
+        // Fallback: try to extract full date directly
+        $fullText = strip_tags($cellHtml);
+        $fullText = preg_replace('/\s+/', ' ', trim($fullText));
+        
+        if (preg_match('/(\d+)\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})/i', $fullText, $match)) {
+            return $match[1] . ' ' . $match[2] . ' ' . $match[3];
+        }
+        
+        return null;
     }
     
     protected function parseDate(string $dateStr): ?string
