@@ -1,0 +1,79 @@
+{
+    "name": "Complete Schedules Production Fix",
+    "description": "Comprehensive fix for schedules page issues including view cache and missing database data",
+    "script": "forge-production-complete-fix.sh",
+    "user": "forge",
+    "timeout": 600,
+    "environment": "production",
+    "notifications": {
+        "slack": false,
+        "email": false
+    },
+    "steps": [
+        {
+            "name": "Pull Latest Code",
+            "command": "git pull origin main",
+            "timeout": 60
+        },
+        {
+            "name": "Nuclear Cache Clear",
+            "command": "rm -rf storage/framework/views/* storage/framework/cache/* bootstrap/cache/*",
+            "timeout": 30
+        },
+        {
+            "name": "Clear Laravel Caches",
+            "command": "php artisan view:clear && php artisan cache:clear && php artisan config:clear && php artisan route:clear && php artisan optimize:clear",
+            "timeout": 60
+        },
+        {
+            "name": "Run Migrations",
+            "command": "php artisan migrate --force",
+            "timeout": 120
+        },
+        {
+            "name": "Seed Critical Data",
+            "command": "php artisan db:seed --class=PortSeeder --force && php artisan db:seed --class=ShippingCarrierSeeder --force",
+            "timeout": 120
+        },
+        {
+            "name": "Verify Data",
+            "command": "php artisan tinker --execute=\"echo 'Ports: ' . App\\Models\\Port::count() . ', Carriers: ' . App\\Models\\ShippingCarrier::count();\"",
+            "timeout": 30
+        },
+        {
+            "name": "Rebuild Caches",
+            "command": "php artisan config:cache && php artisan route:cache && php artisan view:cache",
+            "timeout": 60
+        },
+        {
+            "name": "Restart Services",
+            "command": "sudo supervisorctl restart all",
+            "timeout": 30
+        }
+    ],
+    "rollback": {
+        "enabled": true,
+        "steps": [
+            {
+                "name": "Restore Previous Code",
+                "command": "git reset --hard HEAD~1",
+                "timeout": 60
+            },
+            {
+                "name": "Clear Caches",
+                "command": "php artisan optimize:clear",
+                "timeout": 30
+            },
+            {
+                "name": "Restart Services",
+                "command": "sudo supervisorctl restart all",
+                "timeout": 30
+            }
+        ]
+    },
+    "monitoring": {
+        "check_url": "/schedules",
+        "expected_status": 200,
+        "timeout": 30
+    }
+}
