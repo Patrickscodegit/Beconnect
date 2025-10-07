@@ -20,29 +20,22 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
     protected function fetchRealSchedules(string $polCode, string $podCode): array
     {
         try {
-            // Attempt to fetch real schedule data from Sallaum Lines website
-            // Using their route finder: https://sallaumlines.com/route-finder/
+            // Fetch real schedule data from Sallaum Lines' Europe to Africa schedule page
+            // Source: https://sallaumlines.com/schedules/europe-to-west-and-south-africa/
             
             $response = Http::timeout(30)
                 ->withHeaders([
                     'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                     'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 ])
-                ->get('https://sallaumlines.com/route-finder/', [
-                    'origin' => $polCode,
-                    'destination' => $podCode
-                ]);
+                ->get('https://sallaumlines.com/schedules/europe-to-west-and-south-africa/');
 
             if ($response->successful()) {
-                $content = $response->body();
+                $html = $response->body();
                 
-                // Check if route exists
-                if (!$this->checkRouteExistsInContent($content, $polCode, $podCode)) {
-                    Log::info("Sallaum Lines: Route {$polCode}->{$podCode} does not exist on website");
-                    return [];
-                }
+                Log::info("Sallaum Lines: Fetched schedule page, parsing for {$polCode}->{$podCode}");
                 
-                return $this->parseSallaumHtml($content, $polCode, $podCode);
+                return $this->parseSallaumScheduleTable($html, $polCode, $podCode);
             }
             
         } catch (\Exception $e) {
@@ -52,41 +45,124 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
         return [];
     }
 
-    protected function parseSallaumHtml(string $html, string $polCode, string $podCode): array
+    protected function parseSallaumScheduleTable(string $html, string $polCode, string $podCode): array
     {
         $schedules = [];
         
-        // Parse the HTML to extract real schedule information
-        // This will extract: service name, frequency, transit time, vessel, ETS, ETA
-        
         try {
-            // Look for schedule data in the HTML
-            // Sallaum typically shows:
-            // - Service routes
-            // - Frequency (weekly/monthly)
-            // - Transit times
-            // - Next sailing dates
+            // Map port codes to Sallaum's port names
+            $portNameMapping = [
+                'ANR' => 'Antwerp',
+                'ZEE' => 'Zeebrugge',
+                'FLU' => 'Amsterdam', // Flushing is close to Amsterdam
+                'LOS' => 'Lagos',
+                'DKR' => 'Dakar',
+                'ABJ' => 'Abidjan',
+                'TEM' => 'Tema', // Not on this route
+                'CKY' => 'Conakry',
+                'LFW' => 'Lome',
+                'COO' => 'Cotonou',
+            ];
             
-            // Pattern to find schedule tables or divs
-            if (preg_match_all('/<div[^>]*class="[^"]*schedule[^"]*"[^>]*>(.*?)<\/div>/is', $html, $matches)) {
-                foreach ($matches[1] as $scheduleBlock) {
-                    $schedule = $this->extractScheduleFromBlock($scheduleBlock, $polCode, $podCode);
-                    if ($schedule) {
-                        $schedules[] = $schedule;
+            $polName = $portNameMapping[$polCode] ?? $polCode;
+            $podName = $portNameMapping[$podCode] ?? $podCode;
+            
+            // Extract table content
+            if (preg_match('/<table[^>]*>(.*?)<\/table>/is', $html, $tableMatch)) {
+                $tableHtml = $tableMatch[1];
+                
+                // Extract vessel names from header row
+                preg_match_all('/<th[^>]*>([^<]+)<\/th>/i', $tableHtml, $vesselMatches);
+                $vessels = $vesselMatches[1];
+                
+                // Remove empty vessels and clean up
+                $vessels = array_filter($vessels, function($v) {
+                    return !empty(trim($v)) && strlen(trim($v)) > 2;
+                });
+                
+                // Extract rows
+                preg_match_all('/<tr[^>]*>(.*?)<\/tr>/is', $tableHtml, $rowMatches);
+                
+                $polDates = [];
+                $podDates = [];
+                
+                foreach ($rowMatches[1] as $rowHtml) {
+                    // Check if this row contains our POL
+                    if (stripos($rowHtml, $polName) !== false) {
+                        preg_match_all('/<td[^>]*>([^<]*)<\/td>/i', $rowHtml, $cellMatches);
+                        $polDates = $cellMatches[1];
+                    }
+                    
+                    // Check if this row contains our POD
+                    if (stripos($rowHtml, $podName) !== false) {
+                        preg_match_all('/<td[^>]*>([^<]*)<\/td>/i', $rowHtml, $cellMatches);
+                        $podDates = $cellMatches[1];
+                    }
+                }
+                
+                // Match POL and POD dates for each vessel
+                foreach ($vessels as $index => $vessel) {
+                    $vesselName = trim($vessel);
+                    $polDate = isset($polDates[$index]) ? trim(strip_tags($polDates[$index])) : null;
+                    $podDate = isset($podDates[$index]) ? trim(strip_tags($podDates[$index])) : null;
+                    
+                    // Only create schedule if both POL and POD dates exist
+                    if (!empty($polDate) && !empty($podDate) && $polDate !== 'ETA') {
+                        $schedules[] = [
+                            'pol_code' => $polCode,
+                            'pod_code' => $podCode,
+                            'carrier_code' => 'SALLAUM',
+                            'carrier_name' => 'Sallaum Lines',
+                            'service_type' => 'RORO',
+                            'service_name' => "Europe to Africa - {$vesselName}",
+                            'vessel_name' => $vesselName,
+                            'ets_pol' => $this->parseDate($polDate),
+                            'eta_pod' => $this->parseDate($podDate),
+                            'frequency' => 'As per schedule',
+                            'data_source' => 'website_table',
+                            'source_url' => 'https://sallaumlines.com/schedules/europe-to-west-and-south-africa/'
+                        ];
                     }
                 }
             }
             
-            // If no schedules found in structured format, look for schedule information in text
-            if (empty($schedules)) {
-                $schedules = $this->extractScheduleFromText($html, $polCode, $podCode);
-            }
+            Log::info("Sallaum Lines: Extracted " . count($schedules) . " schedules for {$polCode}->{$podCode}");
             
         } catch (\Exception $e) {
-            Log::error("Sallaum Lines: Failed to parse HTML for {$polCode}->{$podCode}: " . $e->getMessage());
+            Log::error("Sallaum Lines: Failed to parse schedule table for {$polCode}->{$podCode}: " . $e->getMessage());
         }
         
         return $schedules;
+    }
+    
+    protected function parseDate(string $dateStr): ?string
+    {
+        // Parse dates like "2 September 2025" or "21 September 2025"
+        try {
+            // Remove bold markers and extra spaces
+            $dateStr = preg_replace('/<[^>]+>/', '', $dateStr);
+            $dateStr = preg_replace('/\s+/', ' ', trim($dateStr));
+            
+            if (empty($dateStr) || $dateStr === 'ETA') {
+                return null;
+            }
+            
+            $date = \DateTime::createFromFormat('d F Y', $dateStr);
+            if ($date) {
+                return $date->format('Y-m-d');
+            }
+            
+            // Try alternative format
+            $date = \DateTime::createFromFormat('j F Y', $dateStr);
+            if ($date) {
+                return $date->format('Y-m-d');
+            }
+            
+        } catch (\Exception $e) {
+            Log::warning("Sallaum Lines: Could not parse date: {$dateStr}");
+        }
+        
+        return null;
     }
 
     protected function extractScheduleFromBlock(string $block, string $polCode, string $podCode): ?array
@@ -166,41 +242,28 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
 
     protected function checkRouteExistsInContent(string $content, string $polCode, string $podCode): bool
     {
-        // Sallaum-specific "no route" indicators
-        $notFoundIndicators = [
-            'No routes found',
-            'No services available',
-            'Route not available',
-            'No sailings found',
-            'Sorry, we don\'t operate this route'
+        // Map port codes to Sallaum's port names
+        $portNameMapping = [
+            'ANR' => 'Antwerp',
+            'ZEE' => 'Zeebrugge',
+            'FLU' => 'Amsterdam',
+            'LOS' => 'Lagos',
+            'DKR' => 'Dakar',
+            'ABJ' => 'Abidjan',
+            'CKY' => 'Conakry',
+            'LFW' => 'Lome',
+            'COO' => 'Cotonou',
         ];
         
-        foreach ($notFoundIndicators as $indicator) {
-            if (stripos($content, $indicator) !== false) {
-                return false;
-            }
-        }
+        $polName = $portNameMapping[$polCode] ?? $polCode;
+        $podName = $portNameMapping[$podCode] ?? $podCode;
         
-        // Check for positive indicators
-        $routeIndicators = [
-            'schedule',
-            'sailing',
-            'departure',
-            'arrival',
-            'frequency',
-            'service',
-            'route details'
-        ];
+        // Check if both POL and POD appear in the schedule table
+        $hasPol = stripos($content, $polName) !== false;
+        $hasPod = stripos($content, $podName) !== false;
+        $hasTable = stripos($content, '<table') !== false;
         
-        $foundIndicators = 0;
-        foreach ($routeIndicators as $indicator) {
-            if (stripos($content, $indicator) !== false) {
-                $foundIndicators++;
-            }
-        }
-        
-        // If we find at least 2 route indicators, route likely exists
-        return $foundIndicators >= 2;
+        return $hasPol && $hasPod && $hasTable;
     }
 
     public function supports(string $polCode, string $podCode): bool
@@ -219,14 +282,12 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
     protected function validateRouteExists(string $polCode, string $podCode): bool
     {
         try {
+            // Fetch the actual schedule page to validate
             $response = Http::timeout(30)
                 ->withHeaders([
                     'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                 ])
-                ->get('https://sallaumlines.com/route-finder/', [
-                    'origin' => $polCode,
-                    'destination' => $podCode
-                ]);
+                ->get('https://sallaumlines.com/schedules/europe-to-west-and-south-africa/');
 
             if ($response->successful()) {
                 $content = $response->body();
