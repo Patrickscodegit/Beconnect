@@ -15,8 +15,9 @@ return new class extends Migration
             // Drop the old unique constraint
             $table->dropUnique(['carrier_id', 'pol_id', 'pod_id', 'service_name']);
             
-            // Add new unique constraint that includes vessel_name and voyage_number to allow multiple schedules per route
-            $table->unique(['carrier_id', 'pol_id', 'pod_id', 'service_name', 'vessel_name', 'voyage_number']);
+            // Add new unique constraint that includes vessel_name to allow multiple schedules per route
+            // Note: voyage_number will be added in a later migration
+            $table->unique(['carrier_id', 'pol_id', 'pod_id', 'service_name', 'vessel_name']);
         });
     }
 
@@ -27,7 +28,7 @@ return new class extends Migration
     {
         Schema::table('shipping_schedules', function (Blueprint $table) {
             // Drop the new unique constraint
-            $table->dropUnique(['carrier_id', 'pol_id', 'pod_id', 'service_name', 'vessel_name', 'voyage_number']);
+            $table->dropUnique(['carrier_id', 'pol_id', 'pod_id', 'service_name', 'vessel_name']);
             
             // Restore the old unique constraint
             $table->unique(['carrier_id', 'pol_id', 'pod_id', 'service_name']);
