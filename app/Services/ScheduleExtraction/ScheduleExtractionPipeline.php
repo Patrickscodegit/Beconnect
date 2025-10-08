@@ -5,11 +5,18 @@ namespace App\Services\ScheduleExtraction;
 use App\Models\ShippingCarrier;
 use App\Models\Port;
 use App\Models\ShippingSchedule;
+use App\Services\AI\AIScheduleValidationService;
 use Illuminate\Support\Facades\Log;
 
 class ScheduleExtractionPipeline
 {
     private array $strategies = [];
+    private AIScheduleValidationService $aiValidator;
+    
+    public function __construct(AIScheduleValidationService $aiValidator)
+    {
+        $this->aiValidator = $aiValidator;
+    }
     
     public function addStrategy(ScheduleExtractionStrategyInterface $strategy): void
     {
@@ -83,7 +90,10 @@ class ScheduleExtractionPipeline
                 continue;
             }
             
-            foreach ($carrierSchedules as $scheduleData) {
+            // Apply AI validation to schedules before saving
+            $validatedSchedules = $this->aiValidator->validateSchedules($carrierSchedules, "{$pol}->{$pod}");
+            
+            foreach ($validatedSchedules as $scheduleData) {
                 $this->updateOrCreateSchedule($carrier, $polPort, $podPort, $scheduleData);
             }
         }
@@ -95,20 +105,23 @@ class ScheduleExtractionPipeline
         Port $podPort, 
         array $scheduleData
     ): void {
+        // New unique constraint includes ETS (sailing date) to allow multiple voyages
+        // Same vessel can now have multiple schedules for same route with different sailing dates
         $schedule = ShippingSchedule::updateOrCreate(
             [
                 'carrier_id' => $carrier->id,
                 'pol_id' => $polPort->id,
                 'pod_id' => $podPort->id,
                 'service_name' => $scheduleData['service_name'] ?? null,
+                'vessel_name' => $scheduleData['vessel_name'] ?? null,
+                'ets_pol' => $scheduleData['ets_pol'] ?? null, // Added to unique key for multiple voyages
             ],
             [
                 'frequency_per_week' => $scheduleData['frequency_per_week'] ?? null,
                 'frequency_per_month' => $scheduleData['frequency_per_month'] ?? null,
                 'transit_days' => $scheduleData['transit_days'] ?? null,
-                'vessel_name' => $scheduleData['vessel_name'] ?? null,
+                'voyage_number' => $scheduleData['voyage_number'] ?? null,
                 'vessel_class' => $scheduleData['vessel_class'] ?? null,
-                'ets_pol' => $scheduleData['ets_pol'] ?? null,
                 'eta_pod' => $scheduleData['eta_pod'] ?? null,
                 'next_sailing_date' => $scheduleData['next_sailing_date'] ?? null,
                 'last_updated' => now(),
@@ -121,6 +134,8 @@ class ScheduleExtractionPipeline
             'pol' => $polPort->code,
             'pod' => $podPort->code,
             'service' => $scheduleData['service_name'] ?? 'N/A',
+            'vessel' => $scheduleData['vessel_name'] ?? 'N/A',
+            'voyage' => $scheduleData['voyage_number'] ?? 'N/A',
             'schedule_id' => $schedule->id
         ]);
     }

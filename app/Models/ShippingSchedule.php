@@ -19,6 +19,7 @@ class ShippingSchedule extends Model
         'frequency_per_month',
         'transit_days',
         'vessel_name',
+        'voyage_number',
         'vessel_class',
         'ets_pol',
         'eta_pod',
@@ -81,14 +82,20 @@ class ShippingSchedule extends Model
     public function getFrequencyDisplayAttribute(): string
     {
         if ($this->frequency_per_month) {
-            if ($this->frequency_per_month == 1) {
-                return '1x/month';
-            } elseif ($this->frequency_per_month == 2) {
-                return '2x/month';
-            } elseif ($this->frequency_per_month == 4) {
-                return 'Weekly';
+            $freq = (float) $this->frequency_per_month;
+            
+            if ($freq >= 4.0) {
+                return 'Weekly service';
+            } elseif ($freq >= 2.5) {
+                return '2-3x/month';
+            } elseif ($freq >= 1.5) {
+                return 'Bi-weekly service';
+            } elseif ($freq >= 0.8) {
+                return 'Monthly service';
+            } elseif ($freq >= 0.5) {
+                return '~1x/month';
             } else {
-                return number_format($this->frequency_per_month, 1) . 'x/month';
+                return 'Irregular service';
             }
         }
         return 'On request';
@@ -97,5 +104,50 @@ class ShippingSchedule extends Model
     public function getTransitTimeDisplayAttribute(): string
     {
         return $this->transit_days ? $this->transit_days . ' days' : 'TBA';
+    }
+
+    /**
+     * Calculate dynamic frequency for this schedule's route
+     */
+    public function getDynamicFrequency(int $monthsAhead = 6): array
+    {
+        $frequencyService = app(\App\Services\ScheduleFrequencyCalculationService::class);
+        return $frequencyService->calculateScheduleFrequency($this, $monthsAhead);
+    }
+
+    /**
+     * Get dynamic frequency display text
+     */
+    public function getDynamicFrequencyDisplayAttribute(): string
+    {
+        $frequencyService = app(\App\Services\ScheduleFrequencyCalculationService::class);
+        $frequencyData = $this->getDynamicFrequency();
+        return $frequencyService->getFrequencyDisplayText($frequencyData);
+    }
+
+    /**
+     * Get the most accurate frequency for display
+     * Uses dynamic calculation if available, falls back to stored values
+     */
+    public function getAccurateFrequencyDisplayAttribute(): string
+    {
+        try {
+            $dynamicFreq = $this->getDynamicFrequencyDisplayAttribute();
+            
+            // Only use dynamic if it's based on actual data
+            $frequencyData = $this->getDynamicFrequency();
+            if ($frequencyData['is_dynamic'] && $frequencyData['total_sailings'] > 0) {
+                return $dynamicFreq;
+            }
+        } catch (\Exception $e) {
+            // Fall back to stored frequency if dynamic calculation fails
+            \Log::warning('Dynamic frequency calculation failed', [
+                'schedule_id' => $this->id,
+                'error' => $e->getMessage()
+            ]);
+        }
+
+        // Fallback to stored frequency
+        return $this->getFrequencyDisplayAttribute();
     }
 }

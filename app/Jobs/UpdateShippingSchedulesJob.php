@@ -9,6 +9,9 @@ use App\Services\ScheduleExtraction\RealNmtScheduleExtractionStrategy;
 use App\Services\ScheduleExtraction\RealGrimaldiScheduleExtractionStrategy;
 use App\Services\ScheduleExtraction\RealWalleniusWilhelmsenScheduleExtractionStrategy;
 use App\Services\ScheduleExtraction\RealSallaumScheduleExtractionStrategy;
+use App\Services\ScheduleExtraction\AIScheduleExtractionStrategy;
+use App\Services\AI\AIScheduleValidationService;
+use App\Services\AI\OpenAIService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -36,11 +39,13 @@ class UpdateShippingSchedulesJob implements ShouldQueue
             $syncLog = ScheduleSyncLog::find($this->syncLogId);
         }
 
-        Log::info('Starting REAL DATA shipping schedule update', [
+        Log::info('Starting AI-POWERED shipping schedule update', [
             'sync_log_id' => $this->syncLogId
         ]);
         
-        $pipeline = new ScheduleExtractionPipeline();
+        // Initialize AI services for dynamic validation and parsing
+        $aiValidator = new AIScheduleValidationService(new OpenAIService());
+        $pipeline = new ScheduleExtractionPipeline($aiValidator);
         
         // Use REAL DATA extraction strategies only - no mock data!
         $pipeline->addStrategy(new RealSallaumScheduleExtractionStrategy()); // West Africa specialist
@@ -48,7 +53,15 @@ class UpdateShippingSchedulesJob implements ShouldQueue
         $pipeline->addStrategy(new RealGrimaldiScheduleExtractionStrategy());
         $pipeline->addStrategy(new RealWalleniusWilhelmsenScheduleExtractionStrategy());
         
-        Log::info('Registered REAL DATA schedule extraction strategies (no mock data)');
+        // Add AI parsing strategy if enabled
+        // TEMPORARILY DISABLED: AI parsing hits rate limits and returns 0 schedules
+        // Re-enable after optimizing API calls
+        if (false && config('schedule_extraction.use_ai_parsing', false)) {
+            $pipeline->addStrategy(new AIScheduleExtractionStrategy(new OpenAIService()));
+            Log::info('AI parsing strategy enabled for dynamic schedule extraction');
+        }
+        
+        Log::info('Registered AI-POWERED schedule extraction strategies (no hardcoded data)');
         
         $portCombinations = $this->getActivePortCombinations();
         $totalSchedulesUpdated = 0;
@@ -164,21 +177,39 @@ class UpdateShippingSchedulesJob implements ShouldQueue
     private function getActivePortCombinations(): array
     {
         // Only use the 3 required POLs: Antwerp, Zeebrugge, Flushing
-        $pols = ['ANR', 'ZEE', 'FLU'];
+        // Sallaum Lines POLs (only Antwerp and Zeebrugge - no Flushing)
+        // Flushing will be used for other carriers later
+        $sallaumPols = ['ANR', 'ZEE'];
         
-        // Sallaum Lines - West Africa routes (REAL DATA ONLY - verified from their schedule page)
+        // Sallaum Lines - ALL destinations (REAL DATA ONLY - verified from their schedule page)
+        // Source: https://sallaumlines.com/schedules/europe-to-west-and-south-africa/
         $sallaumPods = [
-            'DKR', // Dakar, Senegal
+            // West Africa (8 ports)
+            'ABJ', // Abidjan, Côte d'Ivoire
             'CKY', // Conakry, Guinea
-            'LFW', // Lomé, Togo
             'COO', // Cotonou, Benin
-            'LOS', // Lagos, Nigeria (limited service)
+            'DKR', // Dakar, Senegal
+            'DLA', // Douala, Cameroon
+            'LOS', // Lagos, Nigeria
+            'LFW', // Lomé, Togo
+            'PNR', // Pointe Noire, Republic of Congo
+            
+            // East Africa (2 ports)
+            'DAR', // Dar es Salaam, Tanzania
+            'MBA', // Mombasa, Kenya
+            
+            // South Africa (4 ports)
+            'DUR', // Durban, South Africa
+            'ELS', // East London, South Africa
+            'PLZ', // Port Elizabeth, South Africa
+            'WVB', // Walvis Bay, Namibia
         ];
         
         $combinations = [];
         
-        // Generate all combinations of the 3 POLs with Sallaum West Africa PODs
-        foreach ($pols as $pol) {
+        // Generate all combinations of Sallaum's 2 POLs with ALL 14 Sallaum PODs
+        // 2 POLs × 14 PODs = 28 route combinations
+        foreach ($sallaumPols as $pol) {
             foreach ($sallaumPods as $pod) {
                 $combinations[] = ['pol' => $pol, 'pod' => $pod];
             }

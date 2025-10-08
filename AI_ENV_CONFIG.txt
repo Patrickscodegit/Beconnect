@@ -1,0 +1,88 @@
+################################################################################
+# AI SCHEDULE EXTRACTION CONFIGURATION
+# Add these lines to your .env files
+################################################################################
+
+# ----------------------------------------------------------------------------
+# OpenAI API Configuration
+# ----------------------------------------------------------------------------
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4
+
+# ----------------------------------------------------------------------------
+# AI Features (Enable/Disable)
+# ----------------------------------------------------------------------------
+# Enable AI-powered schedule parsing (uses OpenAI API)
+USE_AI_SCHEDULE_PARSING=false
+
+# Enable AI validation of extracted schedules (uses OpenAI API)
+USE_AI_VALIDATION=false
+
+# Validation confidence threshold (0.0 to 1.0)
+AI_VALIDATION_THRESHOLD=0.7
+
+# Fallback to traditional parsing if AI fails
+AI_FALLBACK_ENABLED=true
+
+# ----------------------------------------------------------------------------
+# AI Cost Control
+# ----------------------------------------------------------------------------
+# Maximum AI requests per hour (to control costs)
+MAX_AI_REQUESTS_PER_HOUR=100
+
+# Daily cost limit in USD (to prevent runaway costs)
+AI_COST_LIMIT_PER_DAY=10.00
+
+# ----------------------------------------------------------------------------
+# AI Performance
+# ----------------------------------------------------------------------------
+# Timeout for AI API requests (seconds)
+AI_REQUEST_TIMEOUT=60
+
+# Maximum schedules to validate with AI (larger batches = higher cost)
+MAX_SCHEDULES_FOR_AI_VALIDATION=20
+
+# ----------------------------------------------------------------------------
+# AI Logging
+# ----------------------------------------------------------------------------
+# Log all AI requests (for monitoring)
+LOG_AI_REQUESTS=true
+
+# Log AI responses (for debugging - can be verbose)
+LOG_AI_RESPONSES=false
+
+# ----------------------------------------------------------------------------
+# Hybrid Processing (Advanced)
+# ----------------------------------------------------------------------------
+# Use both traditional and AI parsing for best results
+HYBRID_PROCESSING_ENABLED=false
+
+# Threshold to trigger AI parsing (number of schedules)
+HYBRID_AI_THRESHOLD=5
+
+# Prioritize traditional parsing over AI
+TRADITIONAL_PARSING_PRIORITY=true
+
+################################################################################
+# RECOMMENDED SETTINGS
+################################################################################
+#
+# For LOCAL DEVELOPMENT (.env, .env.local):
+#   USE_AI_VALIDATION=true
+#   USE_AI_SCHEDULE_PARSING=false  (start with validation only)
+#   LOG_AI_REQUESTS=true
+#   LOG_AI_RESPONSES=true
+#
+# For PRODUCTION (.env.production):
+#   USE_AI_VALIDATION=true
+#   USE_AI_SCHEDULE_PARSING=true  (when ready)
+#   LOG_AI_REQUESTS=true
+#   LOG_AI_RESPONSES=false
+#   MAX_AI_REQUESTS_PER_HOUR=50  (adjust based on usage)
+#   AI_COST_LIMIT_PER_DAY=5.00  (adjust based on budget)
+#
+################################################################################
+
+
+
+

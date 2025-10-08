@@ -1,0 +1,57 @@
+################################################################################
+# AI SCHEDULE EXTRACTION - ADD THESE LINES TO YOUR .env FILES
+################################################################################
+# You already have OPENAI_API_KEY and OPENAI_MODEL configured ✓
+# Just add these additional AI schedule extraction settings:
+
+# AI Schedule Features (Enable/Disable)
+USE_AI_SCHEDULE_PARSING=false
+USE_AI_VALIDATION=false
+AI_VALIDATION_THRESHOLD=0.7
+AI_FALLBACK_ENABLED=true
+
+# AI Cost Control
+MAX_AI_REQUESTS_PER_HOUR=100
+AI_COST_LIMIT_PER_DAY=10.00
+AI_REQUEST_TIMEOUT=60
+MAX_SCHEDULES_FOR_AI_VALIDATION=20
+
+# AI Logging
+LOG_AI_REQUESTS=true
+LOG_AI_RESPONSES=false
+
+# Hybrid Processing
+HYBRID_PROCESSING_ENABLED=false
+HYBRID_AI_THRESHOLD=5
+TRADITIONAL_PARSING_PRIORITY=true
+
+################################################################################
+# QUICK START GUIDE
+################################################################################
+#
+# STEP 1 - Add to .env (Local Development):
+#   Copy the lines above to your .env file
+#
+# STEP 2 - Enable AI Validation (Safe to test):
+#   USE_AI_VALIDATION=true
+#
+# STEP 3 - Test it:
+#   php artisan ai:test-schedule-extraction ANR CKY
+#
+# STEP 4 - Run sync with AI validation:
+#   php artisan schedules:sync
+#
+# STEP 5 - When ready, enable full AI parsing:
+#   USE_AI_SCHEDULE_PARSING=true
+#
+################################################################################
+
+# Note: Your existing OpenAI config will be used automatically:
+# - OPENAI_API_KEY: Already configured ✓
+# - OPENAI_MODEL: gpt-4o ✓
+# - OPENAI_TIMEOUT: 45 seconds ✓
+
+
+
+
+

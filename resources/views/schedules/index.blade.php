@@ -27,7 +27,7 @@
                     <option value="">Select POL</option>
                     @foreach($polPorts as $port)
                         <option value="{{ $port->code }}" {{ $pol == $port->code ? 'selected' : '' }}>
-                            {{ $port->name }} ({{ $port->code }})
+                            {{ $port->name }}, {{ $port->country }} ({{ $port->code }})
                         </option>
                     @endforeach
                 </select>
@@ -42,7 +42,7 @@
                     @else
                         @foreach($podPorts as $port)
                             <option value="{{ $port->code }}" {{ $pod == $port->code ? 'selected' : '' }}>
-                                {{ $port->name }} ({{ $port->code }})
+                                {{ $port->name }}, {{ $port->country }} ({{ $port->code }})
                             </option>
                         @endforeach
                     @endif
@@ -292,6 +292,20 @@
     background: #f8f9fa;
 }
 
+.schedule-navigation {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding: 10px 0;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.schedule-counter {
+    font-weight: 500;
+    color: #495057;
+}
+
 .schedule-header {
     display: flex;
     justify-content: between;
@@ -315,10 +329,20 @@
 }
 
 .schedule-details {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 10px;
     margin-bottom: 15px;
+}
+
+.schedule-info-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+}
+
+.info-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0; /* Prevents overflow */
 }
 
 .detail-row {
@@ -355,8 +379,16 @@
         grid-template-columns: 1fr;
     }
     
-    .schedule-details {
-        grid-template-columns: 1fr;
+    .schedule-info-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+    }
+    
+    @media (max-width: 480px) {
+        .schedule-info-grid {
+            grid-template-columns: 1fr;
+            gap: 15px;
+        }
     }
     
     .schedule-actions {
@@ -402,93 +434,213 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     });
     
-    // Display schedule results
-    function displayScheduleResults(data, offerId) {
-        if (data.carriers && Object.keys(data.carriers).length > 0) {
-            let html = '';
-            
-            Object.values(data.carriers).forEach(carrier => {
-                html += `
-                    <div class="carrier-group">
-                        <h3>${carrier.name}</h3>
-                        <div class="carrier-info">
-                            <span class="specialization">${carrier.specialization ? (() => {
-                                try {
-                                    const spec = typeof carrier.specialization === 'string' ? JSON.parse(carrier.specialization) : carrier.specialization;
-                                    return typeof spec === 'object' && spec !== null ? Object.keys(spec).filter(key => spec[key] === true).join(', ') : '';
-                                } catch (e) {
-                                    return '';
-                                }
-                            })() : ''}</span>
-                            <span class="service-types">${carrier.service_types ? (() => {
-                                try {
-                                    const types = typeof carrier.service_types === 'string' ? JSON.parse(carrier.service_types) : carrier.service_types;
-                                    return Array.isArray(types) ? types.join(', ') : '';
-                                } catch (e) {
-                                    return '';
-                                }
-                            })() : ''}</span>
-                        </div>
-                        
-                        <div class="schedules-list">
-                            ${carrier.schedules.map(schedule => `
-                                <div class="schedule-card">
-                                    <div class="schedule-header">
-                                        <h4>${schedule.service_name}</h4>
-                                        <span class="frequency">${schedule.frequency_per_month}x/month</span>
-                                    </div>
-                                    
-                                    <div class="schedule-details">
-                                        <div class="detail-row">
-                                            <span class="label">Transit Time:</span>
-                                            <span class="value">${schedule.transit_days} days</span>
-                                        </div>
-                                        
-                                        <div class="detail-row">
-                                            <span class="label">Next Sailing:</span>
-                                            <span class="value">${schedule.next_sailing_date}</span>
-                                        </div>
-                                        
-                                        <div class="detail-row">
-                                            <span class="label">Vessel:</span>
-                                            <span class="value">${schedule.vessel_name || 'TBA'}</span>
-                                        </div>
-                                        
-                                        <div class="detail-row">
-                                            <span class="label">ETS:</span>
-                                            <span class="value">${schedule.ets_pol || 'TBA'}</span>
-                                        </div>
-                                        
-                                        <div class="detail-row">
-                                            <span class="label">ETA:</span>
-                                            <span class="value">${schedule.eta_pod || 'TBA'}</span>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="schedule-actions">
-                                        <button class="btn btn-sm btn-secondary copy-schedule" 
-                                                data-schedule='${JSON.stringify(schedule)}'>
-                                            Copy to Clipboard
-                                        </button>
-                                        
-                                        <button class="btn btn-sm btn-primary update-offer" 
-                                                data-schedule='${JSON.stringify(schedule)}'
-                                                data-offer-id="${offerId}">
-                                            Update Robaws Offer
-                                        </button>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                `;
+    // Format date for display
+    function formatDate(dateString) {
+        if (!dateString) return 'TBA';
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
             });
-            
-            resultsGrid.innerHTML = html;
-        } else {
-            noResults.style.display = 'block';
+        } catch (e) {
+            return dateString;
         }
     }
+
+    // Global variables for schedule navigation
+    let allSchedules = [];
+    let currentScheduleIndex = 0;
+    let currentOfferId = null;
+
+    // Display schedule results
+    function displayScheduleResults(data, offerId) {
+        // Store offerId globally for use in navigation
+        currentOfferId = offerId;
+        
+        if (data.carriers && Object.keys(data.carriers).length > 0) {
+            // Flatten all schedules into a single array for navigation
+            allSchedules = [];
+            Object.values(data.carriers).forEach(carrier => {
+                carrier.schedules.forEach(schedule => {
+                    allSchedules.push({
+                        ...schedule,
+                        carrier: carrier
+                    });
+                });
+            });
+            
+            // Schedules are already sorted chronologically by backend (oldest to latest)
+            // No need to re-sort - just find the schedule closest to today for initial view
+            
+            // Find the schedule with ETS closest to today's date
+            currentScheduleIndex = findClosestScheduleIndex(allSchedules);
+            displayCurrentSchedule();
+        } else {
+            resultsGrid.innerHTML = '<div class="no-results"><p>No schedules found for the selected criteria.</p></div>';
+        }
+    }
+    
+    // Find the schedule index with ETS closest to today's date
+    function findClosestScheduleIndex(schedules) {
+        if (schedules.length === 0) return 0;
+        
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Normalize to start of day
+        
+        let closestIndex = 0;
+        let smallestDiff = Infinity;
+        
+        schedules.forEach((schedule, index) => {
+            const etsDate = new Date(schedule.ets_pol);
+            etsDate.setHours(0, 0, 0, 0); // Normalize to start of day
+            
+            const diff = Math.abs(etsDate - today);
+            
+            if (diff < smallestDiff) {
+                smallestDiff = diff;
+                closestIndex = index;
+            }
+        });
+        
+        return closestIndex;
+    }
+    
+    // Display the current schedule with navigation
+    function displayCurrentSchedule() {
+        if (allSchedules.length === 0) {
+            resultsGrid.innerHTML = '<div class="no-results"><p>No schedules found for the selected criteria.</p></div>';
+            return;
+        }
+        
+        const schedule = allSchedules[currentScheduleIndex];
+        const carrier = schedule.carrier;
+        
+        let html = `
+            <div class="schedule-navigation">
+                <button class="btn btn-sm btn-secondary" onclick="previousSchedule()" ${currentScheduleIndex === 0 ? 'disabled' : ''}>
+                    ← Previous
+                </button>
+                <span class="schedule-counter">${currentScheduleIndex + 1} of ${allSchedules.length}</span>
+                <button class="btn btn-sm btn-secondary" onclick="nextSchedule()" ${currentScheduleIndex === allSchedules.length - 1 ? 'disabled' : ''}>
+                    Next →
+                </button>
+            </div>
+            
+            <div class="carrier-group">
+                <h3>${carrier.name}</h3>
+                <div class="carrier-info">
+                    <span class="specialization">${carrier.specialization ? (() => {
+                        try {
+                            const spec = typeof carrier.specialization === 'string' ? JSON.parse(carrier.specialization) : carrier.specialization;
+                            return typeof spec === 'object' && spec !== null ? Object.keys(spec).filter(key => spec[key] === true).join(', ') : '';
+                        } catch (e) {
+                            return '';
+                        }
+                    })() : ''}</span>
+                    <span class="service-types">${carrier.service_types ? (() => {
+                        try {
+                            const types = typeof carrier.service_types === 'string' ? JSON.parse(carrier.service_types) : carrier.service_types;
+                            return Array.isArray(types) ? types.join(', ') : '';
+                        } catch (e) {
+                            return '';
+                        }
+                    })() : ''}</span>
+                </div>
+                
+                <div class="schedule-card">
+                    <div class="schedule-header">
+                        <h4>${schedule.service_name}</h4>
+                        <span class="frequency">${schedule.accurate_frequency_display || schedule.frequency_per_month + 'x/month'}</span>
+                    </div>
+                    
+                    <div class="schedule-details">
+                        <div class="schedule-info-grid">
+                            <div class="info-section">
+                                <div class="detail-row">
+                                    <span class="label">Transit Time:</span>
+                                    <span class="value">${schedule.transit_days} days</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="label">Next Sailing:</span>
+                                    <span class="value">${formatDate(schedule.next_sailing_date)}</span>
+                                </div>
+                            </div>
+                            
+                            <div class="info-section">
+                                <div class="detail-row">
+                                    <span class="label">Vessel:</span>
+                                    <span class="value">${schedule.vessel_name || 'TBA'}${schedule.voyage_number ? ' (' + schedule.voyage_number + ')' : ''}</span>
+                                </div>
+                                ${schedule.carrier.code === 'SALLAUM' ? `
+                                <div class="detail-row">
+                                    <span class="label">Departure Terminal:</span>
+                                    <span class="value">332</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                            
+                            <div class="info-section">
+                                <div class="detail-row">
+                                    <span class="label">POL:</span>
+                                    <span class="value">${schedule.pol_port.name}, ${schedule.pol_port.country} (${schedule.pol_port.code})</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="label">ETS:</span>
+                                    <span class="value">${formatDate(schedule.ets_pol)}</span>
+                                </div>
+                            </div>
+                            
+                            <div class="info-section">
+                                <div class="detail-row">
+                                    <span class="label">POD:</span>
+                                    <span class="value">${schedule.pod_port.name}, ${schedule.pod_port.country} (${schedule.pod_port.code})</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="label">ETA:</span>
+                                    <span class="value">${formatDate(schedule.eta_pod)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="schedule-actions">
+                        <button class="btn btn-sm btn-secondary copy-schedule" 
+                                data-schedule='${JSON.stringify(schedule)}'>
+                            Copy to Clipboard
+                        </button>
+                        <button class="btn btn-sm btn-primary update-offer" 
+                                data-schedule='${JSON.stringify(schedule)}' 
+                                data-offer-id="${currentOfferId || ''}">
+                            Update Robaws Offer
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        resultsGrid.innerHTML = html;
+    }
+    
+    // Navigation functions
+    function previousSchedule() {
+        if (currentScheduleIndex > 0) {
+            currentScheduleIndex--;
+            displayCurrentSchedule();
+        }
+    }
+    
+    function nextSchedule() {
+        if (currentScheduleIndex < allSchedules.length - 1) {
+            currentScheduleIndex++;
+            displayCurrentSchedule();
+        }
+    }
+    
+    // Make navigation functions global
+    window.previousSchedule = previousSchedule;
+    window.nextSchedule = nextSchedule;
     
     // Copy to clipboard
     document.addEventListener('click', function(e) {
@@ -496,12 +648,15 @@ document.addEventListener('DOMContentLoaded', function() {
             const schedule = JSON.parse(e.target.dataset.schedule);
             const scheduleText = `
 Service: ${schedule.service_name}
-Frequency: ${schedule.frequency_per_month}x/month
+Frequency: ${schedule.accurate_frequency_display || schedule.frequency_per_month + 'x/month'}
 Transit Time: ${schedule.transit_days} days
-Next Sailing: ${schedule.next_sailing_date}
-Vessel: ${schedule.vessel_name || 'TBA'}
-ETS: ${schedule.ets_pol || 'TBA'}
-ETA: ${schedule.eta_pod || 'TBA'}
+Next Sailing: ${formatDate(schedule.next_sailing_date)}
+${schedule.carrier.code === 'SALLAUM' ? 'Departure Terminal: 332' : ''}
+Vessel: ${schedule.vessel_name || 'TBA'}${schedule.voyage_number ? ' (Voyage ' + schedule.voyage_number + ')' : ''}
+POL: ${schedule.pol_port.name}, ${schedule.pol_port.country} (${schedule.pol_port.code})
+ETS: ${formatDate(schedule.ets_pol)}
+POD: ${schedule.pod_port.name}, ${schedule.pod_port.country} (${schedule.pod_port.code})
+ETA: ${formatDate(schedule.eta_pod)}
             `.trim();
             
             navigator.clipboard.writeText(scheduleText).then(function() {

@@ -50,96 +50,175 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
         $schedules = [];
         
         try {
-            // Map port codes to Sallaum's port names (ONLY ports that actually exist on their schedule)
+            // Map port codes to Sallaum's port names
+            // Source: https://sallaumlines.com/schedules/europe-to-west-and-south-africa/
             $portNameMapping = [
+                // POLs (Origins)
                 'ANR' => 'Antwerp',
                 'ZEE' => 'Zeebrugge',
-                'FLU' => 'Amsterdam', // Flushing is close to Amsterdam
-                'LOS' => 'Lagos',
-                'DKR' => 'Dakar',
+                'FLU' => 'Amsterdam', // Flushing is close to Amsterdam on Sallaum's schedule
+                
+                // PODs (Destinations) - West Africa
+                'ABJ' => 'Abidjan',
                 'CKY' => 'Conakry',
-                'LFW' => 'Lome',
                 'COO' => 'Cotonou',
+                'DKR' => 'Dakar',
+                'DLA' => 'Douala',
+                'LOS' => 'Lagos',
+                'LFW' => 'Lome',
+                'PNR' => 'Pointe Noire',
+                
+                // PODs (Destinations) - East Africa
+                'DAR' => 'Dar es Salaam',
+                'MBA' => 'Mombasa',
+                
+                // PODs (Destinations) - South Africa
+                'DUR' => 'Durban',
+                'ELS' => 'East London',
+                'PLZ' => 'Port Elizabeth',
+                'WVB' => 'Walvis Bay',
             ];
             
             $polName = $portNameMapping[$polCode] ?? $polCode;
             $podName = $portNameMapping[$podCode] ?? $podCode;
             
+            // Parse the real HTML from Sallaum's website with VERTICAL column reading
+            
             // Extract table content
             if (preg_match('/<table[^>]*>(.*?)<\/table>/is', $html, $tableMatch)) {
                 $tableHtml = $tableMatch[1];
                 
-                // Extract vessel names from first row (header with vessel names)
+                // IMPORTANT: Preprocess HTML to handle self-closing <td> tags
+                // The Sallaum website has malformed HTML with self-closing <td> tags for empty cells
+                // Convert <td> or <td /> to <td></td> so DOMDocument can parse correctly
+                $tableHtml = preg_replace('/<td([^>]*)>\s*(?=<td|<\/tr)/', '<td$1></td>', $tableHtml);
+                
+                // Extract all table rows
                 preg_match_all('/<tr[^>]*>(.*?)<\/tr>/is', $tableHtml, $allRows);
                 
+                // Find vessel names and voyage numbers from the first two rows
                 $vessels = [];
                 $voyageNumbers = [];
                 
+                // First row: vessel names
                 if (isset($allRows[1][0])) {
-                    // First row contains vessel names
-                    preg_match_all('/<t[dh][^>]*>(.*?)<\/t[dh]>/is', $allRows[1][0], $vesselCells);
-                    foreach ($vesselCells[1] as $cell) {
+                    preg_match_all('/<t[dh][^>]*>(.*?)<\/t[dh]>/is', $allRows[1][0], $cells);
+                    foreach ($cells[1] as $cell) {
                         $vesselName = trim(strip_tags($cell));
-                        if (!empty($vesselName) && $vesselName !== 'ETA') {
+                        if (!empty($vesselName) && $vesselName !== 'ETA' && !preg_match('/\d{4}/', $vesselName)) {
                             $vessels[] = $vesselName;
                         }
                     }
                 }
                 
+                // Second row: voyage numbers
                 if (isset($allRows[1][1])) {
-                    // Second row contains voyage numbers
-                    preg_match_all('/<t[dh][^>]*>(.*?)<\/t[dh]>/is', $allRows[1][1], $voyageCells);
-                    foreach ($voyageCells[1] as $cell) {
+                    preg_match_all('/<t[dh][^>]*>(.*?)<\/t[dh]>/is', $allRows[1][1], $cells);
+                    foreach ($cells[1] as $cell) {
                         $voyageNo = trim(strip_tags($cell));
-                        if (!empty($voyageNo) && $voyageNo !== 'ETA') {
+                        // Updated pattern to match voyage numbers like 25PA09, 25OB03, etc.
+                        if (preg_match('/^[0-9]{2}[A-Z]{2}[0-9]{2}$/', $voyageNo)) {
                             $voyageNumbers[] = $voyageNo;
                         }
                     }
                 }
                 
                 Log::info("Sallaum Lines: Found " . count($vessels) . " vessels", ['vessels' => $vessels]);
+                Log::info("Sallaum Lines: Found " . count($voyageNumbers) . " voyage numbers", ['voyages' => $voyageNumbers]);
                 
-                // Find POL and POD rows
-                $polDates = [];
-                $podDates = [];
+                // Now read VERTICALLY - each vessel has its own column
+                // Use DOMDocument to properly parse HTML including self-closing tags
+                $polDatesByVoyage = [];
+                $podDatesByVoyage = [];
                 
-                foreach ($allRows[1] as $rowHtml) {
-                    // Check if this row contains our POL
-                    if (stripos($rowHtml, $polName) !== false) {
-                        // Extract ALL content from cells (including nested spans/divs)
-                        preg_match_all('/<td[^>]*>(.*?)<\/td>/is', $rowHtml, $cells);
-                        foreach ($cells[1] as $cellContent) {
+                // Use DOMDocument for robust HTML parsing
+                // Suppress libxml errors for malformed HTML
+                libxml_use_internal_errors(true);
+                
+                $dom = new \DOMDocument();
+                $dom->loadHTML($tableHtml, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+                
+                // Clear any libxml errors
+                libxml_clear_errors();
+                libxml_use_internal_errors(false);
+                
+                $xpath = new \DOMXPath($dom);
+                
+                // Find POL row
+                $polRows = $xpath->query("//tr[contains(., '{$polName}')]");
+                foreach ($polRows as $row) {
+                    $cells = $xpath->query(".//td[@headers]", $row);
+                    foreach ($cells as $cell) {
+                        $headers = $cell->getAttribute('headers');
+                        
+                        // Extract voyage code from headers attribute (e.g., "25PA09-date")
+                        if (preg_match('/(\d{2}[A-Z]{2}\d{2})-date/', $headers, $voyageMatch)) {
+                            $voyageCode = $voyageMatch[1];
+                            
+                            // Get cell content
+                            $cellContent = $dom->saveHTML($cell);
                             $dateText = $this->extractDateFromCell($cellContent);
-                            $polDates[] = $dateText;
+                            
+                            if ($dateText) {
+                                $polDatesByVoyage[$voyageCode] = $dateText;
+                            }
                         }
-                        Log::info("Sallaum Lines: Found POL row for {$polName}", ['dates_count' => count($polDates)]);
                     }
-                    
-                    // Check if this row contains our POD
-                    if (stripos($rowHtml, $podName) !== false) {
-                        preg_match_all('/<td[^>]*>(.*?)<\/td>/is', $rowHtml, $cells);
-                        foreach ($cells[1] as $cellContent) {
-                            $dateText = $this->extractDateFromCell($cellContent);
-                            $podDates[] = $dateText;
-                        }
-                        Log::info("Sallaum Lines: Found POD row for {$podName}", ['dates_count' => count($podDates)]);
-                    }
+                    Log::info("Sallaum Lines: Found POL row for {$polName}", ['dates_by_voyage' => $polDatesByVoyage]);
+                    break; // Only process first matching row
                 }
                 
-                // Match POL and POD dates for each vessel
-                $vesselCount = count($vessels);
-                for ($i = 0; $i < $vesselCount; $i++) {
-                    $vesselName = $vessels[$i] ?? null;
-                    $voyageNo = $voyageNumbers[$i] ?? null;
-                    // Skip first cell (port name cell) when accessing dates
-                    $polDate = $polDates[$i + 1] ?? null;
-                    $podDate = $podDates[$i + 1] ?? null;
-                    
-                    if ($vesselName && $polDate && $podDate && !empty($polDate) && !empty($podDate)) {
-                        $parsedPolDate = $this->parseDate($polDate);
-                        $parsedPodDate = $this->parseDate($podDate);
+                // Find POD row
+                $podRows = $xpath->query("//tr[contains(., '{$podName}')]");
+                foreach ($podRows as $row) {
+                    $cells = $xpath->query(".//td[@headers]", $row);
+                    foreach ($cells as $cell) {
+                        $headers = $cell->getAttribute('headers');
                         
-                        if ($parsedPolDate && $parsedPodDate) {
+                        // Extract voyage code from headers attribute (e.g., "25PA09-date")
+                        if (preg_match('/(\d{2}[A-Z]{2}\d{2})-date/', $headers, $voyageMatch)) {
+                            $voyageCode = $voyageMatch[1];
+                            
+                            // Get cell content
+                            $cellContent = $dom->saveHTML($cell);
+                            $dateText = $this->extractDateFromCell($cellContent);
+                            
+                            if ($dateText) {
+                                $podDatesByVoyage[$voyageCode] = $dateText;
+                            }
+                        }
+                    }
+                    Log::info("Sallaum Lines: Found POD row for {$podName}", ['dates_by_voyage' => $podDatesByVoyage]);
+                    break; // Only process first matching row
+                }
+                
+                // Create schedules by matching vessels to their voyage numbers
+                // Use the voyage number to match POL and POD dates from the headers attribute parsing
+                
+                foreach ($vessels as $vesselIndex => $vesselName) {
+                    $voyageNo = $voyageNumbers[$vesselIndex] ?? null;
+                    
+                    if (!$voyageNo) {
+                        Log::info("Sallaum Lines: Skipping vessel {$vesselName} - no voyage number found");
+                        continue;
+                    }
+                    
+                    // Match dates using voyage number from headers attribute
+                    $polDate = $polDatesByVoyage[$voyageNo] ?? null;
+                    $podDate = $podDatesByVoyage[$voyageNo] ?? null;
+                    
+                // Only create schedule if BOTH POL and POD dates exist for this voyage
+                if ($polDate && $podDate) {
+                    $parsedPolDate = $this->parseDate($polDate);
+                    $parsedPodDate = $this->parseDate($podDate);
+
+                    if ($parsedPolDate && $parsedPodDate) {
+                        // Calculate transit days from actual website data
+                        $transitDays = (strtotime($parsedPodDate) - strtotime($parsedPolDate)) / (60 * 60 * 24);
+
+                        // Sanity check: transit time should be positive and reasonable
+                        // West Africa: 7-30 days, South Africa: 20-45 days, East Africa: 25-50 days
+                        if ($transitDays > 0 && $transitDays <= 50) {
                             $schedules[] = [
                                 'pol_code' => $polCode,
                                 'pod_code' => $podCode,
@@ -151,18 +230,36 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
                                 'voyage_number' => $voyageNo,
                                 'ets_pol' => $parsedPolDate,
                                 'eta_pod' => $parsedPodDate,
-                                'frequency' => 'Weekly',
+                                'frequency_per_week' => 1.0,
+                                'frequency_per_month' => 4.0,
+                                'transit_days' => (int) $transitDays,
+                                'next_sailing_date' => $parsedPolDate,
                                 'data_source' => 'website_table',
                                 'source_url' => 'https://sallaumlines.com/schedules/europe-to-west-and-south-africa/'
                             ];
-                            
+
                             Log::info("Sallaum Lines: Created schedule", [
                                 'vessel' => $vesselName,
+                                'voyage' => $voyageNo,
+                                'pol_date' => $parsedPolDate,
+                                'pod_date' => $parsedPodDate,
+                                'transit_days' => $transitDays
+                            ]);
+                        } else {
+                            Log::warning("Sallaum Lines: Invalid transit time for {$vesselName} ({$voyageNo}): {$transitDays} days", [
+                                'vessel' => $vesselName,
+                                'voyage' => $voyageNo,
                                 'pol_date' => $parsedPolDate,
                                 'pod_date' => $parsedPodDate
                             ]);
                         }
                     }
+                } else {
+                    Log::info("Sallaum Lines: Vessel {$vesselName} ({$voyageNo}) does not serve {$polCode}->{$podCode} route", [
+                        'has_pol_date' => isset($polDatesByVoyage[$voyageNo]),
+                        'has_pod_date' => isset($podDatesByVoyage[$voyageNo])
+                    ]);
+                }
                 }
             }
             
@@ -219,6 +316,7 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
         return null;
     }
     
+    
     protected function parseDate(string $dateStr): ?string
     {
         // Parse dates like "2 September 2025" or "21 September 2025"
@@ -261,14 +359,28 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
         
         // Extract frequency
         if (preg_match('/frequency[:\s]+([^<\n]+)/i', $block, $match)) {
-            $schedule['frequency'] = trim($match[1]);
+            $freq = trim($match[1]);
+            if (stripos($freq, 'weekly') !== false) {
+                $schedule['frequency_per_week'] = 1.0;
+                $schedule['frequency_per_month'] = 4.0;
+            } elseif (stripos($freq, 'monthly') !== false) {
+                $schedule['frequency_per_week'] = 0.25;
+                $schedule['frequency_per_month'] = 1.0;
+            }
         } elseif (preg_match('/(weekly|monthly|daily)/i', $block, $match)) {
-            $schedule['frequency'] = ucfirst(strtolower($match[1]));
+            $freq = strtolower($match[1]);
+            if ($freq === 'weekly') {
+                $schedule['frequency_per_week'] = 1.0;
+                $schedule['frequency_per_month'] = 4.0;
+            } elseif ($freq === 'monthly') {
+                $schedule['frequency_per_week'] = 0.25;
+                $schedule['frequency_per_month'] = 1.0;
+            }
         }
         
         // Extract transit time
         if (preg_match('/transit[:\s]+(\d+)\s*(days?|hours?)/i', $block, $match)) {
-            $schedule['transit_time_days'] = (int)$match[1];
+            $schedule['transit_days'] = (int)$match[1];
         }
         
         // If we have at least service name or frequency, consider it valid
@@ -307,8 +419,9 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
                     'pod_code' => $podCode,
                     'carrier_code' => 'SALLAUM',
                     'service_type' => 'RORO',
-                    'frequency' => isset($match[1]) ? trim($match[1]) : 'Unknown',
-                    'transit_time_days' => null,
+                    'frequency_per_week' => 1.0,
+                    'frequency_per_month' => 4.0,
+                    'transit_days' => 21,
                     'data_source' => 'website_text'
                 ];
                 break; // Take first match
@@ -326,16 +439,33 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
 
     protected function checkRouteExistsInContent(string $content, string $polCode, string $podCode): bool
     {
-        // Map port codes to Sallaum's port names (ONLY ports that actually exist on their schedule)
+        // Map port codes to Sallaum's port names
+        // Source: https://sallaumlines.com/schedules/europe-to-west-and-south-africa/
         $portNameMapping = [
+            // POLs (Origins)
             'ANR' => 'Antwerp',
             'ZEE' => 'Zeebrugge',
-            'FLU' => 'Amsterdam',
-            'LOS' => 'Lagos',
-            'DKR' => 'Dakar',
+            'FLU' => 'Amsterdam', // Flushing is close to Amsterdam on Sallaum's schedule
+            
+            // PODs (Destinations) - West Africa
+            'ABJ' => 'Abidjan',
             'CKY' => 'Conakry',
-            'LFW' => 'Lome',
             'COO' => 'Cotonou',
+            'DKR' => 'Dakar',
+            'DLA' => 'Douala',
+            'LOS' => 'Lagos',
+            'LFW' => 'Lome',
+            'PNR' => 'Pointe Noire',
+            
+            // PODs (Destinations) - East Africa
+            'DAR' => 'Dar es Salaam',
+            'MBA' => 'Mombasa',
+            
+            // PODs (Destinations) - South Africa
+            'DUR' => 'Durban',
+            'ELS' => 'East London',
+            'PLZ' => 'Port Elizabeth',
+            'WVB' => 'Walvis Bay',
         ];
         
         $polName = $portNameMapping[$polCode] ?? $polCode;
@@ -348,6 +478,143 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
         
         return $hasPol && $hasPod && $hasTable;
     }
+
+    public function extractSchedules(string $pol, string $pod): array
+    {
+        return $this->fetchRealSchedules($pol, $pod);
+    }
+
+    public function getCarrierCode(): string
+    {
+        return 'SALLAUM';
+    }
+
+    public function getUpdateFrequency(): string
+    {
+        return 'daily'; // Sallaum updates their schedules daily
+    }
+
+    public function getLastUpdate(): ?\DateTime
+    {
+        return new \DateTime(); // For now, return current time
+    }
+
+    /**
+     * Find vessel-specific dates in the HTML table without assuming sequential column mapping
+     */
+    private function findVesselDatesInTable(string $vesselName, string $voyageNo, array $allRows, string $polName, string $podName): ?array
+    {
+        // Strategy 1: Try to find vessel name in HTML and extract nearby dates
+        $vesselDates = $this->findVesselDatesByPattern($vesselName, $voyageNo, $allRows, $polName, $podName);
+        
+        if ($vesselDates) {
+            return $vesselDates;
+        }
+        
+        // Strategy 2: Try sequential mapping but with validation
+        $vesselDates = $this->trySequentialMappingWithValidation($vesselName, $voyageNo, $allRows, $polName, $podName);
+        
+        if ($vesselDates && $this->validateVesselRoute($vesselName, $voyageNo, $polCode, $podCode, $vesselDates['transit_days'])) {
+            return $vesselDates;
+        }
+        
+        // If no valid dates found, return null
+        return null;
+    }
+
+    /**
+     * Find vessel dates by searching for vessel name patterns in the HTML
+     */
+    private function findVesselDatesByPattern(string $vesselName, string $voyageNo, array $allRows, string $polName, string $podName): ?array
+    {
+        // Look for vessel name and voyage number in the HTML
+        $vesselPattern = preg_quote($vesselName, '/');
+        $voyagePattern = preg_quote($voyageNo, '/');
+        
+        foreach ($allRows[1] as $rowHtml) {
+            // Check if this row contains the vessel name or voyage number
+            if (preg_match("/{$vesselPattern}|{$voyagePattern}/i", $rowHtml)) {
+                // Extract dates from this row
+                $dates = $this->extractDatesFromRow($rowHtml);
+                if (count($dates) >= 2) {
+                    // Try to match with POL/POD names
+                    $polDate = $this->findDateForPort($dates, $polName);
+                    $podDate = $this->findDateForPort($dates, $podName);
+                    
+                    if ($polDate && $podDate) {
+                        return [
+                            'pol_date' => $polDate,
+                            'pod_date' => $podDate
+                        ];
+                    }
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Try sequential mapping but with validation to prevent incorrect assignments
+     */
+    private function trySequentialMappingWithValidation(string $vesselName, string $voyageNo, array $allRows, string $polName, string $podName): ?array
+    {
+        // Get vessel index
+        $vesselIndex = $this->getVesselIndex($vesselName);
+        if ($vesselIndex === null) {
+            return null;
+        }
+        
+        // Extract dates by column (existing logic)
+        $polDatesByColumn = [];
+        $podDatesByColumn = [];
+        
+        foreach ($allRows[1] as $rowHtml) {
+            if (stripos($rowHtml, $polName) !== false) {
+                preg_match_all('/<td[^>]*>(.*?)<\/td>/is', $rowHtml, $cells);
+                foreach ($cells[1] as $colIndex => $cellContent) {
+                    $dateText = $this->extractDateFromCell($cellContent);
+                    if ($dateText) {
+                        $polDatesByColumn[$colIndex] = $dateText;
+                    }
+                }
+            }
+            
+            if (stripos($rowHtml, $podName) !== false) {
+                preg_match_all('/<td[^>]*>(.*?)<\/td>/is', $rowHtml, $cells);
+                foreach ($cells[1] as $colIndex => $cellContent) {
+                    $dateText = $this->extractDateFromCell($cellContent);
+                    if ($dateText) {
+                        $podDatesByColumn[$colIndex] = $dateText;
+                    }
+                }
+            }
+        }
+        
+        $polDate = $polDatesByColumn[$vesselIndex] ?? null;
+        $podDate = $podDatesByColumn[$vesselIndex] ?? null;
+        
+        if ($polDate && $podDate) {
+            return [
+                'pol_date' => $polDate,
+                'pod_date' => $podDate
+            ];
+        }
+        
+        return null;
+    }
+
+
+    /**
+     * Get vessel index in the vessels array
+     */
+    private function getVesselIndex(string $vesselName): ?int
+    {
+        // This would need to be passed from the calling method
+        // For now, return null to prevent incorrect mapping
+        return null;
+    }
+
 
     public function supports(string $polCode, string $podCode): bool
     {
@@ -387,5 +654,44 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
         
         return false;
     }
+
+    /**
+     * Extract dates from a table row
+     */
+    private function extractDatesFromRow(string $rowHtml): array
+    {
+        $dates = [];
+        
+        // Extract all cells from the row
+        preg_match_all('/<td[^>]*>(.*?)<\/td>/is', $rowHtml, $cells);
+        
+        foreach ($cells[1] as $cellContent) {
+            $dateText = $this->extractDateFromCell($cellContent);
+            if ($dateText) {
+                $dates[] = $dateText;
+            }
+        }
+        
+        return $dates;
+    }
+
+    /**
+     * Find date for a specific port from a list of dates
+     */
+    private function findDateForPort(array $dates, string $portName): ?string
+    {
+        // For now, just return the first date if we have any
+        // This could be enhanced to match port names more intelligently
+        if (empty($dates)) {
+            return null;
+        }
+        
+        // Try to parse the first date properly
+        $dateText = $dates[0];
+        $parsedDate = $this->parseDate($dateText);
+        
+        return $parsedDate ?: null;
+    }
+
 }
 

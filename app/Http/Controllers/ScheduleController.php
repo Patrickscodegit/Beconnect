@@ -30,11 +30,15 @@ class ScheduleController extends Controller
         }
 
         if ($request->filled('carrier')) {
-            $query->where('carrier_code', $request->carrier);
+            $query->whereHas('carrier', function($q) use ($request) {
+                $q->where('code', $request->carrier);
+            });
         }
 
         if ($request->filled('service_type')) {
-            $query->where('service_type', $request->service_type);
+            $query->whereHas('carrier', function($q) use ($request) {
+                $q->whereJsonContains('service_types', $request->service_type);
+            });
         }
 
         $schedules = $query->orderBy('vessel_name')
@@ -132,21 +136,41 @@ class ScheduleController extends Controller
             }
 
             if ($request->filled('carrier')) {
-                $query->where('carrier_code', $request->carrier);
+                $query->whereHas('carrier', function($q) use ($request) {
+                    $q->where('code', $request->carrier);
+                });
             }
 
             if ($request->filled('service_type')) {
-                $query->where('service_type', $request->service_type);
+                $query->whereHas('carrier', function($q) use ($request) {
+                    $q->whereJsonContains('service_types', $request->service_type);
+                });
             }
 
-            $schedules = $query->orderBy('pol_code')
-                              ->orderBy('pod_code')
-                              ->orderBy('carrier_name')
+            $schedules = $query->orderBy('ets_pol', 'asc')
                               ->get();
+
+            // Group schedules by carrier for the frontend
+            $carriers = [];
+            foreach ($schedules as $schedule) {
+                $carrierCode = $schedule->carrier->code;
+                if (!isset($carriers[$carrierCode])) {
+                    $carriers[$carrierCode] = [
+                        'name' => $schedule->carrier->name,
+                        'code' => $schedule->carrier->code,
+                        'specialization' => $schedule->carrier->specialization,
+                        'service_types' => $schedule->carrier->service_types,
+                        'schedules' => []
+                    ];
+                }
+                // Add dynamic frequency display to schedule
+                $schedule->accurate_frequency_display = $schedule->accurate_frequency_display;
+                $carriers[$carrierCode]['schedules'][] = $schedule;
+            }
 
             return response()->json([
                 'success' => true,
-                'schedules' => $schedules,
+                'carriers' => $carriers,
                 'count' => $schedules->count()
             ]);
 
