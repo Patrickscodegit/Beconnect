@@ -12,12 +12,20 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('shipping_schedules', function (Blueprint $table) {
-            // Drop the old unique constraint
-            $table->dropUnique(['carrier_id', 'pol_id', 'pod_id', 'service_name']);
+            // Check if the old unique constraint exists before trying to drop it
+            $oldIndexName = 'shipping_schedules_carrier_id_pol_id_pod_id_service_name_unique';
+            
+            if (Schema::hasIndex('shipping_schedules', $oldIndexName)) {
+                $table->dropUnique(['carrier_id', 'pol_id', 'pod_id', 'service_name']);
+            }
             
             // Add new unique constraint that includes vessel_name to allow multiple schedules per route
             // Note: voyage_number will be added in a later migration
-            $table->unique(['carrier_id', 'pol_id', 'pod_id', 'service_name', 'vessel_name']);
+            $newIndexName = 'shipping_schedules_carrier_id_pol_id_pod_id_service_name_vessel_name_unique';
+            
+            if (!Schema::hasIndex('shipping_schedules', $newIndexName)) {
+                $table->unique(['carrier_id', 'pol_id', 'pod_id', 'service_name', 'vessel_name']);
+            }
         });
     }
 
@@ -27,11 +35,19 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('shipping_schedules', function (Blueprint $table) {
-            // Drop the new unique constraint
-            $table->dropUnique(['carrier_id', 'pol_id', 'pod_id', 'service_name', 'vessel_name']);
+            // Check if the new unique constraint exists before trying to drop it
+            $newIndexName = 'shipping_schedules_carrier_id_pol_id_pod_id_service_name_vessel_name_unique';
             
-            // Restore the old unique constraint
-            $table->unique(['carrier_id', 'pol_id', 'pod_id', 'service_name']);
+            if (Schema::hasIndex('shipping_schedules', $newIndexName)) {
+                $table->dropUnique(['carrier_id', 'pol_id', 'pod_id', 'service_name', 'vessel_name']);
+            }
+            
+            // Restore the old unique constraint only if it doesn't exist
+            $oldIndexName = 'shipping_schedules_carrier_id_pol_id_pod_id_service_name_unique';
+            
+            if (!Schema::hasIndex('shipping_schedules', $oldIndexName)) {
+                $table->unique(['carrier_id', 'pol_id', 'pod_id', 'service_name']);
+            }
         });
     }
 };
