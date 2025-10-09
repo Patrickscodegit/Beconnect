@@ -52,6 +52,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/schedules/search', [ScheduleController::class, 'searchSchedules'])->name('schedules.search');
     Route::post('/schedules/update-offer', [ScheduleController::class, 'updateOffer'])->name('schedules.update-offer');
     Route::get('/schedules/sync-status', [ScheduleController::class, 'getSyncStatus'])->name('schedules.sync-status');
+    Route::delete('/schedules/sync-status', [ScheduleController::class, 'resetStuckSync'])->name('schedules.reset-stuck-sync');
     Route::post('/schedules/sync', [ScheduleController::class, 'triggerSync'])->name('schedules.sync');
 });
 

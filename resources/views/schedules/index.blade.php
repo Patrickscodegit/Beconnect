@@ -747,7 +747,26 @@ ETA: ${formatDate(schedule.eta_pod)}
         const statusDiv = document.getElementById('sync-status');
         const lastSyncTime = document.getElementById('last-sync-time');
         
+        // Set a timeout to prevent infinite polling (10 minutes max)
+        const maxPollingTime = 10 * 60 * 1000; // 10 minutes
+        const startTime = Date.now();
+        
         const pollInterval = setInterval(() => {
+            // Check if we've been polling too long
+            if (Date.now() - startTime > maxPollingTime) {
+                clearInterval(pollInterval);
+                statusDiv.innerHTML = `
+                    <div class="alert alert-warning">
+                        Sync is taking longer than expected. 
+                        <button onclick="resetStuckSync()" class="btn btn-sm btn-outline-warning ms-2">
+                            Reset Sync
+                        </button>
+                    </div>
+                `;
+                resetSyncButton();
+                return;
+            }
+            
             fetch('/schedules/sync-status')
             .then(response => response.json())
             .then(data => {
@@ -765,7 +784,14 @@ ETA: ${formatDate(schedule.eta_pod)}
                         resetSyncButton();
                     } else if (data.latestSync.status === 'error') {
                         clearInterval(pollInterval);
-                        statusDiv.innerHTML = '<div class="alert alert-danger">Sync failed. Please try again.</div>';
+                        statusDiv.innerHTML = `
+                            <div class="alert alert-danger">
+                                Sync failed: ${data.latestSync.error_message || 'Unknown error'}. 
+                                <button onclick="resetStuckSync()" class="btn btn-sm btn-outline-danger ms-2">
+                                    Reset Sync
+                                </button>
+                            </div>
+                        `;
                         resetSyncButton();
                     }
                 }
@@ -779,9 +805,44 @@ ETA: ${formatDate(schedule.eta_pod)}
             .catch(error => {
                 console.error('Error polling sync status:', error);
                 clearInterval(pollInterval);
+                statusDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        Error checking sync status: ${error.message}. 
+                        <button onclick="resetStuckSync()" class="btn btn-sm btn-outline-danger ms-2">
+                            Reset Sync
+                        </button>
+                    </div>
+                `;
                 resetSyncButton();
             });
         }, 5000); // Poll every 5 seconds
+    }
+    
+    // Function to reset stuck sync
+    function resetStuckSync() {
+        if (confirm('This will reset any stuck sync operations. Continue?')) {
+            fetch('/schedules/sync-status', {
+                method: 'DELETE', // We'll add this endpoint
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('sync-status').innerHTML = 
+                        '<div class="alert alert-info">Sync reset successfully. You can now start a new sync.</div>';
+                    resetSyncButton();
+                } else {
+                    alert('Failed to reset sync: ' + (data.message || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error resetting sync:', error);
+                alert('Error resetting sync: ' + error.message);
+            });
+        }
     }
     
     function resetSyncButton() {

@@ -207,6 +207,63 @@ class ScheduleController extends Controller
     }
 
     /**
+     * Reset stuck sync operations
+     */
+    public function resetStuckSync()
+    {
+        try {
+            // Check if the schedule_sync_logs table exists
+            if (!\Schema::hasTable('schedule_sync_logs')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Schedule sync logs table not found.'
+                ], 500);
+            }
+
+            // Find and reset stuck syncs (running but started more than 30 minutes ago)
+            $stuckSyncs = ScheduleSyncLog::whereNull('completed_at')
+                ->where('started_at', '<', now()->subMinutes(30))
+                ->get();
+
+            $resetCount = 0;
+            foreach ($stuckSyncs as $sync) {
+                $sync->update([
+                    'status' => 'failed',
+                    'completed_at' => now(),
+                    'error_message' => 'Reset by user - sync was stuck for more than 30 minutes',
+                    'details' => array_merge($sync->details ?? [], [
+                        'reset_at' => now()->toISOString(),
+                        'reset_reason' => 'user_reset'
+                    ])
+                ]);
+                $resetCount++;
+            }
+
+            Log::info('Stuck sync operations reset by user', [
+                'reset_count' => $resetCount,
+                'user_ip' => request()->ip()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Reset {$resetCount} stuck sync operation(s).",
+                'reset_count' => $resetCount
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to reset stuck sync', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to reset stuck sync: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Trigger manual sync
      */
     public function triggerSync(Request $request)
