@@ -57,8 +57,8 @@ class ScheduleController extends Controller
         $offerId = $request->get('offer_id', '');
 
         // Get sync information
-        $lastSyncTime = ScheduleSyncLog::getFormattedLastSyncTime();
-        $isSyncRunning = ScheduleSyncLog::isSyncRunning();
+        $lastSyncTime = \Schema::hasTable('schedule_sync_logs') ? ScheduleSyncLog::getFormattedLastSyncTime() : 'Database not ready';
+        $isSyncRunning = \Schema::hasTable('schedule_sync_logs') ? ScheduleSyncLog::isSyncRunning() : false;
 
         return view('schedules.index', compact('schedules', 'polPorts', 'podPorts', 'carriers', 'pol', 'pod', 'serviceType', 'offerId', 'lastSyncTime', 'isSyncRunning'));
     }
@@ -95,23 +95,47 @@ class ScheduleController extends Controller
      */
     public function getSyncStatus()
     {
-        $lastSyncTime = ScheduleSyncLog::getFormattedLastSyncTime();
-        $isSyncRunning = ScheduleSyncLog::isSyncRunning();
-        $latestSync = ScheduleSyncLog::getLatestSync();
+        try {
+            // Check if the schedule_sync_logs table exists
+            if (!\Schema::hasTable('schedule_sync_logs')) {
+                return response()->json([
+                    'lastSyncTime' => 'Database not ready',
+                    'isSyncRunning' => false,
+                    'latestSync' => null,
+                    'error' => 'Schedule sync logs table not found. Please run migrations.'
+                ]);
+            }
 
-        return response()->json([
-            'lastSyncTime' => $lastSyncTime,
-            'isSyncRunning' => $isSyncRunning,
-            'latestSync' => $latestSync ? [
-                'id' => $latestSync->id,
-                'sync_type' => $latestSync->sync_type,
-                'schedules_updated' => $latestSync->schedules_updated,
-                'carriers_processed' => $latestSync->carriers_processed,
-                'status' => $latestSync->status,
-                'duration' => $latestSync->duration,
-                'completed_at' => $latestSync->completed_at?->format('M j, Y \a\t g:i A')
-            ] : null
-        ]);
+            $lastSyncTime = ScheduleSyncLog::getFormattedLastSyncTime();
+            $isSyncRunning = ScheduleSyncLog::isSyncRunning();
+            $latestSync = ScheduleSyncLog::getLatestSync();
+
+            return response()->json([
+                'lastSyncTime' => $lastSyncTime,
+                'isSyncRunning' => $isSyncRunning,
+                'latestSync' => $latestSync ? [
+                    'id' => $latestSync->id,
+                    'sync_type' => $latestSync->sync_type,
+                    'schedules_updated' => $latestSync->schedules_updated,
+                    'carriers_processed' => $latestSync->carriers_processed,
+                    'status' => $latestSync->status,
+                    'duration' => $latestSync->duration,
+                    'completed_at' => $latestSync->completed_at?->format('M j, Y \a\t g:i A')
+                ] : null
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error getting sync status', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'lastSyncTime' => 'Error',
+                'isSyncRunning' => false,
+                'latestSync' => null,
+                'error' => 'Failed to get sync status: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -188,6 +212,14 @@ class ScheduleController extends Controller
     public function triggerSync(Request $request)
     {
         try {
+            // Check if the schedule_sync_logs table exists
+            if (!\Schema::hasTable('schedule_sync_logs')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Schedule sync logs table not found. Please run migrations first.'
+                ], 500);
+            }
+
             // Check if sync is already running
             if (ScheduleSyncLog::isSyncRunning()) {
                 return response()->json([
