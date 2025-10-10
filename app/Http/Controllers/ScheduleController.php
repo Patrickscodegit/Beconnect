@@ -46,10 +46,15 @@ class ScheduleController extends Controller
                           ->paginate(50);
 
         // Get POL and POD ports separately
-        // POL ports: Only the 3 European ports used for loading
-        $polPorts = Port::whereIn('code', ['ANR', 'ZEE', 'FLU'])->orderBy('name')->get();
-        // POD ports: All African destination ports
-        $podPorts = Port::whereIn('code', ['ABJ', 'CKY', 'COO', 'DKR', 'DAR', 'DLA', 'DUR', 'ELS', 'LOS', 'LFW', 'MBA', 'PNR', 'PLZ', 'WVB'])->orderBy('name')->get();
+        // Define port roles for flexibility (ports can be both POL and POD)
+        $polPortCodes = ['ANR', 'ZEE', 'FLU']; // Current POL ports
+        $podPortCodes = ['ABJ', 'CKY', 'COO', 'DKR', 'DAR', 'DLA', 'DUR', 'ELS', 'LOS', 'LFW', 'MBA', 'PNR', 'PLZ', 'WVB']; // Current POD ports
+        
+        // Future-ready: To add Antwerp as POD, simply add 'ANR' to $podPortCodes array
+        // Example: $podPortCodes = ['ABJ', 'CKY', 'COO', 'DKR', 'DAR', 'DLA', 'DUR', 'ELS', 'LOS', 'LFW', 'MBA', 'PNR', 'PLZ', 'WVB', 'ANR'];
+        
+        $polPorts = Port::whereIn('code', $polPortCodes)->orderBy('name')->get();
+        $podPorts = Port::whereIn('code', $podPortCodes)->orderBy('name')->get();
         $carriers = ShippingCarrier::orderBy('name')->get();
 
         // Get filter values for form
