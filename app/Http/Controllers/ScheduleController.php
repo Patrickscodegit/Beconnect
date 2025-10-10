@@ -46,8 +46,10 @@ class ScheduleController extends Controller
                           ->paginate(50);
 
         // Get POL and POD ports separately
-        $polPorts = Port::whereIn('type', ['pol', 'both'])->orderBy('name')->get();
-        $podPorts = Port::whereIn('type', ['pod', 'both'])->orderBy('name')->get();
+        // POL ports: Only the 3 European ports used for loading
+        $polPorts = Port::whereIn('code', ['ANR', 'ZEE', 'FLU'])->orderBy('name')->get();
+        // POD ports: All African destination ports
+        $podPorts = Port::whereIn('code', ['ABJ', 'CKY', 'COO', 'DKR', 'DAR', 'DLA', 'DUR', 'ELS', 'LOS', 'LFW', 'MBA', 'PNR', 'PLZ', 'WVB'])->orderBy('name')->get();
         $carriers = ShippingCarrier::orderBy('name')->get();
 
         // Get filter values for form
