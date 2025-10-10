@@ -28,19 +28,19 @@ php artisan tinker --execute="
     'ZEE', // Zeebrugge, Belgium  
     'FLU', // Flushing, Netherlands
     
-    // PODs (Ports of Discharge) - Based on your carriers' actual routes
-    'LOS', // Lagos, Nigeria
-    'DKR', // Dakar, Senegal
-    'ABJ', // Abidjan, Ivory Coast
+    // PODs (Ports of Discharge) - All 14 African ports from your local
+    'ABJ', // Abidjan, Côte d'Ivoire
     'CKY', // Conakry, Guinea
-    'LFW', // Lomé, Togo
     'COO', // Cotonou, Benin
-    'DLA', // Douala, Cameroon
-    'PNR', // Pointe Noire, Congo
+    'DKR', // Dakar, Senegal
     'DAR', // Dar es Salaam, Tanzania
-    'MBA', // Mombasa, Kenya
+    'DLA', // Douala, Cameroon
     'DUR', // Durban, South Africa
     'ELS', // East London, South Africa
+    'LOS', // Lagos (Tin Can Island), Nigeria
+    'LFW', // Lomé, Togo
+    'MBA', // Mombasa, Kenya
+    'PNR', // Pointe Noire, Republic of Congo
     'PLZ', // Port Elizabeth, South Africa
     'WVB', // Walvis Bay, Namibia
 ];
