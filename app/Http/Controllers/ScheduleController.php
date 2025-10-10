@@ -297,8 +297,9 @@ class ScheduleController extends Controller
                 ]
             ]);
 
-            // Dispatch the job
-            UpdateShippingSchedulesJob::dispatch($syncLog->id);
+            // Temporary: Run synchronously until Horizon is configured
+            // UpdateShippingSchedulesJob::dispatch($syncLog->id);
+            UpdateShippingSchedulesJob::dispatchSync($syncLog->id);
 
             Log::info('Manual schedule sync triggered', [
                 'sync_log_id' => $syncLog->id,

@@ -29,7 +29,9 @@ class UpdateShippingSchedulesJob implements ShouldQueue
 
     public function __construct(public ?int $syncLogId = null)
     {
-        $this->onQueue('schedules'); // Use separate queue for schedule updates
+        // Temporarily disabled - run sync synchronously until Horizon is configured
+        // TODO: Re-enable when Horizon is running in production
+        // $this->onQueue('schedules');
     }
 
     public function handle(): void
