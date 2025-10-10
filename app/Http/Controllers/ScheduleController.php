@@ -46,7 +46,8 @@ class ScheduleController extends Controller
                           ->paginate(50);
 
         // Get POL and POD ports separately
-        $polPorts = Port::whereIn('type', ['pol', 'both'])->orderBy('name')->get();
+        // Limit POL ports to only the 3 relevant ports for shipping routes
+        $polPorts = Port::whereIn('code', ['ANR', 'ZEE', 'FLU'])->orderBy('name')->get();
         $podPorts = Port::whereIn('type', ['pod', 'both'])->orderBy('name')->get();
         $carriers = ShippingCarrier::orderBy('name')->get();
 
