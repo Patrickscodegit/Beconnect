@@ -1,0 +1,841 @@
+<?php
+
+namespace App\Services\Robaws;
+
+use App\Models\RobawsArticleCache;
+use App\Models\RobawsSyncLog;
+use App\Services\Export\Clients\RobawsApiClient;
+use App\Exceptions\RateLimitException;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Collection;
+
+class RobawsArticleProvider
+{
+    private const RATE_LIMIT_CACHE_KEY = 'robaws_rate_limit';
+
+    public function __construct(
+        private RobawsApiClient $robawsClient
+    ) {}
+
+    /**
+     * Sync articles from Robaws offers (since /api/v2/articles returns 403)
+     * Extracts articles from line items in offers
+     * Following Robaws best practices with rate limiting and idempotency
+     */
+    public function syncArticles(): int
+    {
+        if (!config('quotation.enabled')) {
+            Log::info('Quotation system disabled, skipping article sync.');
+            return 0;
+        }
+
+        $syncLog = RobawsSyncLog::create([
+            'sync_type' => 'articles',
+            'started_at' => now(),
+        ]);
+
+        try {
+            Log::info('Starting Robaws article extraction from offers');
+
+            // Get configuration
+            $maxOffers = config('quotation.article_extraction.max_offers_to_process', 500);
+            $batchSize = config('quotation.article_extraction.batch_size', 50);
+            $totalPages = (int) ceil($maxOffers / $batchSize);
+
+            $articlesMap = [];
+            $relationshipsMap = [];
+            $processedOffers = 0;
+
+            // Fetch offers in batches
+            for ($page = 0; $page < $totalPages; $page++) {
+                $this->checkRateLimit();
+
+                $idempotencyKey = 'article_extraction_offers_page_' . $page . '_' . date('Y-m-d');
+
+                Log::info('Fetching offers batch', [
+                    'page' => $page,
+                    'size' => $batchSize
+                ]);
+
+                $response = $this->robawsClient->getHttpClientForQuotation()
+                    ->withHeader('Idempotency-Key', $idempotencyKey)
+                    ->get('/api/v2/offers', [
+                        'page' => $page,
+                        'size' => $batchSize,
+                        'include' => 'lineItems,client'
+                    ]);
+
+                $this->handleRateLimitResponse($response);
+
+                if (!$response->successful()) {
+                    Log::warning('Failed to fetch offers page', [
+                        'page' => $page,
+                        'status' => $response->status(),
+                        'body' => $response->body()
+                    ]);
+                    continue;
+                }
+
+                $data = $response->json();
+                $offers = $data['items'] ?? [];
+
+                foreach ($offers as $offer) {
+                    $lineItems = $offer['lineItems'] ?? [];
+                    
+                    if (empty($lineItems)) {
+                        continue;
+                    }
+
+                    // Extract articles from line items
+                    foreach ($lineItems as $item) {
+                        $articleId = $item['articleId'] ?? $item['id'] ?? null;
+                        
+                        if (!$articleId) {
+                            continue;
+                        }
+
+                        // Build article data if not already processed
+                        if (!isset($articlesMap[$articleId])) {
+                            $articlesMap[$articleId] = $this->buildArticleData($item, $offer);
+                        }
+                    }
+
+                    // Detect parent-child relationships in this offer
+                    $relationships = $this->detectParentChildRelationships($lineItems);
+                    $relationshipsMap = array_merge_recursive($relationshipsMap, $relationships);
+
+                    $processedOffers++;
+                }
+
+                // Delay between batches to respect rate limits
+                if ($page < $totalPages - 1) {
+                    usleep(config('quotation.article_extraction.request_delay_ms', 500) * 1000);
+                }
+            }
+
+            Log::info('Article extraction completed', [
+                'offers_processed' => $processedOffers,
+                'unique_articles' => count($articlesMap),
+                'parent_child_relationships' => count($relationshipsMap)
+            ]);
+
+            // Cache articles
+            $syncedCount = $this->cacheExtractedArticles($articlesMap);
+
+            // Create parent-child relationships
+            $this->createParentChildLinks($relationshipsMap);
+
+            $syncLog->markAsCompleted($syncedCount);
+
+            Log::info('Robaws article sync completed', [
+                'articles_synced' => $syncedCount
+            ]);
+
+            return $syncedCount;
+
+        } catch (\Exception $e) {
+            $syncLog->markAsFailed($e->getMessage());
+
+            Log::error('Robaws article sync failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Build article data from line item
+     */
+    private function buildArticleData(array $lineItem, array $offer): array
+    {
+        $description = $lineItem['description'] ?? $lineItem['name'] ?? '';
+        $unitPrice = $lineItem['unitPrice'] ?? $lineItem['price'] ?? null;
+        $currency = $lineItem['currency'] ?? $offer['currency'] ?? 'EUR';
+
+        // Extract article code
+        $articleCode = $this->parseArticleCode($description);
+
+        // Map to service type
+        $serviceTypes = $this->mapToServiceType($articleCode, $description);
+
+        // Parse quantity tier
+        $quantityTier = $this->parseQuantityTier($description);
+
+        // Detect pricing formula
+        $pricingFormula = $this->detectPricingFormula($description, $unitPrice);
+
+        // Parse carrier
+        $carriers = $this->parseCarrierFromDescription($description);
+
+        // Extract customer type
+        $customerType = $this->extractCustomerType($description);
+
+        // Determine category
+        $category = $this->determineCategoryFromDescription($description);
+
+        // Determine if parent article
+        $isParent = $this->isParentArticle($description);
+
+        // Determine if surcharge
+        $isSurcharge = $this->isSurchargeArticle($description);
+
+        return [
+            'robaws_article_id' => $lineItem['articleId'] ?? $lineItem['id'],
+            'article_code' => $articleCode,
+            'article_name' => $description,
+            'description' => $description,
+            'category' => $category,
+            'applicable_services' => $serviceTypes,
+            'applicable_carriers' => $carriers,
+            'customer_type' => $customerType,
+            'min_quantity' => $quantityTier['min'] ?? 1,
+            'max_quantity' => $quantityTier['max'] ?? 1,
+            'tier_label' => $quantityTier['label'] ?? null,
+            'unit_price' => $unitPrice,
+            'currency' => $currency,
+            'pricing_formula' => $pricingFormula,
+            'is_parent_article' => $isParent,
+            'is_surcharge' => $isSurcharge,
+            'is_active' => true,
+            'requires_manual_review' => $this->requiresManualReview($description, $articleCode),
+            'last_synced_at' => now(),
+        ];
+    }
+
+    /**
+     * Cache extracted articles
+     */
+    private function cacheExtractedArticles(array $articlesMap): int
+    {
+        $syncedCount = 0;
+
+        foreach ($articlesMap as $articleId => $articleData) {
+            try {
+                RobawsArticleCache::updateOrCreate(
+                    ['robaws_article_id' => $articleId],
+                    $articleData
+                );
+
+                $syncedCount++;
+            } catch (\Exception $e) {
+                Log::warning('Failed to cache article', [
+                    'article_id' => $articleId,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+
+        return $syncedCount;
+    }
+
+    /**
+     * Create parent-child links
+     */
+    private function createParentChildLinks(array $relationshipsMap): void
+    {
+        foreach ($relationshipsMap as $parentArticleId => $childIds) {
+            $parent = RobawsArticleCache::where('robaws_article_id', $parentArticleId)->first();
+            
+            if (!$parent) {
+                continue;
+            }
+
+            foreach ($childIds as $index => $childArticleId) {
+                $child = RobawsArticleCache::where('robaws_article_id', $childArticleId)->first();
+                
+                if (!$child) {
+                    continue;
+                }
+
+                // Check if relationship already exists
+                $exists = $parent->children()->wherePivot('child_article_id', $child->id)->exists();
+                
+                if (!$exists) {
+                    $parent->children()->attach($child->id, [
+                        'sort_order' => $index + 1,
+                        'is_required' => true,
+                        'is_conditional' => false,
+                    ]);
+
+                    Log::info('Created parent-child relationship', [
+                        'parent' => $parent->article_name,
+                        'child' => $child->article_name
+                    ]);
+                }
+            }
+        }
+    }
+
+    /**
+     * Detect parent-child relationships from line items sequence
+     * Pattern: Parent article followed by surcharges mentioning parent name
+     */
+    private function detectParentChildRelationships(array $lineItems): array
+    {
+        $relationships = [];
+        $currentParent = null;
+
+        foreach ($lineItems as $item) {
+            $description = $item['description'] ?? $item['name'] ?? '';
+            $articleId = $item['articleId'] ?? $item['id'] ?? null;
+
+            if (!$articleId) {
+                continue;
+            }
+
+            // Detect parent articles (main services)
+            if ($this->isParentArticle($description)) {
+                $currentParent = [
+                    'id' => $articleId,
+                    'description' => $description,
+                    'keywords' => $this->extractParentKeywords($description)
+                ];
+                
+                // Initialize relationship array for this parent
+                if (!isset($relationships[$articleId])) {
+                    $relationships[$articleId] = [];
+                }
+                continue;
+            }
+
+            // Detect child articles (surcharges, add-ons)
+            if ($this->isChildArticle($description) && $currentParent) {
+                // Check if this child belongs to the current parent
+                if ($this->childBelongsToParent($description, $currentParent)) {
+                    $relationships[$currentParent['id']][] = $articleId;
+                }
+            }
+        }
+
+        return $relationships;
+    }
+
+    /**
+     * Extract keywords from description for matching
+     */
+    private function extractKeywordsFromDescription(string $description): array
+    {
+        // Remove common words and extract meaningful parts
+        $keywords = [];
+        $words = preg_split('/[\s\-,]+/', $description);
+        
+        foreach ($words as $word) {
+            $word = trim($word);
+            if (strlen($word) > 3 && !in_array(strtolower($word), ['from', 'with', 'service', 'import', 'export'])) {
+                $keywords[] = strtolower($word);
+            }
+        }
+
+        return array_unique($keywords);
+    }
+
+    /**
+     * Extract parent-specific keywords from description
+     * Based on GANRLAGSV pattern: carrier + route + service type
+     */
+    private function extractParentKeywords(string $description): array
+    {
+        $keywords = [];
+        $desc = strtoupper($description);
+        
+        // Extract carrier name (e.g., "Grimaldi" from "Grimaldi(ANR 1333)")
+        if (preg_match('/([A-Z]{3,20})\(/', $desc, $matches)) {
+            $keywords[] = strtolower($matches[1]);
+        }
+        
+        // Extract route info (e.g., "Lagos", "Nigeria")
+        $routeWords = preg_split('/[\s\-\(\)\[\],]+/', $desc);
+        foreach ($routeWords as $word) {
+            $word = trim($word);
+            if (strlen($word) > 2 && !in_array($word, ['SEAFREIGHT', 'SERVICE', 'IMPORT', 'EXPORT', 'SMALL', 'VAN', 'CAR', 'BV', 'SV', 'ANR', 'ZEE'])) {
+                $keywords[] = strtolower($word);
+            }
+        }
+        
+        // Extract service type (e.g., "SV" from "SMALL VAN")
+        if (str_contains($desc, 'SMALL VAN') || str_contains($desc, 'SV')) {
+            $keywords[] = 'sv';
+        }
+        if (str_contains($desc, 'BIG VAN') || str_contains($desc, 'BV')) {
+            $keywords[] = 'bv';
+        }
+        if (str_contains($desc, 'CAR')) {
+            $keywords[] = 'car';
+        }
+        
+        return array_unique($keywords);
+    }
+
+    /**
+     * Check if child article belongs to parent based on keywords
+     */
+    private function childBelongsToParent(string $childDescription, array $parent): bool
+    {
+        $childDesc = strtolower($childDescription);
+        $parentKeywords = $parent['keywords'];
+        
+        // Direct keyword matching
+        foreach ($parentKeywords as $keyword) {
+            if (str_contains($childDesc, $keyword)) {
+                return true;
+            }
+        }
+        
+        // Special patterns for surcharges (from your screenshot)
+        $surchargePatterns = [
+            'surcharge', 'sur charge', 'additional', 'extra', 'admin', 'customs',
+            'courrier', 'waiver', 'besc', 'exa', 'waf'
+        ];
+        
+        foreach ($surchargePatterns as $pattern) {
+            if (str_contains($childDesc, $pattern)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Parse article code from description
+     * Examples: GANRLAGSV, BWFCLIMP, BWA-FCL, CIB-RORO-IMP
+     */
+    private function parseArticleCode(string $description): ?string
+    {
+        // Pattern 1: Service code at start (GANRLAGSV, BWFCLIMP)
+        if (preg_match('/^([A-Z]{6,15})\b/', $description, $matches)) {
+            return $matches[1];
+        }
+
+        // Pattern 2: Code with hyphens (BWA-FCL, CIB-RORO-IMP)
+        if (preg_match('/\b([A-Z]{2,5}-[A-Z]{2,8}(?:-[A-Z]{2,5})?)\b/', $description, $matches)) {
+            return $matches[1];
+        }
+
+        // Pattern 3: Code in parentheses (ANR 1333, ZEE 1234)
+        if (preg_match('/[\(\[]([A-Z]{3,6}\s*\d{3,6})[\)\]]/', $description, $matches)) {
+            return str_replace(' ', '', $matches[1]); // Remove spaces
+        }
+
+        // Pattern 4: Extract from carrier pattern (Grimaldi(ANR 1333) -> GANRLAG)
+        if (preg_match('/([A-Z]{3,20})\([A-Z]{3,6}\s*\d{3,6}\)/', $description, $matches)) {
+            $carrier = strtolower($matches[1]);
+            // Convert to GANRLAG pattern
+            if ($carrier === 'grimaldi') {
+                return 'GANRLAG';
+            }
+            // Add more carrier mappings as needed
+            return strtoupper(substr($carrier, 0, 6));
+        }
+
+        return null;
+    }
+
+    /**
+     * Map article to service types based on code and description
+     */
+    private function mapToServiceType(?string $articleCode, string $description): array
+    {
+        $services = [];
+        $desc = strtoupper($description);
+        $code = strtoupper($articleCode ?? '');
+
+        // RORO services
+        if (str_contains($desc, 'RORO') || str_contains($code, 'RORO')) {
+            if (str_contains($desc, 'IMPORT') || str_contains($code, 'IMP')) {
+                $services[] = 'RORO_IMPORT';
+            } elseif (str_contains($desc, 'EXPORT') || str_contains($code, 'EXP')) {
+                $services[] = 'RORO_EXPORT';
+            } else {
+                $services[] = 'RORO_IMPORT';
+                $services[] = 'RORO_EXPORT';
+            }
+        }
+
+        // FCL services
+        if (str_contains($desc, 'FCL') || str_contains($desc, 'CONTAINER') || str_contains($code, 'FCL')) {
+            if (str_contains($desc, 'CONSOL') || str_contains($desc, 'CONSOLIDAT')) {
+                $services[] = 'FCL_CONSOL_EXPORT';
+            } elseif (str_contains($desc, 'IMPORT') || str_contains($code, 'IMP')) {
+                $services[] = 'FCL_IMPORT';
+            } elseif (str_contains($desc, 'EXPORT') || str_contains($code, 'EXP')) {
+                $services[] = 'FCL_EXPORT';
+            } else {
+                $services[] = 'FCL_IMPORT';
+                $services[] = 'FCL_EXPORT';
+            }
+        }
+
+        // LCL services
+        if (str_contains($desc, 'LCL')) {
+            if (str_contains($desc, 'IMPORT') || str_contains($code, 'IMP')) {
+                $services[] = 'LCL_IMPORT';
+            } elseif (str_contains($desc, 'EXPORT') || str_contains($code, 'EXP')) {
+                $services[] = 'LCL_EXPORT';
+            } else {
+                $services[] = 'LCL_IMPORT';
+                $services[] = 'LCL_EXPORT';
+            }
+        }
+
+        // Break Bulk
+        if (str_contains($desc, 'BREAK BULK') || str_contains($desc, 'BREAKBULK') || str_contains($code, 'BB')) {
+            if (str_contains($desc, 'IMPORT')) {
+                $services[] = 'BB_IMPORT';
+            } elseif (str_contains($desc, 'EXPORT')) {
+                $services[] = 'BB_EXPORT';
+            }
+        }
+
+        // Air services
+        if (str_contains($desc, 'AIR') || str_contains($desc, 'AIRFREIGHT')) {
+            if (str_contains($desc, 'IMPORT')) {
+                $services[] = 'AIR_IMPORT';
+            } elseif (str_contains($desc, 'EXPORT')) {
+                $services[] = 'AIR_EXPORT';
+            }
+        }
+
+        return array_unique($services);
+    }
+
+    /**
+     * Parse quantity tier from description
+     * Examples: "1-pack", "2 pack container", "3-pack", "4 pack"
+     */
+    private function parseQuantityTier(string $description): array
+    {
+        $desc = strtolower($description);
+
+        // Pattern: "X-pack" or "X pack"
+        if (preg_match('/(\d+)[\s-]pack/', $desc, $matches)) {
+            $quantity = (int) $matches[1];
+            return [
+                'min' => $quantity,
+                'max' => $quantity,
+                'label' => $quantity . '-pack'
+            ];
+        }
+
+        // Pattern: "X container" or "X vehicles"
+        if (preg_match('/(\d+)\s+(container|vehicle|car|unit)s?/', $desc, $matches)) {
+            $quantity = (int) $matches[1];
+            if ($quantity >= 1 && $quantity <= 4) {
+                return [
+                    'min' => $quantity,
+                    'max' => $quantity,
+                    'label' => $quantity . '-pack'
+                ];
+            }
+        }
+
+        // Default: 1
+        return [
+            'min' => 1,
+            'max' => 1,
+            'label' => null
+        ];
+    }
+
+    /**
+     * Detect pricing formula from description
+     * Examples: "ocean freight / 2 + 800", "half of seafreight plus 800"
+     */
+    private function detectPricingFormula(string $description, $price): ?array
+    {
+        $desc = strtolower($description);
+
+        // Pattern 1: "/ 2 + 800" or "divided by 2 plus 800"
+        if (preg_match('/(ocean|sea)\s*freight.*?\/\s*(\d+)\s*\+\s*(\d+)/', $desc, $matches)) {
+            return [
+                'type' => 'formula',
+                'base' => 'ocean_freight',
+                'divisor' => (int) $matches[2],
+                'fixed_amount' => (float) $matches[3]
+            ];
+        }
+
+        // Pattern 2: "half" keyword
+        if (str_contains($desc, 'half') && str_contains($desc, 'ocean')) {
+            // Try to find fixed amount
+            if (preg_match('/\+\s*(\d+)/', $desc, $matches)) {
+                return [
+                    'type' => 'formula',
+                    'base' => 'ocean_freight',
+                    'divisor' => 2,
+                    'fixed_amount' => (float) $matches[1]
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Parse carrier from description using known carriers list
+     */
+    private function parseCarrierFromDescription(string $description): array
+    {
+        $carriers = [];
+        $desc = strtoupper($description);
+        $knownCarriers = config('quotation.known_carriers', []);
+
+        foreach ($knownCarriers as $carrier) {
+            if (str_contains($desc, strtoupper($carrier))) {
+                $carriers[] = $carrier;
+            }
+        }
+
+        return array_unique($carriers);
+    }
+
+    /**
+     * Extract customer type from description
+     */
+    private function extractCustomerType(string $description): ?string
+    {
+        $desc = strtoupper($description);
+
+        $customerTypes = config('quotation.customer_types', []);
+        
+        foreach (array_keys($customerTypes) as $type) {
+            if (str_contains($desc, strtoupper($type))) {
+                return $type;
+            }
+        }
+
+        // Check for common keywords
+        if (str_contains($desc, 'FORWARDER')) {
+            return 'FORWARDERS';
+        }
+        if (str_contains($desc, 'CIB')) {
+            return 'CIB';
+        }
+        if (str_contains($desc, 'PRIVATE')) {
+            return 'PRIVATE';
+        }
+
+        return null;
+    }
+
+    /**
+     * Check if article is a parent article
+     */
+    private function isParentArticle(string $description): bool
+    {
+        $desc = strtolower($description);
+
+        // Parent articles are main seafreight services (like GANRLAGSV)
+        return str_contains($desc, 'seafreight') && 
+               !str_contains($desc, 'surcharge') && 
+               !str_contains($desc, 'additional') &&
+               !str_contains($desc, 'courrier') &&
+               !str_contains($desc, 'admin') &&
+               !str_contains($desc, 'customs') &&
+               !str_contains($desc, 'waiver');
+    }
+
+    /**
+     * Check if this is a child article (surcharge/additional)
+     */
+    private function isChildArticle(string $description): bool
+    {
+        $desc = strtolower($description);
+
+        // Child articles are surcharges, admin fees, customs, etc.
+        return str_contains($desc, 'surcharge') || 
+               str_contains($desc, 'sur charge') ||
+               str_contains($desc, 'additional') ||
+               str_contains($desc, 'extra') ||
+               str_contains($desc, 'courrier') ||
+               str_contains($desc, 'admin') ||
+               str_contains($desc, 'customs') ||
+               str_contains($desc, 'waiver') ||
+               str_contains($desc, 'besc') ||
+               str_contains($desc, 'exa') ||
+               str_contains($desc, 'waf');
+    }
+
+    /**
+     * Check if article is a surcharge
+     */
+    private function isSurchargeArticle(string $description): bool
+    {
+        return $this->isChildArticle($description);
+    }
+
+    /**
+     * Check if article requires manual review
+     */
+    private function requiresManualReview(string $description, ?string $articleCode): bool
+    {
+        // Require review if no code could be parsed
+        if (!$articleCode) {
+            return true;
+        }
+
+        // Require review if description is very short (likely incomplete)
+        if (strlen($description) < 10) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Determine category from description
+     */
+    private function determineCategoryFromDescription(string $description): string
+    {
+        $name = strtolower($description);
+
+        if (str_contains($name, 'seafreight') || str_contains($name, 'ocean')) {
+            return 'seafreight';
+        } elseif (str_contains($name, 'precarriage') || str_contains($name, 'pre-carriage') || str_contains($name, 'trucking to port')) {
+            return 'precarriage';
+        } elseif (str_contains($name, 'oncarriage') || str_contains($name, 'on-carriage') || str_contains($name, 'trucking from port')) {
+            return 'oncarriage';
+        } elseif (str_contains($name, 'customs') || str_contains($name, 'clearance')) {
+            return 'customs';
+        } elseif (str_contains($name, 'warehouse') || str_contains($name, 'storage')) {
+            return 'warehouse';
+        } elseif (str_contains($name, 'insurance')) {
+            return 'insurance';
+        } elseif (str_contains($name, 'documentation') || str_contains($name, 'document') || str_contains($name, 'admin')) {
+            return 'administration';
+        } elseif (str_contains($name, 'surcharge')) {
+            return 'miscellaneous';
+        } else {
+            return 'general';
+        }
+    }
+
+    /**
+     * Get articles for a specific carrier
+     */
+    public function getArticlesForCarrier(string $carrierCode): Collection
+    {
+        return RobawsArticleCache::active()
+            ->forCarrier($carrierCode)
+            ->get();
+    }
+
+    /**
+     * Get articles for a service type
+     */
+    public function getArticlesForServiceType(string $serviceType): Collection
+    {
+        return RobawsArticleCache::active()
+            ->forService($serviceType)
+            ->get();
+    }
+
+    /**
+     * Get articles by category
+     */
+    public function getArticlesByCategory(string $category): Collection
+    {
+        return RobawsArticleCache::active()
+            ->byCategory($category)
+            ->get();
+    }
+
+    /**
+     * Check rate limit before making requests
+     * Critical: Robaws monitors 429 errors and will block integration if too many occur
+     */
+    private function checkRateLimit(): void
+    {
+        $rateLimitData = Cache::get(self::RATE_LIMIT_CACHE_KEY);
+
+        if ($rateLimitData && isset($rateLimitData['remaining'])) {
+            if ($rateLimitData['remaining'] <= 5) {
+                $waitTime = max(0, ($rateLimitData['reset_time'] ?? time()) - time());
+
+                if ($waitTime > 0 && $waitTime <= 60) {
+                    Log::info('Approaching rate limit, waiting', [
+                        'wait_seconds' => $waitTime,
+                        'remaining_requests' => $rateLimitData['remaining']
+                    ]);
+
+                    sleep($waitTime);
+                }
+            }
+        }
+    }
+
+    /**
+     * Handle rate limit response from Robaws
+     */
+    private function handleRateLimitResponse($response): void
+    {
+        if ($response->status() === 429) {
+            $retryAfter = (int) ($response->header('Retry-After')[0] ?? 60);
+
+            Log::warning('Robaws rate limit exceeded', [
+                'retry_after' => $retryAfter,
+                'endpoint' => $response->effectiveUri()
+            ]);
+
+            Cache::put(self::RATE_LIMIT_CACHE_KEY, [
+                'remaining' => 0,
+                'reset_time' => time() + $retryAfter
+            ], $retryAfter);
+
+            throw RateLimitException::exceeded($retryAfter);
+        }
+
+        // Store rate limit headers for future requests
+        $headers = $response->headers();
+        
+        if (isset($headers['X-RateLimit-Remaining'])) {
+            $remaining = (int) ($headers['X-RateLimit-Remaining'][0] ?? 100);
+            $reset = (int) ($headers['X-RateLimit-Reset'][0] ?? time() + 3600);
+
+            Cache::put(self::RATE_LIMIT_CACHE_KEY, [
+                'remaining' => $remaining,
+                'reset_time' => $reset
+            ], 3600);
+
+            if ($remaining <= 10) {
+                Log::warning('Robaws rate limit getting low', [
+                    'remaining' => $remaining,
+                    'reset_time' => date('Y-m-d H:i:s', $reset)
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Get article details from Robaws
+     */
+    public function getArticleDetails(string $articleId): ?array
+    {
+        try {
+            $this->checkRateLimit();
+
+            $response = $this->robawsClient->getHttpClientForQuotation()
+                ->get("/api/v2/articles/{$articleId}");
+
+            $this->handleRateLimitResponse($response);
+
+            if ($response->successful()) {
+                return $response->json();
+            }
+
+            return null;
+
+        } catch (\Exception $e) {
+            Log::error('Failed to get article details from Robaws', [
+                'article_id' => $articleId,
+                'error' => $e->getMessage()
+            ]);
+
+            return null;
+        }
+    }
+}
+

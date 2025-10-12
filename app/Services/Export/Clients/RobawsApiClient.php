@@ -1766,4 +1766,13 @@ final class RobawsApiClient
             'contacts' => !empty($contacts) ? $contacts : null,
         ], fn($v) => $v !== null && $v !== [] && $v !== '');
     }
+
+    /**
+     * Public method to access HTTP client for quotation system
+     * This allows the quotation system to make API calls while maintaining encapsulation
+     */
+    public function getHttpClientForQuotation(): \Illuminate\Http\Client\PendingRequest
+    {
+        return $this->getHttpClient();
+    }
 }

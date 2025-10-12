@@ -775,6 +775,38 @@ class IntakeResource extends Resource
                     ])
                     ->columns(2)
                     ->visible(fn (?Intake $record): bool => $record && $record->extraction()->exists()),
+                    
+                Infolists\Components\Section::make('Linked Quotation')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('quotationRequest.request_number')
+                            ->label('Quotation Number')
+                            ->url(fn ($record) => $record->quotationRequest 
+                                ? route('filament.admin.resources.quotation-requests.view', $record->quotationRequest)
+                                : null
+                            ),
+                        Infolists\Components\TextEntry::make('quotationRequest.customer_name')
+                            ->label('Customer'),
+                        Infolists\Components\TextEntry::make('quotationRequest.service_type')
+                            ->badge()
+                            ->formatStateUsing(fn ($state) => str_replace('_', ' ', $state)),
+                        Infolists\Components\TextEntry::make('quotationRequest.total_incl_vat')
+                            ->label('Total Amount')
+                            ->money('EUR'),
+                        Infolists\Components\TextEntry::make('quotationRequest.status')
+                            ->badge()
+                            ->color(fn ($state) => match($state) {
+                                'pending' => 'warning',
+                                'processing' => 'info',
+                                'quoted' => 'success',
+                                'accepted' => 'success',
+                                'rejected' => 'danger',
+                                'expired' => 'gray',
+                                default => 'gray',
+                            }),
+                    ])
+                    ->visible(fn ($record) => $record->quotationRequest !== null)
+                    ->collapsible()
+                    ->collapsed(false),
             ]);
     }
 

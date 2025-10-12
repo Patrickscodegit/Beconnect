@@ -6,14 +6,49 @@ use App\Http\Controllers\ResultsController;
 use App\Http\Controllers\RobawsOfferController;
 use App\Http\Controllers\ApiIntakeController;
 use App\Http\Controllers\ScheduleController;
+use App\Http\Controllers\PublicScheduleController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
 });
 
+// Public Schedule Routes (no authentication required)
+Route::prefix('public/schedules')->name('public.schedules.')->group(function () {
+    Route::get('/', [PublicScheduleController::class, 'index'])->name('index');
+    Route::get('/{schedule}', [PublicScheduleController::class, 'show'])->name('show');
+});
+
+// Public Quotation Routes (no authentication required)
+Route::prefix('public/quotations')->name('public.quotations.')->group(function () {
+    Route::get('/create', [\App\Http\Controllers\ProspectQuotationController::class, 'create'])->name('create');
+    Route::post('/store', [\App\Http\Controllers\ProspectQuotationController::class, 'store'])->name('store');
+    Route::get('/{quotationRequest}/confirmation', [\App\Http\Controllers\ProspectQuotationController::class, 'confirmation'])->name('confirmation');
+    Route::get('/status', [\App\Http\Controllers\ProspectQuotationController::class, 'status'])->name('status');
+});
+
+// Customer Portal Routes (authenticated)
+Route::middleware(['auth'])->prefix('customer')->name('customer.')->group(function () {
+    Route::get('/dashboard', [\App\Http\Controllers\CustomerDashboardController::class, 'index'])->name('dashboard');
+    
+    // Quotations
+    Route::prefix('quotations')->name('quotations.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\CustomerQuotationController::class, 'index'])->name('index');
+        Route::get('/create', [\App\Http\Controllers\CustomerQuotationController::class, 'create'])->name('create');
+        Route::post('/store', [\App\Http\Controllers\CustomerQuotationController::class, 'store'])->name('store');
+        Route::get('/{quotationRequest}', [\App\Http\Controllers\CustomerQuotationController::class, 'show'])->name('show');
+    });
+    
+    // Schedules (customer view - with pricing)
+    Route::prefix('schedules')->name('schedules.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\CustomerScheduleController::class, 'index'])->name('index');
+        Route::get('/{schedule}', [\App\Http\Controllers\CustomerScheduleController::class, 'show'])->name('show');
+    });
+});
+
 Route::get('/dashboard', function () {
-    return view('dashboard');
+    // Redirect to customer dashboard
+    return redirect()->route('customer.dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware('auth')->group(function () {
@@ -54,6 +89,22 @@ Route::middleware('auth')->group(function () {
     Route::get('/schedules/sync-status', [ScheduleController::class, 'getSyncStatus'])->name('schedules.sync-status');
     Route::delete('/schedules/sync-status', [ScheduleController::class, 'resetStuckSync'])->name('schedules.reset-stuck-sync');
     Route::post('/schedules/sync', [ScheduleController::class, 'triggerSync'])->name('schedules.sync');
+    
+    // Robaws Schedule Integration (NEW - separate from existing schedule routes)
+    Route::prefix('robaws/schedule')->name('robaws.schedule.')->group(function () {
+        Route::post('/suggest-articles', [\App\Http\Controllers\RobawsScheduleIntegrationController::class, 'getSuggestedArticles'])
+            ->name('suggest-articles');
+        Route::post('/update-articles', [\App\Http\Controllers\RobawsScheduleIntegrationController::class, 'updateOfferArticles'])
+            ->name('update-articles');
+        Route::get('/integration-widget', [\App\Http\Controllers\RobawsScheduleIntegrationController::class, 'getWidget'])
+            ->name('integration-widget');
+    });
+    
+    // Quotation System API (for Filament admin)
+    Route::prefix('admin/api/quotation')->name('admin.api.quotation.')->group(function () {
+        Route::get('/articles', [\App\Http\Controllers\Api\QuotationArticleController::class, 'index'])
+            ->name('articles.index');
+    });
 });
 
 // Webhook endpoint (no auth required)

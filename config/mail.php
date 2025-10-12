@@ -113,4 +113,19 @@ return [
         'name' => env('MAIL_FROM_NAME', 'Example'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Email Notification Settings
+    |--------------------------------------------------------------------------
+    |
+    | These settings control the behavior of email notifications in the
+    | quotation system. Use testing_mode during development to prevent
+    | sending emails to real customers.
+    |
+    */
+
+    'testing_mode' => env('MAIL_TESTING_MODE', true),
+    'testing_address' => env('MAIL_TESTING_ADDRESS', 'patrick@belgaco.be'),
+    'team_address' => env('MAIL_TEAM_ADDRESS', 'info@belgaco.be'),
+
 ];

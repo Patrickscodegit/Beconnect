@@ -56,4 +56,9 @@ class Intake extends Model
     {
         return $this->hasMany(IntakeFile::class);
     }
+
+    public function quotationRequest(): HasOne
+    {
+        return $this->hasOne(QuotationRequest::class, 'intake_id');
+    }
 }

@@ -84,5 +84,9 @@ class AppServiceProvider extends ServiceProvider
     {
         \App\Models\Document::observe(\App\Observers\DocumentObserver::class);
         \App\Models\Extraction::observe(\App\Observers\ExtractionObserver::class);
+        
+        // Quotation System Observers
+        \App\Models\Intake::observe(\App\Observers\IntakeObserver::class);
+        \App\Models\QuotationRequest::observe(\App\Observers\QuotationRequestObserver::class);
     }
 }

@@ -10,3 +10,7 @@ Route::get('/user', function (Request $request) {
 
 // Intake status API
 Route::get('/intakes/{intake}/status', [IntakeStatusController::class, 'show'])->name('intakes.status');
+
+// Robaws Webhook (no auth - verified by signature)
+Route::post('/webhooks/robaws', [\App\Http\Controllers\RobawsWebhookController::class, 'handle'])
+    ->name('webhooks.robaws');
