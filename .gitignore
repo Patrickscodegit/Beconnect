@@ -1,30 +1,95 @@
-/.phpunit.cache
+# Laravel
 /node_modules
-/public/build
 /public/hot
 /public/storage
 /storage/*.key
-/storage/pail
 /vendor
 .env
 .env.backup
 .env.production
-.env.local
-.env.*.local
-*.sqlite
-*.sqlite-journal
-database/*.sqlite
-.phpactor.json
 .phpunit.result.cache
 Homestead.json
 Homestead.yaml
+auth.json
 npm-debug.log
 yarn-error.log
-/auth.json
 /.fleet
 /.idea
-/.nova
 /.vscode
-/.zed
+
+# Database files (local development)
+/database/database.sqlite
+/database/database.sqlite-journal
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+
+# Dangerous scripts that can wipe database
+forge-*-fix*.sh
+forge-ultra-nuclear*.sh
+forge-real-data-only-fix.sh
+deploy*.sh
+fix_production*.sh
+
+# Test files that might affect production
+test_*.php
+debug_*.php
+analyze_*.php
+check_*.php
+verify_*.php
+create_*.php
+process_*.php
+simulate_*.php
+demo_*.php
+improvement_*.php
+solution_*.php
+final_*.php
+getFile
+getMessage
+id
+id}n"
+customer_name
+document
+extracted
+extracted_data
+filename
+filename}n"
+mime_type
+null
+pipeline_health_check.php
+retry_pending_intakes.php
+robaws_client_id
+robaws_offer_id}n"
+status
+status}n"
+storage_disk
+storage-test.txt,
+Test Client (Doc-Aligned Update),
+BE0437311533,
+68b320c74d202_01K3XVG2MBHB27G6HHDHBT47RX.eml
+armos_bv_email.eml
+armos_roro_kenya.eml
+armos_test.eml
+armos_with_phone_numbers.eml
+bmw_serie7_french.eml
+car_shipment_oliver.eml
+lagos_nigeria.eml
+Prijs en afvaart Dar es Salaam ref 208005.eml
+real_bmw_serie7.eml
+RO-RO verscheping ANTWERPEN - MOMBASA, KENIA.eml
+RO-RO_verscheping_ANTWERPEN-MOMBASA_KENIA_2.eml
+sallaum_sample_route_finder_main.html
+sallaum_sample_route_finder_with_params.html
+sallaum_sample_schedules_page.html
+sample_email.eml

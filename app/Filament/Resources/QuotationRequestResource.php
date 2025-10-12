@@ -152,29 +152,29 @@ class QuotationRequestResource extends Resource
                             
                         Forms\Components\TextInput::make('por')
                             ->label('Place of Receipt (POR)')
-                            ->placeholder('Optional - e.g., Antwerp')
+                            ->placeholder('Optional - e.g., Brussels, Paris')
                             ->maxLength(100)
                             ->columnSpan(1),
                             
-                        Forms\Components\Select::make('pol')
+                        Forms\Components\TextInput::make('pol')
                             ->label('Port of Loading (POL)')
-                            ->options(\App\Models\Port::active()->orderBy('name')->pluck('name', 'name'))
-                            ->searchable()
+                            ->placeholder('Required - e.g., Antwerp, Rotterdam')
                             ->required()
                             ->live()
+                            ->maxLength(100)
                             ->columnSpan(1),
                             
-                        Forms\Components\Select::make('pod')
+                        Forms\Components\TextInput::make('pod')
                             ->label('Port of Discharge (POD)')
-                            ->options(\App\Models\Port::active()->orderBy('name')->pluck('name', 'name'))
-                            ->searchable()
+                            ->placeholder('Required - e.g., Conakry, Lagos')
                             ->required()
                             ->live()
+                            ->maxLength(100)
                             ->columnSpan(1),
                             
                         Forms\Components\TextInput::make('fdest')
                             ->label('Final Destination (FDEST)')
-                            ->placeholder('Optional - e.g., Lagos')
+                            ->placeholder('Optional - e.g., Bamako, Lagos')
                             ->maxLength(100)
                             ->columnSpan(1),
                             
