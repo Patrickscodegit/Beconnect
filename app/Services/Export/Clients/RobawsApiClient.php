@@ -1775,4 +1775,122 @@ final class RobawsApiClient
     {
         return $this->getHttpClient();
     }
+
+    /**
+     * Get all articles with pagination and filtering
+     * Based on Robaws API: GET /api/v2/articles
+     */
+    public function getArticles(array $params = []): array
+    {
+        try {
+            // Default parameters
+            $query = array_merge([
+                'page' => 0,
+                'size' => 100, // Robaws max
+                'sort' => 'name:asc'
+            ], $params);
+
+            $response = $this->getHttpClient()->get('/api/v2/articles', $query);
+
+            if ($response->successful()) {
+                return [
+                    'success' => true,
+                    'data' => $response->json(),
+                ];
+            }
+
+            return [
+                'success' => false,
+                'error' => $response->body(),
+                'status' => $response->status(),
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'status' => 500,
+            ];
+        }
+    }
+
+    /**
+     * Get a single article by ID
+     * Based on Robaws API: GET /api/v2/articles/{id}
+     */
+    public function getArticle(string $articleId, array $include = []): array
+    {
+        try {
+            $query = [];
+            if (!empty($include)) {
+                $query['include'] = implode(',', $include);
+            }
+
+            $response = $this->getHttpClient()->get("/api/v2/articles/{$articleId}", $query);
+
+            if ($response->successful()) {
+                return [
+                    'success' => true,
+                    'data' => $response->json(),
+                ];
+            }
+
+            return [
+                'success' => false,
+                'error' => $response->body(),
+                'status' => $response->status(),
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'status' => 500,
+            ];
+        }
+    }
+
+    /**
+     * Fetch all articles across all pages
+     */
+    public function getAllArticlesPaginated(): array
+    {
+        $allArticles = [];
+        $page = 0;
+        $size = 100;
+        
+        do {
+            $result = $this->getArticles([
+                'page' => $page,
+                'size' => $size,
+            ]);
+            
+            if (!$result['success']) {
+                \Log::error('Failed to fetch articles page', [
+                    'page' => $page,
+                    'error' => $result['error'] ?? 'Unknown error'
+                ]);
+                throw new \RuntimeException('Failed to fetch articles: ' . ($result['error'] ?? 'Unknown error'));
+            }
+            
+            $data = $result['data'];
+            $items = $data['items'] ?? [];
+            $allArticles = array_merge($allArticles, $items);
+            
+            $page++;
+            $totalItems = (int)($data['totalItems'] ?? 0);
+            
+            \Log::info('Fetched articles page', [
+                'page' => $page - 1,
+                'items_in_page' => count($items),
+                'total_fetched' => count($allArticles),
+                'total_items' => $totalItems
+            ]);
+            
+        } while (count($items) === $size && count($allArticles) < $totalItems);
+        
+        return [
+            'success' => true,
+            'articles' => $allArticles,
+            'total' => count($allArticles)
+        ];
+    }
 }

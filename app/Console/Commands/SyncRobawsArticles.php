@@ -2,53 +2,47 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Quotation\RobawsArticlesSyncService;
 use Illuminate\Console\Command;
 
 class SyncRobawsArticles extends Command
 {
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
-    protected $signature = 'robaws:sync-articles {--force : Force sync even if recently synced}';
+    protected $signature = 'robaws:sync-articles 
+                            {--rebuild : Clear and rebuild entire cache}';
+    
+    protected $description = 'Sync articles from Robaws Articles API';
 
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
-    protected $description = 'Sync articles from Robaws API to local cache';
-
-    /**
-     * Execute the console command.
-     */
-    public function handle()
+    public function handle(RobawsArticlesSyncService $syncService): int
     {
-        if (!config('quotation.enabled')) {
-            $this->error('Quotation system is disabled');
-            return 1;
-        }
-
-        $this->info('Starting Robaws article sync...');
-
+        $this->info('Starting Robaws articles sync...');
+        
         try {
-            $articleProvider = app(\App\Services\Robaws\RobawsArticleProvider::class);
+            if ($this->option('rebuild')) {
+                $this->warn('Rebuilding entire article cache...');
+                $result = $syncService->rebuildCache();
+            } else {
+                $result = $syncService->sync();
+            }
             
-            $syncedCount = $articleProvider->syncArticles();
-
-            $this->info("✓ Successfully synced {$syncedCount} articles from Robaws");
+            if ($result['success']) {
+                $this->info('✅ Sync completed successfully!');
+                $this->table(
+                    ['Metric', 'Value'],
+                    [
+                        ['Total Articles', $result['total']],
+                        ['Synced', $result['synced']],
+                        ['Errors', $result['errors']],
+                    ]
+                );
+                return Command::SUCCESS;
+            }
             
-            return 0;
-
-        } catch (\App\Exceptions\RateLimitException $e) {
-            $this->error('Rate limit exceeded: ' . $e->getMessage());
-            return 1;
-
+            $this->error('❌ Sync failed: ' . ($result['error'] ?? 'Unknown error'));
+            return Command::FAILURE;
+            
         } catch (\Exception $e) {
-            $this->error('Sync failed: ' . $e->getMessage());
-            $this->error($e->getTraceAsString());
-            return 1;
+            $this->error('❌ Exception: ' . $e->getMessage());
+            return Command::FAILURE;
         }
     }
 }

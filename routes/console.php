@@ -60,3 +60,6 @@ Schedule::job(new UpdateVehicleDatabaseJob())->weekly()->sundays()->at('02:00');
 
 // Schedule shipping schedule updates daily
 Schedule::job(new UpdateShippingSchedulesJob())->daily()->at('03:00');
+
+// Schedule Robaws articles sync daily at 2 AM
+Schedule::command('robaws:sync-articles')->dailyAt('02:00');

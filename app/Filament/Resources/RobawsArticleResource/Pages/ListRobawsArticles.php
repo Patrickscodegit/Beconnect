@@ -3,6 +3,9 @@
 namespace App\Filament\Resources\RobawsArticleResource\Pages;
 
 use App\Filament\Resources\RobawsArticleResource;
+use App\Services\Quotation\RobawsArticlesSyncService;
+use Filament\Actions;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Resources\Components\Tab;
 use Illuminate\Database\Eloquent\Builder;
@@ -10,6 +13,71 @@ use Illuminate\Database\Eloquent\Builder;
 class ListRobawsArticles extends ListRecords
 {
     protected static string $resource = RobawsArticleResource::class;
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Actions\Action::make('syncArticles')
+                ->label('Sync from Robaws API')
+                ->icon('heroicon-o-arrow-path')
+                ->color('success')
+                ->requiresConfirmation()
+                ->modalHeading('Sync Articles')
+                ->modalDescription('Fetch latest articles from Robaws API and update the cache.')
+                ->action(function (RobawsArticlesSyncService $syncService) {
+                    try {
+                        $result = $syncService->sync();
+                        
+                        if ($result['success']) {
+                            Notification::make()
+                                ->title('Articles synced successfully')
+                                ->success()
+                                ->body("Synced {$result['synced']} of {$result['total']} articles from Robaws API")
+                                ->send();
+                        } else {
+                            Notification::make()
+                                ->title('Sync failed')
+                                ->danger()
+                                ->body($result['error'] ?? 'Unknown error')
+                                ->send();
+                        }
+                    } catch (\Exception $e) {
+                        Notification::make()
+                            ->title('Sync error')
+                            ->danger()
+                            ->body($e->getMessage())
+                            ->send();
+                    }
+                }),
+                
+            Actions\Action::make('rebuildCache')
+                ->label('Rebuild Cache')
+                ->icon('heroicon-o-arrow-path-rounded-square')
+                ->color('warning')
+                ->requiresConfirmation()
+                ->modalHeading('Rebuild Article Cache')
+                ->modalDescription('This will clear all cached articles and re-fetch from Robaws API. This action cannot be undone.')
+                ->action(function (RobawsArticlesSyncService $syncService) {
+                    try {
+                        $result = $syncService->rebuildCache();
+                        
+                        Notification::make()
+                            ->title('Cache rebuilt successfully')
+                            ->success()
+                            ->body("Rebuilt with {$result['synced']} articles from Robaws API")
+                            ->send();
+                    } catch (\Exception $e) {
+                        Notification::make()
+                            ->title('Rebuild failed')
+                            ->danger()
+                            ->body($e->getMessage())
+                            ->send();
+                    }
+                }),
+                
+            Actions\CreateAction::make(),
+        ];
+    }
 
     public function getTabs(): array
     {

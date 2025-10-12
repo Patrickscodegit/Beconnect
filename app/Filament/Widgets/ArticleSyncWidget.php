@@ -2,32 +2,33 @@
 
 namespace App\Filament\Widgets;
 
-use Filament\Widgets\Widget;
+use Filament\Widgets\StatsOverviewWidget as BaseWidget;
+use Filament\Widgets\StatsOverviewWidget\Stat;
 use App\Models\RobawsArticleCache;
-use App\Models\RobawsSyncLog;
-use Illuminate\Support\Facades\DB;
 
-class ArticleSyncWidget extends Widget
+class ArticleSyncWidget extends BaseWidget
 {
-    protected static string $view = 'filament.widgets.article-sync-widget';
-    
-    protected int | string | array $columnSpan = 'full';
-    
-    public function getViewData(): array
+    protected function getStats(): array
     {
-        $lastSync = RobawsSyncLog::where('sync_type', 'articles')
-            ->orderBy('started_at', 'desc')
-            ->first();
-            
+        $totalArticles = RobawsArticleCache::count();
+        $lastSync = RobawsArticleCache::max('synced_at');
+        $todaySync = RobawsArticleCache::whereDate('synced_at', today())->count();
+        
         return [
-            'articleCount' => RobawsArticleCache::count(),
-            'parentCount' => RobawsArticleCache::where('is_parent_article', true)->count(),
-            'surchargeCount' => RobawsArticleCache::where('is_surcharge', true)->count(),
-            'childrenCount' => DB::table('article_children')->count(),
-            'lastSyncAt' => $lastSync?->started_at,
-            'lastSyncStatus' => $lastSync?->status,
-            'lastSyncCount' => $lastSync?->synced_count,
-            'lastSyncDuration' => $lastSync?->duration_seconds,
+            Stat::make('Total Articles', $totalArticles)
+                ->description('From Robaws Articles API')
+                ->icon('heroicon-o-cube')
+                ->color('success'),
+                
+            Stat::make('Synced Today', $todaySync)
+                ->description('Articles updated today')
+                ->icon('heroicon-o-bolt')
+                ->color('info'),
+                
+            Stat::make('Last Sync', $lastSync ? $lastSync->diffForHumans() : 'Never')
+                ->description('Next sync at 2:00 AM')
+                ->icon('heroicon-o-clock')
+                ->color('warning'),
         ];
     }
 }
