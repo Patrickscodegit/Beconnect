@@ -22,7 +22,8 @@ class QuotationArticleController extends Controller
             $query->where(function ($q) use ($serviceType) {
                 $q->whereJsonContains('applicable_services', $serviceType)
                   ->orWhereNull('applicable_services')
-                  ->orWhereRaw('JSON_LENGTH(applicable_services) = 0');
+                  ->orWhere('applicable_services', '[]')
+                  ->orWhere('applicable_services', '');
             });
         }
         
@@ -51,28 +52,32 @@ class QuotationArticleController extends Controller
             $query->select([
                 'robaws_articles_cache.id',
                 'robaws_articles_cache.robaws_article_id',
+                'robaws_articles_cache.article_name',
                 'robaws_articles_cache.description',
                 'robaws_articles_cache.article_code',
                 'robaws_articles_cache.unit_price',
                 'robaws_articles_cache.unit_type',
+                'robaws_articles_cache.currency',
                 'robaws_articles_cache.is_parent_article',
             ]);
         }])
         ->select([
             'id',
             'robaws_article_id',
+            'article_name',
             'description',
             'article_code',
             'unit_price',
             'unit_type',
+            'currency',
             'category',
             'is_parent_article',
             'is_surcharge',
         ])
-        ->orderBy('description')
+        ->orderBy('article_name')
         ->get();
         
-        return response()->json($articles);
+        return response()->json(['data' => $articles]);
     }
 }
 
