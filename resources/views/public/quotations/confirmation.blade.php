@@ -280,7 +280,7 @@
                 <i class="fas fa-search mr-2"></i>
                 Track Request Status
             </a>
-            <a href="{{ route('public.schedules.index') }}" 
+            <a href="{{ auth()->check() ? route('customer.schedules.index') : route('public.schedules.index') }}" 
                class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold text-center transition-colors">
                 <i class="fas fa-calendar mr-2"></i>
                 View Shipping Schedules

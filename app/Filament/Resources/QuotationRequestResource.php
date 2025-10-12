@@ -156,20 +156,36 @@ class QuotationRequestResource extends Resource
                             ->maxLength(100)
                             ->columnSpan(1),
                             
-                        Forms\Components\TextInput::make('pol')
+                        Forms\Components\Select::make('pol')
                             ->label('Port of Loading (POL)')
-                            ->placeholder('Required - e.g., Antwerp, Rotterdam')
+                            ->options(function () {
+                                return \App\Models\Port::europeanOrigins()
+                                    ->orderBy('name')
+                                    ->get()
+                                    ->mapWithKeys(function ($port) {
+                                        return [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country];
+                                    });
+                            })
+                            ->searchable()
                             ->required()
                             ->live()
-                            ->maxLength(100)
+                            ->afterStateUpdated(fn (Forms\Set $set) => $set('selected_schedule_id', null))
                             ->columnSpan(1),
                             
-                        Forms\Components\TextInput::make('pod')
+                        Forms\Components\Select::make('pod')
                             ->label('Port of Discharge (POD)')
-                            ->placeholder('Required - e.g., Conakry, Lagos')
+                            ->options(function () {
+                                return \App\Models\Port::active()
+                                    ->orderBy('name')
+                                    ->get()
+                                    ->mapWithKeys(function ($port) {
+                                        return [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country];
+                                    });
+                            })
+                            ->searchable()
                             ->required()
                             ->live()
-                            ->maxLength(100)
+                            ->afterStateUpdated(fn (Forms\Set $set) => $set('selected_schedule_id', null))
                             ->columnSpan(1),
                             
                         Forms\Components\TextInput::make('fdest')
@@ -222,11 +238,8 @@ class QuotationRequestResource extends Resource
                                 return \App\Models\ShippingSchedule::active()
                                     ->whereHas('polPort', fn($q) => $q->where('name', 'like', "%{$pol}%"))
                                     ->whereHas('podPort', fn($q) => $q->where('name', 'like', "%{$pod}%"))
-                                    ->when($serviceType, function($q) use ($serviceType) {
-                                        $q->whereHas('carrier', function($query) use ($serviceType) {
-                                            $query->whereJsonContains('service_types', $serviceType);
-                                        });
-                                    })
+                                    // Service type filter removed - data format mismatch between config (RORO_IMPORT) and database (RORO)
+                                    // User already selected service type separately, showing all sailings for route is helpful
                                     ->with(['carrier', 'polPort', 'podPort'])
                                     ->get()
                                     ->mapWithKeys(fn($schedule) => [
@@ -240,7 +253,7 @@ class QuotationRequestResource extends Resource
                                         )
                                     ]);
                             })
-                            ->live()
+                            ->live(onBlur: false)
                             ->afterStateUpdated(function ($state, Forms\Set $set) {
                                 if ($state) {
                                     $schedule = \App\Models\ShippingSchedule::with('carrier')->find($state);
