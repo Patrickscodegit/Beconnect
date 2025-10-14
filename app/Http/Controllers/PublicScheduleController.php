@@ -59,8 +59,7 @@ class PublicScheduleController extends Controller
     protected function buildScheduleData(Request $request): array
     {
         $query = ShippingSchedule::with(['polPort', 'podPort', 'carrier'])
-            ->active()
-            ->upcomingSailings();
+            ->active();
 
         // Apply filters
         if ($request->filled('pol')) {
@@ -96,10 +95,20 @@ class PublicScheduleController extends Controller
         $carriers = ShippingCarrier::where('is_active', true)->orderBy('name')->get();
         $serviceTypes = $this->getServiceTypes();
 
+        // Format ports for display with country
+        $polPortsFormatted = $polPorts->mapWithKeys(function ($port) {
+            return [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country];
+        });
+        $podPortsFormatted = $podPorts->mapWithKeys(function ($port) {
+            return [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country];
+        });
+
         return [
             'schedules' => $schedules,
             'polPorts' => $polPorts,
             'podPorts' => $podPorts,
+            'polPortsFormatted' => $polPortsFormatted,
+            'podPortsFormatted' => $podPortsFormatted,
             'carriers' => $carriers,
             'serviceTypes' => $serviceTypes,
             'filters' => [
@@ -112,25 +121,19 @@ class PublicScheduleController extends Controller
     }
 
     /**
-     * Get POL (Port of Loading) ports
+     * Get POL (Port of Loading) ports - European origins only
      */
     protected function getPolPorts()
     {
-        return Port::active()
-            ->whereIn('code', ['ANR', 'ZEE', 'FLU']) // Antwerp, Zeebrugge, Flushing
-            ->orderBy('name')
-            ->get();
+        return Port::europeanOrigins()->orderBy('name')->get();
     }
 
     /**
-     * Get POD (Port of Discharge) ports
+     * Get POD (Port of Discharge) ports - Only ports with active schedules
      */
     protected function getPodPorts()
     {
-        return Port::active()
-            ->whereIn('code', ['ABJ', 'CKY', 'COO', 'DKR', 'DAR', 'DLA', 'DUR', 'ELS', 'LOS', 'LFW', 'MBA', 'PNR', 'PLZ', 'WVB'])
-            ->orderBy('name')
-            ->get();
+        return Port::withActivePodSchedules()->orderBy('name')->get();
     }
 
     /**
