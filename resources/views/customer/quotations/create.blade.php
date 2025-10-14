@@ -18,7 +18,8 @@
     <!-- Form -->
     <div class="bg-white rounded-lg shadow-xl overflow-hidden">
         <form action="{{ route('customer.quotations.store') }}" method="POST" enctype="multipart/form-data" 
-                  x-data="{ quotationMode: 'detailed', ...quotationForm() }">
+                  x-data="{ quotationMode: 'detailed', ...quotationForm() }"
+                  @submit="syncCommodityItems($event)">
                 @csrf
                 
                 <!-- Contact Information (Pre-filled for Customer) -->
@@ -512,9 +513,38 @@ function quotationForm() {
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
-        
-        // Frontend validation removed - Laravel handles validation server-side
     }
+}
+
+// Sync Livewire commodity items to hidden input before form submission
+function syncCommodityItems(event) {
+    try {
+        // Find the Livewire component
+        const livewireComponent = document.querySelector('[wire\\:id]');
+        
+        if (livewireComponent && typeof Livewire !== 'undefined') {
+            // Get the component ID
+            const componentId = livewireComponent.getAttribute('wire:id');
+            const component = Livewire.find(componentId);
+            
+            if (component) {
+                // Get items from Livewire component
+                const items = component.get('items');
+                
+                // Update hidden input with current items
+                const hiddenInput = document.querySelector('input[name="commodity_items"]');
+                if (hiddenInput) {
+                    hiddenInput.value = JSON.stringify(items);
+                    console.log('✅ Synced commodity items before submission:', items.length, 'items');
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error syncing commodity items:', error);
+    }
+    
+    // Let form submit normally
+    return true;
 }
 </script>
 @endsection
