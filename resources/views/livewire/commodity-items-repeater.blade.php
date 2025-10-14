@@ -1,4 +1,4 @@
-<div x-data="{ unitSystem: @entangle('unitSystem'), serviceType: @entangle('serviceType') }">
+<div>
     <!-- Unit System Toggle -->
     <div class="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-200">
         <div class="flex items-center justify-between">
@@ -95,6 +95,6 @@
     </div>
 
     <!-- Hidden field to submit items data -->
-    <input type="hidden" name="commodity_items" :value="JSON.stringify(@js($items))">
-    <input type="hidden" name="unit_system" wire:model="unitSystem">
+    <input type="hidden" name="commodity_items" value="{{ json_encode($items) }}">
+    <input type="hidden" name="unit_system" value="{{ $unitSystem }}">
 </div>
