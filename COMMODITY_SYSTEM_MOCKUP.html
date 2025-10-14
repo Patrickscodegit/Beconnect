@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Commodity System - Complete Specification</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        .commodity-item {
+            transition: all 0.3s ease;
+        }
+        .commodity-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .cbm-highlight {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 p-8">
+    <div class="max-w-6xl mx-auto" x-data="commodityForm()">
+        
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">
+                <i class="fas fa-ship text-blue-600 mr-2"></i>
+                Multi-Commodity Quotation System - Complete Spec
+            </h1>
+            <p class="text-gray-600">All refinements + CBM calculation + Unit conversion - Ready!</p>
+            
+            <!-- Global Unit Selector -->
+            <div class="mt-4 bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <div class="flex items-center justify-between">
+                    <label class="text-sm font-semibold text-blue-900">
+                        <i class="fas fa-ruler mr-2"></i>Measurement Units
+                    </label>
+                    <div class="flex space-x-4">
+                        <label class="flex items-center cursor-pointer">
+                            <input type="radio" x-model="unitSystem" value="metric" class="w-5 h-5 text-blue-600">
+                            <span class="ml-2 text-sm font-medium text-gray-700">Metric (cm, kg, m³)</span>
+                        </label>
+                        <label class="flex items-center cursor-pointer">
+                            <input type="radio" x-model="unitSystem" value="us" class="w-5 h-5 text-blue-600">
+                            <span class="ml-2 text-sm font-medium text-gray-700">US (inch, lbs, cuft)</span>
+                        </label>
+                    </div>
+                </div>
+                <p class="text-xs text-blue-700 mt-2">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    Select your preferred units. All values will be converted to metric for Robaws.
+                </p>
+            </div>
+        </div>
+
+        <!-- Service Type Selector (for wheelbase conditional logic) -->
+        <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <h2 class="text-xl font-bold text-gray-900 mb-4">
+                <i class="fas fa-shipping-fast text-blue-600 mr-2"></i>Service Type
+            </h2>
+            <select x-model="serviceType" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                <option value="">Select Service Type</option>
+                <option value="RORO_EXPORT">RORO Export</option>
+                <option value="RORO_IMPORT">RORO Import</option>
+                <option value="FCL_EXPORT">FCL Export</option>
+                <option value="FCL_IMPORT">FCL Import</option>
+                <option value="AIRFREIGHT_EXPORT">Airfreight Export</option>
+                <option value="AIRFREIGHT_IMPORT">Airfreight Import</option>
+            </select>
+            <p class="text-sm text-gray-500 mt-2">
+                <i class="fas fa-lightbulb text-yellow-500 mr-1"></i>
+                Wheelbase is <strong>only required</strong> for Airfreight services
+            </p>
+        </div>
+
+        <!-- Cargo Information Section -->
+        <div class="bg-white rounded-lg shadow-sm p-8 mb-6">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6">
+                <i class="fas fa-box text-blue-600 mr-2"></i>Cargo Information
+            </h2>
+
+            <!-- General Cargo Description -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    Cargo Description <span class="text-red-500">*</span>
+                </label>
+                <textarea 
+                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                    rows="3"
+                    placeholder="Overall description of your cargo...">1 Mercedes car, 1 excavator with parts, 1 boat with iron cradle</textarea>
+            </div>
+
+            <!-- Commodity Items Repeater -->
+            <div class="border-2 border-dashed border-blue-300 rounded-lg p-6 bg-blue-50">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">
+                        <i class="fas fa-list-ul text-blue-600 mr-2"></i>
+                        Commodity Items (<span x-text="items.length"></span>)
+                    </h3>
+                    <button 
+                        @click="addItem()" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                        <i class="fas fa-plus mr-2"></i>Add Item
+                    </button>
+                </div>
+
+                <!-- Items List -->
+                <div class="space-y-4">
+                    <template x-for="(item, index) in items" :key="index">
+                        <div class="commodity-item bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+                            <!-- Item Header -->
+                            <div class="flex justify-between items-center mb-4">
+                                <h4 class="text-lg font-semibold text-gray-700">
+                                    <i class="fas fa-cube text-gray-500 mr-2"></i>
+                                    Item #<span x-text="index + 1"></span>
+                                </h4>
+                                <button 
+                                    @click="removeItem(index)"
+                                    class="text-red-600 hover:text-red-700 px-3 py-1 rounded hover:bg-red-50 transition-colors">
+                                    <i class="fas fa-trash mr-1"></i>Remove
+                                </button>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <!-- Commodity Type -->
+                                <div class="md:col-span-2">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                                        Commodity Type <span class="text-red-500">*</span>
+                                    </label>
+                                    <select 
+                                        x-model="item.type"
+                                        class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                        <option value="">Select Type</option>
+                                        <option value="vehicles">🚗 Vehicles</option>
+                                        <option value="machinery">🏗️ Machinery</option>
+                                        <option value="boat">⛵ Boat</option>
+                                        <option value="general_cargo">📦 General Cargo</option>
+                                    </select>
+                                </div>
+
+                                <!-- VEHICLES Fields -->
+                                <template x-if="item.type === 'vehicles'">
+                                    <div class="md:col-span-2 bg-blue-50 p-4 rounded-lg border border-blue-200">
+                                        <h5 class="font-semibold text-blue-900 mb-3">
+                                            <i class="fas fa-car mr-2"></i>Vehicle Details
+                                        </h5>
+                                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                            <div class="lg:col-span-3">
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Vehicle Category <span class="text-red-500">*</span>
+                                                </label>
+                                                <select x-model="item.category" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                                    <option value="">Select Category</option>
+                                                    <option value="car" selected>Car</option>
+                                                    <option value="suv">SUV</option>
+                                                    <option value="motorcycle">Motorcycle</option>
+                                                    <option value="small_van">Small Van</option>
+                                                    <option value="big_van">Big Van</option>
+                                                    <option value="truck">Truck</option>
+                                                    <option value="truckhead">Truckhead</option>
+                                                    <option value="truck_chassis">Truck Chassis</option>
+                                                    <option value="tipper_truck">Tipper Truck</option>
+                                                    <option value="platform_truck">Platform Truck</option>
+                                                    <option value="box_truck">Box Truck</option>
+                                                    <option value="vacuum_truck">Vacuum Truck</option>
+                                                    <option value="refuse_truck">Refuse Truck</option>
+                                                    <option value="bus">Bus</option>
+                                                    <option value="concrete_mixer">Concrete Mixer</option>
+                                                    <option value="tank_truck">Tank Truck</option>
+                                                    <option value="trailer">Trailer</option>
+                                                    <option value="trailer_stack">Trailer Stack</option>
+                                                    <option value="tank_trailer">Tank Trailer</option>
+                                                    <option value="truck_trailer_combination">Truck-Trailer Combination</option>
+                                                    <option value="loaded_truck_trailer">Loaded Truck-Trailer Combination</option>
+                                                    <option value="high_and_heavy">High and Heavy</option>
+                                                </select>
+                                            </div>
+
+                                            <!-- SECTION: Identity -->
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">Make</label>
+                                                <input type="text" value="Mercedes" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" placeholder="e.g., Toyota">
+                                            </div>
+                                            <div class="lg:col-span-2">
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">Type/Model</label>
+                                                <input type="text" value="C-Class" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" placeholder="e.g., Corolla">
+                                            </div>
+
+                                            <!-- SECTION: Condition & Fuel (Condition first) -->
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Condition <span class="text-red-500">*</span>
+                                                </label>
+                                                <select x-model="item.condition" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                                    <option value="">Select Condition</option>
+                                                    <option value="new">New</option>
+                                                    <option value="used" selected>Used</option>
+                                                    <option value="damaged">Damaged</option>
+                                                </select>
+                                            </div>
+                                            <div class="lg:col-span-2">
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Fuel Type <span class="text-red-500">*</span>
+                                                </label>
+                                                <select class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                                    <option value="">Select Fuel</option>
+                                                    <option value="diesel" selected>Diesel</option>
+                                                    <option value="petrol">Petrol</option>
+                                                    <option value="mild_hybrid">Mild-Hybrid</option>
+                                                    <option value="hybrid">Hybrid</option>
+                                                    <option value="electric">Electric</option>
+                                                    <option value="other">Other</option>
+                                                </select>
+                                            </div>
+
+                                            <!-- SECTION: Physical Dimensions -->
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Length <span class="text-red-500">*</span>
+                                                    <span class="text-xs text-gray-500" x-text="unitSystem === 'metric' ? '(cm)' : '(inch)'"></span>
+                                                </label>
+                                                <input type="number" 
+                                                    x-model="item.length"
+                                                    @input="calculateCBM(item)"
+                                                    value="450" 
+                                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
+                                                    placeholder="450">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Width <span class="text-red-500">*</span>
+                                                    <span class="text-xs text-gray-500" x-text="unitSystem === 'metric' ? '(cm)' : '(inch)'"></span>
+                                                </label>
+                                                <input type="number" 
+                                                    x-model="item.width"
+                                                    @input="calculateCBM(item)"
+                                                    value="180" 
+                                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
+                                                    placeholder="180">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Height <span class="text-red-500">*</span>
+                                                    <span class="text-xs text-gray-500" x-text="unitSystem === 'metric' ? '(cm)' : '(inch)'"></span>
+                                                </label>
+                                                <input type="number" 
+                                                    x-model="item.height"
+                                                    @input="calculateCBM(item)"
+                                                    value="150" 
+                                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
+                                                    placeholder="150">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-purple-700 mb-2">
+                                                    <i class="fas fa-calculator mr-1"></i>
+                                                    <span x-text="unitSystem === 'metric' ? 'CBM (m³)' : 'Cubic Feet (ft³)'"></span>
+                                                </label>
+                                                <input type="text" 
+                                                    x-model="item.cbm" 
+                                                    readonly
+                                                    class="cbm-highlight w-full px-4 py-3 rounded-lg border-2 border-purple-400"
+                                                    placeholder="Auto-calculated">
+                                                <p class="text-xs text-purple-600 mt-1">Auto-calculated</p>
+                                            </div>
+
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Weight 
+                                                    <span class="text-xs text-gray-500" x-text="unitSystem === 'metric' ? '(kg)' : '(lbs)'"></span>
+                                                </label>
+                                                <input type="number" value="1500" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" placeholder="e.g., 1500">
+                                            </div>
+
+                                            <!-- Wheelbase - Only required for Airfreight -->
+                                            <template x-if="(item.category === 'car' || item.category === 'suv')">
+                                                <div>
+                                                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                        Wheelbase 
+                                                        <span class="text-xs text-gray-500" x-text="unitSystem === 'metric' ? '(cm)' : '(inch)'"></span>
+                                                        <span x-show="serviceType === 'AIRFREIGHT_EXPORT' || serviceType === 'AIRFREIGHT_IMPORT'" class="text-red-500">*</span>
+                                                    </label>
+                                                    <input type="number" value="270" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" placeholder="e.g., 270">
+                                                    <p class="text-xs text-gray-500 mt-1" x-show="serviceType === 'AIRFREIGHT_EXPORT' || serviceType === 'AIRFREIGHT_IMPORT'">
+                                                        <i class="fas fa-plane text-blue-500 mr-1"></i>Required for Airfreight
+                                                    </p>
+                                                </div>
+                                            </template>
+
+                                            <div class="lg:col-span-3">
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">Extra Info</label>
+                                                <textarea class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" rows="2" placeholder="Additional information..."></textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- MACHINERY Fields -->
+                                <template x-if="item.type === 'machinery'">
+                                    <div class="md:col-span-2 bg-orange-50 p-4 rounded-lg border border-orange-200">
+                                        <h5 class="font-semibold text-orange-900 mb-3">
+                                            <i class="fas fa-cog mr-2"></i>Machinery Details
+                                        </h5>
+                                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Machinery Type <span class="text-red-500">*</span>
+                                                </label>
+                                                <select class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                                    <option value="">Select Type</option>
+                                                    <option value="on_wheels">On Wheels</option>
+                                                    <option value="on_tracks" selected>On Tracks</option>
+                                                    <option value="static">Static</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">Make</label>
+                                                <input type="text" value="Caterpillar" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">Type/Model</label>
+                                                <input type="text" value="320D" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Condition <span class="text-red-500">*</span>
+                                                </label>
+                                                <select x-model="item.condition" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                                    <option value="">Select Condition</option>
+                                                    <option value="new">New</option>
+                                                    <option value="used" selected>Used</option>
+                                                    <option value="damaged">Damaged</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">Fuel Type</label>
+                                                <select class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                                    <option value="">Select Fuel</option>
+                                                    <option value="diesel" selected>Diesel</option>
+                                                    <option value="petrol">Petrol</option>
+                                                    <option value="hybrid">Hybrid</option>
+                                                    <option value="electric">Electric</option>
+                                                    <option value="other">Other</option>
+                                                </select>
+                                            </div>
+                                            
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Length <span class="text-red-500">*</span>
+                                                    <span class="text-xs text-gray-500" x-text="unitSystem === 'metric' ? '(cm)' : '(inch)'"></span>
+                                                </label>
+                                                <input type="number" 
+                                                    x-model="item.length"
+                                                    @input="calculateCBM(item)"
+                                                    value="600" 
+                                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Width <span class="text-red-500">*</span>
+                                                    <span class="text-xs text-gray-500" x-text="unitSystem === 'metric' ? '(cm)' : '(inch)'"></span>
+                                                </label>
+                                                <input type="number" 
+                                                    x-model="item.width"
+                                                    @input="calculateCBM(item)"
+                                                    value="250" 
+                                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Height <span class="text-red-500">*</span>
+                                                    <span class="text-xs text-gray-500" x-text="unitSystem === 'metric' ? '(cm)' : '(inch)'"></span>
+                                                </label>
+                                                <input type="number" 
+                                                    x-model="item.height"
+                                                    @input="calculateCBM(item)"
+                                                    value="280" 
+                                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-purple-700 mb-2">
+                                                    <i class="fas fa-calculator mr-1"></i>
+                                                    <span x-text="unitSystem === 'metric' ? 'CBM (m³)' : 'Cubic Feet (ft³)'"></span>
+                                                </label>
+                                                <input type="text" 
+                                                    x-model="item.cbm" 
+                                                    readonly
+                                                    class="cbm-highlight w-full px-4 py-3 rounded-lg border-2 border-purple-400">
+                                            </div>
+
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Weight 
+                                                    <span class="text-xs text-gray-500" x-text="unitSystem === 'metric' ? '(kg)' : '(lbs)'"></span>
+                                                </label>
+                                                <input type="number" value="3500" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                            </div>
+
+                                            <div class="lg:col-span-3 bg-orange-100 p-3 rounded-lg">
+                                                <label class="flex items-center cursor-pointer">
+                                                    <input type="checkbox" x-model="item.has_parts" class="w-5 h-5 text-orange-600 border-gray-300 rounded">
+                                                    <span class="ml-3 text-sm font-medium text-gray-700">
+                                                        <i class="fas fa-puzzle-piece mr-1"></i>Has Parts
+                                                    </span>
+                                                </label>
+                                            </div>
+
+                                            <template x-if="item.has_parts">
+                                                <div class="lg:col-span-3">
+                                                    <label class="block text-sm font-medium text-gray-700 mb-2">Parts Description</label>
+                                                    <textarea class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" rows="3">Bucket, tracks, and hydraulic components</textarea>
+                                                </div>
+                                            </template>
+
+                                            <div class="lg:col-span-3">
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">Extra Info</label>
+                                                <textarea class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" rows="2"></textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- BOAT Fields -->
+                                <template x-if="item.type === 'boat'">
+                                    <div class="md:col-span-2 bg-cyan-50 p-4 rounded-lg border border-cyan-200">
+                                        <h5 class="font-semibold text-cyan-900 mb-3">
+                                            <i class="fas fa-ship mr-2"></i>Boat Details
+                                        </h5>
+                                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Condition <span class="text-red-500">*</span>
+                                                </label>
+                                                <select x-model="item.condition" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                                    <option value="">Select Condition</option>
+                                                    <option value="new" selected>New</option>
+                                                    <option value="used">Used</option>
+                                                    <option value="damaged">Damaged</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Length <span class="text-red-500">*</span>
+                                                    <span class="text-xs text-gray-500" x-text="unitSystem === 'metric' ? '(cm)' : '(inch)'"></span>
+                                                </label>
+                                                <input type="number" 
+                                                    x-model="item.length"
+                                                    @input="calculateCBM(item)"
+                                                    value="700" 
+                                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Width <span class="text-red-500">*</span>
+                                                    <span class="text-xs text-gray-500" x-text="unitSystem === 'metric' ? '(cm)' : '(inch)'"></span>
+                                                </label>
+                                                <input type="number" 
+                                                    x-model="item.width"
+                                                    @input="calculateCBM(item)"
+                                                    value="250" 
+                                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Height <span class="text-red-500">*</span>
+                                                    <span class="text-xs text-gray-500" x-text="unitSystem === 'metric' ? '(cm)' : '(inch)'"></span>
+                                                </label>
+                                                <input type="number" 
+                                                    x-model="item.height"
+                                                    @input="calculateCBM(item)"
+                                                    value="180" 
+                                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-purple-700 mb-2">
+                                                    <i class="fas fa-calculator mr-1"></i>
+                                                    <span x-text="unitSystem === 'metric' ? 'CBM (m³)' : 'Cubic Feet (ft³)'"></span>
+                                                </label>
+                                                <input type="text" 
+                                                    x-model="item.cbm" 
+                                                    readonly
+                                                    class="cbm-highlight w-full px-4 py-3 rounded-lg border-2 border-purple-400">
+                                            </div>
+
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Weight 
+                                                    <span class="text-xs text-gray-500" x-text="unitSystem === 'metric' ? '(kg)' : '(lbs)'"></span>
+                                                </label>
+                                                <input type="number" value="2500" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                            </div>
+
+                                            <div class="lg:col-span-3 bg-cyan-100 p-3 rounded-lg space-y-2">
+                                                <label class="flex items-center cursor-pointer">
+                                                    <input type="checkbox" x-model="item.has_trailer" class="w-5 h-5 text-cyan-600 border-gray-300 rounded">
+                                                    <span class="ml-3 text-sm font-medium text-gray-700">
+                                                        <i class="fas fa-trailer mr-1"></i>With Trailer
+                                                    </span>
+                                                </label>
+                                                <label class="flex items-center cursor-pointer">
+                                                    <input type="checkbox" x-model="item.has_wooden_cradle" class="w-5 h-5 text-cyan-600 border-gray-300 rounded">
+                                                    <span class="ml-3 text-sm font-medium text-gray-700">
+                                                        <i class="fas fa-tree mr-1"></i>With Wooden Cradle
+                                                    </span>
+                                                </label>
+                                                <label class="flex items-center cursor-pointer">
+                                                    <input type="checkbox" x-model="item.has_iron_cradle" checked class="w-5 h-5 text-cyan-600 border-gray-300 rounded">
+                                                    <span class="ml-3 text-sm font-medium text-gray-700">
+                                                        <i class="fas fa-industry mr-1"></i>With Iron Cradle
+                                                    </span>
+                                                </label>
+                                            </div>
+
+                                            <div class="lg:col-span-3">
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">Extra Info</label>
+                                                <textarea class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" rows="2">Moody 28 sailboat with iron cradle</textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- GENERAL CARGO Fields -->
+                                <template x-if="item.type === 'general_cargo'">
+                                    <div class="md:col-span-2 bg-green-50 p-4 rounded-lg border border-green-200">
+                                        <h5 class="font-semibold text-green-900 mb-3">
+                                            <i class="fas fa-boxes mr-2"></i>General Cargo Details
+                                        </h5>
+                                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Cargo Type <span class="text-red-500">*</span>
+                                                </label>
+                                                <select x-model="item.category" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                                    <option value="">Select Type</option>
+                                                    <option value="palletized" selected>Palletized</option>
+                                                    <option value="loose">Loose</option>
+                                                </select>
+                                            </div>
+                                            
+                                            <div class="bg-green-100 p-3 rounded-lg space-y-2">
+                                                <!-- Hide Forkliftable when Palletized is selected -->
+                                                <template x-if="item.category !== 'palletized'">
+                                                    <label class="flex items-center cursor-pointer">
+                                                        <input type="checkbox" x-model="item.is_forkliftable" class="w-5 h-5 text-green-600 border-gray-300 rounded">
+                                                        <span class="ml-3 text-sm font-medium text-gray-700">
+                                                            <i class="fas fa-pallet mr-1"></i>Forkliftable
+                                                        </span>
+                                                    </label>
+                                                </template>
+                                                <label class="flex items-center cursor-pointer">
+                                                    <input type="checkbox" x-model="item.is_hazardous" class="w-5 h-5 text-red-600 border-gray-300 rounded">
+                                                    <span class="ml-3 text-sm font-medium text-gray-700">
+                                                        <i class="fas fa-exclamation-triangle mr-1 text-yellow-600"></i>Hazardous
+                                                    </span>
+                                                </label>
+                                                <label class="flex items-center cursor-pointer">
+                                                    <input type="checkbox" x-model="item.is_unpacked" class="w-5 h-5 text-green-600 border-gray-300 rounded">
+                                                    <span class="ml-3 text-sm font-medium text-gray-700">
+                                                        <i class="fas fa-box-open mr-1"></i>Unpacked
+                                                    </span>
+                                                </label>
+                                                <label class="flex items-center cursor-pointer">
+                                                    <input type="checkbox" x-model="item.is_ispm15" checked class="w-5 h-5 text-green-600 border-gray-300 rounded">
+                                                    <span class="ml-3 text-sm font-medium text-gray-700">
+                                                        <i class="fas fa-certificate mr-1"></i>ISPM15 Wood
+                                                    </span>
+                                                </label>
+                                            </div>
+
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Length <span class="text-red-500">*</span>
+                                                    <span class="text-xs text-gray-500" x-text="unitSystem === 'metric' ? '(cm)' : '(inch)'"></span>
+                                                </label>
+                                                <input type="number" 
+                                                    x-model="item.length"
+                                                    @input="calculateCBM(item)"
+                                                    value="120" 
+                                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Width <span class="text-red-500">*</span>
+                                                    <span class="text-xs text-gray-500" x-text="unitSystem === 'metric' ? '(cm)' : '(inch)'"></span>
+                                                </label>
+                                                <input type="number" 
+                                                    x-model="item.width"
+                                                    @input="calculateCBM(item)"
+                                                    value="80" 
+                                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Height <span class="text-red-500">*</span>
+                                                    <span class="text-xs text-gray-500" x-text="unitSystem === 'metric' ? '(cm)' : '(inch)'"></span>
+                                                </label>
+                                                <input type="number" 
+                                                    x-model="item.height"
+                                                    @input="calculateCBM(item)"
+                                                    value="100" 
+                                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-purple-700 mb-2">
+                                                    <i class="fas fa-calculator mr-1"></i>
+                                                    <span x-text="unitSystem === 'metric' ? 'CBM (m³)' : 'Cubic Feet (ft³)'"></span>
+                                                </label>
+                                                <input type="text" 
+                                                    x-model="item.cbm" 
+                                                    readonly
+                                                    class="cbm-highlight w-full px-4 py-3 rounded-lg border-2 border-purple-400">
+                                            </div>
+
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Bruto Weight <span class="text-red-500">*</span>
+                                                    <span class="text-xs text-gray-500" x-text="unitSystem === 'metric' ? '(kg)' : '(lbs)'"></span>
+                                                </label>
+                                                <input type="number" value="850" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                    Netto Weight <span class="text-red-500">*</span>
+                                                    <span class="text-xs text-gray-500" x-text="unitSystem === 'metric' ? '(kg)' : '(lbs)'"></span>
+                                                </label>
+                                                <input type="number" value="800" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                            </div>
+
+                                            <div class="lg:col-span-3">
+                                                <label class="block text-sm font-medium text-gray-700 mb-2">Extra Info</label>
+                                                <textarea class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" rows="2"></textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- Common Fields (Quantity) -->
+                                <template x-if="item.type">
+                                    <div class="md:col-span-2 border-t pt-4 mt-2">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                Quantity <span class="text-red-500">*</span>
+                                            </label>
+                                            <input type="number" value="1" min="1" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Empty State -->
+                    <template x-if="items.length === 0">
+                        <div class="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-300">
+                            <i class="fas fa-inbox text-gray-400 text-5xl mb-4"></i>
+                            <p class="text-gray-600 text-lg mb-4">No commodity items added yet</p>
+                            <button 
+                                @click="addItem()" 
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">
+                                <i class="fas fa-plus mr-2"></i>Add Your First Item
+                            </button>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Complete Specification Summary -->
+        <div class="mt-6 bg-gradient-to-r from-purple-50 to-pink-50 border-l-4 border-purple-600 p-6 rounded-r-lg">
+            <h3 class="font-semibold text-purple-900 mb-3">
+                <i class="fas fa-check-double mr-2"></i>✨ Complete Specification - All Features
+            </h3>
+            <div class="grid md:grid-cols-3 gap-4 text-sm text-purple-800">
+                <ul class="space-y-2">
+                    <li><i class="fas fa-calculator text-purple-600 mr-2"></i><strong>CBM Auto-Calc:</strong> Real-time volume calculation</li>
+                    <li><i class="fas fa-ruler text-blue-600 mr-2"></i><strong>Unit Toggle:</strong> Metric ⟺ US format</li>
+                    <li><i class="fas fa-plane text-cyan-600 mr-2"></i><strong>Smart Wheelbase:</strong> Only for Airfreight</li>
+                </ul>
+                <ul class="space-y-2">
+                    <li><i class="fas fa-weight text-green-600 mr-2"></i><strong>Dual Weight:</strong> Bruto & Netto for cargo</li>
+                    <li><i class="fas fa-industry text-cyan-600 mr-2"></i><strong>Cradle Types:</strong> Wooden & Iron checkboxes</li>
+                    <li><i class="fas fa-cog text-orange-600 mr-2"></i><strong>Hybrid Fuel:</strong> Added for machinery</li>
+                </ul>
+                <ul class="space-y-2">
+                    <li><i class="fas fa-ruler-combined text-blue-600 mr-2"></i><strong>L x W x H:</strong> Standardized format</li>
+                    <li><i class="fas fa-sync text-green-600 mr-2"></i><strong>Auto-Convert:</strong> All to metric for Robaws</li>
+                    <li><i class="fas fa-rocket text-purple-600 mr-2"></i><strong>Status:</strong> Ready to implement!</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function commodityForm() {
+            return {
+                serviceType: 'RORO_EXPORT',
+                unitSystem: 'metric',
+                previousUnitSystem: 'metric',
+                items: [
+                    { type: 'vehicles', category: 'car', condition: 'used', length: 450, width: 180, height: 150, cbm: '', has_parts: false, has_trailer: false, has_wooden_cradle: false, has_iron_cradle: false, is_forkliftable: false, is_hazardous: false, is_unpacked: false, is_ispm15: false },
+                    { type: 'machinery', category: 'on_tracks', condition: 'used', length: 600, width: 250, height: 280, cbm: '', has_parts: true, has_trailer: false, has_wooden_cradle: false, has_iron_cradle: false, is_forkliftable: false, is_hazardous: false, is_unpacked: false, is_ispm15: false },
+                    { type: 'boat', category: '', condition: 'new', length: 700, width: 250, height: 180, cbm: '', has_parts: false, has_trailer: false, has_wooden_cradle: false, has_iron_cradle: true, is_forkliftable: false, is_hazardous: false, is_unpacked: false, is_ispm15: false },
+                    { type: 'general_cargo', category: 'palletized', condition: '', length: 120, width: 80, height: 100, cbm: '', has_parts: false, has_trailer: false, has_wooden_cradle: false, has_iron_cradle: false, is_forkliftable: false, is_hazardous: false, is_unpacked: false, is_ispm15: true }
+                ],
+                init() {
+                    // Calculate initial CBM values
+                    this.items.forEach(item => {
+                        if (item.length && item.width && item.height) {
+                            this.calculateCBM(item);
+                        }
+                    });
+                    
+                    // Watch for unit system changes
+                    this.$watch('unitSystem', (newValue, oldValue) => {
+                        if (newValue !== oldValue) {
+                            this.convertAllDimensions(oldValue, newValue);
+                        }
+                    });
+                },
+                addItem() {
+                    this.items.push({ 
+                        type: '', 
+                        category: '', 
+                        condition: '',
+                        length: '',
+                        width: '',
+                        height: '',
+                        cbm: '',
+                        has_parts: false, 
+                        has_trailer: false, 
+                        has_wooden_cradle: false,
+                        has_iron_cradle: false,
+                        is_forkliftable: false,
+                        is_hazardous: false,
+                        is_unpacked: false,
+                        is_ispm15: false
+                    });
+                },
+                removeItem(index) {
+                    this.items.splice(index, 1);
+                },
+                calculateCBM(item) {
+                    // Use separate L/W/H fields
+                    const length = parseFloat(item.length);
+                    const width = parseFloat(item.width);
+                    const height = parseFloat(item.height);
+                    
+                    if (!isNaN(length) && !isNaN(width) && !isNaN(height) && length > 0 && width > 0 && height > 0) {
+                        if (this.unitSystem === 'us') {
+                            // Calculate Cubic Feet (dimensions in inches)
+                            const cuft = (length / 12) * (width / 12) * (height / 12);
+                            item.cbm = cuft.toFixed(2) + ' ft³';
+                        } else {
+                            // Calculate CBM (dimensions in cm)
+                            const cbm = (length / 100) * (width / 100) * (height / 100);
+                            item.cbm = cbm.toFixed(2) + ' m³';
+                        }
+                    } else {
+                        item.cbm = '';
+                    }
+                },
+                convertAllDimensions(fromSystem, toSystem) {
+                    // Convert all item dimensions when unit system changes
+                    this.items.forEach(item => {
+                        if (!item.length || !item.width || !item.height) return;
+                        
+                        let length = parseFloat(item.length);
+                        let width = parseFloat(item.width);
+                        let height = parseFloat(item.height);
+                        
+                        if (!isNaN(length) && !isNaN(width) && !isNaN(height)) {
+                            if (fromSystem === 'metric' && toSystem === 'us') {
+                                // Convert cm to inches
+                                item.length = (length / 2.54).toFixed(1);
+                                item.width = (width / 2.54).toFixed(1);
+                                item.height = (height / 2.54).toFixed(1);
+                            } else if (fromSystem === 'us' && toSystem === 'metric') {
+                                // Convert inches to cm
+                                item.length = (length * 2.54).toFixed(0);
+                                item.width = (width * 2.54).toFixed(0);
+                                item.height = (height * 2.54).toFixed(0);
+                            }
+                            
+                            this.calculateCBM(item);
+                        }
+                    });
+                }
+            }
+        }
+    </script>
+</body>
+</html>
