@@ -136,7 +136,7 @@ return [
             'requires_schedule' => false,
         ],
         'FCL_EXPORT_CONSOL' => [
-            'name' => 'FCL Export Consol',
+            'name' => 'FCL Export Vehicle Consol',
             'direction' => 'EXPORT',
             'unit' => 'per car',
             'quantity_tiers' => [2, 3], // 2-pack or 3-pack only
@@ -144,7 +144,7 @@ return [
             'has_formula_pricing' => true, // Ocean freight formula
         ],
         'FCL_IMPORT_CONSOL' => [
-            'name' => 'FCL Import Consol',
+            'name' => 'FCL Import Vehicle Consol',
             'direction' => 'IMPORT',
             'unit' => 'per car',
             'quantity_tiers' => [2, 3], // 2-pack or 3-pack only
