@@ -20,7 +20,7 @@
         <!-- Form -->
         <div class="bg-white rounded-lg shadow-xl overflow-hidden">
             <form action="{{ route('public.quotations.store') }}" method="POST" enctype="multipart/form-data" 
-                  x-data="quotationForm()" @submit="validateForm">
+                  x-data="{ quotationMode: 'detailed', ...quotationForm() }" @submit="validateForm">
                 @csrf
                 
                 <!-- Contact Information -->
@@ -200,22 +200,49 @@
 
                 <!-- Cargo Information -->
                 <div class="p-8 border-b">
-                    <div class="flex items-center justify-between mb-6">
-                        <h2 class="text-2xl font-bold text-gray-900">
-                            <i class="fas fa-box mr-2"></i>Cargo Information
-                        </h2>
-                        <span class="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-sm font-medium">
-                            Quick Quote Option
-                        </span>
-                    </div>
-                    <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
-                        <p class="text-sm text-blue-800">
-                            <i class="fas fa-info-circle mr-2"></i>
-                            <strong>Quick quote:</strong> Fill basic cargo info here, 
-                            <strong>OR</strong> use the detailed commodity items section below for more accurate pricing.
-                        </p>
+                    <h2 class="text-2xl font-bold text-gray-900 mb-6">
+                        <i class="fas fa-box mr-2"></i>Cargo Information
+                    </h2>
+                    
+                    <!-- Toggle Between Quick Quote and Detailed Quote -->
+                    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg border-2 border-blue-200 mb-6">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                            <i class="fas fa-exchange-alt mr-2 text-blue-600"></i>Choose Your Input Method
+                        </h3>
+                        
+                        <div class="space-y-3">
+                            <!-- Quick Quote Option -->
+                            <label class="flex items-start p-4 border-2 rounded-lg cursor-pointer transition-all"
+                                   :class="quotationMode === 'quick' ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-white hover:border-blue-300'">
+                                <input type="radio" x-model="quotationMode" value="quick" class="mt-1 mr-3 w-5 h-5 text-blue-600">
+                                <div class="flex-1">
+                                    <div class="font-semibold text-gray-900">
+                                        <i class="fas fa-bolt text-yellow-500 mr-2"></i>Quick Quote
+                                    </div>
+                                    <p class="text-sm text-gray-600 mt-1">Fast entry for simple shipments with basic cargo details</p>
+                                </div>
+                            </label>
+                            
+                            <!-- Detailed Quote Option -->
+                            <label class="flex items-start p-4 border-2 rounded-lg cursor-pointer transition-all"
+                                   :class="quotationMode === 'detailed' ? 'border-green-500 bg-green-50' : 'border-gray-300 bg-white hover:border-green-300'">
+                                <input type="radio" x-model="quotationMode" value="detailed" class="mt-1 mr-3 w-5 h-5 text-green-600">
+                                <div class="flex-1">
+                                    <div class="font-semibold text-gray-900">
+                                        <i class="fas fa-cubes text-green-600 mr-2"></i>Detailed Quote
+                                        <span class="ml-2 bg-green-500 text-white px-2 py-0.5 rounded-full text-xs font-semibold">RECOMMENDED</span>
+                                    </div>
+                                    <p class="text-sm text-gray-600 mt-1">Multi-commodity breakdown for most accurate pricing and faster processing</p>
+                                </div>
+                            </label>
+                        </div>
                     </div>
                     
+                    <!-- Hidden field to track mode -->
+                    <input type="hidden" name="quotation_mode" :value="quotationMode">
+                    
+                    <!-- Quick Quote Form -->
+                    <div x-show="quotationMode === 'quick'" x-cloak>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="md:col-span-2">
                             <label for="cargo_description" class="block text-sm font-medium text-gray-700 mb-2">
@@ -298,24 +325,12 @@
                             <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
                         @enderror
                     </div>
+                    </div>
+                    <!-- End Quick Quote Form -->
                 </div>
 
-                <!-- Multi-Commodity Items (New System) -->
-                <div class="p-8 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
-                    <div class="flex items-center justify-between mb-6">
-                        <div>
-                            <h2 class="text-2xl font-bold text-gray-900">
-                                <i class="fas fa-cubes mr-2 text-blue-600"></i>Detailed Commodity Items
-                                <span class="ml-3 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold uppercase">
-                                    Recommended
-                                </span>
-                            </h2>
-                            <p class="text-sm text-gray-600 mt-2">
-                                Add detailed information for each item you're shipping for the most accurate quotes and faster processing
-                            </p>
-                        </div>
-                    </div>
-                    
+                <!-- Detailed Quote Form (Multi-Commodity Items) -->
+                <div x-show="quotationMode === 'detailed'" x-cloak class="p-8 border-b">
                     @livewire('commodity-items-repeater', [
                         'existingItems' => old('commodity_items') ? json_decode(old('commodity_items'), true) : [],
                         'serviceType' => old('service_type', $prefill['service_type'] ?? ''),
