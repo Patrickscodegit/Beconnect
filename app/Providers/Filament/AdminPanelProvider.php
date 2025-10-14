@@ -42,6 +42,12 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Widgets\ArticleSyncWidget::class,
                 Widgets\AccountWidget::class,
             ])
+            ->userMenuItems([
+                'customer-portal' => \Filament\Navigation\MenuItem::make()
+                    ->label('Customer Portal')
+                    ->url(fn () => route('customer.dashboard'))
+                    ->icon('heroicon-o-arrow-left-circle'),
+            ])
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
