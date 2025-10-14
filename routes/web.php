@@ -9,9 +9,7 @@ use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\PublicScheduleController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+Route::get('/', [App\Http\Controllers\HomeController::class, 'index'])->name('home');
 
 // Public Schedule Routes (no authentication required)
 Route::prefix('public/schedules')->name('public.schedules.')->group(function () {

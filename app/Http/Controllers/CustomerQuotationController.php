@@ -39,14 +39,13 @@ class CustomerQuotationController extends Controller
     {
         $user = auth()->user();
         
-        // Get filter options
-        $polPorts = Port::active()->orderBy('name')->get();
-        $podPorts = Port::active()->orderBy('name')->get();
+        // Get filter options (unified port system)
+        $polPorts = Port::europeanOrigins()->orderBy('name')->get();
+        // POD: Only ports with active schedules (prevents empty results)
+        $podPorts = Port::withActivePodSchedules()->orderBy('name')->get();
         $carriers = ShippingCarrier::where('is_active', true)->orderBy('name')->get();
         
         $serviceTypes = config('quotation.service_types', []);
-        $customerRoles = config('quotation.customer_roles', []);
-        $customerTypes = config('quotation.customer_types', []);
         
         // Pre-fill from URL parameters (from schedule page)
         $prefill = [
@@ -59,13 +58,21 @@ class CustomerQuotationController extends Controller
             'contact_email' => $user->email,
         ];
         
+        // Format ports for display with country
+        $polPortsFormatted = $polPorts->mapWithKeys(function ($port) {
+            return [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country];
+        });
+        $podPortsFormatted = $podPorts->mapWithKeys(function ($port) {
+            return [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country];
+        });
+
         return view('customer.quotations.create', compact(
             'polPorts',
             'podPorts',
+            'polPortsFormatted',
+            'podPortsFormatted',
             'carriers',
             'serviceTypes',
-            'customerRoles',
-            'customerTypes',
             'prefill',
             'user'
         ));
@@ -155,8 +162,6 @@ class CustomerQuotationController extends Controller
             // Service Information
             'service_type' => 'required|string|in:' . implode(',', array_keys(config('quotation.service_types', []))),
             'trade_direction' => 'required|string|in:import,export',
-            'customer_type' => 'required|string|in:' . implode(',', array_keys(config('quotation.customer_types', []))),
-            'customer_role' => 'required|string|in:' . implode(',', array_keys(config('quotation.customer_roles', []))),
             
             // Cargo Information
             'cargo_description' => 'required|string|max:1000',
@@ -213,8 +218,8 @@ class CustomerQuotationController extends Controller
             // Service
             'service_type' => $request->service_type,
             'trade_direction' => $request->trade_direction,
-            'customer_type' => $request->customer_type,
-            'customer_role' => $request->customer_role,
+            'customer_type' => 'GENERAL', // Set by Belgaco team in admin panel
+            'customer_role' => 'CONSIGNEE', // Set by Belgaco team in admin panel
             
             // Cargo
             'cargo_description' => $request->cargo_description,

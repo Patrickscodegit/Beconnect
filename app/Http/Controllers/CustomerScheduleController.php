@@ -61,13 +61,13 @@ class CustomerScheduleController extends Controller
         // Apply filters
         if ($request->filled('pol')) {
             $query->whereHas('polPort', function($q) use ($request) {
-                $q->where('name', 'like', '%' . $request->pol . '%');
+                $q->where('code', $request->pol);
             });
         }
 
         if ($request->filled('pod')) {
             $query->whereHas('podPort', function($q) use ($request) {
-                $q->where('name', 'like', '%' . $request->pod . '%');
+                $q->where('code', $request->pod);
             });
         }
 
@@ -86,11 +86,19 @@ class CustomerScheduleController extends Controller
             ->paginate(12)
             ->appends($request->query());
 
-        // Get filter options
-        $polPorts = Port::active()->orderBy('name')->get();
-        $podPorts = Port::active()->orderBy('name')->get();
+        // Get filter options (unified port system)
+        $polPorts = Port::europeanOrigins()->orderBy('name')->get();
+        $podPorts = Port::withActivePodSchedules()->orderBy('name')->get();
         $carriers = ShippingCarrier::where('is_active', true)->orderBy('name')->get();
         $serviceTypes = config('quotation.service_types', []);
+
+        // Format ports for display with country
+        $polPortsFormatted = $polPorts->mapWithKeys(function ($port) {
+            return [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country];
+        });
+        $podPortsFormatted = $podPorts->mapWithKeys(function ($port) {
+            return [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country];
+        });
 
         // Create filters array for the view
         $filters = [
@@ -100,7 +108,7 @@ class CustomerScheduleController extends Controller
             'service_type' => $request->get('service_type'),
         ];
 
-        return compact('schedules', 'polPorts', 'podPorts', 'carriers', 'serviceTypes', 'request', 'filters');
+        return compact('schedules', 'polPorts', 'podPorts', 'polPortsFormatted', 'podPortsFormatted', 'carriers', 'serviceTypes', 'request', 'filters');
     }
 }
 

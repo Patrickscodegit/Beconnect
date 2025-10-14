@@ -24,9 +24,9 @@
                         <select name="pol" id="pol" 
                                 class="w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500">
                             <option value="">All Ports</option>
-                            @foreach($polPorts as $port)
-                                <option value="{{ $port->code }}" {{ $filters['pol'] == $port->code ? 'selected' : '' }}>
-                                    {{ $port->name }} ({{ $port->code }})
+                            @foreach($polPortsFormatted as $name => $displayName)
+                                <option value="{{ $polPorts->where('name', $name)->first()->code }}" {{ $filters['pol'] == $polPorts->where('name', $name)->first()->code ? 'selected' : '' }}>
+                                    {{ $displayName }}
                                 </option>
                             @endforeach
                         </select>
@@ -40,9 +40,9 @@
                         <select name="pod" id="pod" 
                                 class="w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500">
                             <option value="">All Ports</option>
-                            @foreach($podPorts as $port)
-                                <option value="{{ $port->code }}" {{ $filters['pod'] == $port->code ? 'selected' : '' }}>
-                                    {{ $port->name }} ({{ $port->code }})
+                            @foreach($podPortsFormatted as $name => $displayName)
+                                <option value="{{ $podPorts->where('name', $name)->first()->code }}" {{ $filters['pod'] == $podPorts->where('name', $name)->first()->code ? 'selected' : '' }}>
+                                    {{ $displayName }}
                                 </option>
                             @endforeach
                         </select>
@@ -102,7 +102,7 @@
             <!-- Schedule Cards -->
             <div class="space-y-4">
                 @foreach($schedules as $schedule)
-                    <x-schedule-card :schedule="$schedule" />
+                    <x-public-schedule-card :schedule="$schedule" />
                 @endforeach
             </div>
 
@@ -132,7 +132,7 @@
                 <h2 class="text-2xl font-bold text-gray-900">Need a Custom Quote?</h2>
                 <p class="mt-2 text-gray-600">Get personalized pricing for your specific shipping needs.</p>
                 <div class="mt-6">
-                    <a href="#" 
+                    <a href="{{ route('public.quotations.create') }}" 
                        class="inline-flex items-center px-6 py-3 bg-amber-600 border border-transparent rounded-md font-semibold text-sm text-white uppercase tracking-widest hover:bg-amber-500 focus:bg-amber-500 active:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 transition ease-in-out duration-150">
                         Request Quotation
                     </a>

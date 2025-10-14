@@ -21,6 +21,9 @@ class Port extends Model
 
     protected $casts = [
         'is_active' => 'boolean',
+        'shipping_codes' => 'array',
+        'is_european_origin' => 'boolean',
+        'is_african_destination' => 'boolean',
     ];
 
     public function polSchedules(): HasMany
@@ -51,5 +54,44 @@ class Port extends Model
     public function scopeByCode($query, string $code)
     {
         return $query->where('code', $code);
+    }
+
+    public function scopeEuropeanOrigins($query)
+    {
+        return $query->where('is_european_origin', true)->where('is_active', true);
+    }
+
+    public function scopeAfricanDestinations($query)
+    {
+        return $query->where('is_african_destination', true)->where('is_active', true);
+    }
+
+    public function scopeForPol($query)
+    {
+        return $query->whereIn('port_type', ['pol', 'both'])->where('is_active', true);
+    }
+
+    public function scopeForPod($query)
+    {
+        return $query->whereIn('port_type', ['pod', 'both'])->where('is_active', true);
+    }
+
+    public function scopeWithActivePodSchedules($query)
+    {
+        return $query->whereHas('podSchedules', function($q) {
+            $q->where('is_active', true);
+        })->where('is_active', true);
+    }
+
+    public function scopeWithActivePolSchedules($query)
+    {
+        return $query->whereHas('polSchedules', function($q) {
+            $q->where('is_active', true);
+        })->where('is_active', true);
+    }
+
+    public function getFullNameAttribute(): string
+    {
+        return $this->name . ($this->country ? ', ' . $this->country : '');
     }
 }

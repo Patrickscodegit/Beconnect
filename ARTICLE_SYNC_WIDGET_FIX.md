@@ -157,3 +157,5 @@ protected $casts = [
 
 **Status**: ✅ FIXED - Widget error resolved, correct column used, proper Carbon casting
 
+
+

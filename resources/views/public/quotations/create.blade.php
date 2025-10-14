@@ -111,10 +111,10 @@
                             <select id="pol" name="pol" required
                                     class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
                                 <option value="">Select POL</option>
-                                @foreach($polPorts as $port)
-                                    <option value="{{ $port->name }}" 
-                                            {{ old('pol', $prefill['pol'] ?? '') == $port->name ? 'selected' : '' }}>
-                                        {{ $port->name }} ({{ $port->code }})
+                                @foreach($polPortsFormatted as $name => $displayName)
+                                    <option value="{{ $name }}" 
+                                            {{ old('pol', $prefill['pol'] ?? '') == $name ? 'selected' : '' }}>
+                                        {{ $displayName }}
                                     </option>
                                 @endforeach
                             </select>
@@ -130,10 +130,10 @@
                             <select id="pod" name="pod" required
                                     class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
                                 <option value="">Select POD</option>
-                                @foreach($podPorts as $port)
-                                    <option value="{{ $port->name }}" 
-                                            {{ old('pod', $prefill['pod'] ?? '') == $port->name ? 'selected' : '' }}>
-                                        {{ $port->name }} ({{ $port->code }})
+                                @foreach($podPortsFormatted as $name => $displayName)
+                                    <option value="{{ $name }}" 
+                                            {{ old('pod', $prefill['pod'] ?? '') == $name ? 'selected' : '' }}>
+                                        {{ $displayName }}
                                     </option>
                                 @endforeach
                             </select>
@@ -194,42 +194,6 @@
                                 <option value="import" {{ old('trade_direction') == 'import' ? 'selected' : '' }}>Import</option>
                             </select>
                             @error('trade_direction')
-                                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
-                            @enderror
-                        </div>
-                        
-                        <div>
-                            <label for="customer_type" class="block text-sm font-medium text-gray-700 mb-2">
-                                Customer Type <span class="text-red-500">*</span>
-                            </label>
-                            <select id="customer_type" name="customer_type" required
-                                    class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                                <option value="">Select Type</option>
-                                @foreach($customerTypes as $key => $label)
-                                    <option value="{{ $key }}" {{ old('customer_type') == $key ? 'selected' : '' }}>
-                                        {{ $label }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            @error('customer_type')
-                                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
-                            @enderror
-                        </div>
-                        
-                        <div>
-                            <label for="customer_role" class="block text-sm font-medium text-gray-700 mb-2">
-                                Your Role <span class="text-red-500">*</span>
-                            </label>
-                            <select id="customer_role" name="customer_role" required
-                                    class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                                <option value="">Select Role</option>
-                                @foreach($customerRoles as $key => $label)
-                                    <option value="{{ $key }}" {{ old('customer_role') == $key ? 'selected' : '' }}>
-                                        {{ $label }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            @error('customer_role')
                                 <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
                             @enderror
                         </div>

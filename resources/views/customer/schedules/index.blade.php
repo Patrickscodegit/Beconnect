@@ -14,7 +14,7 @@
 
         <!-- Filters -->
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-            <form method="GET" action="{{ route('public.schedules.index') }}" class="space-y-4">
+            <form method="GET" action="{{ route('customer.schedules.index') }}" class="space-y-4">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <!-- POL Filter -->
                     <div>
@@ -24,9 +24,9 @@
                         <select name="pol" id="pol" 
                                 class="w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500">
                             <option value="">All Ports</option>
-                            @foreach($polPorts as $port)
-                                <option value="{{ $port->code }}" {{ ($filters['pol'] ?? '') == $port->code ? 'selected' : '' }}>
-                                    {{ $port->name }} ({{ $port->code }})
+                            @foreach($polPortsFormatted as $name => $displayName)
+                                <option value="{{ $polPorts->where('name', $name)->first()->code }}" {{ ($filters['pol'] ?? '') == $polPorts->where('name', $name)->first()->code ? 'selected' : '' }}>
+                                    {{ $displayName }}
                                 </option>
                             @endforeach
                         </select>
@@ -40,9 +40,9 @@
                         <select name="pod" id="pod" 
                                 class="w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500">
                             <option value="">All Ports</option>
-                            @foreach($podPorts as $port)
-                                <option value="{{ $port->code }}" {{ ($filters['pod'] ?? '') == $port->code ? 'selected' : '' }}>
-                                    {{ $port->name }} ({{ $port->code }})
+                            @foreach($podPortsFormatted as $name => $displayName)
+                                <option value="{{ $podPorts->where('name', $name)->first()->code }}" {{ ($filters['pod'] ?? '') == $podPorts->where('name', $name)->first()->code ? 'selected' : '' }}>
+                                    {{ $displayName }}
                                 </option>
                             @endforeach
                         </select>

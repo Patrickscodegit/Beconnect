@@ -21,9 +21,20 @@
                         </span>
                     </div>
                     @if($schedule->carrier->service_types)
-                        @foreach($schedule->carrier->service_types as $serviceType)
+                        @php
+                            $serviceTypes = is_array($schedule->carrier->service_types) 
+                                ? $schedule->carrier->service_types 
+                                : (is_string($schedule->carrier->service_types) ? [$schedule->carrier->service_types] : []);
+                        @endphp
+                        @foreach($serviceTypes as $serviceType)
+                            @php
+                                // Handle nested arrays with 'name' key (from config)
+                                $displayName = is_array($serviceType) && isset($serviceType['name']) 
+                                    ? $serviceType['name'] 
+                                    : (is_string($serviceType) ? str_replace('_', ' ', $serviceType) : '');
+                            @endphp
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                {{ $serviceType }}
+                                {{ $displayName }}
                             </span>
                         @endforeach
                     @endif

@@ -175,7 +175,7 @@ class QuotationRequestResource extends Resource
                         Forms\Components\Select::make('pod')
                             ->label('Port of Discharge (POD)')
                             ->options(function () {
-                                return \App\Models\Port::active()
+                                return \App\Models\Port::withActivePodSchedules()
                                     ->orderBy('name')
                                     ->get()
                                     ->mapWithKeys(function ($port) {

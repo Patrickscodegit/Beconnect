@@ -63,6 +63,12 @@
                          x-cloak
                          class="origin-top-right absolute right-0 mt-48 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5">
                         <div class="py-1">
+                            @if(auth()->user()->email === 'patrick@belgaco.be' || (auth()->user()->is_admin ?? false))
+                                <a href="{{ url('/admin') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 font-medium">
+                                    <i class="fas fa-tools mr-2"></i>Admin Panel
+                                </a>
+                                <div class="border-t border-gray-200"></div>
+                            @endif
                             <a href="{{ route('customer.quotations.create') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                                 <i class="fas fa-plus mr-2"></i>New Quotation
                             </a>

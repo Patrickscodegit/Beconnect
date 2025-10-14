@@ -205,3 +205,5 @@ php artisan view:clear
 
 **Result**: Users now see the appropriate schedules page based on their authentication status, maintaining context and branding throughout their journey! 🎉
 
+
+

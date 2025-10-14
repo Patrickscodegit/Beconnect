@@ -42,13 +42,5 @@ class ShippingCarrier extends Model
         return in_array($serviceType, $this->service_types ?? []);
     }
 
-    public function getSpecializationAttribute($value)
-    {
-        return is_string($value) ? json_decode($value, true) : $value;
-    }
 
-    public function getServiceTypesAttribute($value)
-    {
-        return is_string($value) ? json_decode($value, true) : $value;
-    }
 }
