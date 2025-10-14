@@ -22,7 +22,9 @@
 
         {{-- Make --}}
         <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">Make</label>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+                Make <span class="text-red-500">*</span>
+            </label>
             <input type="text" 
                 wire:model="items.{{ $index }}.make"
                 class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
@@ -31,7 +33,9 @@
 
         {{-- Type/Model --}}
         <div class="lg:col-span-2">
-            <label class="block text-sm font-medium text-gray-700 mb-2">Type/Model</label>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+                Type/Model <span class="text-red-500">*</span>
+            </label>
             <input type="text" 
                 wire:model="items.{{ $index }}.type_model"
                 class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 

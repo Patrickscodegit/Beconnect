@@ -263,12 +263,14 @@ class QuotationRequestResource extends Resource
                                     
                                 Forms\Components\TextInput::make('make')
                                     ->label('Make')
-                                    ->visible(fn (Forms\Get $get) => in_array($get('commodity_type'), ['vehicles', 'machinery']))
+                                    ->required(fn (Forms\Get $get) => in_array($get('commodity_type'), ['vehicles', 'machinery', 'boat']))
+                                    ->visible(fn (Forms\Get $get) => in_array($get('commodity_type'), ['vehicles', 'machinery', 'boat']))
                                     ->columnSpan(1),
                                     
                                 Forms\Components\TextInput::make('type_model')
                                     ->label('Type/Model')
-                                    ->visible(fn (Forms\Get $get) => in_array($get('commodity_type'), ['vehicles', 'machinery']))
+                                    ->required(fn (Forms\Get $get) => in_array($get('commodity_type'), ['vehicles', 'machinery', 'boat']))
+                                    ->visible(fn (Forms\Get $get) => in_array($get('commodity_type'), ['vehicles', 'machinery', 'boat']))
                                     ->columnSpan(1),
                                     
                                 Forms\Components\Select::make('condition')
