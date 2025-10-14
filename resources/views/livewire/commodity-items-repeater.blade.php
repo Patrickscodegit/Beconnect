@@ -68,7 +68,7 @@
                                     class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
                                     <option value="">Select Type</option>
                                     @foreach($commodityTypes as $key => $config)
-                                        <option value="{{ $key }}">{{ $config['icon'] }} {{ $config['name'] }}</option>
+                                        <option value="{{ $key }}">{{ $config['name'] }}</option>
                                     @endforeach
                                 </select>
                             </div>
