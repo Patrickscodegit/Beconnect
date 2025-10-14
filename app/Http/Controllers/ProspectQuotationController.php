@@ -168,7 +168,6 @@ class ProspectQuotationController extends Controller
             
             // Service Information
             'service_type' => 'required|string|in:' . implode(',', array_keys(config('quotation.service_types', []))),
-            'trade_direction' => 'required|string|in:import,export',
             
             // Cargo Information
             'cargo_description' => 'required|string|max:1000',
@@ -233,7 +232,7 @@ class ProspectQuotationController extends Controller
             
             // Service
             'service_type' => $request->service_type,
-            'trade_direction' => $request->trade_direction,
+            'trade_direction' => $this->getDirectionFromServiceType($request->service_type),
             'customer_type' => 'GENERAL', // Set by Belgaco team in admin panel
             'customer_role' => 'CONSIGNEE', // Set by Belgaco team in admin panel
             
@@ -288,5 +287,23 @@ class ProspectQuotationController extends Controller
                 ]);
             }
         }
+    }
+
+    /**
+     * Derive trade direction from service type
+     */
+    private function getDirectionFromServiceType(string $serviceType): string
+    {
+        if (str_contains($serviceType, '_EXPORT')) {
+            return 'export';
+        }
+        if (str_contains($serviceType, '_IMPORT')) {
+            return 'import';
+        }
+        if ($serviceType === 'CROSSTRADE') {
+            return 'cross_trade';
+        }
+        // For ROAD_TRANSPORT, CUSTOMS, PORT_FORWARDING, OTHER
+        return 'both';
     }
 }

@@ -182,21 +182,6 @@
                                 <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
                             @enderror
                         </div>
-                        
-                        <div>
-                            <label for="trade_direction" class="block text-sm font-medium text-gray-700 mb-2">
-                                Trade Direction <span class="text-red-500">*</span>
-                            </label>
-                            <select id="trade_direction" name="trade_direction" required
-                                    class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                                <option value="">Select Direction</option>
-                                <option value="export" {{ old('trade_direction') == 'export' ? 'selected' : '' }}>Export</option>
-                                <option value="import" {{ old('trade_direction') == 'import' ? 'selected' : '' }}>Import</option>
-                            </select>
-                            @error('trade_direction')
-                                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
-                            @enderror
-                        </div>
                     </div>
                 </div>
 

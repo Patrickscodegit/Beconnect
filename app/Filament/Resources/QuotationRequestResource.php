@@ -119,7 +119,16 @@ class QuotationRequestResource extends Resource
                             ->default('admin')
                             ->dehydrated(),
                         Forms\Components\Hidden::make('trade_direction')
-                            ->default('export')
+                            ->afterStateHydrated(function ($component, $state, $get) {
+                                // Auto-calculate from service_type if not set
+                                if (!$state && $get('service_type')) {
+                                    $component->state(self::getDirectionFromServiceType($get('service_type')));
+                                }
+                            })
+                            ->dehydrateStateUsing(function ($state, $get) {
+                                // Always derive from service_type
+                                return self::getDirectionFromServiceType($get('service_type') ?? '');
+                            })
                             ->dehydrated(),
                         Forms\Components\Hidden::make('robaws_sync_status')
                             ->default('pending')
@@ -616,6 +625,24 @@ class QuotationRequestResource extends Resource
     public static function getNavigationBadgeColor(): ?string
     {
         return 'warning';
+    }
+
+    /**
+     * Derive trade direction from service type
+     */
+    public static function getDirectionFromServiceType(string $serviceType): string
+    {
+        if (str_contains($serviceType, '_EXPORT')) {
+            return 'export';
+        }
+        if (str_contains($serviceType, '_IMPORT')) {
+            return 'import';
+        }
+        if ($serviceType === 'CROSSTRADE') {
+            return 'cross_trade';
+        }
+        // For ROAD_TRANSPORT, CUSTOMS, PORT_FORWARDING, OTHER
+        return 'both';
     }
     
 }
