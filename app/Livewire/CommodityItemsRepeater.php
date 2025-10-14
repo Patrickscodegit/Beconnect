@@ -16,6 +16,19 @@ class CommodityItemsRepeater extends Component
     public $unitSystems;
     
     protected $listeners = ['serviceTypeUpdated' => 'updateServiceType'];
+    
+    protected $validationAttributes = [
+        'items.*.commodity_type' => 'commodity type',
+        'items.*.category' => 'category',
+        'items.*.make' => 'make',
+        'items.*.type_model' => 'type/model',
+        'items.*.condition' => 'condition',
+        'items.*.fuel_type' => 'fuel type',
+        'items.*.length_cm' => 'length',
+        'items.*.width_cm' => 'width',
+        'items.*.height_cm' => 'height',
+        'items.*.quantity' => 'quantity',
+    ];
 
     public function mount($existingItems = [], $serviceType = '', $unitSystem = 'metric')
     {
@@ -195,6 +208,62 @@ class CommodityItemsRepeater extends Component
         }
         
         return $processedItems;
+    }
+
+    public function validateItems()
+    {
+        $rules = [];
+        $messages = [];
+        
+        foreach ($this->items as $index => $item) {
+            $commodityType = $item['commodity_type'] ?? '';
+            
+            // Base rules for all types
+            $rules["items.{$index}.commodity_type"] = 'required';
+            $rules["items.{$index}.quantity"] = 'required|integer|min:1';
+            
+            // Vehicle, Machinery, Boat specific
+            if (in_array($commodityType, ['vehicles', 'machinery', 'boat'])) {
+                $rules["items.{$index}.make"] = 'required';
+                $rules["items.{$index}.type_model"] = 'required';
+                $rules["items.{$index}.condition"] = 'required';
+                $rules["items.{$index}.length_cm"] = 'required|numeric|min:1';
+                $rules["items.{$index}.width_cm"] = 'required|numeric|min:1';
+                $rules["items.{$index}.height_cm"] = 'required|numeric|min:1';
+            }
+            
+            // Vehicle specific
+            if ($commodityType === 'vehicles') {
+                $rules["items.{$index}.category"] = 'required';
+                $rules["items.{$index}.fuel_type"] = 'required';
+            }
+            
+            // Machinery specific
+            if ($commodityType === 'machinery') {
+                $rules["items.{$index}.category"] = 'required';
+                $rules["items.{$index}.fuel_type"] = 'required';
+            }
+            
+            // General Cargo specific
+            if ($commodityType === 'general_cargo') {
+                $rules["items.{$index}.category"] = 'required';
+            }
+        }
+        
+        $this->validate($rules, [
+            'items.*.make.required' => 'Make is required',
+            'items.*.type_model.required' => 'Type/Model is required',
+            'items.*.length_cm.required' => 'Length is required',
+            'items.*.width_cm.required' => 'Width is required',
+            'items.*.height_cm.required' => 'Height is required',
+            'items.*.condition.required' => 'Condition is required',
+            'items.*.fuel_type.required' => 'Fuel Type is required',
+            'items.*.category.required' => 'Category is required',
+            'items.*.commodity_type.required' => 'Commodity Type is required',
+            'items.*.quantity.required' => 'Quantity is required',
+        ]);
+        
+        return true;
     }
 
     public function render()

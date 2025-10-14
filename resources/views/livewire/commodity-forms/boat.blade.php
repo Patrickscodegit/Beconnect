@@ -29,6 +29,9 @@
                 wire:model="items.{{ $index }}.make"
                 class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
                 placeholder="e.g., Bayliner">
+            @error("items.{$index}.make")
+                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+            @enderror
         </div>
 
         {{-- Type/Model --}}
@@ -40,6 +43,9 @@
                 wire:model="items.{{ $index }}.type_model"
                 class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
                 placeholder="e.g., Element 180">
+            @error("items.{$index}.type_model")
+                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+            @enderror
         </div>
 
         {{-- Dimensions --}}

@@ -29,6 +29,9 @@
                 wire:model="items.{{ $index }}.make"
                 class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
                 placeholder="e.g., Mercedes">
+            @error("items.{$index}.make")
+                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+            @enderror
         </div>
 
         {{-- Type/Model --}}
@@ -40,6 +43,9 @@
                 wire:model="items.{{ $index }}.type_model"
                 class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
                 placeholder="e.g., C-Class">
+            @error("items.{$index}.type_model")
+                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+            @enderror
         </div>
 
         {{-- Condition --}}
@@ -83,6 +89,9 @@
                 wire:change="calculateCbm({{ $index }})"
                 class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
                 placeholder="450">
+            @error("items.{$index}.length_cm")
+                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+            @enderror
         </div>
 
         <div>
@@ -95,6 +104,9 @@
                 wire:change="calculateCbm({{ $index }})"
                 class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
                 placeholder="180">
+            @error("items.{$index}.width_cm")
+                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+            @enderror
         </div>
 
         <div>
@@ -107,6 +119,9 @@
                 wire:change="calculateCbm({{ $index }})"
                 class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
                 placeholder="150">
+            @error("items.{$index}.height_cm")
+                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+            @enderror
         </div>
 
         {{-- CBM/CuFt (Auto-calculated) --}}
