@@ -95,10 +95,68 @@ class CommodityItemsRepeater extends Component
 
     public function updatedUnitSystem($value)
     {
-        // When unit system changes, recalculate all CBM values
-        foreach ($this->items as $index => $item) {
+        $previousSystem = $this->unitSystem === 'metric' ? 'us' : 'metric';
+        
+        // Convert all existing values when unit system changes
+        foreach ($this->items as $index => &$item) {
+            // Convert dimensions (cm ↔ inch)
+            if (!empty($item['length_cm'])) {
+                $item['length_cm'] = $this->convertLength($item['length_cm'], $previousSystem, $value);
+            }
+            if (!empty($item['width_cm'])) {
+                $item['width_cm'] = $this->convertLength($item['width_cm'], $previousSystem, $value);
+            }
+            if (!empty($item['height_cm'])) {
+                $item['height_cm'] = $this->convertLength($item['height_cm'], $previousSystem, $value);
+            }
+            if (!empty($item['wheelbase_cm'])) {
+                $item['wheelbase_cm'] = $this->convertLength($item['wheelbase_cm'], $previousSystem, $value);
+            }
+            
+            // Convert weights (kg ↔ lbs)
+            if (!empty($item['weight_kg'])) {
+                $item['weight_kg'] = $this->convertWeight($item['weight_kg'], $previousSystem, $value);
+            }
+            if (!empty($item['bruto_weight_kg'])) {
+                $item['bruto_weight_kg'] = $this->convertWeight($item['bruto_weight_kg'], $previousSystem, $value);
+            }
+            if (!empty($item['netto_weight_kg'])) {
+                $item['netto_weight_kg'] = $this->convertWeight($item['netto_weight_kg'], $previousSystem, $value);
+            }
+            
+            // Recalculate CBM with converted dimensions
             $this->calculateCbm($index);
         }
+    }
+    
+    /**
+     * Convert length values between metric (cm) and US (inch)
+     */
+    private function convertLength($value, $fromSystem, $toSystem)
+    {
+        if ($fromSystem === 'metric' && $toSystem === 'us') {
+            // cm to inch
+            return round($value / 2.54, 2);
+        } elseif ($fromSystem === 'us' && $toSystem === 'metric') {
+            // inch to cm
+            return round($value * 2.54, 2);
+        }
+        return $value;
+    }
+    
+    /**
+     * Convert weight values between metric (kg) and US (lbs)
+     */
+    private function convertWeight($value, $fromSystem, $toSystem)
+    {
+        if ($fromSystem === 'metric' && $toSystem === 'us') {
+            // kg to lbs
+            return round($value / 0.453592, 2);
+        } elseif ($fromSystem === 'us' && $toSystem === 'metric') {
+            // lbs to kg
+            return round($value * 0.453592, 2);
+        }
+        return $value;
     }
 
     public function updateServiceType($serviceType)
