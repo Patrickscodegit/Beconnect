@@ -80,6 +80,11 @@ class ProspectQuotationController extends Controller
             // Create the quotation request
             $quotationRequest = $this->createQuotationRequest($request);
             
+            // Handle commodity items if present
+            if ($request->filled('commodity_items')) {
+                $this->handleCommodityItems($quotationRequest, $request);
+            }
+            
             // Handle file uploads if any
             if ($request->hasFile('supporting_files')) {
                 $this->handleFileUploads($quotationRequest, $request->file('supporting_files'));
@@ -153,7 +158,7 @@ class ProspectQuotationController extends Controller
      */
     protected function validateQuotationRequest(Request $request)
     {
-        return Validator::make($request->all(), [
+        $rules = [
             // Contact Information
             'contact_name' => 'required|string|max:255',
             'contact_email' => 'required|email|max:255',
@@ -169,13 +174,17 @@ class ProspectQuotationController extends Controller
             // Service Information
             'service_type' => 'required|string|in:' . implode(',', array_keys(config('quotation.service_types', []))),
             
-            // Cargo Information
-            'cargo_description' => 'required|string|max:1000',
-            'commodity_type' => 'required|string|max:255',
+            // Legacy Cargo Information (for backward compatibility)
+            'cargo_description' => 'nullable|string|max:1000',
+            'commodity_type' => 'nullable|string|max:255',
             'cargo_weight' => 'nullable|numeric|min:0',
             'cargo_volume' => 'nullable|numeric|min:0',
             'cargo_dimensions' => 'nullable|string|max:255',
             'cargo_value' => 'nullable|numeric|min:0',
+            
+            // New Multi-Commodity System
+            'commodity_items' => 'nullable|json',
+            'unit_system' => 'nullable|string|in:metric,us',
             
             // Additional Information
             'special_requirements' => 'nullable|string|max:1000',
@@ -189,7 +198,9 @@ class ProspectQuotationController extends Controller
             // Terms and Privacy
             'terms_accepted' => 'required|accepted',
             'privacy_policy_accepted' => 'required|accepted',
-        ], [
+        ];
+
+        return Validator::make($request->all(), $rules, [
             'terms_accepted.accepted' => 'You must accept the terms and conditions.',
             'privacy_policy_accepted.accepted' => 'You must accept the privacy policy.',
             'supporting_files.max' => 'You can upload a maximum of 5 files.',
@@ -287,6 +298,73 @@ class ProspectQuotationController extends Controller
                 ]);
             }
         }
+    }
+
+    /**
+     * Handle commodity items creation
+     */
+    protected function handleCommodityItems(QuotationRequest $quotationRequest, Request $request)
+    {
+        $commodityItems = json_decode($request->commodity_items, true);
+        $unitSystem = $request->unit_system ?? 'metric';
+        
+        if (!empty($commodityItems) && is_array($commodityItems)) {
+            foreach ($commodityItems as $index => $item) {
+                // Convert to metric if needed
+                $processedItem = $this->convertToMetric($item, $unitSystem);
+                $processedItem['line_number'] = $index + 1;
+                $processedItem['quotation_request_id'] = $quotationRequest->id;
+                
+                // Auto-calculate CBM if dimensions present
+                if (isset($processedItem['length_cm'], $processedItem['width_cm'], $processedItem['height_cm'])) {
+                    $processedItem['cbm'] = ($processedItem['length_cm'] / 100) * 
+                                           ($processedItem['width_cm'] / 100) * 
+                                           ($processedItem['height_cm'] / 100);
+                }
+                
+                $quotationRequest->commodityItems()->create($processedItem);
+            }
+            
+            // Update quotation with item count
+            $quotationRequest->update([
+                'total_commodity_items' => count($commodityItems)
+            ]);
+        }
+    }
+
+    /**
+     * Convert dimensions and weights from US to metric if needed
+     */
+    protected function convertToMetric(array $item, string $unitSystem): array
+    {
+        if ($unitSystem === 'us') {
+            // Convert dimensions: inches to cm
+            if (isset($item['length_cm'])) {
+                $item['length_cm'] = round($item['length_cm'] * 2.54, 2);
+            }
+            if (isset($item['width_cm'])) {
+                $item['width_cm'] = round($item['width_cm'] * 2.54, 2);
+            }
+            if (isset($item['height_cm'])) {
+                $item['height_cm'] = round($item['height_cm'] * 2.54, 2);
+            }
+            if (isset($item['wheelbase_cm'])) {
+                $item['wheelbase_cm'] = round($item['wheelbase_cm'] * 2.54, 2);
+            }
+            
+            // Convert weights: lbs to kg
+            if (isset($item['weight_kg'])) {
+                $item['weight_kg'] = round($item['weight_kg'] * 0.453592, 2);
+            }
+            if (isset($item['bruto_weight_kg'])) {
+                $item['bruto_weight_kg'] = round($item['bruto_weight_kg'] * 0.453592, 2);
+            }
+            if (isset($item['netto_weight_kg'])) {
+                $item['netto_weight_kg'] = round($item['netto_weight_kg'] * 0.453592, 2);
+            }
+        }
+        
+        return $item;
     }
 
     /**

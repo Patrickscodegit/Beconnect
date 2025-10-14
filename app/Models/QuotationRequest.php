@@ -38,6 +38,10 @@ class QuotationRequest extends Model
         'fdest',
         'cargo_details',
         'cargo_description',
+        'commodity_type', // Legacy field (for backward compatibility)
+        'total_commodity_items', // New multi-commodity system
+        'robaws_cargo_field', // Generated CARGO field for Robaws
+        'robaws_dim_field', // Generated DIM_BEF_DELIVERY field for Robaws
         'special_requirements',
         'selected_schedule_id',
         'preferred_carrier',
@@ -201,6 +205,22 @@ class QuotationRequest extends Model
     public function commodityItems(): HasMany
     {
         return $this->hasMany(QuotationCommodityItem::class)->orderBy('line_number');
+    }
+
+    /**
+     * Get the total number of commodity items
+     */
+    public function getTotalItemsAttribute(): int
+    {
+        return $this->commodityItems()->count();
+    }
+
+    /**
+     * Check if this quotation uses the new multi-commodity system
+     */
+    public function hasMultiCommodityItems(): bool
+    {
+        return $this->commodityItems()->exists();
     }
 
     public function selectedSchedule(): BelongsTo
