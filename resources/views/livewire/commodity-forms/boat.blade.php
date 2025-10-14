@@ -101,7 +101,7 @@
                 <span class="text-xs text-gray-500">({{ $unitSystem === 'metric' ? 'kg' : 'lbs' }})</span>
             </label>
             <input type="number" 
-                wire:model="items.{{ $index }}.weight_kg"
+                wire:model.blur="items.{{ $index }}.weight_kg"
                 class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
         </div>
 
