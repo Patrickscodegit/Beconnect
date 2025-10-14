@@ -277,6 +277,15 @@ class CommodityItemsRepeater extends Component
         return true;
     }
 
+    /**
+     * Computed property to get JSON-encoded items for hidden input binding
+     * This keeps the hidden form input synchronized with Livewire state
+     */
+    public function getItemsJsonProperty()
+    {
+        return json_encode($this->items);
+    }
+
     public function render()
     {
         return view('livewire.commodity-items-repeater', [
