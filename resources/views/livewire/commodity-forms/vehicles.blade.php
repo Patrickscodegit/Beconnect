@@ -26,11 +26,11 @@
                 Make <span class="text-red-500">*</span>
             </label>
             <input type="text" 
-                wire:model="items.{{ $index }}.make"
-                class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
+                wire:model.blur="items.{{ $index }}.make"
+                class="w-full px-4 py-3 rounded-lg border @error('items.'.$index.'.make') border-red-500 @else border-gray-300 @enderror focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
                 placeholder="e.g., Mercedes">
             @error("items.{$index}.make")
-                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+                <p class="text-red-600 text-sm mt-1"><i class="fas fa-exclamation-circle mr-1"></i>{{ $message }}</p>
             @enderror
         </div>
 
@@ -40,11 +40,11 @@
                 Type/Model <span class="text-red-500">*</span>
             </label>
             <input type="text" 
-                wire:model="items.{{ $index }}.type_model"
-                class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
+                wire:model.blur="items.{{ $index }}.type_model"
+                class="w-full px-4 py-3 rounded-lg border @error('items.'.$index.'.type_model') border-red-500 @else border-gray-300 @enderror focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
                 placeholder="e.g., C-Class">
             @error("items.{$index}.type_model")
-                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+                <p class="text-red-600 text-sm mt-1"><i class="fas fa-exclamation-circle mr-1"></i>{{ $message }}</p>
             @enderror
         </div>
 
@@ -87,10 +87,10 @@
             <input type="number" 
                 wire:model.live="items.{{ $index }}.length_cm"
                 wire:change="calculateCbm({{ $index }})"
-                class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
+                class="w-full px-4 py-3 rounded-lg border @error('items.'.$index.'.length_cm') border-red-500 @else border-gray-300 @enderror focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
                 placeholder="450">
             @error("items.{$index}.length_cm")
-                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+                <p class="text-red-600 text-sm mt-1"><i class="fas fa-exclamation-circle mr-1"></i>{{ $message }}</p>
             @enderror
         </div>
 
@@ -102,10 +102,10 @@
             <input type="number" 
                 wire:model.live="items.{{ $index }}.width_cm"
                 wire:change="calculateCbm({{ $index }})"
-                class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
+                class="w-full px-4 py-3 rounded-lg border @error('items.'.$index.'.width_cm') border-red-500 @else border-gray-300 @enderror focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
                 placeholder="180">
             @error("items.{$index}.width_cm")
-                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+                <p class="text-red-600 text-sm mt-1"><i class="fas fa-exclamation-circle mr-1"></i>{{ $message }}</p>
             @enderror
         </div>
 
@@ -117,10 +117,10 @@
             <input type="number" 
                 wire:model.live="items.{{ $index }}.height_cm"
                 wire:change="calculateCbm({{ $index }})"
-                class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
+                class="w-full px-4 py-3 rounded-lg border @error('items.'.$index.'.height_cm') border-red-500 @else border-gray-300 @enderror focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
                 placeholder="150">
             @error("items.{$index}.height_cm")
-                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+                <p class="text-red-600 text-sm mt-1"><i class="fas fa-exclamation-circle mr-1"></i>{{ $message }}</p>
             @enderror
         </div>
 

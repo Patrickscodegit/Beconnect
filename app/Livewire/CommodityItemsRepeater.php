@@ -210,10 +210,15 @@ class CommodityItemsRepeater extends Component
         return $processedItems;
     }
 
-    public function validateItems()
+    public function updated($propertyName)
+    {
+        // Real-time validation when fields are updated
+        $this->validateOnly($propertyName, $this->getValidationRules());
+    }
+    
+    protected function getValidationRules()
     {
         $rules = [];
-        $messages = [];
         
         foreach ($this->items as $index => $item) {
             $commodityType = $item['commodity_type'] ?? '';
@@ -250,19 +255,25 @@ class CommodityItemsRepeater extends Component
             }
         }
         
-        $this->validate($rules, [
-            'items.*.make.required' => 'Make is required',
-            'items.*.type_model.required' => 'Type/Model is required',
-            'items.*.length_cm.required' => 'Length is required',
-            'items.*.width_cm.required' => 'Width is required',
-            'items.*.height_cm.required' => 'Height is required',
-            'items.*.condition.required' => 'Condition is required',
-            'items.*.fuel_type.required' => 'Fuel Type is required',
-            'items.*.category.required' => 'Category is required',
-            'items.*.commodity_type.required' => 'Commodity Type is required',
-            'items.*.quantity.required' => 'Quantity is required',
-        ]);
-        
+        return $rules;
+    }
+    
+    protected $messages = [
+        'items.*.make.required' => 'Make is required',
+        'items.*.type_model.required' => 'Type/Model is required',
+        'items.*.length_cm.required' => 'Length is required',
+        'items.*.width_cm.required' => 'Width is required',
+        'items.*.height_cm.required' => 'Height is required',
+        'items.*.condition.required' => 'Condition is required',
+        'items.*.fuel_type.required' => 'Fuel Type is required',
+        'items.*.category.required' => 'Category is required',
+        'items.*.commodity_type.required' => 'Commodity Type is required',
+        'items.*.quantity.required' => 'Quantity is required',
+    ];
+    
+    public function validateItems()
+    {
+        $this->validate($this->getValidationRules(), $this->messages);
         return true;
     }
 
