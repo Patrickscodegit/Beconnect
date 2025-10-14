@@ -107,20 +107,27 @@ return [
 
     'service_types' => [
         // RORO Services
-        'RORO_IMPORT' => [
-            'name' => 'RORO Import',
-            'direction' => 'IMPORT',
-            'unit' => 'per car',
-            'requires_schedule' => true,
-        ],
         'RORO_EXPORT' => [
             'name' => 'RORO Export',
             'direction' => 'EXPORT',
             'unit' => 'per car',
             'requires_schedule' => true,
         ],
+        'RORO_IMPORT' => [
+            'name' => 'RORO Import',
+            'direction' => 'IMPORT',
+            'unit' => 'per car',
+            'requires_schedule' => true,
+        ],
 
         // FCL Services
+        'FCL_EXPORT' => [
+            'name' => 'FCL Export',
+            'direction' => 'EXPORT',
+            'unit' => 'per container',
+            'quantity_tiers' => [1, 2, 3, 4], // Vehicles per container
+            'requires_schedule' => false,
+        ],
         'FCL_IMPORT' => [
             'name' => 'FCL Import',
             'direction' => 'IMPORT',
@@ -128,16 +135,17 @@ return [
             'quantity_tiers' => [1, 2, 3, 4], // Vehicles per container
             'requires_schedule' => false,
         ],
-        'FCL_EXPORT' => [
-            'name' => 'FCL Export - Dedicated Container',
+        'FCL_EXPORT_CONSOL' => [
+            'name' => 'FCL Export Consol',
             'direction' => 'EXPORT',
-            'unit' => 'per container',
-            'quantity_tiers' => [1, 2, 3, 4], // Vehicles per container
-            'requires_schedule' => false,
+            'unit' => 'per car',
+            'quantity_tiers' => [2, 3], // 2-pack or 3-pack only
+            'requires_schedule' => true,
+            'has_formula_pricing' => true, // Ocean freight formula
         ],
-        'FCL_CONSOL_EXPORT' => [
-            'name' => 'FCL Export - Consol Container',
-            'direction' => 'EXPORT',
+        'FCL_IMPORT_CONSOL' => [
+            'name' => 'FCL Import Consol',
+            'direction' => 'IMPORT',
             'unit' => 'per car',
             'quantity_tiers' => [2, 3], // 2-pack or 3-pack only
             'requires_schedule' => true,
@@ -145,53 +153,79 @@ return [
         ],
 
         // LCL Services
-        'LCL_IMPORT' => [
-            'name' => 'LCL Import',
-            'direction' => 'IMPORT',
-            'unit' => 'per handling',
-            'requires_schedule' => false,
-        ],
         'LCL_EXPORT' => [
             'name' => 'LCL Export',
             'direction' => 'EXPORT',
             'unit' => 'per handling',
             'requires_schedule' => false,
         ],
+        'LCL_IMPORT' => [
+            'name' => 'LCL Import',
+            'direction' => 'IMPORT',
+            'unit' => 'per handling',
+            'requires_schedule' => false,
+        ],
 
         // Break Bulk
         'BB_EXPORT' => [
-            'name' => 'Break Bulk Export',
+            'name' => 'BB Export',
             'direction' => 'EXPORT',
             'unit' => 'per slot',
             'requires_schedule' => true,
         ],
         'BB_IMPORT' => [
-            'name' => 'Break Bulk Import',
+            'name' => 'BB Import',
             'direction' => 'IMPORT',
             'unit' => 'per slot',
             'requires_schedule' => true,
         ],
 
         // Air Freight
-        'AIR_EXPORT' => [
-            'name' => 'Air Export',
+        'AIRFREIGHT_EXPORT' => [
+            'name' => 'Airfreight Export',
             'direction' => 'EXPORT',
             'unit' => 'per kg',
             'requires_schedule' => false,
         ],
-        'AIR_IMPORT' => [
-            'name' => 'Air Import',
+        'AIRFREIGHT_IMPORT' => [
+            'name' => 'Airfreight Import',
             'direction' => 'IMPORT',
             'unit' => 'per kg',
             'requires_schedule' => false,
         ],
 
-        // Cross Trades
-        'CROSS_TRADE' => [
-            'name' => 'Cross Trade',
+        // Cross Trade
+        'CROSSTRADE' => [
+            'name' => 'Crosstrade',
             'direction' => 'CROSS_TRADE',
             'unit' => 'per shipment',
             'requires_schedule' => true,
+        ],
+
+        // Additional Services
+        'ROAD_TRANSPORT' => [
+            'name' => 'Road Transport',
+            'direction' => 'BOTH',
+            'unit' => 'per transport',
+            'requires_schedule' => false,
+        ],
+        'CUSTOMS' => [
+            'name' => 'Customs',
+            'direction' => 'BOTH',
+            'unit' => 'per clearance',
+            'requires_schedule' => false,
+        ],
+        'PORT_FORWARDING' => [
+            'name' => 'Port Forwarding',
+            'direction' => 'BOTH',
+            'unit' => 'per service',
+            'requires_schedule' => false,
+        ],
+        'OTHER' => [
+            'name' => 'Other',
+            'direction' => 'BOTH',
+            'unit' => 'per service',
+            'requires_schedule' => false,
         ],
     ],
 
