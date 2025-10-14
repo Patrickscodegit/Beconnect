@@ -230,6 +230,207 @@ class QuotationRequestResource extends Resource
                     ])
                     ->columns(2),
                     
+                Forms\Components\Section::make('Commodity Items')
+                    ->description('Detailed commodity breakdown (New multi-commodity system)')
+                    ->schema([
+                        Forms\Components\Repeater::make('commodityItems')
+                            ->relationship('commodityItems')
+                            ->schema([
+                                Forms\Components\Select::make('commodity_type')
+                                    ->label('Type')
+                                    ->options([
+                                        'vehicles' => '🚗 Vehicles',
+                                        'machinery' => '⚙️ Machinery',
+                                        'boat' => '⛵ Boat',
+                                        'general_cargo' => '📦 General Cargo',
+                                    ])
+                                    ->required()
+                                    ->live()
+                                    ->columnSpan(2),
+                                    
+                                Forms\Components\Select::make('category')
+                                    ->label('Category')
+                                    ->options(function (Forms\Get $get) {
+                                        $type = $get('commodity_type');
+                                        if (!$type) return [];
+                                        
+                                        $config = config("quotation.commodity_types.{$type}.categories", []);
+                                        return $config;
+                                    })
+                                    ->visible(fn (Forms\Get $get) => in_array($get('commodity_type'), ['vehicles', 'machinery', 'general_cargo']))
+                                    ->required(fn (Forms\Get $get) => in_array($get('commodity_type'), ['vehicles', 'machinery', 'general_cargo']))
+                                    ->columnSpan(2),
+                                    
+                                Forms\Components\TextInput::make('make')
+                                    ->label('Make')
+                                    ->visible(fn (Forms\Get $get) => in_array($get('commodity_type'), ['vehicles', 'machinery']))
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\TextInput::make('type_model')
+                                    ->label('Type/Model')
+                                    ->visible(fn (Forms\Get $get) => in_array($get('commodity_type'), ['vehicles', 'machinery']))
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\Select::make('condition')
+                                    ->label('Condition')
+                                    ->options([
+                                        'new' => 'New',
+                                        'used' => 'Used',
+                                        'damaged' => 'Damaged',
+                                    ])
+                                    ->visible(fn (Forms\Get $get) => in_array($get('commodity_type'), ['vehicles', 'machinery', 'boat']))
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\Select::make('fuel_type')
+                                    ->label('Fuel Type')
+                                    ->options(function (Forms\Get $get) {
+                                        $type = $get('commodity_type');
+                                        if (!$type) return [];
+                                        
+                                        $config = config("quotation.commodity_types.{$type}.fuel_types", []);
+                                        return $config;
+                                    })
+                                    ->visible(fn (Forms\Get $get) => in_array($get('commodity_type'), ['vehicles', 'machinery']))
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\TextInput::make('length_cm')
+                                    ->label('Length (cm)')
+                                    ->numeric()
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\TextInput::make('width_cm')
+                                    ->label('Width (cm)')
+                                    ->numeric()
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\TextInput::make('height_cm')
+                                    ->label('Height (cm)')
+                                    ->numeric()
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\TextInput::make('cbm')
+                                    ->label('CBM (m³)')
+                                    ->numeric()
+                                    ->disabled()
+                                    ->dehydrated()
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\TextInput::make('weight_kg')
+                                    ->label('Weight (kg)')
+                                    ->numeric()
+                                    ->visible(fn (Forms\Get $get) => !in_array($get('commodity_type'), ['general_cargo']))
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\TextInput::make('bruto_weight_kg')
+                                    ->label('Bruto Weight (kg)')
+                                    ->numeric()
+                                    ->visible(fn (Forms\Get $get) => $get('commodity_type') === 'general_cargo')
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\TextInput::make('netto_weight_kg')
+                                    ->label('Netto Weight (kg)')
+                                    ->numeric()
+                                    ->visible(fn (Forms\Get $get) => $get('commodity_type') === 'general_cargo')
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\TextInput::make('wheelbase_cm')
+                                    ->label('Wheelbase (cm)')
+                                    ->numeric()
+                                    ->visible(fn (Forms\Get $get) => 
+                                        $get('commodity_type') === 'vehicles' && 
+                                        in_array($get('category'), ['car', 'suv'])
+                                    )
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\TextInput::make('quantity')
+                                    ->label('Quantity')
+                                    ->numeric()
+                                    ->default(1)
+                                    ->required()
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\Toggle::make('has_parts')
+                                    ->label('Has Parts')
+                                    ->visible(fn (Forms\Get $get) => $get('commodity_type') === 'machinery')
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\Textarea::make('parts_description')
+                                    ->label('Parts Description')
+                                    ->rows(2)
+                                    ->visible(fn (Forms\Get $get) => $get('commodity_type') === 'machinery' && $get('has_parts'))
+                                    ->columnSpan(2),
+                                    
+                                Forms\Components\Toggle::make('has_trailer')
+                                    ->label('Has Trailer')
+                                    ->visible(fn (Forms\Get $get) => $get('commodity_type') === 'boat')
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\Toggle::make('has_wooden_cradle')
+                                    ->label('Has Wooden Cradle')
+                                    ->visible(fn (Forms\Get $get) => $get('commodity_type') === 'boat')
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\Toggle::make('has_iron_cradle')
+                                    ->label('Has Iron Cradle')
+                                    ->visible(fn (Forms\Get $get) => $get('commodity_type') === 'boat')
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\Toggle::make('is_forkliftable')
+                                    ->label('Forkliftable')
+                                    ->visible(fn (Forms\Get $get) => 
+                                        $get('commodity_type') === 'general_cargo' && 
+                                        $get('category') !== 'palletized'
+                                    )
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\Toggle::make('is_hazardous')
+                                    ->label('Hazardous')
+                                    ->visible(fn (Forms\Get $get) => $get('commodity_type') === 'general_cargo')
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\Toggle::make('is_unpacked')
+                                    ->label('Unpacked')
+                                    ->visible(fn (Forms\Get $get) => $get('commodity_type') === 'general_cargo')
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\Toggle::make('is_ispm15')
+                                    ->label('ISPM15 Wood')
+                                    ->visible(fn (Forms\Get $get) => $get('commodity_type') === 'general_cargo')
+                                    ->columnSpan(1),
+                                    
+                                Forms\Components\Textarea::make('extra_info')
+                                    ->label('Extra Info')
+                                    ->rows(2)
+                                    ->columnSpan(2),
+                            ])
+                            ->columns(4)
+                            ->itemLabel(fn (array $state): ?string => 
+                                isset($state['commodity_type']) 
+                                    ? ucfirst(str_replace('_', ' ', $state['commodity_type'])) . ' #' . ($state['line_number'] ?? '')
+                                    : 'New Item'
+                            )
+                            ->collapsible()
+                            ->cloneable()
+                            ->reorderable()
+                            ->defaultItems(0)
+                            ->columnSpanFull(),
+                            
+                        Forms\Components\Placeholder::make('robaws_cargo_field')
+                            ->label('Generated CARGO Field (for Robaws)')
+                            ->content(fn ($record) => $record?->robaws_cargo_field ?? 'Not generated yet')
+                            ->visible(fn ($record) => $record?->robaws_cargo_field)
+                            ->columnSpan(1),
+                            
+                        Forms\Components\Placeholder::make('robaws_dim_field')
+                            ->label('Generated DIM Field (for Robaws)')
+                            ->content(fn ($record) => $record?->robaws_dim_field ?? 'Not generated yet')
+                            ->visible(fn ($record) => $record?->robaws_dim_field)
+                            ->columnSpan(1),
+                    ])
+                    ->columns(2)
+                    ->collapsible()
+                    ->collapsed(fn ($record) => !$record?->hasMultiCommodityItems()),
+                    
                 Forms\Components\Section::make('Select Sailing')
                     ->description('Choose a specific sailing to filter carrier-specific articles')
                     ->schema([
