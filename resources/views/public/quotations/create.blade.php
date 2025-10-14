@@ -288,6 +288,26 @@
                     </div>
                 </div>
 
+                <!-- Multi-Commodity Items (New System) -->
+                <div class="p-8 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+                    <div class="flex items-center justify-between mb-6">
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-900">
+                                <i class="fas fa-cubes mr-2 text-blue-600"></i>Detailed Commodity Items
+                            </h2>
+                            <p class="text-sm text-gray-600 mt-1">
+                                Add detailed information for each item you're shipping (optional but recommended for accurate quotes)
+                            </p>
+                        </div>
+                    </div>
+                    
+                    @livewire('commodity-items-repeater', [
+                        'existingItems' => old('commodity_items') ? json_decode(old('commodity_items'), true) : [],
+                        'serviceType' => old('service_type', $prefill['service_type'] ?? ''),
+                        'unitSystem' => old('unit_system', 'metric')
+                    ])
+                </div>
+
                 <!-- File Uploads -->
                 <div class="p-8 border-b">
                     <h2 class="text-2xl font-bold text-gray-900 mb-6">
