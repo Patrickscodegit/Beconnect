@@ -7,6 +7,7 @@ use App\Models\Port;
 use App\Models\ShippingCarrier;
 use App\Models\ShippingSchedule;
 use App\Notifications\QuotationSubmittedNotification;
+use App\Services\RobawsFieldGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
@@ -101,6 +102,10 @@ class CustomerQuotationController extends Controller
             // Handle commodity items if present
             if ($request->filled('commodity_items')) {
                 $this->handleCommodityItems($quotationRequest, $request);
+                
+                // Generate Robaws fields from commodity items
+                $fieldGenerator = new RobawsFieldGenerator();
+                $fieldGenerator->generateAndUpdateFields($quotationRequest);
             }
             
             // Handle file uploads
