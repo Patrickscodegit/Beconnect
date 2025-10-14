@@ -166,16 +166,28 @@
 
                 <!-- Cargo Information -->
                 <div class="p-8 border-b">
-                    <h2 class="text-2xl font-bold text-gray-900 mb-6">
-                        <i class="fas fa-box mr-2"></i>Cargo Information
-                    </h2>
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-2xl font-bold text-gray-900">
+                            <i class="fas fa-box mr-2"></i>Cargo Information
+                        </h2>
+                        <span class="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-sm font-medium">
+                            Quick Quote Option
+                        </span>
+                    </div>
+                    <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
+                        <p class="text-sm text-blue-800">
+                            <i class="fas fa-info-circle mr-2"></i>
+                            <strong>Quick quote:</strong> Fill basic cargo info here, 
+                            <strong>OR</strong> use the detailed commodity items section below for more accurate pricing.
+                        </p>
+                    </div>
                     
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="md:col-span-2">
                             <label for="cargo_description" class="block text-sm font-medium text-gray-700 mb-2">
-                                Cargo Description <span class="text-red-500">*</span>
+                                Cargo Description
                             </label>
-                            <textarea id="cargo_description" name="cargo_description" required rows="3"
+                            <textarea id="cargo_description" name="cargo_description" rows="3"
                                       class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
                                       placeholder="Describe your cargo in detail...">{{ old('cargo_description') }}</textarea>
                             @error('cargo_description')
@@ -185,9 +197,9 @@
                         
                         <div>
                             <label for="commodity_type" class="block text-sm font-medium text-gray-700 mb-2">
-                                Commodity Type <span class="text-red-500">*</span>
+                                Commodity Type
                             </label>
-                            <select id="commodity_type" name="commodity_type" required
+                            <select id="commodity_type" name="commodity_type"
                                     class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
                                 <option value="">Select Type</option>
                                 <option value="cars" {{ old('commodity_type') == 'cars' ? 'selected' : '' }}>Cars/Vehicles</option>
@@ -273,9 +285,12 @@
                         <div>
                             <h2 class="text-2xl font-bold text-gray-900">
                                 <i class="fas fa-cubes mr-2 text-blue-600"></i>Detailed Commodity Items
+                                <span class="ml-3 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold uppercase">
+                                    Recommended
+                                </span>
                             </h2>
-                            <p class="text-sm text-gray-600 mt-1">
-                                Add detailed information for each item you're shipping (optional but recommended for accurate quotes)
+                            <p class="text-sm text-gray-600 mt-2">
+                                Add detailed information for each item you're shipping for the most accurate quotes and faster processing
                             </p>
                         </div>
                     </div>

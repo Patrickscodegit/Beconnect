@@ -172,8 +172,8 @@ class CustomerQuotationController extends Controller
             // Service Information
             'service_type' => 'required|string|in:' . implode(',', array_keys(config('quotation.service_types', []))),
             
-            // Legacy Cargo Information (for backward compatibility)
-            'cargo_description' => 'nullable|string|max:1000',
+            // Legacy Cargo Information (optional if commodity_items provided)
+            'cargo_description' => 'required_without:commodity_items|nullable|string|max:1000',
             'commodity_type' => 'nullable|string|max:255',
             'cargo_weight' => 'nullable|numeric|min:0',
             'cargo_volume' => 'nullable|numeric|min:0',
