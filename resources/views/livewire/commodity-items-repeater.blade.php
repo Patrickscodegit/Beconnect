@@ -94,7 +94,7 @@
         @endif
     </div>
 
-    <!-- Hidden field to submit items data (reactive binding) -->
-    <input type="hidden" name="commodity_items" wire:model="itemsJson">
+    <!-- Hidden field to submit items data -->
+    <input type="hidden" name="commodity_items" value="{{ json_encode($items) }}">
     <input type="hidden" name="unit_system" value="{{ $unitSystem }}">
 </div>

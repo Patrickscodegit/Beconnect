@@ -20,7 +20,7 @@
         <!-- Form -->
         <div class="bg-white rounded-lg shadow-xl overflow-hidden">
             <form action="{{ route('public.quotations.store') }}" method="POST" enctype="multipart/form-data" 
-                  x-data="{ quotationMode: 'detailed', ...quotationForm() }" @submit="validateForm">
+                  x-data="{ quotationMode: 'detailed', ...quotationForm() }">
                 @csrf
                 
                 <!-- Contact Information -->
@@ -556,46 +556,9 @@ function quotationForm() {
             const sizes = ['Bytes', 'KB', 'MB', 'GB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        },
-        
-        validateForm(event) {
-            const quotationMode = this.quotationMode;
-            const commodityItemsInput = document.querySelector('input[name="commodity_items"]');
-            const cargoDescriptionInput = document.querySelector('textarea[name="cargo_description"]');
-            
-            // Validate based on selected mode
-            if (quotationMode === 'detailed') {
-                // Detailed mode: Check if commodity items exist
-                if (!commodityItemsInput || !commodityItemsInput.value || commodityItemsInput.value === '[]') {
-                    alert('⚠️ Please add at least one commodity item for detailed quote.\n\nClick the "Add Item" button to get started.');
-                    event.preventDefault();
-                    return false;
-                }
-                
-                // Parse and validate commodity items
-                try {
-                    const items = JSON.parse(commodityItemsInput.value);
-                    if (!items || items.length === 0) {
-                        alert('⚠️ Please add at least one commodity item for detailed quote.');
-                        event.preventDefault();
-                        return false;
-                    }
-                } catch (e) {
-                    alert('⚠️ Invalid commodity items data. Please refresh and try again.');
-                    event.preventDefault();
-                    return false;
-                }
-            } else if (quotationMode === 'quick') {
-                // Quick mode: Check if cargo description is filled
-                if (!cargoDescriptionInput || !cargoDescriptionInput.value.trim()) {
-                    alert('⚠️ Please provide a cargo description for quick quote.');
-                    event.preventDefault();
-                    return false;
-                }
-            }
-            
-            return true;
         }
+        
+        // Frontend validation removed - Laravel handles validation server-side
     }
 }
 </script>
