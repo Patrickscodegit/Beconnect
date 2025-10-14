@@ -401,4 +401,136 @@ return [
         'ZDRAVZAR',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Multi-Commodity System
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for the multi-commodity quotation system.
+    |
+    */
+
+    'commodity_types' => [
+        'vehicles' => [
+            'name' => 'Vehicles',
+            'icon' => 'fas fa-car',
+            'categories' => [
+                'motorcycle' => 'Motorcycle',
+                'car' => 'Car',
+                'suv' => 'SUV',
+                'small_van' => 'Small Van',
+                'big_van' => 'Big Van',
+                'truck' => 'Truck',
+                'truckhead' => 'Truckhead',
+                'truck_chassis' => 'Truck Chassis',
+                'tipper_truck' => 'Tipper Truck',
+                'platform_truck' => 'Platform Truck',
+                'box_truck' => 'Box Truck',
+                'vacuum_truck' => 'Vacuum Truck',
+                'refuse_truck' => 'Refuse Truck',
+                'bus' => 'Bus',
+                'concrete_mixer' => 'Concrete Mixer',
+                'tank_truck' => 'Tank Truck',
+                'trailer' => 'Trailer',
+                'trailer_stack' => 'Trailer Stack',
+                'tank_trailer' => 'Tank Trailer',
+                'truck_trailer_combination' => 'Truck-Trailer Combination',
+                'loaded_truck_trailer' => 'Loaded Truck-Trailer Combination',
+                'high_and_heavy' => 'High and Heavy',
+            ],
+            'fuel_types' => [
+                'diesel' => 'Diesel',
+                'petrol' => 'Petrol',
+                'mild_hybrid' => 'Mild-Hybrid',
+                'hybrid' => 'Hybrid',
+                'electric' => 'Electric',
+                'other' => 'Other',
+            ],
+            'condition_types' => [
+                'new' => 'New',
+                'used' => 'Used',
+                'damaged' => 'Damaged',
+            ],
+            'has_wheelbase' => ['car', 'suv'], // Categories that have wheelbase field
+            'wheelbase_required_for' => ['AIRFREIGHT_EXPORT', 'AIRFREIGHT_IMPORT'], // Service types requiring wheelbase
+        ],
+
+        'machinery' => [
+            'name' => 'Machinery',
+            'icon' => 'fas fa-cog',
+            'categories' => [
+                'on_wheels' => 'On Wheels',
+                'on_tracks' => 'On Tracks',
+                'static' => 'Static',
+            ],
+            'fuel_types' => [
+                'diesel' => 'Diesel',
+                'petrol' => 'Petrol',
+                'hybrid' => 'Hybrid',
+                'electric' => 'Electric',
+                'other' => 'Other',
+            ],
+            'condition_types' => [
+                'new' => 'New',
+                'used' => 'Used',
+                'damaged' => 'Damaged',
+            ],
+            'has_parts' => true, // Can have parts checkbox
+        ],
+
+        'boat' => [
+            'name' => 'Boat',
+            'icon' => 'fas fa-ship',
+            'condition_types' => [
+                'new' => 'New',
+                'used' => 'Used',
+                'damaged' => 'Damaged',
+            ],
+            'has_trailer' => true,
+            'has_cradles' => true, // wooden_cradle, iron_cradle
+        ],
+
+        'general_cargo' => [
+            'name' => 'General Cargo',
+            'icon' => 'fas fa-boxes',
+            'categories' => [
+                'palletized' => 'Palletized',
+                'loose' => 'Loose',
+            ],
+            'has_dual_weight' => true, // bruto_weight_kg, netto_weight_kg
+            'has_checkboxes' => ['forkliftable', 'hazardous', 'unpacked', 'ispm15'],
+            'forkliftable_hidden_for' => ['palletized'], // Hide forkliftable checkbox for palletized cargo
+        ],
+    ],
+
+    // Unit conversion
+    'unit_systems' => [
+        'metric' => [
+            'length' => 'cm',
+            'weight' => 'kg',
+            'volume' => 'm³',
+        ],
+        'us' => [
+            'length' => 'inch',
+            'weight' => 'lbs',
+            'volume' => 'ft³',
+        ],
+    ],
+
+    'unit_conversion' => [
+        'inch_to_cm' => 2.54,
+        'lbs_to_kg' => 0.453592,
+        'cuft_to_m3' => 0.0283168,
+    ],
+
+    // File types for commodity item attachments
+    'commodity_file_types' => [
+        'photo' => 'Item Photo',
+        'invoice' => 'Purchase Invoice',
+        'certificate' => 'Certificate (ISPM15, Conformity, etc.)',
+        'technical_doc' => 'Technical Specifications',
+        'customs_doc' => 'Customs Documents',
+        'other' => 'Other Files',
+    ],
+
 ];

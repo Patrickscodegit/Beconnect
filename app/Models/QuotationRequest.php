@@ -198,6 +198,11 @@ class QuotationRequest extends Model
         return $this->hasMany(QuotationRequestFile::class);
     }
 
+    public function commodityItems(): HasMany
+    {
+        return $this->hasMany(QuotationCommodityItem::class)->orderBy('line_number');
+    }
+
     public function selectedSchedule(): BelongsTo
     {
         return $this->belongsTo(ShippingSchedule::class, 'selected_schedule_id');
