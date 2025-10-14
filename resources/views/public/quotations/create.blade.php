@@ -163,7 +163,7 @@
                         <i class="fas fa-ship mr-2"></i>Service Information
                     </h2>
                     
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                             <label for="service_type" class="block text-sm font-medium text-gray-700 mb-2">
                                 Service Type <span class="text-red-500">*</span>
@@ -179,6 +179,19 @@
                                 @endforeach
                             </select>
                             @error('service_type')
+                                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+                            @enderror
+                        </div>
+                        
+                        <div>
+                            <label for="preferred_departure_date" class="block text-sm font-medium text-gray-700 mb-2">
+                                Preferred Departure Date
+                            </label>
+                            <input type="date" id="preferred_departure_date" name="preferred_departure_date"
+                                   value="{{ old('preferred_departure_date') }}"
+                                   min="{{ date('Y-m-d', strtotime('+1 day')) }}"
+                                   class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                            @error('preferred_departure_date')
                                 <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
                             @enderror
                         </div>
@@ -269,19 +282,6 @@
                                    class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
                                    placeholder="L x W x H (cm)">
                             @error('cargo_dimensions')
-                                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
-                            @enderror
-                        </div>
-                        
-                        <div>
-                            <label for="preferred_departure_date" class="block text-sm font-medium text-gray-700 mb-2">
-                                Preferred Departure Date
-                            </label>
-                            <input type="date" id="preferred_departure_date" name="preferred_departure_date"
-                                   value="{{ old('preferred_departure_date') }}"
-                                   min="{{ date('Y-m-d', strtotime('+1 day')) }}"
-                                   class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                            @error('preferred_departure_date')
                                 <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
                             @enderror
                         </div>
