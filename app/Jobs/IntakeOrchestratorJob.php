@@ -101,40 +101,16 @@ class IntakeOrchestratorJob implements ShouldQueue
             
             // Step 3: Add offer creation - ENHANCED for multi-document support
             if ($this->intake->is_multi_document && !$this->intake->robaws_offer_id) {
-                // Multi-document intake: Create ONE offer using aggregated data
-                Log::info('Multi-document intake detected - will create single aggregated offer', [
+                // Multi-document intake: Queue aggregated offer creation AFTER extraction
+                Log::info('Multi-document intake detected - queuing aggregated offer creation', [
                     'intake_id' => $this->intake->id,
                     'total_documents' => $this->intake->total_documents,
                     'documents_count' => $documents->count()
                 ]);
                 
-                // Aggregate extraction data from all documents
-                $aggregationService = app(\App\Services\IntakeAggregationService::class);
-                $aggregatedData = $aggregationService->aggregateExtractionData($this->intake);
+                // Queue offer creation job (runs AFTER extraction completes)
+                $jobs[] = new CreateAggregatedOfferJob($this->intake);
                 
-                Log::info('Extraction data aggregated', [
-                    'intake_id' => $this->intake->id,
-                    'has_contact' => !empty($aggregatedData['contact']),
-                    'has_vehicle' => !empty($aggregatedData['vehicle']),
-                    'sources_merged' => count($aggregatedData['metadata']['sources'] ?? [])
-                ]);
-                
-                // Create ONE offer using aggregated data
-                try {
-                    $offerId = $aggregationService->createSingleOffer($this->intake);
-                    
-                    Log::info('Single offer created for multi-document intake', [
-                        'intake_id' => $this->intake->id,
-                        'offer_id' => $offerId,
-                        'documents_linked' => $documents->count()
-                    ]);
-                } catch (\Exception $e) {
-                    Log::error('Failed to create aggregated offer', [
-                        'intake_id' => $this->intake->id,
-                        'error' => $e->getMessage()
-                    ]);
-                    throw $e;
-                }
             } else {
                 // Single document intake: Use existing per-document offer creation (backward compatible)
                 foreach ($documents as $document) {
