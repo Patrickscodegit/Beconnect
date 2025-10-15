@@ -26,7 +26,7 @@ class CreateAggregatedOfferJob implements ShouldQueue
     /**
      * Execute the job.
      */
-    public function handle(IntakeAggregationService $aggregationService): void
+    public function handle(): void
     {
         Log::info('Starting aggregated offer creation', [
             'intake_id' => $this->intake->id,
@@ -44,6 +44,9 @@ class CreateAggregatedOfferJob implements ShouldQueue
         }
 
         try {
+            // Get aggregation service from container
+            $aggregationService = app(IntakeAggregationService::class);
+            
             // Aggregate extraction data from all documents
             $aggregatedData = $aggregationService->aggregateExtractionData($this->intake);
             
