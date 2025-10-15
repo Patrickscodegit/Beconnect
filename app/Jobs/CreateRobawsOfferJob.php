@@ -120,11 +120,37 @@ class CreateRobawsOfferJob implements ShouldQueue
                 throw new \RuntimeException('Robaws offer creation failed: missing id');
             }
 
+            $offerId = $result['id'];
+
             Log::info('Robaws offer created successfully', [
                 'document_id' => $this->document->id,
-                'offer_id' => $result['id'],
+                'offer_id' => $offerId,
                 'filename' => $this->document->filename
             ]);
+
+            // UNIVERSAL FIX: Attach ALL documents from the intake to this offer
+            // This ensures multi-file uploads (Filament, API, etc.) attach all documents
+            try {
+                $exportService = app(\App\Services\Robaws\RobawsExportService::class);
+                $exportService->attachDocumentsToOffer(
+                    $this->document->intake, 
+                    $offerId, 
+                    'offer_' . $offerId
+                );
+                
+                Log::info('All intake documents attached to offer', [
+                    'offer_id' => $offerId,
+                    'intake_id' => $this->document->intake_id,
+                    'document_id' => $this->document->id
+                ]);
+            } catch (\Exception $e) {
+                // Don't fail the job if attachment fails - offer was created successfully
+                Log::warning('Document attachment failed but offer created', [
+                    'offer_id' => $offerId,
+                    'intake_id' => $this->document->intake_id,
+                    'error' => $e->getMessage()
+                ]);
+            }
 
         } catch (\Exception $e) {
             Log::error('Robaws offer creation failed', [
@@ -227,11 +253,34 @@ class CreateRobawsOfferJob implements ShouldQueue
             throw new \RuntimeException('Even fallback offer creation failed');
         }
 
+        $offerId = $result['id'];
+
         Log::info('Fallback offer created successfully', [
             'document_id' => $this->document->id,
-            'offer_id' => $result['id'],
+            'offer_id' => $offerId,
             'filename' => $this->document->filename,
             'fallback_data' => $fallbackData
         ]);
+
+        // Attach ALL documents from the intake to this fallback offer
+        try {
+            $exportService = app(\App\Services\Robaws\RobawsExportService::class);
+            $exportService->attachDocumentsToOffer(
+                $this->document->intake, 
+                $offerId, 
+                'fallback_offer_' . $offerId
+            );
+            
+            Log::info('All intake documents attached to fallback offer', [
+                'offer_id' => $offerId,
+                'intake_id' => $this->document->intake_id,
+                'document_id' => $this->document->id
+            ]);
+        } catch (\Exception $e) {
+            Log::warning('Document attachment failed for fallback offer', [
+                'offer_id' => $offerId,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 }
