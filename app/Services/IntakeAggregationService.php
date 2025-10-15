@@ -76,20 +76,45 @@ class IntakeAggregationService
             $extractionData = $document->extraction_data;
             $documentType = $this->getDocumentTypeFromMimeType($file->mime_type);
 
+            // Check if data is in raw_data structure (SimplePdfExtractionStrategy format)
+            $hasRawData = !empty($extractionData['raw_data']);
+
+            // Extract nested structured data (handle both formats)
+            $contactData = $hasRawData ? ($extractionData['raw_data']['contact'] ?? []) : ($extractionData['contact'] ?? []);
+            $shipmentData = $hasRawData ? ($extractionData['raw_data']['shipment'] ?? []) : ($extractionData['shipment'] ?? []);
+            $vehicleData = $hasRawData ? ($extractionData['raw_data']['vehicle'] ?? []) : ($extractionData['vehicle'] ?? []);
+
+            // Also collect flattened routing/cargo fields (these are at root level in SimplePdfExtractionStrategy)
+            $routeData = array_filter([
+                'por' => $extractionData['por'] ?? null,
+                'pol' => $extractionData['pol'] ?? null,
+                'pod' => $extractionData['pod'] ?? null,
+                'origin' => $extractionData['origin'] ?? null,
+                'destination' => $extractionData['destination'] ?? null,
+            ]);
+
+            $cargoData = array_filter([
+                'description' => $extractionData['cargo'] ?? null,
+                'dim_bef_delivery' => $extractionData['dim_bef_delivery'] ?? null,
+                'customer_reference' => $extractionData['customer_reference'] ?? null,
+            ]);
+
             Log::info('Merging file data', [
                 'file_id' => $file->id,
                 'document_type' => $documentType,
-                'has_contact' => !empty($extractionData['contact']),
-                'has_shipment' => !empty($extractionData['shipment']),
-                'has_vehicle' => !empty($extractionData['vehicle'])
+                'has_raw_data' => $hasRawData,
+                'contact_fields' => array_keys($contactData),
+                'vehicle_fields' => array_keys($vehicleData),
+                'route_fields' => array_keys($routeData),
+                'cargo_desc' => $cargoData['description'] ?? 'none',
             ]);
 
             // Merge each section (only fill in missing data, don't overwrite)
-            $aggregated['contact'] = $this->mergeData($aggregated['contact'], $extractionData['contact'] ?? []);
-            $aggregated['shipment'] = $this->mergeData($aggregated['shipment'], $extractionData['shipment'] ?? []);
-            $aggregated['vehicle'] = $this->mergeData($aggregated['vehicle'], $extractionData['vehicle'] ?? []);
-            $aggregated['cargo'] = $this->mergeData($aggregated['cargo'], $extractionData['cargo'] ?? []);
-            $aggregated['route'] = $this->mergeData($aggregated['route'], $extractionData['route'] ?? []);
+            $aggregated['contact'] = $this->mergeData($aggregated['contact'] ?? [], $contactData);
+            $aggregated['shipment'] = $this->mergeData($aggregated['shipment'] ?? [], $shipmentData);
+            $aggregated['vehicle'] = $this->mergeData($aggregated['vehicle'] ?? [], $vehicleData);
+            $aggregated['route'] = $this->mergeData($aggregated['route'] ?? [], $routeData);
+            $aggregated['cargo'] = $this->mergeData($aggregated['cargo'] ?? [], $cargoData);
 
             // Track source
             $aggregated['metadata']['sources'][] = [
