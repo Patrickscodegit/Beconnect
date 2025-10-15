@@ -99,24 +99,62 @@ class IntakeOrchestratorJob implements ShouldQueue
                 $jobs[] = new CreateRobawsClientJob($this->intake->id, $this->getContactData());
             }
             
-            // Step 3: Add offer creation jobs after client creation
-            foreach ($documents as $document) {
-                // Create offer if no quotation ID
-                if (!$document->robaws_quotation_id) {
-                    Log::info('Adding offer creation job for document', [
+            // Step 3: Add offer creation - ENHANCED for multi-document support
+            if ($this->intake->is_multi_document && !$this->intake->robaws_offer_id) {
+                // Multi-document intake: Create ONE offer using aggregated data
+                Log::info('Multi-document intake detected - will create single aggregated offer', [
+                    'intake_id' => $this->intake->id,
+                    'total_documents' => $this->intake->total_documents,
+                    'documents_count' => $documents->count()
+                ]);
+                
+                // Aggregate extraction data from all documents
+                $aggregationService = app(\App\Services\IntakeAggregationService::class);
+                $aggregatedData = $aggregationService->aggregateExtractionData($this->intake);
+                
+                Log::info('Extraction data aggregated', [
+                    'intake_id' => $this->intake->id,
+                    'has_contact' => !empty($aggregatedData['contact']),
+                    'has_vehicle' => !empty($aggregatedData['vehicle']),
+                    'sources_merged' => count($aggregatedData['metadata']['sources'] ?? [])
+                ]);
+                
+                // Create ONE offer using aggregated data
+                try {
+                    $offerId = $aggregationService->createSingleOffer($this->intake);
+                    
+                    Log::info('Single offer created for multi-document intake', [
                         'intake_id' => $this->intake->id,
-                        'document_id' => $document->id,
-                        'filename' => $document->filename,
-                        'current_quotation_id' => $document->robaws_quotation_id,
-                        'current_sync_status' => $document->robaws_sync_status
+                        'offer_id' => $offerId,
+                        'documents_linked' => $documents->count()
                     ]);
-                    $jobs[] = new CreateRobawsOfferJob($document);
-                } else {
-                    Log::info('Skipping offer creation - quotation already exists', [
+                } catch (\Exception $e) {
+                    Log::error('Failed to create aggregated offer', [
                         'intake_id' => $this->intake->id,
-                        'document_id' => $document->id,
-                        'existing_quotation_id' => $document->robaws_quotation_id
+                        'error' => $e->getMessage()
                     ]);
+                    throw $e;
+                }
+            } else {
+                // Single document intake: Use existing per-document offer creation (backward compatible)
+                foreach ($documents as $document) {
+                    // Create offer if no quotation ID
+                    if (!$document->robaws_quotation_id) {
+                        Log::info('Adding offer creation job for document', [
+                            'intake_id' => $this->intake->id,
+                            'document_id' => $document->id,
+                            'filename' => $document->filename,
+                            'current_quotation_id' => $document->robaws_quotation_id,
+                            'current_sync_status' => $document->robaws_sync_status
+                        ]);
+                        $jobs[] = new CreateRobawsOfferJob($document);
+                    } else {
+                        Log::info('Skipping offer creation - quotation already exists', [
+                            'intake_id' => $this->intake->id,
+                            'document_id' => $document->id,
+                            'existing_quotation_id' => $document->robaws_quotation_id
+                        ]);
+                    }
                 }
             }
             

@@ -202,6 +202,63 @@ class IntakeCreationService
         return $intake;
     }
 
+    /**
+     * Create intake from multiple files uploaded together
+     * All files will be processed and contribute to ONE Robaws offer
+     *
+     * @param array $files Array of UploadedFile instances
+     * @param array $options Options including customer_name, contact_email, etc.
+     * @return Intake
+     */
+    public function createFromMultipleFiles(array $files, array $options = []): Intake
+    {
+        Log::info('Creating multi-file intake', [
+            'files_count' => count($files),
+            'source' => $options['source'] ?? 'multi_file_upload',
+            'customer_name' => $options['customer_name'] ?? null
+        ]);
+
+        // Create intake with multi-document flag
+        $intake = Intake::create([
+            'status' => 'processing',
+            'source' => $options['source'] ?? 'multi_file_upload',
+            'is_multi_document' => true,
+            'total_documents' => count($files),
+            'processed_documents' => 0,
+            'notes' => $options['notes'] ?? null,
+            'priority' => $options['priority'] ?? 'normal',
+            'customer_name' => $options['customer_name'] ?? null,
+            'contact_email' => $options['contact_email'] ?? null,
+            'contact_phone' => $options['contact_phone'] ?? null,
+            'extraction_data' => $options['extraction_data'] ?? null,
+        ]);
+
+        // Store all files
+        foreach ($files as $index => $file) {
+            $this->addFileToIntake($intake, $file);
+            
+            Log::info('Added file to multi-file intake', [
+                'intake_id' => $intake->id,
+                'file_index' => $index + 1,
+                'total_files' => count($files),
+                'filename' => $file->getClientOriginalName()
+            ]);
+        }
+
+        // Dispatch processing job
+        DB::afterCommit(function () use ($intake) {
+            ProcessIntake::dispatchSync($intake);
+        });
+
+        Log::info('Multi-file intake created successfully', [
+            'intake_id' => $intake->id,
+            'total_files' => count($files),
+            'is_multi_document' => $intake->is_multi_document
+        ]);
+
+        return $intake;
+    }
+
     public function addFileToIntake(Intake $intake, TemporaryUploadedFile|UploadedFile $file): IntakeFile
     {
         $storagePath = $this->storeFileOnly($file);
