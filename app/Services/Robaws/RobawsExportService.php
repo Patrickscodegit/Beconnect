@@ -862,6 +862,35 @@ class RobawsExportService
             'image/jpeg',       // Images
         ])->get();
 
+        // Debug logging
+        Log::info('attachDocumentsToOffer: File discovery', [
+            'export_id' => $exportId,
+            'offer_id' => $offerId,
+            'intake_id' => $intake->id,
+            'docs_found' => $docs->count(),
+            'intake_files_found' => $intakeFiles->count(),
+            'all_intake_files' => $intake->files()->count(),
+            'all_documents' => $intake->documents()->count(),
+            'doc_details' => $docs->map(function($doc) {
+                return [
+                    'id' => $doc->id,
+                    'filename' => $doc->filename,
+                    'status' => $doc->status,
+                    'file_path' => $doc->file_path,
+                    'filepath' => $doc->filepath ?? 'null'
+                ];
+            })->toArray(),
+            'intake_file_details' => $intakeFiles->map(function($file) {
+                return [
+                    'id' => $file->id,
+                    'filename' => $file->filename,
+                    'mime_type' => $file->mime_type,
+                    'storage_path' => $file->storage_path,
+                    'storage_disk' => $file->storage_disk
+                ];
+            })->toArray()
+        ]);
+
         $allFilesToUpload = collect();
 
         // Add Document models to upload list

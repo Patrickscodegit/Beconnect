@@ -169,6 +169,32 @@ class IntakeAggregationService
 
         // Attach all documents to the Robaws offer
         try {
+            // Debug: Check what files we have before attaching
+            Log::info('Debug: Files available for attachment', [
+                'intake_id' => $intake->id,
+                'offer_id' => $offerId,
+                'documents_count' => $intake->documents->count(),
+                'files_count' => $intake->files->count(),
+                'documents' => $intake->documents->map(function($doc) {
+                    return [
+                        'id' => $doc->id,
+                        'filename' => $doc->filename,
+                        'file_path' => $doc->file_path,
+                        'filepath' => $doc->filepath ?? 'null',
+                        'status' => $doc->status
+                    ];
+                })->toArray(),
+                'files' => $intake->files->map(function($file) {
+                    return [
+                        'id' => $file->id,
+                        'filename' => $file->filename,
+                        'storage_path' => $file->storage_path,
+                        'storage_disk' => $file->storage_disk,
+                        'mime_type' => $file->mime_type
+                    ];
+                })->toArray()
+            ]);
+            
             $exportService = app(\App\Services\Robaws\RobawsExportService::class);
             $exportService->attachDocumentsToOffer($intake, $offerId, 'aggregated_' . $intake->id);
             
@@ -181,7 +207,8 @@ class IntakeAggregationService
             Log::error('Failed to attach documents to offer', [
                 'intake_id' => $intake->id,
                 'offer_id' => $offerId,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
             // Don't throw - offer was created successfully, attachment is secondary
         }
