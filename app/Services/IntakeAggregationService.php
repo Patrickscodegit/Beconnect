@@ -84,19 +84,19 @@ class IntakeAggregationService
             $shipmentData = $hasRawData ? ($extractionData['raw_data']['shipment'] ?? []) : ($extractionData['shipment'] ?? []);
             $vehicleData = $hasRawData ? ($extractionData['raw_data']['vehicle'] ?? []) : ($extractionData['vehicle'] ?? []);
 
-            // Also collect flattened routing/cargo fields (these are at root level in SimplePdfExtractionStrategy)
+            // Collect flattened routing/cargo fields (check both root level AND raw_data)
             $routeData = array_filter([
-                'por' => $extractionData['por'] ?? null,
-                'pol' => $extractionData['pol'] ?? null,
-                'pod' => $extractionData['pod'] ?? null,
-                'origin' => $extractionData['origin'] ?? null,
-                'destination' => $extractionData['destination'] ?? null,
+                'por' => $extractionData['por'] ?? $extractionData['raw_data']['por'] ?? null,
+                'pol' => $extractionData['pol'] ?? $extractionData['raw_data']['pol'] ?? null,
+                'pod' => $extractionData['pod'] ?? $extractionData['raw_data']['pod'] ?? null,
+                'origin' => $extractionData['origin'] ?? $extractionData['raw_data']['origin'] ?? null,
+                'destination' => $extractionData['destination'] ?? $extractionData['raw_data']['destination'] ?? null,
             ]);
 
             $cargoData = array_filter([
-                'description' => $extractionData['cargo'] ?? null,
-                'dim_bef_delivery' => $extractionData['dim_bef_delivery'] ?? null,
-                'customer_reference' => $extractionData['customer_reference'] ?? null,
+                'description' => $extractionData['cargo'] ?? $extractionData['raw_data']['cargo'] ?? null,
+                'dim_bef_delivery' => $extractionData['dim_bef_delivery'] ?? $extractionData['raw_data']['dim_bef_delivery'] ?? null,
+                'customer_reference' => $extractionData['customer_reference'] ?? $extractionData['raw_data']['customer_reference'] ?? null,
             ]);
 
             Log::info('Merging file data', [
