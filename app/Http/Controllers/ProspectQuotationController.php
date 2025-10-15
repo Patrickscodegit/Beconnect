@@ -266,7 +266,7 @@ class ProspectQuotationController extends Controller
             
             // Cargo
             'cargo_description' => $request->cargo_description,
-            // 'commodity_type' => $request->commodity_type, // REMOVED: Legacy field, not in database
+            'commodity_type' => $request->commodity_type, // Quick Quote mode
             'cargo_details' => [
                 'weight' => $request->cargo_weight,
                 'volume' => $request->cargo_volume,
