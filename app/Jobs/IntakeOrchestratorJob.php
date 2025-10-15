@@ -158,12 +158,20 @@ class IntakeOrchestratorJob implements ShouldQueue
                 }
             }
             
-            // Step 4: Add upload jobs after offer creation
-            foreach ($documents as $document) {
-                // Upload file if quotation exists and not uploaded
-                if ($document->robaws_quotation_id && $document->upload_status !== 'uploaded') {
-                    $jobs[] = new ProcessFileUploadJob($document);
+            // Step 4: Add upload jobs after offer creation (ONLY for single-document intakes)
+            // Multi-document intakes already attach files via IntakeAggregationService
+            if (!$this->intake->is_multi_document) {
+                foreach ($documents as $document) {
+                    // Upload file if quotation exists and not uploaded
+                    if ($document->robaws_quotation_id && $document->upload_status !== 'uploaded') {
+                        $jobs[] = new ProcessFileUploadJob($document);
+                    }
                 }
+            } else {
+                Log::info('Skipping ProcessFileUploadJob for multi-document intake (files already attached)', [
+                    'intake_id' => $this->intake->id,
+                    'documents_count' => $documents->count()
+                ]);
             }
 
             // Step 5: Add status update job
