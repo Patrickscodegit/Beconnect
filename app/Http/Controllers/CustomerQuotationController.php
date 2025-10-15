@@ -250,7 +250,7 @@ class CustomerQuotationController extends Controller
             
             // Cargo
             'cargo_description' => $request->cargo_description,
-            'commodity_type' => $request->commodity_type,
+            // 'commodity_type' => $request->commodity_type, // REMOVED: Legacy field, not in database
             'cargo_details' => [
                 'weight' => $request->cargo_weight,
                 'volume' => $request->cargo_volume,
