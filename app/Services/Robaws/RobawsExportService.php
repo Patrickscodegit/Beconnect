@@ -857,16 +857,24 @@ class RobawsExportService
             'image/jpeg',       // Images
         ])->get();
 
-        // For multi-document intakes, use only IntakeFiles
-        // For single-document intakes, also check Document models
+        // For multi-document intakes, use only IntakeFiles to avoid duplicates
+        // For single-document intakes, use Document models
         if ($intake->is_multi_document) {
-            // Multi-document intake: use only IntakeFiles
+            // Multi-document intake: use only IntakeFiles (Document models are duplicates)
             $docs = collect();
+            Log::info('Multi-document intake: using only IntakeFiles for attachment', [
+                'intake_id' => $intake->id,
+                'intake_files_count' => $intakeFiles->count()
+            ]);
         } else {
             // Single-document intake: use Document models (approved, pending, or no status set)
             $docs = $intake->documents()->where(function ($q) {
                 $q->whereIn('status', ['approved', 'pending'])->orWhereNull('status');
             })->get();
+            Log::info('Single-document intake: using Document models for attachment', [
+                'intake_id' => $intake->id,
+                'documents_count' => $docs->count()
+            ]);
         }
 
         // Debug logging
@@ -926,9 +934,15 @@ class RobawsExportService
             }
         }
 
-        // Deduplicate files by filename to prevent attaching the same file multiple times
+        // Deduplicate files by filename and path to prevent attaching the same file multiple times
         $allFilesToUpload = $allFilesToUpload->unique(function ($file) {
-            return $file['filename'] . '_' . ($file['path'] ?? '');
+            // Use filename + path as unique key, but also consider the storage path
+            $path = $file['path'] ?? '';
+            if (isset($file['disk']) && isset($file['path'])) {
+                // For IntakeFiles, use storage_disk + storage_path
+                $path = $file['disk'] . ':' . $file['path'];
+            }
+            return $file['filename'] . '_' . $path;
         });
 
         if ($allFilesToUpload->isEmpty()) {
