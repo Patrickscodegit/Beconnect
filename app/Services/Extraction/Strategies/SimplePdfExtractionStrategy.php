@@ -49,14 +49,30 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
 
             // Read PDF content from storage
             if (!Storage::disk($document->storage_disk)->exists($document->file_path)) {
+                Log::error('PDF file not found in storage', [
+                    'document_id' => $document->id,
+                    'file_path' => $document->file_path,
+                    'storage_disk' => $document->storage_disk
+                ]);
                 throw new \Exception('PDF file not found: ' . $document->file_path);
             }
             
             $pdfContent = Storage::disk($document->storage_disk)->get($document->file_path);
             
             if (!$pdfContent) {
+                Log::error('Could not read PDF file content from storage', [
+                    'document_id' => $document->id,
+                    'file_path' => $document->file_path,
+                    'storage_disk' => $document->storage_disk
+                ]);
                 throw new \Exception('Could not read PDF file from storage');
             }
+
+            Log::info('PDF file read successfully', [
+                'document_id' => $document->id,
+                'file_size' => strlen($pdfContent),
+                'filename' => $document->filename
+            ]);
 
             // Extract text from PDF using PdfService
             // Create a temporary file for PdfService to work with
@@ -73,7 +89,36 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
             }
             
             if (empty($extractedText)) {
-                throw new \Exception('No text could be extracted from PDF');
+                Log::warning('No text extracted from PDF - file may be image-based or corrupted', [
+                    'document_id' => $document->id,
+                    'filename' => $document->filename,
+                    'file_size' => strlen($pdfContent)
+                ]);
+                
+                // Return minimal data instead of failing completely
+                return new ExtractionResult(
+                    success: true, // Mark as success but with minimal data
+                    data: [
+                        'contact' => ['name' => 'PDF Processing Required'],
+                        'cargo' => "PDF Document: {$document->filename} - Manual processing required",
+                        'customer_reference' => "PDF-{$document->id}",
+                        'notes' => [
+                            'extraction_method' => 'fallback',
+                            'reason' => 'No text extractable from PDF',
+                            'file_size' => strlen($pdfContent),
+                            'requires_manual_review' => true
+                        ]
+                    ],
+                    confidence: 0.1, // Very low confidence
+                    strategyUsed: $this->getName(),
+                    metadata: [
+                        'extraction_strategy' => $this->getName(),
+                        'pdf_text_length' => 0,
+                        'document_type' => 'pdf',
+                        'filename' => $document->filename,
+                        'source' => 'simple_pdf_extraction_fallback'
+                    ]
+                );
             }
 
             Log::info('PDF text extracted successfully', [

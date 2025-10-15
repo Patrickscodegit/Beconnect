@@ -91,14 +91,17 @@ class CreateRobawsOfferJob implements ShouldQueue
                         ]);
                         sleep($retryDelay);
                     } else {
-                        Log::error('No extraction data found after all attempts', [
+                        Log::warning('No extraction data found after all attempts - creating fallback offer', [
                             'document_id' => $this->document->id,
                             'max_retries' => $maxRetries,
                             'final_extraction_status' => $this->document->extraction_status,
                             'intake_id' => $this->document->intake_id,
                             'document_filename' => $this->document->filename
                         ]);
-                        throw new \RuntimeException('No extraction data found for document after ' . $maxRetries . ' attempts');
+                        
+                        // Create a fallback offer with minimal data instead of failing completely
+                        $this->createFallbackOffer($integrationService);
+                        return;
                     }
                 }
 
@@ -159,6 +162,76 @@ class CreateRobawsOfferJob implements ShouldQueue
             'robaws_sync_status' => 'error',
             'robaws_last_sync_attempt' => now(),
             'robaws_last_sync_error' => 'Job failed after ' . $this->attempts() . ' attempts: ' . $exception->getMessage()
+        ]);
+    }
+
+    /**
+     * Create a fallback offer when extraction fails completely
+     */
+    private function createFallbackOffer(EnhancedRobawsIntegrationService $integrationService): void
+    {
+        Log::info('Creating fallback offer for document with failed extraction', [
+            'document_id' => $this->document->id,
+            'filename' => $this->document->filename,
+            'intake_id' => $this->document->intake_id
+        ]);
+
+        // Create minimal extraction data from available document info
+        $fallbackData = [
+            'contact' => [
+                'name' => 'Document Processing Required',
+                'email' => null,
+                'phone' => null,
+            ],
+            'shipment' => [
+                'type' => 'Document Upload',
+                'origin' => 'Unknown',
+                'destination' => 'Unknown',
+            ],
+            'cargo' => "Document: {$this->document->filename} - Manual processing required",
+            'customer_reference' => "FALLBACK-{$this->document->id}",
+            'dates' => [
+                'upload_date' => $this->document->created_at->format('Y-m-d'),
+            ],
+            'pricing' => [
+                'amount' => 0,
+                'currency' => 'EUR',
+            ],
+            'notes' => [
+                'extraction_failed' => true,
+                'original_filename' => $this->document->filename,
+                'file_size' => $this->document->file_size,
+                'mime_type' => $this->document->mime_type,
+                'requires_manual_review' => true,
+            ]
+        ];
+
+        // Update document with fallback data
+        $this->document->update([
+            'extraction_data' => $fallbackData,
+            'extraction_status' => 'completed',
+            'extraction_confidence' => 0.1, // Very low confidence since extraction failed
+        ]);
+
+        // Process with the integration service
+        $integrationService->processDocument($this->document, $fallbackData);
+        
+        // Create the offer
+        $result = $integrationService->createOfferFromDocument($this->document);
+        
+        if (!isset($result['id'])) {
+            Log::error('Fallback offer creation also failed', [
+                'document_id' => $this->document->id,
+                'result' => $result
+            ]);
+            throw new \RuntimeException('Even fallback offer creation failed');
+        }
+
+        Log::info('Fallback offer created successfully', [
+            'document_id' => $this->document->id,
+            'offer_id' => $result['id'],
+            'filename' => $this->document->filename,
+            'fallback_data' => $fallbackData
         ]);
     }
 }
