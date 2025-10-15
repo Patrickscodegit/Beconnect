@@ -57,18 +57,23 @@ class IntakeAggregationService
 
         // Merge data from all files
         foreach ($sortedFiles as $file) {
-            // For IntakeFiles, we need to get extraction data from associated Document or use aggregated data
-            $extractionData = null;
+            // Find the corresponding Document model with extraction data
+            $document = $intake->documents()->where(function($query) use ($file) {
+                $query->where('file_path', $file->storage_path)
+                      ->orWhere('filepath', $file->storage_path);
+            })->first();
             
-            // Try to find associated Document with extraction data
-            $document = $intake->documents()->where('file_path', $file->storage_path)->first();
-            if ($document && !empty($document->extraction_data)) {
-                $extractionData = $document->extraction_data;
-            }
-            
-            if (empty($extractionData)) {
+            if (!$document || empty($document->extraction_data)) {
+                Log::debug('No extraction data found for file', [
+                    'file_id' => $file->id,
+                    'file_path' => $file->storage_path,
+                    'has_document' => $document ? 'yes' : 'no',
+                    'document_extraction_data' => $document ? (!empty($document->extraction_data) ? 'yes' : 'no') : 'n/a'
+                ]);
                 continue;
             }
+            
+            $extractionData = $document->extraction_data;
             $documentType = $this->getDocumentTypeFromMimeType($file->mime_type);
 
             Log::info('Merging file data', [

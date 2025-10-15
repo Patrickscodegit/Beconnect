@@ -235,7 +235,11 @@ class IntakeCreationService
 
         // Store all files
         foreach ($files as $index => $file) {
-            $this->addFileToIntake($intake, $file);
+            // Create both IntakeFile and Document models for multi-file intakes
+            $intakeFile = $this->addFileToIntake($intake, $file);
+            
+            // Also create Document model for extraction processing
+            $this->createDocumentFromIntakeFile($intake, $intakeFile);
             
             Log::info('Added file to multi-file intake', [
                 'intake_id' => $intake->id,
@@ -281,6 +285,25 @@ class IntakeCreationService
         return $intakeFile;
     }
 
+    /**
+     * Create Document model from IntakeFile for extraction processing
+     */
+    private function createDocumentFromIntakeFile(Intake $intake, IntakeFile $intakeFile): void
+    {
+        \App\Models\Document::create([
+            'intake_id' => $intake->id,
+            'filename' => $intakeFile->filename,
+            'original_filename' => $intakeFile->filename,
+            'file_path' => $intakeFile->storage_path,
+            'filepath' => $intakeFile->storage_path, // Alternative field name
+            'mime_type' => $intakeFile->mime_type,
+            'file_size' => $intakeFile->file_size,
+            'storage_disk' => $intakeFile->storage_disk,
+            'status' => 'pending', // Will be processed by extraction
+            'extraction_status' => 'pending',
+            'extraction_confidence' => 0.0,
+        ]);
+    }
 
     private function storeFile(Intake $intake, TemporaryUploadedFile|UploadedFile $file, string $originalName): void
     {
