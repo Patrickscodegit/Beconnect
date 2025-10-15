@@ -102,7 +102,7 @@
             <!-- Schedule Cards -->
             <div class="space-y-4">
                 @foreach($schedules as $schedule)
-                    <x-public-schedule-card :schedule="$schedule" />
+                    <x-schedule-card :schedule="$schedule" />
                 @endforeach
             </div>
 
