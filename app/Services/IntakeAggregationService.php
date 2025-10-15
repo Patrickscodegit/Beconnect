@@ -125,12 +125,10 @@ class IntakeAggregationService
         }
 
         // Select the primary document (highest priority) to create the offer
-        $primaryDocument = $intake->documents()
-            ->orderByDesc(function ($query) {
-                // Order by mime type priority
-                return $this->getDocumentPriority($query);
-            })
-            ->first();
+        $documents = $intake->documents;
+        $primaryDocument = $documents->sortByDesc(function ($document) {
+            return $this->getDocumentPriority($document);
+        })->first();
 
         if (!$primaryDocument) {
             throw new \RuntimeException('No primary document found for offer creation');
