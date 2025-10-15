@@ -318,8 +318,17 @@ class CustomerQuotationController extends Controller
                 $processedItem['line_number'] = $index + 1;
                 $processedItem['quotation_request_id'] = $quotationRequest->id;
                 
+                // Clean up empty strings for decimal fields - convert to null
+                $decimalFields = ['wheelbase_cm', 'length_cm', 'width_cm', 'height_cm', 'cbm', 'weight_kg', 'bruto_weight_kg', 'netto_weight_kg', 'unit_price', 'line_total'];
+                foreach ($decimalFields as $field) {
+                    if (isset($processedItem[$field]) && $processedItem[$field] === '') {
+                        $processedItem[$field] = null;
+                    }
+                }
+                
                 // Auto-calculate CBM if dimensions present
-                if (isset($processedItem['length_cm'], $processedItem['width_cm'], $processedItem['height_cm'])) {
+                if (isset($processedItem['length_cm'], $processedItem['width_cm'], $processedItem['height_cm']) && 
+                    $processedItem['length_cm'] && $processedItem['width_cm'] && $processedItem['height_cm']) {
                     $processedItem['cbm'] = ($processedItem['length_cm'] / 100) * 
                                            ($processedItem['width_cm'] / 100) * 
                                            ($processedItem['height_cm'] / 100);
