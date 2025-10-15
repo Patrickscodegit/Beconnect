@@ -849,18 +849,25 @@ class RobawsExportService
      */
     public function attachDocumentsToOffer(Intake $intake, int $offerId, string $exportId): void
     {
-        // Pick documents that are ready for attachment (approved, pending, or no status set)
-        $docs = $intake->documents()->where(function ($q) {
-            $q->whereIn('status', ['approved', 'pending'])->orWhereNull('status');
-        })->get();
-
-        // Also check for IntakeFiles (for .eml files and other direct uploads)
+        // Check for IntakeFiles first (for multi-file uploads and direct uploads)
         $intakeFiles = $intake->files()->whereIn('mime_type', [
             'message/rfc822',  // .eml files
             'application/pdf',  // PDFs
             'image/png',        // Images
             'image/jpeg',       // Images
         ])->get();
+
+        // For multi-document intakes, only use IntakeFiles to avoid duplicates
+        // For single-document intakes, use Document models
+        if ($intake->is_multi_document && $intakeFiles->isNotEmpty()) {
+            // Multi-document intake: use only IntakeFiles (Document models are duplicates)
+            $docs = collect();
+        } else {
+            // Single-document intake: use Document models (approved, pending, or no status set)
+            $docs = $intake->documents()->where(function ($q) {
+                $q->whereIn('status', ['approved', 'pending'])->orWhereNull('status');
+            })->get();
+        }
 
         // Debug logging
         Log::info('attachDocumentsToOffer: File discovery', [
