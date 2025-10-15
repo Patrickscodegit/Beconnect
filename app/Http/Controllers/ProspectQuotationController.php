@@ -71,19 +71,7 @@ class ProspectQuotationController extends Controller
         // Validate the request
         $validator = $this->validateQuotationRequest($request);
         
-        // Debug logging
-        \Log::info('📥 Quotation Request Received', [
-            'has_commodity_items' => $request->has('commodity_items'),
-            'commodity_items_value' => $request->input('commodity_items'),
-            'quotation_mode' => $request->input('quotation_mode'),
-            'cargo_description' => $request->input('cargo_description') ? 'Present' : 'Missing',
-        ]);
-        
         if ($validator->fails()) {
-            \Log::warning('❌ Validation Failed', [
-                'errors' => $validator->errors()->toArray()
-            ]);
-            
             return redirect()->back()
                 ->withErrors($validator)
                 ->withInput();

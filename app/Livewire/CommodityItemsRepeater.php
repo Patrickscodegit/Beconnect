@@ -75,12 +75,6 @@ class CommodityItemsRepeater extends Component
             'attachments' => [],
             'input_unit_system' => $this->unitSystem,
         ];
-        
-        // Debug logging
-        \Log::info('➕ Item added to Livewire', [
-            'total_items' => count($this->items),
-            'last_item_id' => $this->items[count($this->items) - 1]['id'] ?? null,
-        ]);
     }
 
     public function removeItem($index)

@@ -89,21 +89,7 @@ class CustomerQuotationController extends Controller
         // Validate
         $validator = $this->validateQuotationRequest($request);
         
-        // Debug logging
-        \Log::info('📥 Customer Quotation Request Received', [
-            'user_id' => $user->id,
-            'has_commodity_items' => $request->has('commodity_items'),
-            'commodity_items_value' => $request->input('commodity_items'),
-            'quotation_mode' => $request->input('quotation_mode'),
-            'cargo_description' => $request->input('cargo_description') ? 'Present' : 'Missing',
-        ]);
-        
         if ($validator->fails()) {
-            \Log::warning('❌ Customer Validation Failed', [
-                'user_id' => $user->id,
-                'errors' => $validator->errors()->toArray()
-            ]);
-            
             return redirect()->back()
                 ->withErrors($validator)
                 ->withInput();

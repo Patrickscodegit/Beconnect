@@ -94,18 +94,7 @@
         @endif
     </div>
 
-    <!-- Debug field to visualize items data (temporarily visible for debugging) -->
-    <div class="mt-4 p-4 bg-yellow-50 border-2 border-yellow-400 rounded-lg">
-        <label class="block text-sm font-semibold text-yellow-800 mb-2">
-            🐛 DEBUG: Commodity Items Data (This shows what will be sent to server)
-        </label>
-        <input type="text" name="commodity_items" value="{{ json_encode($items) }}" 
-               class="w-full p-3 border-2 border-red-500 bg-white rounded font-mono text-sm"
-               readonly
-               placeholder="Commodity items JSON will appear here when you add items">
-        <p class="text-xs text-yellow-700 mt-2">
-            📌 If this stays empty after adding items, Livewire is not updating the data
-        </p>
-    </div>
+    <!-- Hidden field to submit items data -->
+    <input type="hidden" name="commodity_items" value="{{ json_encode($items) }}">
     <input type="hidden" name="unit_system" value="{{ $unitSystem }}">
 </div>
