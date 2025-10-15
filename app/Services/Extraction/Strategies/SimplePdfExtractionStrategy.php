@@ -450,6 +450,17 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
      */
     private function extractVehicleInfo(string $text, array &$extractedData): void
     {
+        // Known company/customer names to exclude from VIN extraction
+        $excludedNames = [
+            'HOLLANDICO',
+            'JB TRADING',
+            'SILVER UNIVER',
+            'SUMITOMO MITSUI',
+            'SMBC',
+            'BANKING CORPORATION',
+            // Add more as needed
+        ];
+        
         // Vehicle make patterns (expanded list)
         $makes = [
             'BMW', 'Mercedes', 'Audi', 'Toyota', 'Honda', 'Ford', 'Volkswagen', 'Nissan', 'Hyundai', 'Kia',
@@ -523,13 +534,29 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
                 $vin = trim($matches[1] ?? $matches[0]);
                 
                 // Additional validation to exclude false positives and booking numbers
-                if (strlen($vin) >= 10 && 
+                if (strlen($vin) >= 10 &&  // Support older vehicles (10-17 chars)
                     $vin !== 'YearWeightType' && 
                     $vin !== '251001115946' && // Exclude booking number
                     !preg_match('/^(Year|Weight|Type)$/i', $vin) &&
                     preg_match('/^[A-Z0-9]{10,17}$/i', $vin)) {
-                    $extractedData['vehicle']['vin'] = $vin;
-                    break;
+                    
+                    // Additional validation: exclude known company names
+                    $isExcluded = false;
+                    foreach ($excludedNames as $excludedName) {
+                        if (stripos($vin, $excludedName) !== false) {
+                            $isExcluded = true;
+                            Log::debug('VIN excluded as company name', [
+                                'vin' => $vin,
+                                'excluded_name' => $excludedName
+                            ]);
+                            break;
+                        }
+                    }
+                    
+                    if (!$isExcluded) {
+                        $extractedData['vehicle']['vin'] = $vin;
+                        break;
+                    }
                 }
             }
         }
@@ -763,9 +790,17 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
 
         // Customer reference will be set after origin normalization
 
-        // Set POR (Port of Receipt) - always the complete shipper address
+        // Set POR (Port of Receipt) - use shipper address if available
         if (empty($extractedData['por'])) {
-            $extractedData['por'] = 'Marconistraat 22, 6716 AK Ede, Nederland';
+            // Try to use shipper address if available
+            if (!empty($extractedData['contact']['address'])) {
+                $extractedData['por'] = $extractedData['contact']['address'];
+            } elseif (!empty($extractedData['shipment']['origin_address'])) {
+                $extractedData['por'] = $extractedData['shipment']['origin_address'];
+            } else {
+                // Only use default as last resort
+                $extractedData['por'] = 'Marconistraat 22, 6716 AK Ede, Nederland';
+            }
         }
 
         // Set POL (Port of Loading) - Antwerp for European customers

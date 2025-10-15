@@ -167,6 +167,25 @@ class IntakeAggregationService
             'documents_linked' => $intake->documents->count()
         ]);
 
+        // Attach all documents to the Robaws offer
+        try {
+            $exportService = app(\App\Services\Robaws\RobawsExportService::class);
+            $exportService->attachDocumentsToOffer($intake, $offerId, 'aggregated_' . $intake->id);
+            
+            Log::info('All documents attached to Robaws offer', [
+                'intake_id' => $intake->id,
+                'offer_id' => $offerId,
+                'total_files' => $intake->documents->count() + $intake->files->count()
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to attach documents to offer', [
+                'intake_id' => $intake->id,
+                'offer_id' => $offerId,
+                'error' => $e->getMessage()
+            ]);
+            // Don't throw - offer was created successfully, attachment is secondary
+        }
+
         return $offerId;
     }
 
