@@ -11,6 +11,24 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Offer Templates (Intro/End Standard Texts) - MUST BE CREATED FIRST (referenced by quotation_requests)
+        Schema::create('offer_templates', function (Blueprint $table) {
+            $table->id();
+            $table->string('template_code')->unique(); // FCL_EXP_INTRO_PICKUP, RORO_IMP_INTRO_ENG
+            $table->string('template_name'); // "FCL EXP - intro - with pick up"
+            $table->enum('template_type', ['intro', 'end', 'slot']); // intro, end, or slot (middle section)
+            $table->string('service_type'); // RORO_IMPORT, FCL_EXPORT, etc.
+            $table->string('customer_type')->nullable(); // FORWARDERS, POV, GENERAL
+            $table->text('content'); // Template with ${variables}
+            $table->json('available_variables')->nullable(); // List of variables this template uses
+            $table->integer('sort_order')->default(0);
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+            
+            $table->index(['service_type', 'template_type', 'is_active']);
+            $table->index('template_code');
+        });
+
         // Quotation Requests - Main table for all quotation requests
         Schema::create('quotation_requests', function (Blueprint $table) {
             $table->id();
@@ -228,24 +246,6 @@ return new class extends Migration
             
             $table->index(['quotation_request_id', 'article_cache_id']);
             $table->index(['quotation_request_id', 'parent_article_id']);
-        });
-
-        // Offer Templates (Intro/End Standard Texts)
-        Schema::create('offer_templates', function (Blueprint $table) {
-            $table->id();
-            $table->string('template_code')->unique(); // FCL_EXP_INTRO_PICKUP, RORO_IMP_INTRO_ENG
-            $table->string('template_name'); // "FCL EXP - intro - with pick up"
-            $table->enum('template_type', ['intro', 'end', 'slot']); // intro, end, or slot (middle section)
-            $table->string('service_type'); // RORO_IMPORT, FCL_EXPORT, etc.
-            $table->string('customer_type')->nullable(); // FORWARDERS, POV, GENERAL
-            $table->text('content'); // Template with ${variables}
-            $table->json('available_variables')->nullable(); // List of variables this template uses
-            $table->integer('sort_order')->default(0);
-            $table->boolean('is_active')->default(true);
-            $table->timestamps();
-            
-            $table->index(['service_type', 'template_type', 'is_active']);
-            $table->index('template_code');
         });
     }
 
