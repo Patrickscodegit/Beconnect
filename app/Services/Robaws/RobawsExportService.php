@@ -849,7 +849,7 @@ class RobawsExportService
      */
     public function attachDocumentsToOffer(Intake $intake, int $offerId, string $exportId): void
     {
-        // Check for IntakeFiles first (for multi-file uploads and direct uploads)
+        // Get all files to attach
         $intakeFiles = $intake->files()->whereIn('mime_type', [
             'message/rfc822',  // .eml files
             'application/pdf',  // PDFs
@@ -857,10 +857,10 @@ class RobawsExportService
             'image/jpeg',       // Images
         ])->get();
 
-        // For multi-document intakes, only use IntakeFiles to avoid duplicates
-        // For single-document intakes, use Document models
-        if ($intake->is_multi_document && $intakeFiles->isNotEmpty()) {
-            // Multi-document intake: use only IntakeFiles (Document models are duplicates)
+        // For multi-document intakes, use only IntakeFiles
+        // For single-document intakes, also check Document models
+        if ($intake->is_multi_document) {
+            // Multi-document intake: use only IntakeFiles
             $docs = collect();
         } else {
             // Single-document intake: use Document models (approved, pending, or no status set)

@@ -124,27 +124,25 @@ class IntakeAggregationService
             $aggregatedData = $this->aggregateExtractionData($intake);
         }
 
-        // Select the primary document (highest priority) to create the offer
-        $documents = $intake->documents;
-        $primaryDocument = $documents->sortByDesc(function ($document) {
-            return $this->getDocumentPriority($document);
+        // Select the primary file (highest priority) to create the offer
+        $files = $intake->files;
+        $primaryFile = $files->sortByDesc(function ($file) {
+            return $this->getFilePriority($file);
         })->first();
 
-        if (!$primaryDocument) {
-            throw new \RuntimeException('No primary document found for offer creation');
+        if (!$primaryFile) {
+            throw new \RuntimeException('No primary file found for offer creation');
         }
 
-        // Update primary document with aggregated data for Robaws processing
-        $primaryDocument->update([
-            'extraction_data' => $aggregatedData
-        ]);
+        // Create a temporary Document model for Robaws processing
+        $tempDocument = $this->createTempDocumentFromFile($intake, $primaryFile, $aggregatedData);
 
         // Process document for Robaws (this creates robaws_quotation_data)
-        $this->robawsService->processDocumentFromExtraction($primaryDocument);
-        $primaryDocument->refresh();
+        $this->robawsService->processDocumentFromExtraction($tempDocument);
+        $tempDocument->refresh();
 
-        // Create the offer using the primary document
-        $offerResult = $this->robawsService->createOfferFromDocument($primaryDocument);
+        // Create the offer using the temporary document
+        $offerResult = $this->robawsService->createOfferFromDocument($tempDocument);
         $offerId = $offerResult['id'] ?? null;
 
         if (!$offerId) {
@@ -237,18 +235,39 @@ class IntakeAggregationService
     }
 
     /**
-     * Get priority score for document type (higher = more important)
+     * Get priority score for file type (higher = more important)
      */
-    private function getDocumentPriority(Document $document): int
+    private function getFilePriority(\App\Models\IntakeFile $file): int
     {
-        $type = $this->getDocumentType($document);
+        $mimeType = $file->mime_type;
 
-        return match ($type) {
-            'email' => 100,  // Email has highest priority (contains contact info, intent)
-            'pdf' => 50,     // PDF has medium priority (detailed specs)
-            'image' => 25,   // Image has lowest priority (visual confirmation)
+        return match ($mimeType) {
+            'message/rfc822' => 100,  // Email has highest priority (contains contact info, intent)
+            'application/pdf' => 50,  // PDF has medium priority (detailed specs)
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp' => 25,  // Images have lowest priority
             default => 0
         };
+    }
+
+    /**
+     * Create a temporary Document model from IntakeFile for Robaws processing
+     */
+    private function createTempDocumentFromFile(Intake $intake, \App\Models\IntakeFile $file, array $aggregatedData): Document
+    {
+        return new Document([
+            'intake_id' => $intake->id,
+            'filename' => $file->filename,
+            'original_filename' => $file->filename,
+            'file_path' => $file->storage_path,
+            'filepath' => $file->storage_path,
+            'mime_type' => $file->mime_type,
+            'file_size' => $file->file_size,
+            'storage_disk' => $file->storage_disk,
+            'status' => 'pending',
+            'extraction_status' => 'completed',
+            'extraction_confidence' => 0.8,
+            'extraction_data' => $aggregatedData,
+        ]);
     }
 
     /**
