@@ -849,9 +849,9 @@ class RobawsExportService
      */
     public function attachDocumentsToOffer(Intake $intake, int $offerId, string $exportId): void
     {
-        // Pick "approved" docs (or sensible default if none approved yet)
+        // Pick documents that are ready for attachment (approved, pending, or no status set)
         $docs = $intake->documents()->where(function ($q) {
-            $q->where('status', 'approved')->orWhereNull('status');
+            $q->whereIn('status', ['approved', 'pending'])->orWhereNull('status');
         })->get();
 
         // Also check for IntakeFiles (for .eml files and other direct uploads)
@@ -918,6 +918,11 @@ class RobawsExportService
                 ]);
             }
         }
+
+        // Deduplicate files by filename to prevent attaching the same file multiple times
+        $allFilesToUpload = $allFilesToUpload->unique(function ($file) {
+            return $file['filename'] . '_' . ($file['path'] ?? '');
+        });
 
         if ($allFilesToUpload->isEmpty()) {
             Log::info('No files to attach', [
