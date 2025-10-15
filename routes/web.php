@@ -105,9 +105,9 @@ Route::middleware('auth')->group(function () {
     });
 });
 
-// Webhook endpoint (no auth required)
-Route::post('/webhooks/robaws', [RobawsOfferController::class, 'webhook'])
-    ->name('webhooks.robaws');
+// Legacy webhook endpoint (deprecated - use API route instead)
+// Route::post('/webhooks/robaws', [RobawsOfferController::class, 'webhook'])
+//     ->name('webhooks.robaws.legacy');
 
 // API endpoints for intake creation (no auth required for external services)
 Route::post('/api/intakes/screenshot', [ApiIntakeController::class, 'createFromScreenshot'])
