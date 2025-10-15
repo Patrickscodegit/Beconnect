@@ -847,7 +847,7 @@ class RobawsExportService
     /**
      * Attach documents to Robaws offer
      */
-    private function attachDocumentsToOffer(Intake $intake, int $offerId, string $exportId): void
+    public function attachDocumentsToOffer(Intake $intake, int $offerId, string $exportId): void
     {
         // Pick "approved" docs (or sensible default if none approved yet)
         $docs = $intake->documents()->where(function ($q) {
