@@ -50,22 +50,29 @@ class IntakeAggregationService
             ]
         ];
 
-        // Sort documents by priority (email > PDF > image)
-        $sortedDocuments = $documents->sortByDesc(function ($document) {
-            return $this->getDocumentPriority($document);
+        // Sort files by priority (email > PDF > image)
+        $sortedFiles = $intake->files->sortByDesc(function ($file) {
+            return $this->getFilePriority($file);
         });
 
-        // Merge data from all documents
-        foreach ($sortedDocuments as $document) {
-            if (empty($document->extraction_data)) {
+        // Merge data from all files
+        foreach ($sortedFiles as $file) {
+            // For IntakeFiles, we need to get extraction data from associated Document or use aggregated data
+            $extractionData = null;
+            
+            // Try to find associated Document with extraction data
+            $document = $intake->documents()->where('file_path', $file->storage_path)->first();
+            if ($document && !empty($document->extraction_data)) {
+                $extractionData = $document->extraction_data;
+            }
+            
+            if (empty($extractionData)) {
                 continue;
             }
+            $documentType = $this->getDocumentTypeFromMimeType($file->mime_type);
 
-            $extractionData = $document->extraction_data;
-            $documentType = $this->getDocumentType($document);
-
-            Log::info('Merging document data', [
-                'document_id' => $document->id,
+            Log::info('Merging file data', [
+                'file_id' => $file->id,
                 'document_type' => $documentType,
                 'has_contact' => !empty($extractionData['contact']),
                 'has_shipment' => !empty($extractionData['shipment']),
@@ -81,15 +88,15 @@ class IntakeAggregationService
 
             // Track source
             $aggregated['metadata']['sources'][] = [
-                'document_id' => $document->id,
-                'filename' => $document->filename,
+                'file_id' => $file->id,
+                'filename' => $file->filename,
                 'type' => $documentType,
-                'priority' => $this->getDocumentPriority($document)
+                'priority' => $this->getFilePriority($file)
             ];
         }
 
         // Calculate overall confidence
-        $aggregated['metadata']['confidence'] = $this->calculateAggregatedConfidence($documents);
+        $aggregated['metadata']['confidence'] = $this->calculateAggregatedConfidence($sortedFiles);
 
         // Store aggregated data on intake
         $intake->update(['aggregated_extraction_data' => $aggregated]);
@@ -246,6 +253,19 @@ class IntakeAggregationService
             'application/pdf' => 50,  // PDF has medium priority (detailed specs)
             'image/jpeg', 'image/png', 'image/gif', 'image/webp' => 25,  // Images have lowest priority
             default => 0
+        };
+    }
+
+    /**
+     * Get document type from MIME type
+     */
+    private function getDocumentTypeFromMimeType(string $mimeType): string
+    {
+        return match ($mimeType) {
+            'message/rfc822' => 'email',
+            'application/pdf' => 'pdf',
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp' => 'image',
+            default => 'unknown'
         };
     }
 
