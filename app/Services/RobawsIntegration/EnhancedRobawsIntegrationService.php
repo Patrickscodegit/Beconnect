@@ -499,18 +499,31 @@ class EnhancedRobawsIntegrationService
                 // Determine sync status based on validation
                 $syncStatus = $validationResult['is_valid'] ? 'ready' : 'needs_review';
                 
-                // Store the formatted data
-                $document->update([
-                    'robaws_quotation_data' => $final,
-                    'robaws_formatted_at' => now(),
-                    'robaws_sync_status' => $syncStatus,
-                ]);
-                
-                // Debug: Log final saved values to prove they're intact
-                Log::channel('robaws')->info('Routing FINAL (saved)', [
-                    'document_id' => $document->id,
-                    'saved_data' => Arr::only($final, ['por','pol','pod','customer_reference']),
-                ]);
+                // Store the formatted data (only if document is persisted)
+                if ($document->exists) {
+                    $document->update([
+                        'robaws_quotation_data' => $final,
+                        'robaws_formatted_at' => now(),
+                        'robaws_sync_status' => $syncStatus,
+                    ]);
+                    
+                    // Debug: Log final saved values to prove they're intact
+                    Log::channel('robaws')->info('Routing FINAL (saved to DB)', [
+                        'document_id' => $document->id,
+                        'saved_data' => Arr::only($final, ['por','pol','pod','customer_reference']),
+                    ]);
+                } else {
+                    // For temporary documents (multi-document aggregation), set attributes without saving
+                    $document->robaws_quotation_data = $final;
+                    $document->robaws_formatted_at = now();
+                    $document->robaws_sync_status = $syncStatus;
+                    
+                    Log::channel('robaws')->info('Routing FINAL (temp document - not saved)', [
+                        'temp_document' => true,
+                        'data_keys' => array_keys($final),
+                        'has_routing' => !empty($final['por']) && !empty($final['pod']),
+                    ]);
+                }
                 
                 Log::channel('robaws')->info('Document formatted for Robaws using JSON mapping', [
                     'document_id' => $document->id,

@@ -149,9 +149,19 @@ class IntakeAggregationService
         // Create a temporary Document model for Robaws processing
         $tempDocument = $this->createTempDocumentFromFile($intake, $primaryFile, $aggregatedData);
 
-        // Process document for Robaws (this creates robaws_quotation_data)
-        $this->robawsService->processDocumentFromExtraction($tempDocument);
-        $tempDocument->refresh();
+        // Log aggregated data before processing
+        Log::info('Processing aggregated data for multi-document offer', [
+            'intake_id' => $intake->id,
+            'primary_file' => $primaryFile->filename,
+            'aggregated_data_keys' => array_keys($aggregatedData),
+            'has_contact' => !empty($aggregatedData['contact']),
+            'has_vehicle' => !empty($aggregatedData['vehicle']),
+            'has_shipment' => !empty($aggregatedData['shipment']),
+        ]);
+
+        // Process document for Robaws with aggregated extraction data
+        $this->robawsService->processDocument($tempDocument, $aggregatedData);
+        // Note: No refresh() needed since tempDocument is not persisted
 
         // Create the offer using the temporary document
         $offerResult = $this->robawsService->createOfferFromDocument($tempDocument);
