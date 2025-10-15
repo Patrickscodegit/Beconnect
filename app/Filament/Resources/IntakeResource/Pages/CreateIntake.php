@@ -75,39 +75,48 @@ class CreateIntake extends CreateRecord
         }
 
         try {
-            // 3) Create intake from the first file
-            $first = array_shift($uploadedFiles);
-            $intake = $intakeCreationService->createFromUploadedFile($first, [
-                'source'         => $data['source'] ?? 'upload',
-                'notes'          => $data['notes'] ?? null,
-                'priority'       => $data['priority'] ?? 'normal',
-                'customer_name'  => $data['customer_name'] ?? null,
-                'contact_email'  => $data['contact_email'] ?? null,
-                'contact_phone'  => $data['contact_phone'] ?? null,
-                'extraction_data'=> [
-                    'contact' => array_filter([
-                        'name'  => $data['customer_name'] ?? null,
-                        'email' => $data['contact_email'] ?? null,
-                        'phone' => $data['contact_phone'] ?? null,
-                    ]),
-                ],
-            ]);
-
-            $processedCount = 1;
-            $failedCount = 0;
-
-            // 4) Attach the rest
-            foreach ($uploadedFiles as $file) {
-                try {
-                    $intakeCreationService->addFileToIntake($intake, $file);
-                    $processedCount++;
-                } catch (\Exception $e) {
-                    \Log::error('Failed to add additional file to intake', [
-                        'intake_id' => $intake->id,
-                        'error' => $e->getMessage()
-                    ]);
-                    $failedCount++;
-                }
+            // Use multi-file creation service for proper handling
+            if (count($uploadedFiles) > 1) {
+                // Multiple files: use createFromMultipleFiles for proper aggregation
+                $intake = $intakeCreationService->createFromMultipleFiles($uploadedFiles, [
+                    'source'         => $data['source'] ?? 'multi_file_upload',
+                    'notes'          => $data['notes'] ?? null,
+                    'priority'       => $data['priority'] ?? 'normal',
+                    'customer_name'  => $data['customer_name'] ?? null,
+                    'contact_email'  => $data['contact_email'] ?? null,
+                    'contact_phone'  => $data['contact_phone'] ?? null,
+                    'extraction_data'=> [
+                        'contact' => array_filter([
+                            'name'  => $data['customer_name'] ?? null,
+                            'email' => $data['contact_email'] ?? null,
+                            'phone' => $data['contact_phone'] ?? null,
+                        ]),
+                    ],
+                ]);
+                
+                $processedCount = count($uploadedFiles);
+                $failedCount = 0;
+            } else {
+                // Single file: use original logic
+                $first = array_shift($uploadedFiles);
+                $intake = $intakeCreationService->createFromUploadedFile($first, [
+                    'source'         => $data['source'] ?? 'upload',
+                    'notes'          => $data['notes'] ?? null,
+                    'priority'       => $data['priority'] ?? 'normal',
+                    'customer_name'  => $data['customer_name'] ?? null,
+                    'contact_email'  => $data['contact_email'] ?? null,
+                    'contact_phone'  => $data['contact_phone'] ?? null,
+                    'extraction_data'=> [
+                        'contact' => array_filter([
+                            'name'  => $data['customer_name'] ?? null,
+                            'email' => $data['contact_email'] ?? null,
+                            'phone' => $data['contact_phone'] ?? null,
+                        ]),
+                    ],
+                ]);
+                
+                $processedCount = 1;
+                $failedCount = 0;
             }
 
             // Show notification about upload results
