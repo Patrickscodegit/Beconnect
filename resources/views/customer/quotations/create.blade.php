@@ -518,32 +518,60 @@ function quotationForm() {
 
 // Sync Livewire commodity items to hidden input before form submission
 function syncCommodityItems(event) {
+    console.log('🚀 Form submission started - syncing commodity items...');
+    
     try {
         // Find the Livewire component
         const livewireComponent = document.querySelector('[wire\\:id]');
+        console.log('📦 Livewire component found:', livewireComponent ? 'YES' : 'NO');
         
-        if (livewireComponent && typeof Livewire !== 'undefined') {
-            // Get the component ID
-            const componentId = livewireComponent.getAttribute('wire:id');
-            const component = Livewire.find(componentId);
-            
-            if (component) {
-                // Get items from Livewire component
-                const items = component.get('items');
-                
-                // Update hidden input with current items
-                const hiddenInput = document.querySelector('input[name="commodity_items"]');
-                if (hiddenInput) {
-                    hiddenInput.value = JSON.stringify(items);
-                    console.log('✅ Synced commodity items before submission:', items.length, 'items');
-                }
-            }
+        if (!livewireComponent) {
+            console.warn('⚠️ No Livewire component found on page');
+            // Still allow form to submit - might be using Quick Quote
+            return true;
         }
+        
+        if (typeof Livewire === 'undefined') {
+            console.error('❌ Livewire is not loaded on the page');
+            return true; // Allow submit anyway
+        }
+        
+        // Get the component ID
+        const componentId = livewireComponent.getAttribute('wire:id');
+        console.log('🆔 Component ID:', componentId);
+        
+        const component = Livewire.find(componentId);
+        console.log('🔍 Component instance:', component ? 'FOUND' : 'NOT FOUND');
+        
+        if (!component) {
+            console.error('❌ Could not find Livewire component instance');
+            return true; // Allow submit anyway
+        }
+        
+        // Get items from Livewire component
+        const items = component.get('items');
+        console.log('📋 Items from Livewire:', items);
+        console.log('📊 Number of items:', Array.isArray(items) ? items.length : 'NOT AN ARRAY');
+        
+        // Update hidden input with current items
+        const hiddenInput = document.querySelector('input[name="commodity_items"]');
+        console.log('🎯 Hidden input found:', hiddenInput ? 'YES' : 'NO');
+        
+        if (hiddenInput) {
+            const jsonString = JSON.stringify(items);
+            hiddenInput.value = jsonString;
+            console.log('✅ Synced commodity items:', jsonString);
+            console.log('✅ Hidden input value updated to:', hiddenInput.value);
+        } else {
+            console.error('❌ Hidden input not found in DOM');
+        }
+        
     } catch (error) {
-        console.error('Error syncing commodity items:', error);
+        console.error('❌ Error syncing commodity items:', error);
+        console.error('Stack trace:', error.stack);
     }
     
-    // Let form submit normally
+    // Always return true to allow form submission
     return true;
 }
 </script>
