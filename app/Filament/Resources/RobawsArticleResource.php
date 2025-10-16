@@ -254,20 +254,21 @@ class RobawsArticleResource extends Resource
                     $services = is_string($state) ? json_decode($state, true) : $state;
                     
                     if (is_array($services) && count($services) > 0) {
-                        return $services;
+                        // Return as string for Filament to handle properly
+                        return implode(', ', $services);
                     }
                     
                     // Fallback: show service_type if available
                     if ($record->service_type) {
-                        return [$record->service_type];
+                        return $record->service_type;
                     }
                     
-                    return ['Not specified'];
+                    return 'Not specified';
                 })
                 ->color('success')
-                ->limit(2)
+                ->limit(50) // Limit characters, not array items
                 ->tooltip(function ($state, $record) {
-                    $services = is_array($state) ? $state : json_decode($state, true);
+                    $services = is_string($state) ? json_decode($state, true) : $state;
                     
                     if (is_array($services) && count($services) > 2) {
                         return implode(', ', $services);
