@@ -9,12 +9,12 @@ use Illuminate\Support\Facades\Log;
 class IntakePipelineFactory
 {
     /**
-     * Available pipelines (will be expanded in future phases)
+     * Available pipelines
      */
     private array $pipelines = [
         EmailIntakePipeline::class,
         PdfIntakePipeline::class,
-        // Future: ImageIntakePipeline::class,
+        ImageIntakePipeline::class,
     ];
 
     /**

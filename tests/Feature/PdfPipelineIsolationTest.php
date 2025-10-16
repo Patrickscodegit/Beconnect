@@ -170,14 +170,12 @@ class PdfPipelineIsolationTest extends TestCase
         $pipelineFactory = app(IntakePipelineFactory::class);
         $supportedTypes = $pipelineFactory->getAllSupportedMimeTypes();
 
-        // Should support both email and PDF
+        // Should support email, PDF, and images
         $this->assertContains('message/rfc822', $supportedTypes);
         $this->assertContains('application/vnd.ms-outlook', $supportedTypes);
         $this->assertContains('application/pdf', $supportedTypes);
-        
-        // Should not support images yet
-        $this->assertNotContains('image/jpeg', $supportedTypes);
-        $this->assertNotContains('image/png', $supportedTypes);
+        $this->assertContains('image/jpeg', $supportedTypes);
+        $this->assertContains('image/png', $supportedTypes);
     }
 
     public function test_pipeline_factory_correctly_identifies_supported_mime_types(): void
@@ -191,9 +189,13 @@ class PdfPipelineIsolationTest extends TestCase
         // PDF type
         $this->assertTrue($pipelineFactory->isMimeTypeSupported('application/pdf'));
         
+        // Image types
+        $this->assertTrue($pipelineFactory->isMimeTypeSupported('image/jpeg'));
+        $this->assertTrue($pipelineFactory->isMimeTypeSupported('image/png'));
+        
         // Unsupported types
-        $this->assertFalse($pipelineFactory->isMimeTypeSupported('image/jpeg'));
         $this->assertFalse($pipelineFactory->isMimeTypeSupported('text/plain'));
+        $this->assertFalse($pipelineFactory->isMimeTypeSupported('application/zip'));
     }
 
     public function test_pdf_pipeline_has_lower_priority_than_email(): void

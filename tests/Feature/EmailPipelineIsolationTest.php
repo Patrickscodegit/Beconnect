@@ -85,12 +85,11 @@ class EmailPipelineIsolationTest extends TestCase
             'filename' => 'test-image.jpg'
         ]);
 
-        // Test pipeline detection
-        $pipelineFactory = app(IntakePipelineFactory::class);
-        $pipeline = $pipelineFactory->getPipelineForFile($imageFile);
+        // Get email pipeline directly
+        $emailPipeline = app(\App\Services\Intake\Pipelines\EmailIntakePipeline::class);
 
-        // Should return null for non-email files
-        $this->assertNull($pipeline);
+        // Email pipeline should not handle image files
+        $this->assertFalse($emailPipeline->canHandle($imageFile));
     }
 
     /** @test */
@@ -223,8 +222,9 @@ class EmailPipelineIsolationTest extends TestCase
         // Should also support PDF (Phase 2 complete)
         $this->assertContains('application/pdf', $supportedTypes);
         
-        // Should not support images yet (Phase 3 pending)
-        $this->assertNotContains('image/jpeg', $supportedTypes);
+        // Should also support images (Phase 3 complete)
+        $this->assertContains('image/jpeg', $supportedTypes);
+        $this->assertContains('image/png', $supportedTypes);
     }
 
     /** @test */
@@ -239,8 +239,12 @@ class EmailPipelineIsolationTest extends TestCase
         // PDF type (Phase 2)
         $this->assertTrue($pipelineFactory->isMimeTypeSupported('application/pdf'));
         
+        // Image types (Phase 3)
+        $this->assertTrue($pipelineFactory->isMimeTypeSupported('image/jpeg'));
+        $this->assertTrue($pipelineFactory->isMimeTypeSupported('image/png'));
+        
         // Unsupported types
-        $this->assertFalse($pipelineFactory->isMimeTypeSupported('image/jpeg'));
         $this->assertFalse($pipelineFactory->isMimeTypeSupported('text/plain'));
+        $this->assertFalse($pipelineFactory->isMimeTypeSupported('application/zip'));
     }
 }
