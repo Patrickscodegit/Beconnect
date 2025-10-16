@@ -5,8 +5,7 @@ namespace App\Jobs\Intake;
 use App\Models\Intake;
 use App\Models\IntakeFile;
 use App\Models\Document;
-use App\Services\Extraction\ExtractionService;
-use App\Services\Extraction\Strategies\SimplePdfExtractionStrategy;
+use App\Services\ExtractionService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -43,20 +42,15 @@ class ExtractPdfDataJob implements ShouldQueue
             // Create Document model for extraction processing
             $document = $this->createDocumentFromIntakeFile();
 
-            // Extract PDF data using specialized strategy
+            // Extract PDF data using ExtractionService
             $extractionService = app(ExtractionService::class);
-            $extractionResult = $extractionService->extractFromFile(
-                $this->file->storage_path,
-                $this->file->storage_disk,
-                SimplePdfExtractionStrategy::class
-            );
+            $extractionData = $extractionService->extractFromFile($this->file);
 
-            if ($extractionResult->success) {
+            if ($extractionData) {
                 // Update document with extraction results
                 $document->update([
-                    'extraction_data' => $extractionResult->data,
+                    'extraction_data' => $extractionData,
                     'extraction_status' => 'completed',
-                    'extraction_confidence' => $extractionResult->confidence,
                     'status' => 'approved'
                 ]);
 
@@ -64,15 +58,14 @@ class ExtractPdfDataJob implements ShouldQueue
                     'intake_id' => $this->intake->id,
                     'file_id' => $this->file->id,
                     'document_id' => $document->id,
-                    'confidence' => $extractionResult->confidence,
-                    'data_keys' => array_keys($extractionResult->data ?? [])
+                    'data_keys' => array_keys($extractionData ?? [])
                 ]);
 
                 // Update intake processed documents count
                 $this->updateProcessedDocumentsCount();
 
             } else {
-                throw new \Exception("PDF extraction failed: {$extractionResult->error}");
+                throw new \Exception("PDF extraction returned no data");
             }
 
         } catch (\Exception $e) {
