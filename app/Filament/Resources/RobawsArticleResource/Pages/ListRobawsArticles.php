@@ -32,12 +32,12 @@ class ListRobawsArticles extends ListRecords
                         $syncService = app(RobawsArticlesSyncService::class);
                         $result = $syncService->sync();
                         
-                        // Automatically queue metadata sync
-                        \App\Jobs\SyncArticlesMetadataBulkJob::dispatch('all');
+                        // Automatically sync metadata
+                        $metadataResult = $syncService->syncAllMetadata();
                         
                         Notification::make()
                             ->title('Articles synced successfully!')
-                            ->body("Synced {$result['synced']} articles. Metadata sync queued for background processing.")
+                            ->body("Synced {$result['synced']} articles. Metadata sync completed: {$metadataResult['success']}/{$metadataResult['total']} articles.")
                             ->success()
                             ->duration(10000) // 10 seconds
                             ->send();
@@ -63,11 +63,11 @@ class ListRobawsArticles extends ListRecords
                 ->action(function () {
                     try {
                         $syncService = app(RobawsArticlesSyncService::class);
-                        $result = $syncService->rebuildCache(); // Automatically queues metadata sync
+                        $result = $syncService->rebuildCache(); // Automatically syncs metadata
                         
                         Notification::make()
                             ->title('Cache rebuilt successfully!')
-                            ->body("Total: {$result['total']}, Synced: {$result['synced']}, Errors: {$result['errors']}. Metadata sync queued for background processing.")
+                            ->body("Total: {$result['total']}, Synced: {$result['synced']}, Errors: {$result['errors']}. Metadata sync completed automatically.")
                             ->success()
                             ->duration(10000) // 10 seconds
                             ->send();
@@ -92,13 +92,12 @@ class ListRobawsArticles extends ListRecords
                 ->modalSubmitActionLabel('Yes, sync metadata')
                 ->action(function () {
                     try {
-                        $totalArticles = \App\Models\RobawsArticleCache::count();
-                        
-                        \App\Jobs\SyncArticlesMetadataBulkJob::dispatch('all');
+                        $syncService = app(RobawsArticlesSyncService::class);
+                        $result = $syncService->syncAllMetadata();
                         
                         Notification::make()
-                            ->title('Metadata sync queued!')
-                            ->body("Queued metadata sync for {$totalArticles} articles. This will process in the background.")
+                            ->title('Metadata sync completed!')
+                            ->body("Processed {$result['total']} articles. Success: {$result['success']}, Failed: {$result['failed']}")
                             ->success()
                             ->duration(8000)
                             ->send();

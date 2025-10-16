@@ -203,12 +203,12 @@ class RobawsArticlesSyncService
     /**
      * Clear and rebuild cache from Robaws API
      * 
-     * @param bool $queueMetadataSync Whether to automatically queue metadata sync after rebuild
+     * @param bool $syncMetadata Whether to automatically sync metadata after rebuild
      */
-    public function rebuildCache(bool $queueMetadataSync = true): array
+    public function rebuildCache(bool $syncMetadata = true): array
     {
         Log::info('Rebuilding article cache from Robaws API', [
-            'queue_metadata_sync' => $queueMetadataSync
+            'sync_metadata' => $syncMetadata
         ]);
         
         DB::beginTransaction();
@@ -219,13 +219,13 @@ class RobawsArticlesSyncService
             
             Log::info('Cache rebuild completed', $result);
             
-            // Automatically queue metadata sync for all articles
-            if ($queueMetadataSync && $result['success']) {
-                Log::info('Queuing bulk metadata sync after rebuild', [
+            // Automatically sync metadata for all articles (synchronous)
+            if ($syncMetadata && $result['success']) {
+                Log::info('Starting synchronous metadata sync after rebuild', [
                     'total_articles' => $result['total']
                 ]);
                 
-                \App\Jobs\SyncArticlesMetadataBulkJob::dispatch('all');
+                $this->syncAllMetadata();
             }
             
             return $result;
@@ -234,6 +234,60 @@ class RobawsArticlesSyncService
             Log::error('Cache rebuild failed', ['error' => $e->getMessage()]);
             throw $e;
         }
+    }
+    
+    /**
+     * Sync metadata for all articles synchronously
+     */
+    public function syncAllMetadata(): array
+    {
+        $articles = RobawsArticleCache::all();
+        $total = $articles->count();
+        $successCount = 0;
+        $failCount = 0;
+        
+        Log::info('Starting synchronous metadata sync', [
+            'total_articles' => $total
+        ]);
+        
+        foreach ($articles as $index => $article) {
+            try {
+                // Use the RobawsArticleProvider to sync metadata
+                $provider = app(\App\Services\Robaws\RobawsArticleProvider::class);
+                $provider->syncArticleMetadata($article->id);
+                
+                $successCount++;
+                
+                // Log progress every 100 articles
+                if (($index + 1) % 100 === 0) {
+                    Log::info('Metadata sync progress', [
+                        'processed' => $index + 1,
+                        'total' => $total,
+                        'progress_percent' => round((($index + 1) / $total) * 100, 1)
+                    ]);
+                }
+                
+            } catch (\Exception $e) {
+                $failCount++;
+                Log::warning('Failed to sync metadata for article', [
+                    'article_id' => $article->id,
+                    'article_name' => $article->article_name,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+        
+        Log::info('Completed synchronous metadata sync', [
+            'total' => $total,
+            'success' => $successCount,
+            'failed' => $failCount
+        ]);
+        
+        return [
+            'total' => $total,
+            'success' => $successCount,
+            'failed' => $failCount
+        ];
     }
 }
 

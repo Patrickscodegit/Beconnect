@@ -22,12 +22,18 @@ class SyncRobawsArticles extends Command
             // Option 1: Metadata only (no article sync)
             if ($this->option('metadata-only')) {
                 $this->info('Syncing metadata for all existing articles...');
-                $totalArticles = RobawsArticleCache::count();
                 
-                SyncArticlesMetadataBulkJob::dispatch('all');
+                $result = $syncService->syncAllMetadata();
                 
-                $this->info("✅ Dispatched metadata sync for {$totalArticles} articles!");
-                $this->comment('💡 Run: php artisan queue:work --queue=article-metadata');
+                $this->info("✅ Metadata sync completed!");
+                $this->table(
+                    ['Metric', 'Value'],
+                    [
+                        ['Total Articles', $result['total']],
+                        ['Success', $result['success']],
+                        ['Failed', $result['failed']],
+                    ]
+                );
                 return Command::SUCCESS;
             }
             
@@ -52,16 +58,22 @@ class SyncRobawsArticles extends Command
                     ]
                 );
                 
-                // Automatically queue metadata sync (unless --skip-metadata flag)
+                // Automatically sync metadata (unless --skip-metadata flag)
                 if (!$this->option('skip-metadata')) {
                     $this->newLine();
-                    $this->info('🔄 Queuing metadata sync for all articles...');
+                    $this->info('🔄 Syncing metadata for all articles...');
                     
-                    SyncArticlesMetadataBulkJob::dispatch('all');
+                    $metadataResult = $syncService->syncAllMetadata();
                     
-                    $this->info("✅ Dispatched metadata sync for {$result['total']} articles!");
-                    $this->comment('💡 Metadata will populate in background');
-                    $this->comment('💡 Run: php artisan queue:work --queue=article-metadata');
+                    $this->info("✅ Metadata sync completed!");
+                    $this->table(
+                        ['Metric', 'Value'],
+                        [
+                            ['Total Articles', $metadataResult['total']],
+                            ['Success', $metadataResult['success']],
+                            ['Failed', $metadataResult['failed']],
+                        ]
+                    );
                 } else {
                     $this->comment('⏭️  Skipped metadata sync (--skip-metadata flag)');
                 }

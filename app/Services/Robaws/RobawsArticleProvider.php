@@ -1242,6 +1242,7 @@ class RobawsArticleProvider
     {
         $desc = strtoupper($description);
         
+        // Check for explicit EXPORT/IMPORT
         if (str_contains($desc, 'RORO') && str_contains($desc, 'EXPORT')) {
             return 'RORO EXPORT';
         } elseif (str_contains($desc, 'RORO') && str_contains($desc, 'IMPORT')) {
@@ -1250,6 +1251,17 @@ class RobawsArticleProvider
             return 'FCL EXPORT';
         } elseif (str_contains($desc, 'FCL') && str_contains($desc, 'IMPORT')) {
             return 'FCL IMPORT';
+        }
+        
+        // Check for service types without explicit EXPORT/IMPORT
+        if (str_contains($desc, 'RORO')) {
+            return 'RORO'; // Will be determined by direction later
+        } elseif (str_contains($desc, 'FCL')) {
+            return 'FCL'; // Will be determined by direction later
+        } elseif (str_contains($desc, 'STATIC')) {
+            return 'STATIC CARGO'; // Static cargo service
+        } elseif (str_contains($desc, 'SEAFREIGHT')) {
+            return 'SEAFREIGHT'; // General seafreight
         }
 
         return null;
@@ -1284,13 +1296,30 @@ class RobawsArticleProvider
             }
         }
         
-        // Extract POD
+        // Extract POD - try multiple patterns
+        $podName = null;
+        
+        // Pattern 1: FCL - City (CODE) format
         if (preg_match('/(?:FCL|RORO)\s*-\s*([A-Za-z\s]+?)\s*\([A-Z]{3}\)/', $article->article_name, $matches)) {
             $podName = trim($matches[1]);
+        }
+        // Pattern 2: City(CODE) - Country format  
+        elseif (preg_match('/([A-Za-z\s]+?)\s*\([A-Z]{3}\)\s*-\s*[A-Za-z\s,]+/', $article->article_name, $matches)) {
+            $podName = trim($matches[1]);
+        }
+        // Pattern 3: Any city before (CODE) format
+        elseif (preg_match('/([A-Za-z\s]+?)\s*\([A-Z]{3}\)/', $article->article_name, $matches)) {
+            $podName = trim($matches[1]);
+        }
+        
+        if ($podName) {
             $podPort = \App\Models\Port::where('name', 'LIKE', '%' . $podName . '%')->first();
             
             if ($podPort) {
                 $metadata['pod_name'] = $podPort->name . ', ' . $podPort->country . ' (' . $podPort->code . ')';
+            } else {
+                // Fallback: use extracted name if port not found
+                $metadata['pod_name'] = $podName;
             }
         }
         
