@@ -1282,10 +1282,19 @@ class RobawsArticleProvider
         // Extract POL and POD, store port objects for direction detection
         $polPort = null;
         $podPort = null;
+        $polCode = null;
         
-        // Extract POL
+        // Extract POL with multiple patterns:
+        // Pattern 1: Standard (CODE) format - e.g., (ANR), (RTM)
         if (preg_match('/\(([A-Z]{3})\)/', $article->article_name, $matches)) {
             $polCode = $matches[1];
+        }
+        // Pattern 2: (CODE numbers) format - e.g., (ANR 1333), (ZEE 456)
+        elseif (preg_match('/\(([A-Z]{3})\s+\d+\)/', $article->article_name, $matches)) {
+            $polCode = $matches[1];
+        }
+        
+        if ($polCode) {
             $polPort = \App\Models\Port::where('code', $polCode)->first();
             
             if ($polPort) {
@@ -1309,6 +1318,14 @@ class RobawsArticleProvider
         }
         // Pattern 3: Any city before (CODE) format
         elseif (preg_match('/([A-Za-z\s]+?)\s*\([A-Z]{3}\)/', $article->article_name, $matches)) {
+            $podName = trim($matches[1]);
+        }
+        // Pattern 4: (POL CODE numbers) City Country format - e.g., "ACL(ANR 1333) Halifax Canada"
+        elseif (preg_match('/\([A-Z]{3}\s+\d+\)\s+([A-Za-z\s]+?)\s+[A-Z][a-z]+/', $article->article_name, $matches)) {
+            $podName = trim($matches[1]);
+        }
+        // Pattern 5: (POL CODE) City Country format - e.g., "Grimaldi(ANR) Alexandria Egypt"
+        elseif (preg_match('/\([A-Z]{3}\)\s+([A-Za-z\s]+?)\s+[A-Z][a-z]+/', $article->article_name, $matches)) {
             $podName = trim($matches[1]);
         }
         
