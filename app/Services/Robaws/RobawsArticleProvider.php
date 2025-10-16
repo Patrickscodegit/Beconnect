@@ -918,7 +918,8 @@ class RobawsArticleProvider
                 
                 // SUPPLEMENT: Always try to extract POL/POD from article name
                 // This fills gaps when API doesn't provide complete routing info
-                $nameExtraction = $this->extractMetadataFromArticle($article);
+                // Pass existing service_type to extraction for direction detection
+                $nameExtraction = $this->extractMetadataFromArticleWithContext($article, $metadata);
                 
                 // Merge POL/POD from article name if API didn't provide them
                 if (empty($metadata['pol_code']) && !empty($nameExtraction['pol_code'])) {
@@ -940,6 +941,16 @@ class RobawsArticleProvider
                 // Also supplement pol_terminal if not provided by API
                 if (empty($metadata['pol_terminal']) && !empty($nameExtraction['pol_terminal'])) {
                     $metadata['pol_terminal'] = $nameExtraction['pol_terminal'];
+                }
+                
+                // IMPORTANT: Always use direction-aware applicable_services from name extraction
+                // This overrides API data which may not be direction-aware
+                if (!empty($nameExtraction['applicable_services'])) {
+                    $metadata['applicable_services'] = $nameExtraction['applicable_services'];
+                    Log::info('Using direction-aware applicable_services from article name', [
+                        'article_id' => $articleId,
+                        'services' => $nameExtraction['applicable_services']
+                    ]);
                 }
                 
             } else {
@@ -1245,6 +1256,61 @@ class RobawsArticleProvider
     }
 
     /**
+     * Extract metadata from article name with existing context (for supplementing API data)
+     */
+    private function extractMetadataFromArticleWithContext(RobawsArticleCache $article, array $existingMetadata): array
+    {
+        $metadata = [];
+        
+        // Use existing service_type if available, otherwise extract
+        $metadata['service_type'] = $existingMetadata['service_type'] ?? $this->extractServiceTypeFromDescription(
+            $article->article_name
+        );
+        
+        // Extract POL and POD, store port objects for direction detection
+        $polPort = null;
+        $podPort = null;
+        
+        // Extract POL
+        if (preg_match('/\(([A-Z]{3})\)/', $article->article_name, $matches)) {
+            $polCode = $matches[1];
+            $polPort = \App\Models\Port::where('code', $polCode)->first();
+            
+            if ($polPort) {
+                $metadata['pol_code'] = $polPort->name . ', ' . $polPort->country . ' (' . $polPort->code . ')';
+                if ($polPort->terminal_code ?? null) {
+                    $metadata['pol_terminal'] = $polPort->terminal_code;
+                }
+            }
+        }
+        
+        // Extract POD
+        if (preg_match('/(?:FCL|RORO)\s*-\s*([A-Za-z\s]+?)\s*\([A-Z]{3}\)/', $article->article_name, $matches)) {
+            $podName = trim($matches[1]);
+            $podPort = \App\Models\Port::where('name', 'LIKE', '%' . $podName . '%')->first();
+            
+            if ($podPort) {
+                $metadata['pod_name'] = $podPort->name . ', ' . $podPort->country . ' (' . $podPort->code . ')';
+            }
+        }
+        
+        // Smart applicable_services based on POL/POD direction
+        if ($polPort && $podPort && $metadata['service_type']) {
+            $metadata['applicable_services'] = $this->getApplicableServicesFromDirection(
+                $polPort,
+                $podPort,
+                $metadata['service_type']
+            );
+        } elseif ($metadata['service_type']) {
+            $metadata['applicable_services'] = $this->getApplicableServicesFromType(
+                $metadata['service_type']
+            );
+        }
+        
+        return $metadata;
+    }
+    
+    /**
      * Fallback method to extract metadata from article when API is unavailable
      */
     private function extractMetadataFromArticle(RobawsArticleCache $article): array
@@ -1260,6 +1326,10 @@ class RobawsArticleProvider
         $metadata['service_type'] = $this->extractServiceTypeFromDescription(
             $article->article_name
         );
+        
+        // Extract POL and POD, store port objects for direction detection
+        $polPort = null;
+        $podPort = null;
         
         // NEW: Extract POL code from parentheses and format as schedule: (ANR) → "Antwerp, Belgium (ANR)"
         if (preg_match('/\(([A-Z]{3})\)/', $article->article_name, $matches)) {
@@ -1303,6 +1373,20 @@ class RobawsArticleProvider
             }
         }
         
+        // NEW: Smart applicable_services based on POL/POD direction
+        if ($polPort && $podPort && $metadata['service_type']) {
+            $metadata['applicable_services'] = $this->getApplicableServicesFromDirection(
+                $polPort,
+                $podPort,
+                $metadata['service_type']
+            );
+        } elseif ($metadata['service_type']) {
+            // Fallback: use service_type only
+            $metadata['applicable_services'] = $this->getApplicableServicesFromType(
+                $metadata['service_type']
+            );
+        }
+        
         // Cannot determine parent status from description alone
         // Only the Robaws API "PARENT ITEM" checkbox is authoritative
         $metadata['is_parent_item'] = null;
@@ -1337,6 +1421,95 @@ class RobawsArticleProvider
         }
         
         return null;
+    }
+    
+    /**
+     * Determine applicable services based on POL/POD direction
+     * Uses port flags (is_european_origin, is_african_destination) to detect EXPORT vs IMPORT
+     */
+    private function getApplicableServicesFromDirection(
+        \App\Models\Port $polPort,
+        \App\Models\Port $podPort,
+        string $serviceType
+    ): array {
+        // Detect direction
+        $isExport = $polPort->is_european_origin && $podPort->is_african_destination;
+        $isImport = $podPort->is_european_origin && $polPort->is_african_destination;
+        
+        // Get base service (FCL, RORO, LCL, etc.)
+        $baseService = $this->getBaseService($serviceType);
+        
+        $services = [];
+        
+        if ($isExport) {
+            // Europe → Africa = EXPORT only
+            $services[] = $baseService . ' EXPORT';
+            if ($baseService === 'FCL') {
+                $services[] = 'FCL EXPORT CONSOL';
+            }
+        } elseif ($isImport) {
+            // Africa → Europe = IMPORT only
+            $services[] = $baseService . ' IMPORT';
+            if ($baseService === 'FCL') {
+                $services[] = 'FCL IMPORT CONSOL';
+            }
+        } else {
+            // Unknown direction: include both
+            $services[] = $baseService . ' EXPORT';
+            $services[] = $baseService . ' IMPORT';
+            if ($baseService === 'FCL') {
+                $services[] = 'FCL EXPORT CONSOL';
+                $services[] = 'FCL IMPORT CONSOL';
+            }
+        }
+        
+        return $services;
+    }
+    
+    /**
+     * Extract base service from service_type
+     * Returns: FCL, RORO, LCL, AIRFREIGHT, etc.
+     */
+    private function getBaseService(string $serviceType): string
+    {
+        if (str_contains($serviceType, 'FCL')) {
+            return 'FCL';
+        }
+        if (str_contains($serviceType, 'RORO')) {
+            return 'RORO';
+        }
+        if (str_contains($serviceType, 'LCL')) {
+            return 'LCL';
+        }
+        if (str_contains($serviceType, 'AIRFREIGHT')) {
+            return 'AIRFREIGHT';
+        }
+        return 'FCL'; // Default
+    }
+    
+    /**
+     * Fallback: populate applicable_services from service_type only (no direction info)
+     */
+    private function getApplicableServicesFromType(string $serviceType): array
+    {
+        if (str_contains($serviceType, 'FCL EXPORT')) {
+            return ['FCL EXPORT', 'FCL EXPORT CONSOL'];
+        }
+        
+        if (str_contains($serviceType, 'FCL IMPORT')) {
+            return ['FCL IMPORT', 'FCL IMPORT CONSOL'];
+        }
+        
+        if (str_contains($serviceType, 'RORO EXPORT')) {
+            return ['RORO EXPORT'];
+        }
+        
+        if (str_contains($serviceType, 'RORO IMPORT')) {
+            return ['RORO IMPORT'];
+        }
+        
+        // Default: just the service type itself
+        return [$serviceType];
     }
 
 }

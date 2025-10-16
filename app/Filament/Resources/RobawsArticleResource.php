@@ -249,42 +249,36 @@ class RobawsArticleResource extends Resource
                     
             Tables\Columns\TextColumn::make('applicable_services')
                 ->badge()
+                ->separator(',')
                 ->formatStateUsing(function ($state, $record) {
-                    // Parse array from JSON if needed
                     $services = is_string($state) ? json_decode($state, true) : $state;
-                    if (!is_array($services)) {
-                        return 'None';
-                    }
                     
-                    // If service_type is known, show only relevant services
-                    if ($record->service_type) {
-                        $relevant = [$record->service_type];
-                        
-                        // Add CONSOL variant if it exists
-                        $consol = $record->service_type . ' CONSOL';
-                        if (in_array($consol, $services)) {
-                            $relevant[] = $consol;
-                        }
-                        
-                        return implode(', ', array_map(fn($s) => str_replace('_', ' ', $s), $relevant));
-                    }
-                    
-                    // Otherwise show max 3 services
-                    $limited = array_slice($services, 0, 3);
-                    $more = count($services) - 3;
-                    $result = implode(', ', array_map(fn($s) => str_replace('_', ' ', $s), $limited));
-                    if ($more > 0) {
-                        $result .= " +{$more} more";
-                    }
-                    return $result ?: 'None';
-                })
-                ->color(fn ($state) => $state ? 'success' : 'gray')
-                ->tooltip(function ($state) {
-                    $services = is_string($state) ? json_decode($state, true) : $state;
                     if (is_array($services) && count($services) > 0) {
-                        return implode(', ', array_map(fn($s) => str_replace('_', ' ', $s), $services));
+                        return $services;
                     }
-                    return null;
+                    
+                    // Fallback: show service_type if available
+                    if ($record->service_type) {
+                        return [$record->service_type];
+                    }
+                    
+                    return ['Not specified'];
+                })
+                ->color('success')
+                ->limit(2)
+                ->tooltip(function ($state, $record) {
+                    $services = is_array($state) ? $state : json_decode($state, true);
+                    
+                    if (is_array($services) && count($services) > 2) {
+                        return implode(', ', $services);
+                    }
+                    
+                    // Show direction hint
+                    if ($record->pol_code && $record->pod_name) {
+                        return 'Direction-aware services based on POL/POD routing';
+                    }
+                    
+                    return 'Service types this article applies to';
                 })
                 ->toggleable(),
                     
