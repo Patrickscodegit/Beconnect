@@ -2,12 +2,12 @@
 
 namespace App\Jobs;
 
+use App\Models\RobawsArticleCache;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use App\Services\Robaws\RobawsArticleProvider;
 use Illuminate\Support\Facades\Log;
 
 class SyncArticlesMetadataBulkJob implements ShouldQueue
@@ -26,64 +26,63 @@ class SyncArticlesMetadataBulkJob implements ShouldQueue
      *
      * @var int
      */
-    public $timeout = 3600; // 1 hour for bulk operations
+    public $timeout = 600; // 10 minutes for dispatching jobs
 
     /**
      * Create a new job instance.
+     * 
+     * @param array|string $articleIds Array of IDs or 'all' to sync all articles
      */
     public function __construct(
-        public array $articleIds
+        public array|string $articleIds = 'all'
     ) {}
 
     /**
      * Execute the job.
+     * Dispatches individual SyncSingleArticleMetadataJob for each article
      */
     public function handle(): void
     {
-        $provider = app(RobawsArticleProvider::class);
-        
-        Log::info('Starting bulk metadata sync', [
-            'article_count' => count($this->articleIds)
-        ]);
-        
-        $successCount = 0;
-        $failCount = 0;
-        
-        foreach ($this->articleIds as $articleId) {
-            try {
-                // Sync article metadata (shipping_line, service_type, etc.)
-                $provider->syncArticleMetadata($articleId);
-                
-                // Sync composite items (child articles/surcharges)
-                $provider->syncCompositeItems($articleId);
-                
-                $successCount++;
-                
-                Log::debug('Synced metadata for article', [
-                    'article_id' => $articleId,
-                    'progress' => "{$successCount}/" . count($this->articleIds)
-                ]);
-                
-            } catch (\Exception $e) {
-                $failCount++;
-                
-                Log::error('Failed to sync metadata for article in bulk', [
-                    'article_id' => $articleId,
-                    'error' => $e->getMessage()
-                ]);
-                
-                // Continue with next article even if one fails
-                continue;
-            }
-            
-            // Rate limiting: wait 500ms between requests to respect Robaws API limits
-            usleep(500000);
+        // Resolve article IDs
+        if ($this->articleIds === 'all') {
+            $articles = RobawsArticleCache::pluck('id')->toArray();
+        } else {
+            $articles = $this->articleIds;
         }
         
-        Log::info('Completed bulk metadata sync', [
-            'total' => count($this->articleIds),
-            'success' => $successCount,
-            'failed' => $failCount
+        $totalArticles = count($articles);
+        
+        Log::info('Starting bulk metadata sync - dispatching individual jobs', [
+            'article_count' => $totalArticles,
+            'mode' => $this->articleIds === 'all' ? 'all articles' : 'specific IDs'
+        ]);
+        
+        // Chunk articles into batches to avoid memory issues
+        $batches = array_chunk($articles, 50);
+        $dispatched = 0;
+        
+        foreach ($batches as $batchIndex => $batch) {
+            foreach ($batch as $articleId) {
+                // Dispatch individual job to queue for parallel processing
+                SyncSingleArticleMetadataJob::dispatch($articleId)
+                    ->onQueue('article-metadata');
+                
+                $dispatched++;
+            }
+            
+            Log::info('Dispatched batch of metadata sync jobs', [
+                'batch' => $batchIndex + 1,
+                'total_batches' => count($batches),
+                'dispatched_so_far' => $dispatched,
+                'total' => $totalArticles,
+                'progress_percent' => round(($dispatched / $totalArticles) * 100, 2)
+            ]);
+        }
+        
+        Log::info('Completed dispatching bulk metadata sync jobs', [
+            'total_dispatched' => $dispatched,
+            'queue' => 'article-metadata',
+            'message' => "All jobs queued. Start worker with: php artisan queue:work --queue=article-metadata"
         ]);
     }
 }

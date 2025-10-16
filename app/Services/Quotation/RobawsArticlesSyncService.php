@@ -202,10 +202,14 @@ class RobawsArticlesSyncService
 
     /**
      * Clear and rebuild cache from Robaws API
+     * 
+     * @param bool $queueMetadataSync Whether to automatically queue metadata sync after rebuild
      */
-    public function rebuildCache(): array
+    public function rebuildCache(bool $queueMetadataSync = true): array
     {
-        Log::info('Rebuilding article cache from Robaws API');
+        Log::info('Rebuilding article cache from Robaws API', [
+            'queue_metadata_sync' => $queueMetadataSync
+        ]);
         
         DB::beginTransaction();
         try {
@@ -214,6 +218,16 @@ class RobawsArticlesSyncService
             DB::commit();
             
             Log::info('Cache rebuild completed', $result);
+            
+            // Automatically queue metadata sync for all articles
+            if ($queueMetadataSync && $result['success']) {
+                Log::info('Queuing bulk metadata sync after rebuild', [
+                    'total_articles' => $result['total']
+                ]);
+                
+                \App\Jobs\SyncArticlesMetadataBulkJob::dispatch('all');
+            }
+            
             return $result;
         } catch (\Exception $e) {
             DB::rollBack();

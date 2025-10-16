@@ -25,17 +25,21 @@ class ListRobawsArticles extends ListRecords
                 ->color('primary')
                 ->requiresConfirmation()
                 ->modalHeading('Sync All Articles from Robaws?')
-                ->modalDescription('This will fetch all articles from the Robaws API and update the cache. This may take a few minutes.')
+                ->modalDescription('This will fetch all articles from the Robaws API and update the cache. Metadata will be synced in the background.')
                 ->modalSubmitActionLabel('Yes, sync now')
                 ->action(function () {
                     try {
                         $syncService = app(RobawsArticlesSyncService::class);
                         $result = $syncService->sync();
                         
+                        // Automatically queue metadata sync
+                        \App\Jobs\SyncArticlesMetadataBulkJob::dispatch('all');
+                        
                         Notification::make()
                             ->title('Articles synced successfully!')
-                            ->body("Synced {$result['synced']} articles. Errors: {$result['errors']}")
+                            ->body("Synced {$result['synced']} articles. Metadata sync queued for background processing.")
                             ->success()
+                            ->duration(10000) // 10 seconds
                             ->send();
                             
                         $this->redirect(static::getUrl());
@@ -54,23 +58,54 @@ class ListRobawsArticles extends ListRecords
                 ->color('warning')
                 ->requiresConfirmation()
                 ->modalHeading('Rebuild Entire Article Cache?')
-                ->modalDescription('This will clear all cached articles and fetch everything from Robaws API. This operation cannot be undone and may take several minutes.')
+                ->modalDescription('This will clear all cached articles and fetch everything from Robaws API. Metadata will be synced in the background. This operation cannot be undone and may take several minutes.')
                 ->modalSubmitActionLabel('Yes, rebuild now')
                 ->action(function () {
                     try {
                         $syncService = app(RobawsArticlesSyncService::class);
-                        $result = $syncService->rebuildCache();
+                        $result = $syncService->rebuildCache(); // Automatically queues metadata sync
                         
                         Notification::make()
                             ->title('Cache rebuilt successfully!')
-                            ->body("Total: {$result['total']}, Synced: {$result['synced']}, Errors: {$result['errors']}")
+                            ->body("Total: {$result['total']}, Synced: {$result['synced']}, Errors: {$result['errors']}. Metadata sync queued for background processing.")
                             ->success()
+                            ->duration(10000) // 10 seconds
                             ->send();
                             
                         $this->redirect(static::getUrl());
                     } catch (\Exception $e) {
                         Notification::make()
                             ->title('Rebuild failed')
+                            ->body($e->getMessage())
+                            ->danger()
+                            ->send();
+                    }
+                }),
+                
+            Actions\Action::make('syncAllMetadata')
+                ->label('Sync All Metadata')
+                ->icon('heroicon-o-sparkles')
+                ->color('success')
+                ->requiresConfirmation()
+                ->modalHeading('Sync Metadata for All Articles?')
+                ->modalDescription('This will queue metadata sync (shipping line, POL/POD, service type) for all cached articles. This happens in the background.')
+                ->modalSubmitActionLabel('Yes, sync metadata')
+                ->action(function () {
+                    try {
+                        $totalArticles = \App\Models\RobawsArticleCache::count();
+                        
+                        \App\Jobs\SyncArticlesMetadataBulkJob::dispatch('all');
+                        
+                        Notification::make()
+                            ->title('Metadata sync queued!')
+                            ->body("Queued metadata sync for {$totalArticles} articles. This will process in the background.")
+                            ->success()
+                            ->duration(8000)
+                            ->send();
+                            
+                    } catch (\Exception $e) {
+                        Notification::make()
+                            ->title('Metadata sync failed')
                             ->body($e->getMessage())
                             ->danger()
                             ->send();
