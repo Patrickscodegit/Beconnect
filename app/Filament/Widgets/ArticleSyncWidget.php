@@ -13,6 +13,7 @@ class ArticleSyncWidget extends BaseWidget
         $total = RobawsArticleCache::count();
         $withMetadata = RobawsArticleCache::whereNotNull('shipping_line')->count();
         $withoutMetadata = $total - $withMetadata;
+        $lastSync = RobawsArticleCache::max('last_synced_at');
         $lastMetadataSync = RobawsArticleCache::whereNotNull('shipping_line')
             ->max('updated_at');
         
@@ -21,19 +22,28 @@ class ArticleSyncWidget extends BaseWidget
         return [
             Stat::make('Total Articles', $total)
                 ->description('Cached from Robaws')
-                ->icon('heroicon-o-cube')
-                ->color('primary'),
+                ->descriptionIcon('heroicon-o-cube')
+                ->color('primary')
+                ->extraAttributes([
+                    'class' => 'cursor-pointer',
+                ])
+                ->url(route('filament.admin.resources.robaws-articles.index')),
                 
             Stat::make('With Metadata', $withMetadata)
                 ->description("{$withoutMetadata} missing metadata ({$percentage}% complete)")
-                ->icon('heroicon-o-check-circle')
+                ->descriptionIcon('heroicon-o-check-circle')
                 ->color($withMetadata > 0 ? 'success' : 'danger'),
                 
-            Stat::make('Last Metadata Sync', $lastMetadataSync ? \Carbon\Carbon::parse($lastMetadataSync)->diffForHumans() : 'Never')
-                ->description('Shipping line, service type, terminal')
-                ->icon('heroicon-o-clock')
-                ->color($lastMetadataSync ? 'success' : 'warning'),
+            Stat::make('Last Full Sync', $lastSync ? \Carbon\Carbon::parse($lastSync)->diffForHumans() : 'Never')
+                ->description('Auto-syncs daily at 2 AM')
+                ->descriptionIcon('heroicon-o-clock')
+                ->color($lastSync && \Carbon\Carbon::parse($lastSync)->isToday() ? 'success' : 'warning'),
         ];
+    }
+    
+    protected function getColumns(): int
+    {
+        return 3;
     }
 }
 
