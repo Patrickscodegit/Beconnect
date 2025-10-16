@@ -23,6 +23,7 @@ class IntakeCreationService
         $intake = Intake::create([
             'status' => 'processing', // More user-friendly status
             'source' => $options['source'] ?? 'file_upload',
+            'service_type' => $options['service_type'] ?? null,
             'notes' => $options['notes'] ?? null,
             'priority' => $options['priority'] ?? 'normal',
             'customer_name' => $options['customer_name'] ?? null,
@@ -222,6 +223,7 @@ class IntakeCreationService
         $intake = Intake::create([
             'status' => 'processing',
             'source' => $options['source'] ?? 'multi_file_upload',
+            'service_type' => $options['service_type'] ?? null,
             'is_multi_document' => true,
             'total_documents' => count($files),
             'processed_documents' => 0,

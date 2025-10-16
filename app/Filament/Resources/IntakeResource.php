@@ -41,46 +41,39 @@ class IntakeResource extends Resource
             ->schema([
                 Forms\Components\Section::make('Intake Information')
                     ->schema([
-                        Forms\Components\Select::make('status')
-                            ->options([
-                                'pending' => 'Pending',
-                                'processing' => 'Processing',
-                                'processed' => 'Processed',
-                                'needs_contact' => 'Needs Contact',
-                                'export_failed' => 'Export Failed',
-                                'completed' => 'Completed',
-                                'failed' => 'Failed',
-                            ])
-                            ->default('pending')
-                            ->required()
-                            ->live(),
+                        // Row 1: Service Type + Priority
+                        Forms\Components\Grid::make(2)
+                            ->schema([
+                                Forms\Components\Select::make('service_type')
+                                    ->label('Service Type')
+                                    ->required()
+                                    ->options(function () {
+                                        $serviceTypes = config('quotation.service_types', []);
+                                        return collect($serviceTypes)->mapWithKeys(function ($service, $key) {
+                                            return [$key => is_array($service) ? $service['name'] : $service];
+                                        });
+                                    })
+                                    ->searchable()
+                                    ->helperText('Select the shipping service type'),
+                                    
+                                Forms\Components\Select::make('priority')
+                                    ->label('Priority')
+                                    ->required()
+                                    ->options([
+                                        'low' => 'Low',
+                                        'normal' => 'Normal',
+                                        'high' => 'High',
+                                        'urgent' => 'Urgent',
+                                    ])
+                                    ->default('normal'),
+                            ]),
                             
-                        Forms\Components\Select::make('source')
-                            ->options([
-                                'email' => 'Email',
-                                'upload' => 'Manual Upload',
-                                'api' => 'API',
-                                'ftp' => 'FTP',
-                            ])
-                            ->default('upload')
-                            ->required(),
-                            
-                        Forms\Components\Select::make('priority')
-                            ->options([
-                                'low' => 'Low',
-                                'normal' => 'Normal',
-                                'high' => 'High',
-                                'urgent' => 'Urgent',
-                            ])
-                            ->default('normal')
-                            ->required(),
-                            
+                        // Row 2: Notes (full width)
                         Forms\Components\Textarea::make('notes')
-                            ->rows(4)
+                            ->rows(3)
                             ->placeholder('Additional notes about this intake...')
                             ->columnSpanFull(),
-                    ])
-                    ->columns(3),
+                    ]),
                     
                 Forms\Components\Section::make('Contact Information (Optional)')
                     ->description('Pre-seed contact information if known. This will be merged with extracted data.')
@@ -137,6 +130,20 @@ class IntakeResource extends Resource
                     ->sortable()
                     ->searchable(),
                     
+                Tables\Columns\TextColumn::make('service_type')
+                    ->label('Service Type')
+                    ->badge()
+                    ->formatStateUsing(function (?string $state): string {
+                        if (!$state) return '—';
+                        
+                        $serviceTypes = config('quotation.service_types', []);
+                        $service = $serviceTypes[$state] ?? null;
+                        
+                        return is_array($service) ? $service['name'] : $state;
+                    })
+                    ->color('info')
+                    ->sortable(),
+                    
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
@@ -149,18 +156,8 @@ class IntakeResource extends Resource
                         'failed' => 'danger',
                         default => 'gray',
                     })
-                    ->sortable(),
-                    
-                Tables\Columns\TextColumn::make('source')
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'email' => 'blue',
-                        'upload' => 'green',
-                        'api' => 'purple',
-                        'ftp' => 'orange',
-                        default => 'gray',
-                    })
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                     
                 Tables\Columns\TextColumn::make('priority')
                     ->badge()

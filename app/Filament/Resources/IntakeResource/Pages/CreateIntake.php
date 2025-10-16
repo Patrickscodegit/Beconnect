@@ -15,6 +15,15 @@ class CreateIntake extends CreateRecord
 {
     protected static string $resource = IntakeResource::class;
     
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        // Auto-set status and source (hidden from form)
+        $data['status'] = 'pending';
+        $data['source'] = 'manual_upload';
+        
+        return $data;
+    }
+    
     protected function handleRecordCreation(array $data): Intake
     {
         \Log::info('CreateIntake: Starting record creation with robust file handling', [
@@ -80,6 +89,7 @@ class CreateIntake extends CreateRecord
                 // Multiple files: use createFromMultipleFiles for proper aggregation
                 $intake = $intakeCreationService->createFromMultipleFiles($uploadedFiles, [
                     'source'         => $data['source'] ?? 'multi_file_upload',
+                    'service_type'   => $data['service_type'] ?? null,
                     'notes'          => $data['notes'] ?? null,
                     'priority'       => $data['priority'] ?? 'normal',
                     'customer_name'  => $data['customer_name'] ?? null,
@@ -101,6 +111,7 @@ class CreateIntake extends CreateRecord
                 $first = array_shift($uploadedFiles);
                 $intake = $intakeCreationService->createFromUploadedFile($first, [
                     'source'         => $data['source'] ?? 'upload',
+                    'service_type'   => $data['service_type'] ?? null,
                     'notes'          => $data['notes'] ?? null,
                     'priority'       => $data['priority'] ?? 'normal',
                     'customer_name'  => $data['customer_name'] ?? null,

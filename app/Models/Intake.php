@@ -15,6 +15,7 @@ class Intake extends Model
         'status',
         'flags',
         'source',
+        'service_type',
         'notes',
         'priority',
         'robaws_offer_id',
