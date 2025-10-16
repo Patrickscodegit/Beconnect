@@ -19,6 +19,7 @@ use App\Jobs\ProcessFileUploadJob;
 use App\Jobs\UpdateIntakeStatusJob;
 use App\Jobs\ExtractDocumentDataJob;
 use App\Services\ExtractionService;
+use App\Services\Intake\Pipelines\IntakePipelineFactory;
 
 class IntakeOrchestratorJob implements ShouldQueue
 {
@@ -83,8 +84,36 @@ class IntakeOrchestratorJob implements ShouldQueue
             $jobs = [];
             
             // Step 1: Add extraction jobs for each document first
+            // Use pipeline factory to route files to appropriate processors
+            $pipelineFactory = app(IntakePipelineFactory::class);
+            
             foreach ($documents as $document) {
-                Log::info('Adding extraction job for document', [
+                // Find corresponding IntakeFile for pipeline routing
+                $intakeFile = $this->intake->files()->where('storage_path', $document->file_path)->first();
+                
+                if ($intakeFile) {
+                    // Try to get specialized pipeline
+                    $pipeline = $pipelineFactory->getPipelineForFile($intakeFile);
+                    
+                    if ($pipeline) {
+                        Log::info('Using specialized pipeline for document', [
+                            'intake_id' => $this->intake->id,
+                            'document_id' => $document->id,
+                            'filename' => $document->filename,
+                            'mime_type' => $document->mime_type,
+                            'pipeline_class' => get_class($pipeline)
+                        ]);
+                        
+                        // Pipeline will handle its own job dispatch
+                        $pipeline->process($this->intake, $intakeFile);
+                        
+                        // Skip adding ExtractDocumentDataJob - pipeline handles it
+                        continue;
+                    }
+                }
+                
+                // Fallback to generic extraction for non-pipeline files
+                Log::info('Using generic extraction for document', [
                     'intake_id' => $this->intake->id,
                     'document_id' => $document->id,
                     'filename' => $document->filename,
