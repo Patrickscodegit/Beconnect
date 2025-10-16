@@ -103,6 +103,8 @@ class MultiDocumentIntakeTest extends TestCase
         $this->assertNotEmpty($aggregatedData);
         
         // Check contact data (from email - highest priority)
+        $this->assertArrayHasKey('contact', $aggregatedData);
+        $this->assertArrayHasKey('name', $aggregatedData['contact']);
         $this->assertEquals('John Doe', $aggregatedData['contact']['name']);
         $this->assertEquals('john@example.com', $aggregatedData['contact']['email']);
         

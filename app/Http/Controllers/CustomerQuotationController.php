@@ -231,6 +231,7 @@ class CustomerQuotationController extends Controller
             'special_requirements' => 'nullable|string|max:1000',
             'preferred_departure_date' => 'nullable|date|after:today',
             'customer_reference' => 'nullable|string|max:255',
+            'selected_schedule_id' => 'nullable|exists:shipping_schedules,id',
             
             // File Uploads
             'supporting_files' => 'nullable|array|max:5',

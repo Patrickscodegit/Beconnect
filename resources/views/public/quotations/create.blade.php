@@ -214,6 +214,56 @@
                     </div>
                 </div>
 
+                <!-- Select Sailing (Optional) -->
+                <div class="p-8 border-b" x-data="scheduleSelector()">
+                    <h2 class="text-2xl font-bold text-gray-900 mb-6">
+                        <i class="fas fa-calendar-alt mr-2"></i>Select Sailing <span class="text-sm font-normal text-gray-500">(Optional)</span>
+                    </h2>
+                    <p class="text-gray-600 mb-6">
+                        Choose a specific sailing if you have a preferred departure date and carrier. This helps us provide more accurate pricing.
+                    </p>
+                    
+                    <div class="space-y-4">
+                        <!-- Schedule Dropdown -->
+                        <div>
+                            <label for="selected_schedule_id" class="block text-sm font-medium text-gray-700 mb-2">
+                                Available Sailings
+                            </label>
+                            <select 
+                                id="selected_schedule_id" 
+                                name="selected_schedule_id"
+                                x-model="selectedSchedule"
+                                :disabled="loading || schedules.length === 0"
+                                class="form-select w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                            >
+                                <option value="">
+                                    <span x-show="!loading && !polSelected && !podSelected">Please select POL and POD first</span>
+                                    <span x-show="!loading && (polSelected || podSelected) && schedules.length === 0">No sailings available for this route</span>
+                                    <span x-show="!loading && schedules.length > 0">-- Select a sailing (optional) --</span>
+                                    <span x-show="loading">Loading schedules...</span>
+                                </option>
+                                <template x-for="schedule in schedules" :key="schedule.id">
+                                    <option :value="schedule.id" x-text="schedule.label"></option>
+                                </template>
+                            </select>
+                            <p class="text-gray-500 text-sm mt-2" x-show="loading">
+                                <i class="fas fa-spinner fa-spin mr-1"></i> Searching for available sailings...
+                            </p>
+                            <p class="text-gray-500 text-sm mt-2" x-show="!loading && schedules.length === 0 && (polSelected && podSelected)">
+                                <i class="fas fa-info-circle mr-1"></i> No scheduled sailings found for this route. You can still submit your request.
+                            </p>
+                        </div>
+
+                        <!-- Selected Schedule Details -->
+                        <div x-show="selectedScheduleDetails" class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <h3 class="font-semibold text-gray-900 mb-2">
+                                <i class="fas fa-info-circle text-blue-600 mr-1"></i> Selected Sailing Details
+                            </h3>
+                            <div class="text-sm space-y-1" x-html="selectedScheduleDetails"></div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Cargo Information -->
                 <div class="p-8 border-b">
                     <h2 class="text-2xl font-bold text-gray-900 mb-6">
@@ -605,6 +655,104 @@ function syncCommodityItems(event) {
     
     // Let form submit normally
     return true;
+}
+
+// Alpine.js component for schedule selection
+function scheduleSelector() {
+    return {
+        schedules: [],
+        selectedSchedule: '{{ old('selected_schedule_id') }}',
+        loading: false,
+        polSelected: false,
+        podSelected: false,
+        
+        init() {
+            // Watch for POL/POD changes
+            const polSelect = document.getElementById('pol');
+            const podSelect = document.getElementById('pod');
+            
+            if (polSelect) {
+                polSelect.addEventListener('change', () => {
+                    this.polSelected = polSelect.value !== '';
+                    this.fetchSchedules();
+                });
+                this.polSelected = polSelect.value !== '';
+            }
+            
+            if (podSelect) {
+                podSelect.addEventListener('change', () => {
+                    this.podSelected = podSelect.value !== '';
+                    this.fetchSchedules();
+                });
+                this.podSelected = podSelect.value !== '';
+            }
+            
+            // Initial fetch if both are selected
+            if (this.polSelected && this.podSelected) {
+                this.fetchSchedules();
+            }
+        },
+        
+        async fetchSchedules() {
+            const polSelect = document.getElementById('pol');
+            const podSelect = document.getElementById('pod');
+            const serviceTypeSelect = document.getElementById('service_type');
+            
+            const pol = polSelect?.value;
+            const pod = podSelect?.value;
+            const serviceType = serviceTypeSelect?.value;
+            
+            // Reset selection when POL/POD changes
+            this.selectedSchedule = '';
+            
+            if (!pol || !pod) {
+                this.schedules = [];
+                return;
+            }
+            
+            this.loading = true;
+            
+            try {
+                const url = new URL('{{ route('api.schedules.search') }}', window.location.origin);
+                url.searchParams.append('pol', pol);
+                url.searchParams.append('pod', pod);
+                if (serviceType) {
+                    url.searchParams.append('service_type', serviceType);
+                }
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.schedules = data.schedules || [];
+                } else {
+                    this.schedules = [];
+                    console.warn('Schedule search failed:', data.message);
+                }
+            } catch (error) {
+                console.error('Error fetching schedules:', error);
+                this.schedules = [];
+            } finally {
+                this.loading = false;
+            }
+        },
+        
+        get selectedScheduleDetails() {
+            if (!this.selectedSchedule) return null;
+            
+            const schedule = this.schedules.find(s => s.id == this.selectedSchedule);
+            if (!schedule) return null;
+            
+            return `
+                <div><strong>Carrier:</strong> ${schedule.carrier}</div>
+                <div><strong>Route:</strong> ${schedule.pol} → ${schedule.pod}</div>
+                <div><strong>Service:</strong> ${schedule.service_name}</div>
+                <div><strong>Departure:</strong> ${schedule.departure_date || 'TBA'}</div>
+                <div><strong>Transit Time:</strong> ${schedule.transit_days} days</div>
+                <div><strong>Frequency:</strong> ${schedule.frequency}</div>
+            `;
+        }
+    }
 }
 </script>
 @endsection

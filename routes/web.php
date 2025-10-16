@@ -7,6 +7,7 @@ use App\Http\Controllers\RobawsOfferController;
 use App\Http\Controllers\ApiIntakeController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\PublicScheduleController;
+use App\Http\Controllers\Api\ScheduleSearchController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [App\Http\Controllers\HomeController::class, 'index'])->name('home');
@@ -24,6 +25,9 @@ Route::prefix('public/quotations')->name('public.quotations.')->group(function (
     Route::get('/{quotationRequest}/confirmation', [\App\Http\Controllers\ProspectQuotationController::class, 'confirmation'])->name('confirmation');
     Route::get('/status', [\App\Http\Controllers\ProspectQuotationController::class, 'status'])->name('status');
 });
+
+// API Routes for Schedule Search (public - no auth required)
+Route::get('/api/schedules/search', [ScheduleSearchController::class, 'search'])->name('api.schedules.search');
 
 // Customer Portal Routes (authenticated)
 Route::middleware(['auth'])->prefix('customer')->name('customer.')->group(function () {
