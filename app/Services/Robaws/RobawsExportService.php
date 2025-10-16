@@ -917,7 +917,7 @@ class RobawsExportService
                     'type' => 'document',
                     'id' => $doc->id,
                     'path' => $path,
-                    'filename' => $doc->original_filename ?? $doc->filename ?? basename($path),
+                    'filename' => $doc->filename, // Use filename directly (already contains original name)
                 ]);
             }
         }
