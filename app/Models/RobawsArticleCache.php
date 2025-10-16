@@ -34,6 +34,15 @@ class RobawsArticleCache extends Model
         'is_active',
         'requires_manual_review',
         'last_synced_at',
+        // Article metadata from Robaws ARTICLE INFO
+        'shipping_line',
+        'service_type',
+        'pol_terminal',
+        'is_parent_item',
+        // Article metadata from Robaws IMPORTANT INFO
+        'article_info',
+        'update_date',
+        'validity_date',
     ];
 
     protected $casts = [
@@ -50,6 +59,10 @@ class RobawsArticleCache extends Model
         'is_active' => 'boolean',
         'requires_manual_review' => 'boolean',
         'last_synced_at' => 'datetime',
+        // New metadata fields
+        'is_parent_item' => 'boolean',
+        'update_date' => 'date',
+        'validity_date' => 'date',
     ];
 
     protected static function boot()
@@ -304,5 +317,73 @@ class RobawsArticleCache extends Model
     public function scopeRequiringReview(Builder $query): Builder
     {
         return $query->where('requires_manual_review', true);
+    }
+
+    /**
+     * New Scopes for Article Metadata Filtering
+     */
+    
+    /**
+     * Scope for filtering by shipping line
+     */
+    public function scopeForShippingLine(Builder $query, string $shippingLine): Builder
+    {
+        return $query->where('shipping_line', $shippingLine);
+    }
+
+    /**
+     * Scope for filtering by service type
+     */
+    public function scopeForServiceType(Builder $query, string $serviceType): Builder
+    {
+        return $query->where('service_type', $serviceType);
+    }
+
+    /**
+     * Scope for filtering by POL terminal
+     */
+    public function scopeForPolTerminal(Builder $query, string $polTerminal): Builder
+    {
+        return $query->where('pol_terminal', $polTerminal);
+    }
+
+    /**
+     * Scope for filtering articles by schedule metadata
+     * Filters by carrier, service type, and POL terminal from schedule
+     */
+    public function scopeForSchedule(Builder $query, \App\Models\ShippingSchedule $schedule): Builder
+    {
+        $query->where(function ($q) use ($schedule) {
+            // Filter by carrier/shipping line
+            if ($schedule->carrier) {
+                $q->where('shipping_line', 'LIKE', '%' . $schedule->carrier->name . '%');
+            }
+            
+            // Filter by POL terminal if available
+            if ($schedule->polPort && $schedule->polPort->terminal_code) {
+                $q->orWhere('pol_terminal', $schedule->polPort->terminal_code);
+            }
+        });
+        
+        return $query;
+    }
+
+    /**
+     * Scope for parent items only (items with composite surcharges)
+     */
+    public function scopeParentItems(Builder $query): Builder
+    {
+        return $query->where('is_parent_item', true);
+    }
+
+    /**
+     * Scope for filtering articles valid as of a specific date
+     */
+    public function scopeValidAsOf(Builder $query, \Carbon\Carbon $date): Builder
+    {
+        return $query->where(function ($q) use ($date) {
+            $q->whereNull('validity_date')
+              ->orWhere('validity_date', '>=', $date->format('Y-m-d'));
+        });
     }
 }

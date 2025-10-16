@@ -837,5 +837,308 @@ class RobawsArticleProvider
             return null;
         }
     }
+
+    /**
+     * Sync article metadata for a specific article
+     * Fetches IMPORTANT INFO and ARTICLE INFO metadata from Robaws
+     */
+    public function syncArticleMetadata(int $articleId): array
+    {
+        try {
+            $article = RobawsArticleCache::find($articleId);
+            
+            if (!$article) {
+                throw new \Exception("Article not found in cache: {$articleId}");
+            }
+
+            // Fetch full article details from Robaws
+            $details = $this->getArticleDetails($article->robaws_article_id);
+            
+            if (!$details) {
+                throw new \Exception("Could not fetch article details from Robaws");
+            }
+
+            // Parse metadata
+            $metadata = $this->parseArticleMetadata($details);
+            
+            // Update article with metadata
+            $article->update($metadata);
+
+            Log::info('Article metadata synced', [
+                'article_id' => $articleId,
+                'metadata' => $metadata
+            ]);
+
+            return $metadata;
+
+        } catch (\Exception $e) {
+            Log::error('Failed to sync article metadata', [
+                'article_id' => $articleId,
+                'error' => $e->getMessage()
+            ]);
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Sync composite items (children) for a parent article
+     * Fetches and links child articles from Robaws article data
+     */
+    public function syncCompositeItems(int $parentArticleId): void
+    {
+        try {
+            $parent = RobawsArticleCache::find($parentArticleId);
+            
+            if (!$parent) {
+                throw new \Exception("Parent article not found: {$parentArticleId}");
+            }
+
+            // Fetch full article details from Robaws
+            $details = $this->getArticleDetails($parent->robaws_article_id);
+            
+            if (!$details) {
+                throw new \Exception("Could not fetch article details from Robaws");
+            }
+
+            // Parse composite items
+            $compositeItems = $this->parseCompositeItems($details);
+            
+            if (empty($compositeItems)) {
+                Log::info('No composite items found for parent article', [
+                    'parent_id' => $parentArticleId
+                ]);
+                return;
+            }
+
+            // Link composite items as children
+            foreach ($compositeItems as $index => $item) {
+                $child = $this->findOrCreateChildArticle($item);
+                
+                if ($child) {
+                    // Check if relationship already exists
+                    $exists = $parent->children()->wherePivot('child_article_id', $child->id)->exists();
+                    
+                    if (!$exists) {
+                        $parent->children()->attach($child->id, [
+                            'sort_order' => $index + 1,
+                            'is_required' => $item['is_required'] ?? true,
+                            'is_conditional' => false,
+                            'cost_type' => $item['cost_type'] ?? null,
+                            'default_quantity' => $item['quantity'] ?? 1.00,
+                            'default_cost_price' => $item['cost_price'] ?? null,
+                            'unit_type' => $item['unit_type'] ?? null,
+                        ]);
+
+                        Log::info('Linked composite item to parent', [
+                            'parent' => $parent->article_name,
+                            'child' => $child->article_name
+                        ]);
+                    }
+                }
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Failed to sync composite items', [
+                'parent_article_id' => $parentArticleId,
+                'error' => $e->getMessage()
+            ]);
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Parse article metadata from Robaws API response
+     * Extracts IMPORTANT INFO and ARTICLE INFO fields
+     */
+    private function parseArticleMetadata(array $details): array
+    {
+        $metadata = [];
+
+        // Parse ARTICLE INFO section
+        $articleInfo = $this->parseArticleInfo($details);
+        $metadata = array_merge($metadata, $articleInfo);
+
+        // Parse IMPORTANT INFO section
+        $importantInfo = $this->parseImportantInfo($details);
+        $metadata = array_merge($metadata, $importantInfo);
+
+        return $metadata;
+    }
+
+    /**
+     * Parse ARTICLE INFO section from Robaws data
+     * Fields: shipping_line, service_type, pol_terminal, parent_item
+     */
+    private function parseArticleInfo(array $rawData): array
+    {
+        $info = [];
+
+        // Extract from extraFields if available
+        $extraFields = $rawData['extraFields'] ?? [];
+        
+        foreach ($extraFields as $field) {
+            $code = $field['code'] ?? '';
+            $value = $field['stringValue'] ?? $field['value'] ?? null;
+
+            switch ($code) {
+                case 'SHIPPING_LINE':
+                    $info['shipping_line'] = $value;
+                    break;
+                case 'SERVICE_TYPE':
+                    $info['service_type'] = $value;
+                    break;
+                case 'POL_TERMINAL':
+                    $info['pol_terminal'] = $value;
+                    break;
+                case 'PARENT_ITEM':
+                    $info['is_parent_item'] = (bool) $value;
+                    break;
+            }
+        }
+
+        // Fallback: try to extract from description or metadata
+        if (empty($info['shipping_line'])) {
+            $info['shipping_line'] = $this->extractShippingLineFromDescription($rawData['description'] ?? $rawData['name'] ?? '');
+        }
+
+        if (empty($info['service_type'])) {
+            $info['service_type'] = $this->extractServiceTypeFromDescription($rawData['description'] ?? $rawData['name'] ?? '');
+        }
+
+        return $info;
+    }
+
+    /**
+     * Parse IMPORTANT INFO section from Robaws data
+     * Fields: article_info, update_date, validity_date
+     */
+    private function parseImportantInfo(array $rawData): array
+    {
+        $info = [];
+
+        // Extract from extraFields if available
+        $extraFields = $rawData['extraFields'] ?? [];
+        
+        foreach ($extraFields as $field) {
+            $code = $field['code'] ?? '';
+            $value = $field['stringValue'] ?? $field['value'] ?? null;
+
+            switch ($code) {
+                case 'ARTICLE_INFO':
+                case 'INFO':
+                    $info['article_info'] = $value;
+                    break;
+                case 'UPDATE_DATE':
+                    $info['update_date'] = $value ? \Carbon\Carbon::parse($value)->format('Y-m-d') : null;
+                    break;
+                case 'VALIDITY_DATE':
+                    $info['validity_date'] = $value ? \Carbon\Carbon::parse($value)->format('Y-m-d') : null;
+                    break;
+            }
+        }
+
+        return $info;
+    }
+
+    /**
+     * Parse composite items from Robaws article data
+     * Returns array of child articles with their metadata
+     */
+    private function parseCompositeItems(array $rawData): array
+    {
+        $compositeItems = [];
+
+        // Look for composite items in various possible locations
+        $items = $rawData['compositeItems'] ?? $rawData['children'] ?? $rawData['lineItems'] ?? [];
+
+        foreach ($items as $item) {
+            $compositeItems[] = [
+                'robaws_article_id' => $item['articleId'] ?? $item['id'] ?? null,
+                'name' => $item['description'] ?? $item['name'] ?? '',
+                'cost_type' => $item['costType'] ?? $item['cost_type'] ?? 'Material',
+                'description' => $item['description'] ?? '',
+                'unit_type' => $item['unitType'] ?? $item['unit_type'] ?? '',
+                'quantity' => $item['quantity'] ?? 1.00,
+                'cost_price' => $item['costPrice'] ?? $item['unitPrice'] ?? null,
+                'is_required' => $item['isRequired'] ?? true,
+            ];
+        }
+
+        return $compositeItems;
+    }
+
+    /**
+     * Find or create child article from composite item data
+     */
+    private function findOrCreateChildArticle(array $itemData): ?RobawsArticleCache
+    {
+        if (!$itemData['robaws_article_id']) {
+            // Create new surcharge article
+            return RobawsArticleCache::create([
+                'robaws_article_id' => 'SURCHARGE_' . uniqid(),
+                'article_name' => $itemData['name'],
+                'description' => $itemData['description'],
+                'category' => 'miscellaneous',
+                'unit_price' => $itemData['cost_price'],
+                'currency' => 'EUR',
+                'unit_type' => $itemData['unit_type'],
+                'is_surcharge' => true,
+                'is_active' => true,
+                'last_synced_at' => now(),
+            ]);
+        }
+
+        // Find existing article
+        return RobawsArticleCache::where('robaws_article_id', $itemData['robaws_article_id'])->first();
+    }
+
+    /**
+     * Extract shipping line from description
+     */
+    private function extractShippingLineFromDescription(string $description): ?string
+    {
+        $desc = strtoupper($description);
+        
+        // Known shipping lines
+        $shippingLines = [
+            'SALLAUM LINES' => ['SALLAUM'],
+            'MSC' => ['MSC'],
+            'MAERSK' => ['MAERSK'],
+            'GRIMALDI' => ['GRIMALDI'],
+            'CMA CGM' => ['CMA', 'CGM'],
+        ];
+
+        foreach ($shippingLines as $name => $keywords) {
+            foreach ($keywords as $keyword) {
+                if (str_contains($desc, $keyword)) {
+                    return $name;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract service type from description
+     */
+    private function extractServiceTypeFromDescription(string $description): ?string
+    {
+        $desc = strtoupper($description);
+        
+        if (str_contains($desc, 'RORO') && str_contains($desc, 'EXPORT')) {
+            return 'RORO EXPORT';
+        } elseif (str_contains($desc, 'RORO') && str_contains($desc, 'IMPORT')) {
+            return 'RORO IMPORT';
+        } elseif (str_contains($desc, 'FCL') && str_contains($desc, 'EXPORT')) {
+            return 'FCL EXPORT';
+        } elseif (str_contains($desc, 'FCL') && str_contains($desc, 'IMPORT')) {
+            return 'FCL IMPORT';
+        }
+
+        return null;
+    }
 }
 
