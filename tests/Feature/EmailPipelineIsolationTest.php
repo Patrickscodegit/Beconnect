@@ -66,12 +66,11 @@ class EmailPipelineIsolationTest extends TestCase
             'filename' => 'test-document.pdf'
         ]);
 
-        // Test pipeline detection
-        $pipelineFactory = app(IntakePipelineFactory::class);
-        $pipeline = $pipelineFactory->getPipelineForFile($pdfFile);
+        // Get email pipeline directly
+        $emailPipeline = app(\App\Services\Intake\Pipelines\EmailIntakePipeline::class);
 
-        // Should return null for non-email files
-        $this->assertNull($pipeline);
+        // Email pipeline should not handle PDF files
+        $this->assertFalse($emailPipeline->canHandle($pdfFile));
     }
 
     /** @test */
@@ -173,7 +172,7 @@ class EmailPipelineIsolationTest extends TestCase
     }
 
     /** @test */
-    public function orchestrator_uses_generic_extraction_for_non_email_files()
+    public function orchestrator_routes_pdfs_to_pdf_pipeline_not_email()
     {
         // Create test intake and PDF file
         $intake = Intake::factory()->create([
@@ -202,15 +201,13 @@ class EmailPipelineIsolationTest extends TestCase
         // Create test file content
         Storage::disk('documents')->put('test-document.pdf', 'PDF content here');
 
-        // Test that the pipeline factory returns null for non-email files
+        // Test that the pipeline factory routes PDF to PDF pipeline, not email
         $pipelineFactory = app(IntakePipelineFactory::class);
         $pipeline = $pipelineFactory->getPipelineForFile($intakeFile);
 
-        // Should return null for non-email files (no specialized pipeline)
-        $this->assertNull($pipeline);
-
-        // This means the orchestrator would use generic extraction
-        // (We can't test the orchestrator directly due to its synchronous execution)
+        // Should return PdfIntakePipeline (not null, not EmailIntakePipeline)
+        $this->assertInstanceOf(\App\Services\Intake\Pipelines\PdfIntakePipeline::class, $pipeline);
+        $this->assertNotInstanceOf(\App\Services\Intake\Pipelines\EmailIntakePipeline::class, $pipeline);
     }
 
     /** @test */
@@ -219,9 +216,14 @@ class EmailPipelineIsolationTest extends TestCase
         $pipelineFactory = app(IntakePipelineFactory::class);
         $supportedTypes = $pipelineFactory->getAllSupportedMimeTypes();
 
+        // Should support email types
         $this->assertContains('message/rfc822', $supportedTypes);
         $this->assertContains('application/vnd.ms-outlook', $supportedTypes);
-        $this->assertNotContains('application/pdf', $supportedTypes);
+        
+        // Should also support PDF (Phase 2 complete)
+        $this->assertContains('application/pdf', $supportedTypes);
+        
+        // Should not support images yet (Phase 3 pending)
         $this->assertNotContains('image/jpeg', $supportedTypes);
     }
 
@@ -230,9 +232,14 @@ class EmailPipelineIsolationTest extends TestCase
     {
         $pipelineFactory = app(IntakePipelineFactory::class);
 
+        // Email types (Phase 1)
         $this->assertTrue($pipelineFactory->isMimeTypeSupported('message/rfc822'));
         $this->assertTrue($pipelineFactory->isMimeTypeSupported('application/vnd.ms-outlook'));
-        $this->assertFalse($pipelineFactory->isMimeTypeSupported('application/pdf'));
+        
+        // PDF type (Phase 2)
+        $this->assertTrue($pipelineFactory->isMimeTypeSupported('application/pdf'));
+        
+        // Unsupported types
         $this->assertFalse($pipelineFactory->isMimeTypeSupported('image/jpeg'));
         $this->assertFalse($pipelineFactory->isMimeTypeSupported('text/plain'));
     }

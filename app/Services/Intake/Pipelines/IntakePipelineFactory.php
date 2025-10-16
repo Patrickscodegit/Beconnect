@@ -13,7 +13,7 @@ class IntakePipelineFactory
      */
     private array $pipelines = [
         EmailIntakePipeline::class,
-        // Future: PdfIntakePipeline::class,
+        PdfIntakePipeline::class,
         // Future: ImageIntakePipeline::class,
     ];
 
