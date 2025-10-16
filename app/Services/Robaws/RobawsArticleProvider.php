@@ -817,21 +817,39 @@ class RobawsArticleProvider
         try {
             $this->checkRateLimit();
 
+            Log::debug('Fetching article details from Robaws', [
+                'article_id' => $articleId,
+                'endpoint' => "/api/v2/articles/{$articleId}"
+            ]);
+
             $response = $this->robawsClient->getHttpClientForQuotation()
                 ->get("/api/v2/articles/{$articleId}");
 
             $this->handleRateLimitResponse($response);
 
             if ($response->successful()) {
+                Log::debug('Successfully fetched article details', [
+                    'article_id' => $articleId
+                ]);
                 return $response->json();
             }
+
+            // Log unsuccessful response
+            Log::error('Robaws API returned unsuccessful response', [
+                'article_id' => $articleId,
+                'status_code' => $response->status(),
+                'response_body' => $response->body(),
+                'headers' => $response->headers()
+            ]);
 
             return null;
 
         } catch (\Exception $e) {
             Log::error('Failed to get article details from Robaws', [
                 'article_id' => $articleId,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'error_class' => get_class($e),
+                'trace' => $e->getTraceAsString()
             ]);
 
             return null;
@@ -841,6 +859,7 @@ class RobawsArticleProvider
     /**
      * Sync article metadata for a specific article
      * Fetches IMPORTANT INFO and ARTICLE INFO metadata from Robaws
+     * Falls back to description extraction if API is unavailable
      */
     public function syncArticleMetadata(int $articleId): array
     {
@@ -851,22 +870,32 @@ class RobawsArticleProvider
                 throw new \Exception("Article not found in cache: {$articleId}");
             }
 
-            // Fetch full article details from Robaws
+            // Try to fetch full article details from Robaws API first
             $details = $this->getArticleDetails($article->robaws_article_id);
             
-            if (!$details) {
-                throw new \Exception("Could not fetch article details from Robaws");
+            if ($details) {
+                // ✅ API success - parse from API response
+                $metadata = $this->parseArticleMetadata($details);
+                $source = 'api';
+            } else {
+                // ⚠️ API failed - use fallback extraction from article description
+                Log::warning('Robaws API unavailable, using fallback extraction', [
+                    'article_id' => $articleId,
+                    'robaws_article_id' => $article->robaws_article_id,
+                    'article_name' => $article->article_name
+                ]);
+                
+                $metadata = $this->extractMetadataFromArticle($article);
+                $source = 'fallback';
             }
-
-            // Parse metadata
-            $metadata = $this->parseArticleMetadata($details);
             
             // Update article with metadata
             $article->update($metadata);
 
             Log::info('Article metadata synced', [
                 'article_id' => $articleId,
-                'metadata' => $metadata
+                'source' => $source,
+                'metadata_keys' => array_keys($metadata)
             ]);
 
             return $metadata;
@@ -884,6 +913,7 @@ class RobawsArticleProvider
     /**
      * Sync composite items (children) for a parent article
      * Fetches and links child articles from Robaws article data
+     * Gracefully handles API unavailability
      */
     public function syncCompositeItems(int $parentArticleId): void
     {
@@ -894,11 +924,15 @@ class RobawsArticleProvider
                 throw new \Exception("Parent article not found: {$parentArticleId}");
             }
 
-            // Fetch full article details from Robaws
+            // Try to fetch full article details from Robaws API
             $details = $this->getArticleDetails($parent->robaws_article_id);
             
             if (!$details) {
-                throw new \Exception("Could not fetch article details from Robaws");
+                Log::warning('Cannot sync composite items - API unavailable', [
+                    'parent_article_id' => $parentArticleId,
+                    'parent_article_name' => $parent->article_name
+                ]);
+                return; // Gracefully skip instead of throwing
             }
 
             // Parse composite items
@@ -944,7 +978,8 @@ class RobawsArticleProvider
                 'error' => $e->getMessage()
             ]);
 
-            throw $e;
+            // Don't throw - just log and continue
+            // This allows the system to continue working even if some articles fail
         }
     }
 
@@ -1140,5 +1175,63 @@ class RobawsArticleProvider
 
         return null;
     }
+
+    /**
+     * Fallback method to extract metadata from article when API is unavailable
+     */
+    private function extractMetadataFromArticle(RobawsArticleCache $article): array
+    {
+        $metadata = [];
+        
+        // Extract shipping line from description (using existing method)
+        $metadata['shipping_line'] = $this->extractShippingLineFromDescription(
+            $article->article_name
+        );
+        
+        // Extract service type from description (using existing method)
+        $metadata['service_type'] = $this->extractServiceTypeFromDescription(
+            $article->article_name
+        );
+        
+        // Extract POL terminal from description
+        $metadata['pol_terminal'] = $this->extractPolTerminalFromDescription(
+            $article->article_name
+        );
+        
+        // Determine if parent based on description
+        $metadata['is_parent_item'] = $this->isParentArticle($article->article_name);
+        
+        // Cannot extract dates from description, leave null
+        $metadata['update_date'] = null;
+        $metadata['validity_date'] = null;
+        $metadata['article_info'] = 'Extracted from description (API unavailable)';
+        
+        return $metadata;
+    }
+
+    /**
+     * Extract POL terminal from article description
+     */
+    private function extractPolTerminalFromDescription(string $description): ?string
+    {
+        $desc = strtoupper($description);
+        
+        // Common terminal patterns
+        $patterns = [
+            '/ST\s*(\d{3,4})/i',           // "ST 332", "ST 740"
+            '/TERMINAL\s*(\d{3,4})/i',     // "Terminal 332"
+            '/ANR\s*(\d{3,4})/i',          // "ANR 332"
+            '/ZEE\s*(\d{3,4})/i',          // "ZEE 1234"
+        ];
+        
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $desc, $matches)) {
+                return 'ST ' . $matches[1];
+            }
+        }
+        
+        return null;
+    }
+
 }
 
