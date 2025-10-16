@@ -915,6 +915,33 @@ class RobawsArticleProvider
                 // ✅ API success - parse from API response
                 $metadata = $this->parseArticleMetadata($details);
                 $source = 'api';
+                
+                // SUPPLEMENT: Always try to extract POL/POD from article name
+                // This fills gaps when API doesn't provide complete routing info
+                $nameExtraction = $this->extractMetadataFromArticle($article);
+                
+                // Merge POL/POD from article name if API didn't provide them
+                if (empty($metadata['pol_code']) && !empty($nameExtraction['pol_code'])) {
+                    $metadata['pol_code'] = $nameExtraction['pol_code'];
+                    Log::info('Supplemented POL from article name', [
+                        'article_id' => $articleId,
+                        'pol_code' => $nameExtraction['pol_code']
+                    ]);
+                }
+                
+                if (empty($metadata['pod_name']) && !empty($nameExtraction['pod_name'])) {
+                    $metadata['pod_name'] = $nameExtraction['pod_name'];
+                    Log::info('Supplemented POD from article name', [
+                        'article_id' => $articleId,
+                        'pod_name' => $nameExtraction['pod_name']
+                    ]);
+                }
+                
+                // Also supplement pol_terminal if not provided by API
+                if (empty($metadata['pol_terminal']) && !empty($nameExtraction['pol_terminal'])) {
+                    $metadata['pol_terminal'] = $nameExtraction['pol_terminal'];
+                }
+                
             } else {
                 // ⚠️ API failed - use fallback extraction from article description
                 Log::warning('Robaws API unavailable, using fallback extraction', [
@@ -1234,26 +1261,46 @@ class RobawsArticleProvider
             $article->article_name
         );
         
-        // NEW: Extract POL terminal from article name
-        // Pattern: "FCL - Conakry (ANR) - Guinee, 40ft HC seafreight"
-        // Look for 3-letter code in parentheses (e.g., (ANR) = Antwerp)
+        // NEW: Extract POL code from parentheses and format as schedule: (ANR) → "Antwerp, Belgium (ANR)"
         if (preg_match('/\(([A-Z]{3})\)/', $article->article_name, $matches)) {
-            $terminalCode = $matches[1]; // e.g., "ANR"
+            $polCode = $matches[1]; // e.g., "ANR"
             
-            // Try to find matching port in database
-            $port = \App\Models\Port::where('code', $terminalCode)->first();
+            // Lookup POL in ports table
+            $polPort = \App\Models\Port::where('code', $polCode)->first();
             
-            if ($port && $port->terminal_code) {
-                $metadata['pol_terminal'] = $port->terminal_code; // e.g., "ST 332"
+            if ($polPort) {
+                // Format as schedule: "Antwerp, Belgium (ANR)"
+                $metadata['pol_code'] = $polPort->name . ', ' . $polPort->country . ' (' . $polPort->code . ')';
+                
+                // Also populate pol_terminal if available
+                if ($polPort->terminal_code ?? null) {
+                    $metadata['pol_terminal'] = $polPort->terminal_code;
+                }
             } else {
-                // Fallback: use the code as-is
-                $metadata['pol_terminal'] = $terminalCode; // e.g., "ANR"
+                // Fallback: use extracted code if port not found
+                $metadata['pol_code'] = $polCode;
             }
         } else {
             // Fallback to old extraction method if no parentheses code found
             $metadata['pol_terminal'] = $this->extractPolTerminalFromDescription(
                 $article->article_name
             );
+        }
+        
+        // NEW: Extract POD name and format as schedule: "Conakry" → "Conakry, Guinea (CKY)"
+        if (preg_match('/(?:FCL|RORO)\s*-\s*([A-Za-z\s]+?)\s*\([A-Z]{3}\)/', $article->article_name, $matches)) {
+            $podName = trim($matches[1]); // e.g., "Conakry"
+            
+            // Lookup POD in ports table (case-insensitive, fuzzy match)
+            $podPort = \App\Models\Port::where('name', 'LIKE', '%' . $podName . '%')->first();
+            
+            if ($podPort) {
+                // Format as schedule: "Conakry, Guinea (CKY)"
+                $metadata['pod_name'] = $podPort->name . ', ' . $podPort->country . ' (' . $podPort->code . ')';
+            } else {
+                // Fallback: use extracted name if port not found
+                $metadata['pod_name'] = $podName;
+            }
         }
         
         // Cannot determine parent status from description alone

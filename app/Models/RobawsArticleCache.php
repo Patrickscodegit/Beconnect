@@ -43,6 +43,9 @@ class RobawsArticleCache extends Model
         'article_info',
         'update_date',
         'validity_date',
+        // Port information in schedule format
+        'pol_code',
+        'pod_name',
     ];
 
     protected $casts = [

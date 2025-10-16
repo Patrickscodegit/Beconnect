@@ -208,12 +208,30 @@ class RobawsArticleResource extends Resource
                     ->formatStateUsing(fn ($state) => $state ?: 'Not specified')
                     ->color(fn ($state) => $state ? 'success' : 'gray')
                     ->toggleable(),
+                
+                // NEW: POL in schedule format
+                Tables\Columns\TextColumn::make('pol_code')
+                    ->label('POL')
+                    ->formatStateUsing(fn ($state) => $state ?: 'N/A')
+                    ->color(fn ($state) => $state ? 'success' : 'gray')
+                    ->tooltip('Port of Loading (schedule format)')
+                    ->searchable()
+                    ->toggleable(),
                     
                 Tables\Columns\TextColumn::make('pol_terminal')
                     ->label('POL Terminal')
                     ->formatStateUsing(fn ($state) => $state ?: 'N/A')
                     ->color(fn ($state) => $state ? 'primary' : 'gray')
                     ->tooltip(fn ($state) => $state ? null : 'Not available in Robaws')
+                    ->toggleable(),
+                
+                // NEW: POD in schedule format
+                Tables\Columns\TextColumn::make('pod_name')
+                    ->label('POD')
+                    ->formatStateUsing(fn ($state) => $state ?: 'N/A')
+                    ->color(fn ($state) => $state ? 'info' : 'gray')
+                    ->tooltip('Port of Discharge (schedule format)')
+                    ->searchable()
                     ->toggleable(),
                     
                 Tables\Columns\IconColumn::make('is_parent_item')
@@ -314,11 +332,25 @@ class RobawsArticleResource extends Resource
                         ->pluck('service_type', 'service_type')
                         ->toArray()),
                         
+                Tables\Filters\SelectFilter::make('pol_code')
+                    ->label('POL')
+                    ->options(fn () => RobawsArticleCache::distinct()
+                        ->whereNotNull('pol_code')
+                        ->pluck('pol_code', 'pol_code')
+                        ->toArray()),
+                        
                 Tables\Filters\SelectFilter::make('pol_terminal')
                     ->label('POL Terminal')
                     ->options(fn () => RobawsArticleCache::distinct()
                         ->whereNotNull('pol_terminal')
                         ->pluck('pol_terminal', 'pol_terminal')
+                        ->toArray()),
+                        
+                Tables\Filters\SelectFilter::make('pod_name')
+                    ->label('POD')
+                    ->options(fn () => RobawsArticleCache::distinct()
+                        ->whereNotNull('pod_name')
+                        ->pluck('pod_name', 'pod_name')
                         ->toArray()),
                     
                 Tables\Filters\TernaryFilter::make('is_parent_item')
