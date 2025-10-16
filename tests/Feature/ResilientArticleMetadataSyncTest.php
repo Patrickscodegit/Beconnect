@@ -34,28 +34,28 @@ class ResilientArticleMetadataSyncTest extends TestCase
             ->with('TEST123')
             ->andReturn([
                 'extraFields' => [
-                    [
-                        'code' => 'SHIPPING_LINE',
+                    'SHIPPING LINE' => [
+                        'type' => 'SELECT',
                         'stringValue' => 'MSC'
                     ],
-                    [
-                        'code' => 'SERVICE_TYPE', 
+                    'SERVICE TYPE' => [
+                        'type' => 'SELECT',
                         'stringValue' => 'FCL EXPORT'
                     ],
-                    [
-                        'code' => 'POL_TERMINAL',
+                    'POL TERMINAL' => [
+                        'type' => 'SELECT',
                         'stringValue' => 'ST 332'
                     ],
-                    [
-                        'code' => 'PARENT_ITEM',
-                        'stringValue' => 'true'
+                    'PARENT ITEM' => [
+                        'type' => 'CHECKBOX',
+                        'booleanValue' => true
                     ],
-                    [
-                        'code' => 'UPDATE_DATE',
+                    'UPDATE DATE' => [
+                        'type' => 'TEXT',
                         'stringValue' => '2024-01-01'
                     ],
-                    [
-                        'code' => 'VALIDITY_DATE',
+                    'VALIDITY DATE' => [
+                        'type' => 'TEXT',
                         'stringValue' => '2024-12-31'
                     ]
                 ],
@@ -102,7 +102,9 @@ class ResilientArticleMetadataSyncTest extends TestCase
         $this->assertEquals('MSC', $result['shipping_line']);
         $this->assertEquals('FCL EXPORT', $result['service_type']);
         $this->assertEquals('ST 332', $result['pol_terminal']);
-        $this->assertFalse($result['is_parent_item']); // "COMPLETE PACKAGE" doesn't contain 'seafreight'
+        // Note: "MSC FCL EXPORT ST 332 COMPLETE PACKAGE" contains "fcl" which IS a parent indicator
+        // The improved logic now correctly identifies FCL/LCL/RORO/Seafreight as parent services
+        $this->assertTrue($result['is_parent_item']); // Contains 'fcl' = parent indicator
         $this->assertNull($result['update_date']); // Cannot extract from description
         $this->assertNull($result['validity_date']); // Cannot extract from description
         $this->assertEquals('Extracted from description (API unavailable)', $result['article_info']);
@@ -164,15 +166,22 @@ class ResilientArticleMetadataSyncTest extends TestCase
         $method = $reflection->getMethod('isParentArticle');
         $method->setAccessible(true);
 
-        // Test parent indicators (based on actual method logic)
+        // Test parent indicators (based on actual improved logic)
+        // Parent = contains ('seafreight', 'fcl', 'lcl', 'roro', etc.) 
+        //          AND NOT ('surcharge', 'additional', 'courrier', 'admin', 'customs', 'waiver', etc.)
         $this->assertTrue($method->invoke($provider, 'MSC Seafreight Service'));
         $this->assertTrue($method->invoke($provider, 'FCL Export Seafreight'));
         $this->assertTrue($method->invoke($provider, 'RORO Seafreight Transport'));
+        $this->assertTrue($method->invoke($provider, 'Sallaum(ANR 332/740) Conakry Guinea, LM Seafreight')); // Real example
+        $this->assertTrue($method->invoke($provider, 'Basic FCL Export LM')); // Contains 'fcl' = parent indicator
+        $this->assertTrue($method->invoke($provider, 'LCL Container Service')); // Contains 'lcl'
         
-        // Test non-parent articles
-        $this->assertFalse($method->invoke($provider, 'Basic FCL Export')); // No 'seafreight'
+        // Test non-parent articles (contains exclusions)
         $this->assertFalse($method->invoke($provider, 'Seafreight Surcharge')); // Contains 'surcharge'
         $this->assertFalse($method->invoke($provider, 'Additional Seafreight Fee')); // Contains 'additional'
+        $this->assertFalse($method->invoke($provider, 'Courrier Seafreight')); // Contains 'courrier'
+        $this->assertFalse($method->invoke($provider, 'FCL Handling Fee')); // Contains 'handling'
+        $this->assertFalse($method->invoke($provider, 'Random Article Name')); // No parent indicators
     }
 
     protected function tearDown(): void

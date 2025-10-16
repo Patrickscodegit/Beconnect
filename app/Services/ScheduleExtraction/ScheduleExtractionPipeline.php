@@ -105,84 +105,39 @@ class ScheduleExtractionPipeline
         Port $podPort, 
         array $scheduleData
     ): void {
-        // Normalize dates to string format for consistent matching
-        $etsPolNormalized = null;
-        if (isset($scheduleData['ets_pol'])) {
-            $etsPolNormalized = $scheduleData['ets_pol'] instanceof \Carbon\Carbon 
-                ? $scheduleData['ets_pol']->format('Y-m-d')
-                : \Carbon\Carbon::parse($scheduleData['ets_pol'])->format('Y-m-d');
-        }
+        // New unique constraint includes ETS (sailing date) to allow multiple voyages
+        // Same vessel can now have multiple schedules for same route with different sailing dates
+        $schedule = ShippingSchedule::updateOrCreate(
+            [
+                'carrier_id' => $carrier->id,
+                'pol_id' => $polPort->id,
+                'pod_id' => $podPort->id,
+                'service_name' => $scheduleData['service_name'] ?? null,
+                'vessel_name' => $scheduleData['vessel_name'] ?? null,
+                'ets_pol' => $scheduleData['ets_pol'] ?? null, // Added to unique key for multiple voyages
+            ],
+            [
+                'frequency_per_week' => $scheduleData['frequency_per_week'] ?? null,
+                'frequency_per_month' => $scheduleData['frequency_per_month'] ?? null,
+                'transit_days' => $scheduleData['transit_days'] ?? null,
+                'voyage_number' => $scheduleData['voyage_number'] ?? null,
+                'vessel_class' => $scheduleData['vessel_class'] ?? null,
+                'eta_pod' => $scheduleData['eta_pod'] ?? null,
+                'next_sailing_date' => $scheduleData['next_sailing_date'] ?? null,
+                'last_updated' => now(),
+                'is_active' => true,
+            ]
+        );
         
-        $etaPodNormalized = null;
-        if (isset($scheduleData['eta_pod'])) {
-            $etaPodNormalized = $scheduleData['eta_pod'] instanceof \Carbon\Carbon
-                ? $scheduleData['eta_pod']->format('Y-m-d')
-                : \Carbon\Carbon::parse($scheduleData['eta_pod'])->format('Y-m-d');
-        }
-        
-        $nextSailingNormalized = null;
-        if (isset($scheduleData['next_sailing_date'])) {
-            $nextSailingNormalized = $scheduleData['next_sailing_date'] instanceof \Carbon\Carbon
-                ? $scheduleData['next_sailing_date']->format('Y-m-d')
-                : \Carbon\Carbon::parse($scheduleData['next_sailing_date'])->format('Y-m-d');
-        }
-
-        try {
-            // New unique constraint includes ETS (sailing date) to allow multiple voyages
-            // Same vessel can now have multiple schedules for same route with different sailing dates
-            $schedule = ShippingSchedule::updateOrCreate(
-                [
-                    'carrier_id' => $carrier->id,
-                    'pol_id' => $polPort->id,
-                    'pod_id' => $podPort->id,
-                    'service_name' => $scheduleData['service_name'] ?? null,
-                    'vessel_name' => $scheduleData['vessel_name'] ?? null,
-                    'ets_pol' => $etsPolNormalized, // Normalized to Y-m-d format
-                ],
-                [
-                    'frequency_per_week' => $scheduleData['frequency_per_week'] ?? null,
-                    'frequency_per_month' => $scheduleData['frequency_per_month'] ?? null,
-                    'transit_days' => $scheduleData['transit_days'] ?? null,
-                    'voyage_number' => $scheduleData['voyage_number'] ?? null,
-                    'vessel_class' => $scheduleData['vessel_class'] ?? null,
-                    'eta_pod' => $etaPodNormalized, // Normalized to Y-m-d format
-                    'next_sailing_date' => $nextSailingNormalized, // Normalized to Y-m-d format
-                    'last_updated' => now(),
-                    'is_active' => true,
-                ]
-            );
-            
-            Log::debug('Schedule updated/created', [
-                'carrier' => $carrier->code,
-                'pol' => $polPort->code,
-                'pod' => $podPort->code,
-                'service' => $scheduleData['service_name'] ?? 'N/A',
-                'vessel' => $scheduleData['vessel_name'] ?? 'N/A',
-                'voyage' => $scheduleData['voyage_number'] ?? 'N/A',
-                'schedule_id' => $schedule->id,
-                'was_updated' => $schedule->wasRecentlyCreated ? 'no' : 'yes'
-            ]);
-        } catch (\Illuminate\Database\QueryException $e) {
-            // Catch any remaining constraint violations gracefully
-            if (str_contains($e->getMessage(), 'UNIQUE constraint failed')) {
-                Log::warning('Duplicate schedule detected (skipped)', [
-                    'carrier' => $carrier->code,
-                    'pol' => $polPort->code,
-                    'pod' => $podPort->code,
-                    'vessel' => $scheduleData['vessel_name'] ?? 'N/A',
-                    'ets_pol' => $etsPolNormalized,
-                    'error' => 'Duplicate entry'
-                ]);
-            } else {
-                // Re-throw if it's not a duplicate constraint issue
-                Log::error('Schedule update failed for route', [
-                    'pol' => $polPort->code,
-                    'pod' => $podPort->code,
-                    'error' => $e->getMessage()
-                ]);
-                throw $e;
-            }
-        }
+        Log::debug('Schedule updated/created', [
+            'carrier' => $carrier->code,
+            'pol' => $polPort->code,
+            'pod' => $podPort->code,
+            'service' => $scheduleData['service_name'] ?? 'N/A',
+            'vessel' => $scheduleData['vessel_name'] ?? 'N/A',
+            'voyage' => $scheduleData['voyage_number'] ?? 'N/A',
+            'schedule_id' => $schedule->id
+        ]);
     }
 }
 

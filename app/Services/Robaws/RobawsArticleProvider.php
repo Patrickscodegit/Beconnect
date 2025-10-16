@@ -623,19 +623,57 @@ class RobawsArticleProvider
 
     /**
      * Check if article is a parent article
+     * Parent articles are main seafreight services that can have child items (surcharges, fees)
      */
     private function isParentArticle(string $description): bool
     {
         $desc = strtolower($description);
 
-        // Parent articles are main seafreight services (like GANRLAGSV)
-        return str_contains($desc, 'seafreight') && 
-               !str_contains($desc, 'surcharge') && 
-               !str_contains($desc, 'additional') &&
-               !str_contains($desc, 'courrier') &&
-               !str_contains($desc, 'admin') &&
-               !str_contains($desc, 'customs') &&
-               !str_contains($desc, 'waiver');
+        // Exclusion patterns - these are NOT parent items
+        $exclusions = [
+            'surcharge',
+            'additional',
+            'courrier',
+            'courier',
+            'admin',
+            'customs',
+            'waiver',
+            'handling',
+            'documentation',
+            'certificate',
+            'inspection',
+            'storage',
+            'demurrage',
+            'detention'
+        ];
+        
+        // Check for exclusions first
+        foreach ($exclusions as $exclusion) {
+            if (str_contains($desc, $exclusion)) {
+                return false;
+            }
+        }
+
+        // Positive indicators for parent articles
+        $parentIndicators = [
+            'seafreight',
+            'ocean freight',
+            'fcl',
+            'lcl',
+            'roro',
+            'breakbulk',
+            'bulk cargo',
+            'container service',
+            'shipping service'
+        ];
+        
+        foreach ($parentIndicators as $indicator) {
+            if (str_contains($desc, $indicator)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -1011,23 +1049,24 @@ class RobawsArticleProvider
         $info = [];
 
         // Extract from extraFields if available
+        // Robaws API returns extraFields as an object/dictionary with field names as keys
         $extraFields = $rawData['extraFields'] ?? [];
         
-        foreach ($extraFields as $field) {
-            $code = $field['code'] ?? '';
-            $value = $field['stringValue'] ?? $field['value'] ?? null;
+        foreach ($extraFields as $fieldName => $field) {
+            // Handle both stringValue and booleanValue (for checkboxes)
+            $value = $field['stringValue'] ?? $field['booleanValue'] ?? $field['value'] ?? null;
 
-            switch ($code) {
-                case 'SHIPPING_LINE':
+            switch ($fieldName) {
+                case 'SHIPPING LINE':
                     $info['shipping_line'] = $value;
                     break;
-                case 'SERVICE_TYPE':
+                case 'SERVICE TYPE':
                     $info['service_type'] = $value;
                     break;
-                case 'POL_TERMINAL':
+                case 'POL TERMINAL':
                     $info['pol_terminal'] = $value;
                     break;
-                case 'PARENT_ITEM':
+                case 'PARENT ITEM':
                     $info['is_parent_item'] = (bool) $value;
                     break;
             }
@@ -1054,20 +1093,22 @@ class RobawsArticleProvider
         $info = [];
 
         // Extract from extraFields if available
+        // Robaws API returns extraFields as an object/dictionary with field names as keys
         $extraFields = $rawData['extraFields'] ?? [];
         
-        foreach ($extraFields as $field) {
-            $code = $field['code'] ?? '';
+        foreach ($extraFields as $fieldName => $field) {
             $value = $field['stringValue'] ?? $field['value'] ?? null;
 
-            switch ($code) {
+            switch ($fieldName) {
                 case 'ARTICLE_INFO':
                 case 'INFO':
                     $info['article_info'] = $value;
                     break;
+                case 'UPDATE DATE':
                 case 'UPDATE_DATE':
                     $info['update_date'] = $value ? \Carbon\Carbon::parse($value)->format('Y-m-d') : null;
                     break;
+                case 'VALIDITY DATE':
                 case 'VALIDITY_DATE':
                     $info['validity_date'] = $value ? \Carbon\Carbon::parse($value)->format('Y-m-d') : null;
                     break;
