@@ -35,28 +35,28 @@ class ResilientArticleMetadataSyncTest extends TestCase
             ->andReturn([
                 'extraFields' => [
                     [
-                        'name' => 'SHIPPING_LINE',
-                        'value' => 'MSC'
+                        'code' => 'SHIPPING_LINE',
+                        'stringValue' => 'MSC'
                     ],
                     [
-                        'name' => 'SERVICE_TYPE', 
-                        'value' => 'FCL EXPORT'
+                        'code' => 'SERVICE_TYPE', 
+                        'stringValue' => 'FCL EXPORT'
                     ],
                     [
-                        'name' => 'POL_TERMINAL',
-                        'value' => 'ST 332'
+                        'code' => 'POL_TERMINAL',
+                        'stringValue' => 'ST 332'
                     ],
                     [
-                        'name' => 'PARENT_ITEM',
-                        'value' => 'true'
+                        'code' => 'PARENT_ITEM',
+                        'stringValue' => 'true'
                     ],
                     [
-                        'name' => 'UPDATE_DATE',
-                        'value' => '2024-01-01'
+                        'code' => 'UPDATE_DATE',
+                        'stringValue' => '2024-01-01'
                     ],
                     [
-                        'name' => 'VALIDITY_DATE',
-                        'value' => '2024-12-31'
+                        'code' => 'VALIDITY_DATE',
+                        'stringValue' => '2024-12-31'
                     ]
                 ],
                 'description' => 'Test article',
