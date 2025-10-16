@@ -102,9 +102,9 @@ class ResilientArticleMetadataSyncTest extends TestCase
         $this->assertEquals('MSC', $result['shipping_line']);
         $this->assertEquals('FCL EXPORT', $result['service_type']);
         $this->assertEquals('ST 332', $result['pol_terminal']);
-        // Note: "MSC FCL EXPORT ST 332 COMPLETE PACKAGE" contains "fcl" which IS a parent indicator
-        // The improved logic now correctly identifies FCL/LCL/RORO/Seafreight as parent services
-        $this->assertTrue($result['is_parent_item']); // Contains 'fcl' = parent indicator
+        // Parent status cannot be determined from description alone
+        // Only the Robaws API "PARENT ITEM" checkbox is authoritative
+        $this->assertNull($result['is_parent_item']); // Unknown when API unavailable
         $this->assertNull($result['update_date']); // Cannot extract from description
         $this->assertNull($result['validity_date']); // Cannot extract from description
         $this->assertEquals('Extracted from description (API unavailable)', $result['article_info']);

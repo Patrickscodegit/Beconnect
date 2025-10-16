@@ -1239,8 +1239,9 @@ class RobawsArticleProvider
             $article->article_name
         );
         
-        // Determine if parent based on description
-        $metadata['is_parent_item'] = $this->isParentArticle($article->article_name);
+        // Cannot determine parent status from description alone
+        // Only the Robaws API "PARENT ITEM" checkbox is authoritative
+        $metadata['is_parent_item'] = null;
         
         // Cannot extract dates from description, leave null
         $metadata['update_date'] = null;
