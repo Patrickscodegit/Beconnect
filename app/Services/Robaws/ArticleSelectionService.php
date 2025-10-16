@@ -169,5 +169,137 @@ class ArticleSelectionService
             return $article->isApplicableForCarrier($carrierCode);
         });
     }
+
+    /**
+     * Get articles for quotation based on criteria (NEW - Phase 4)
+     * Intelligently filters articles based on schedule, service type, shipping line, and terminal
+     * 
+     * @param array $criteria Keys: selected_schedule_id, service_type, shipping_line, pol_terminal
+     * @return Collection Filtered articles
+     */
+    public function getArticlesForQuotation(array $criteria): Collection
+    {
+        $query = RobawsArticleCache::active();
+        
+        // If schedule selected → filter by carrier + terminal
+        if (!empty($criteria['selected_schedule_id'])) {
+            $schedule = ShippingSchedule::find($criteria['selected_schedule_id']);
+            if ($schedule) {
+                $query->forSchedule($schedule);
+            }
+        }
+        
+        // Filter by service type
+        if (!empty($criteria['service_type'])) {
+            $query->forServiceType($criteria['service_type']);
+        }
+        
+        // Filter by shipping line
+        if (!empty($criteria['shipping_line'])) {
+            $query->forShippingLine($criteria['shipping_line']);
+        }
+        
+        // Filter by POL terminal
+        if (!empty($criteria['pol_terminal'])) {
+            $query->forPolTerminal($criteria['pol_terminal']);
+        }
+        
+        // Only show valid articles
+        $query->validAsOf(now());
+        
+        Log::info('Articles filtered for quotation', [
+            'criteria' => $criteria,
+            'article_count' => $query->count()
+        ]);
+        
+        return $query->get();
+    }
+
+    /**
+     * Auto-expand parent articles to include their composite items (surcharges)
+     * 
+     * @param Collection $selectedArticles Articles selected by user
+     * @return Collection Expanded collection including all child articles
+     */
+    public function expandParentArticles(Collection $selectedArticles): Collection
+    {
+        $expandedArticles = collect();
+        
+        foreach ($selectedArticles as $article) {
+            // Add the main article
+            $expandedArticles->push($article);
+            
+            // If parent item → add all child surcharges
+            if ($article->is_parent_item && $article->children()->exists()) {
+                $children = $article->children()->get();
+                
+                Log::info('Expanding parent article with children', [
+                    'parent' => $article->article_name,
+                    'children_count' => $children->count()
+                ]);
+                
+                $expandedArticles = $expandedArticles->merge($children);
+            }
+        }
+        
+        // Remove duplicates
+        return $expandedArticles->unique('id');
+    }
+
+    /**
+     * Get articles with their children for display (parent-child hierarchy)
+     * Useful for showing expandable article lists in UI
+     * 
+     * @param Collection $articles Parent articles
+     * @return array Structured array with parents and their children
+     */
+    public function getArticlesWithChildren(Collection $articles): array
+    {
+        $structured = [];
+        
+        foreach ($articles as $article) {
+            $item = [
+                'article' => $article,
+                'children' => [],
+            ];
+            
+            if ($article->is_parent_item) {
+                $item['children'] = $article->children()
+                    ->with('pivot')
+                    ->get()
+                    ->map(function ($child) {
+                        return [
+                            'article' => $child,
+                            'cost_type' => $child->pivot->cost_type,
+                            'default_quantity' => $child->pivot->default_quantity,
+                            'default_cost_price' => $child->pivot->default_cost_price,
+                            'unit_type' => $child->pivot->unit_type,
+                            'is_required' => $child->pivot->is_required,
+                        ];
+                    })
+                    ->toArray();
+            }
+            
+            $structured[] = $item;
+        }
+        
+        return $structured;
+    }
+
+    /**
+     * Get parent articles only (main freight services)
+     * Useful for initial selection UI
+     * 
+     * @param array $criteria Same as getArticlesForQuotation
+     * @return Collection Parent articles only
+     */
+    public function getParentArticlesForQuotation(array $criteria): Collection
+    {
+        $articles = $this->getArticlesForQuotation($criteria);
+        
+        return $articles->filter(function ($article) {
+            return $article->is_parent_item === true;
+        });
+    }
 }
 
