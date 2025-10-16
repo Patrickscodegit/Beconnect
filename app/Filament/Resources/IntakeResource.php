@@ -465,6 +465,19 @@ class IntakeResource extends Resource
                     ->modalCancelActionLabel('Close')
                     ->visible(fn (?Intake $record): bool => $record && $record->extraction()->exists()),
                     
+                Tables\Actions\Action::make('create_quotation')
+                    ->label('Create Quotation')
+                    ->icon('heroicon-o-document-plus')
+                    ->color('primary')
+                    ->url(fn (Intake $record): string => route('customer.quotations.create', ['intake_id' => $record->id]))
+                    ->openUrlInNewTab()
+                    ->visible(fn (Intake $record): bool => 
+                        $record && 
+                        ($record->status === 'processed' || $record->status === 'processing_complete') &&
+                        ($record->robaws_offer_id || $record->documents()->whereNotNull('extraction_data')->exists())
+                    )
+                    ->tooltip('Create a quotation from this intake\'s extracted data'),
+                    
                 Tables\Actions\Action::make('fix_contact_and_retry')
                     ->label('Fix Contact & Retry')
                     ->icon('heroicon-o-phone')

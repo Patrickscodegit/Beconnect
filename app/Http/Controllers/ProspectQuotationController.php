@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\QuotationRequest;
 use App\Models\Port;
 use App\Models\ShippingCarrier;
+use App\Models\Intake;
 use App\Notifications\QuotationSubmittedNotification;
 use App\Services\RobawsFieldGenerator;
+use App\Services\Commodity\CommodityMappingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
@@ -32,12 +34,53 @@ class ProspectQuotationController extends Controller
             // Service types from config
             $serviceTypes = config('quotation.service_types', []);
             
-            // Pre-fill from URL parameters if available (from schedule page)
+            // Check if coming from intake
+            $intake = null;
+            $commodityItems = [];
+            $intakeData = [];
+            
+            if ($request->has('intake_id')) {
+                $intake = Intake::find($request->get('intake_id'));
+                
+                if ($intake) {
+                    // Get commodity items from extraction data
+                    $commodityMappingService = app(CommodityMappingService::class);
+                    $commodityItems = $commodityMappingService->mapFromIntake($intake);
+                    
+                    // Get extraction data for pre-filling form
+                    $extractionData = $intake->is_multi_document && $intake->aggregated_extraction_data
+                        ? $intake->aggregated_extraction_data
+                        : ($intake->documents()->first()?->extraction_data ?? []);
+                    
+                    if (!empty($extractionData)) {
+                        $rawData = $extractionData['raw_data'] ?? [];
+                        $documentData = $extractionData['document_data'] ?? [];
+                        
+                        // Extract contact data
+                        $contact = $documentData['contact'] ?? $extractionData['contact'] ?? $rawData['contact'] ?? [];
+                        $shipping = $documentData['shipping'] ?? $extractionData['shipping'] ?? $rawData['shipping'] ?? [];
+                        
+                        $intakeData = [
+                            'contact_name' => $contact['name'] ?? $intake->customer_name ?? null,
+                            'contact_email' => $contact['email'] ?? $intake->contact_email ?? null,
+                            'contact_phone' => $contact['phone'] ?? $intake->contact_phone ?? null,
+                            'pol' => $shipping['origin'] ?? $rawData['pol'] ?? null,
+                            'pod' => $shipping['destination'] ?? $rawData['pod'] ?? null,
+                            'service_type' => $intake->service_type,
+                        ];
+                    }
+                }
+            }
+            
+            // Pre-fill from URL parameters (from schedule page) or intake data
             $prefill = [
-                'pol' => $request->get('pol'),
-                'pod' => $request->get('pod'),
-                'service_type' => $request->get('service_type'),
+                'pol' => $request->get('pol') ?? $intakeData['pol'] ?? null,
+                'pod' => $request->get('pod') ?? $intakeData['pod'] ?? null,
+                'service_type' => $request->get('service_type') ?? $intakeData['service_type'] ?? null,
                 'carrier' => $request->get('carrier'),
+                'contact_name' => $intakeData['contact_name'] ?? null,
+                'contact_email' => $intakeData['contact_email'] ?? null,
+                'contact_phone' => $intakeData['contact_phone'] ?? null,
             ];
 
             // Format ports for display with country
@@ -55,7 +98,9 @@ class ProspectQuotationController extends Controller
                 'podPortsFormatted',
                 'carriers', 
                 'serviceTypes',
-                'prefill'
+                'prefill',
+                'commodityItems',
+                'intake'
             ));
         } catch (\Exception $e) {
             \Log::error('ProspectQuotationController::create error: ' . $e->getMessage());

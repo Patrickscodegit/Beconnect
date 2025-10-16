@@ -15,6 +15,21 @@
             <p class="text-xl text-gray-600 max-w-2xl mx-auto">
                 Get a competitive quote for your shipping needs. Our experts will provide you with the best rates and service options.
             </p>
+            
+            @if(isset($intake) && $intake)
+                <div class="mt-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded max-w-2xl mx-auto">
+                    <div class="flex items-center">
+                        <i class="fas fa-magic text-blue-500 mr-3 text-xl"></i>
+                        <div>
+                            <h3 class="text-sm font-semibold text-blue-800">Auto-Populated from Intake #{{ $intake->id }}</h3>
+                            <p class="text-sm text-blue-600 mt-1">
+                                We've automatically filled in {{ count($commodityItems ?? []) }} commodity item(s) from your intake. 
+                                Please review and edit as needed.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            @endif
         </div>
 
         <!-- Form -->
@@ -333,7 +348,7 @@
                 <!-- Detailed Quote Form (Multi-Commodity Items) -->
                 <div x-show="quotationMode === 'detailed'" x-cloak class="p-8 border-b">
                     @livewire('commodity-items-repeater', [
-                        'existingItems' => old('commodity_items') ? json_decode(old('commodity_items'), true) : [],
+                        'existingItems' => old('commodity_items') ? json_decode(old('commodity_items'), true) : ($commodityItems ?? []),
                         'serviceType' => old('service_type', $prefill['service_type'] ?? ''),
                         'unitSystem' => old('unit_system', 'metric')
                     ])
