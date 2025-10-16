@@ -122,8 +122,8 @@ class ListRobawsArticles extends ListRecords
                 ->badge(fn () => static::getModel()::count()),
             
             'parent' => Tab::make('Parent Articles')
-                ->modifyQueryUsing(fn (Builder $query) => $query->where('is_parent_article', true))
-                ->badge(fn () => static::getModel()::where('is_parent_article', true)->count())
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('is_parent_item', true))
+                ->badge(fn () => static::getModel()::where('is_parent_item', true)->count())
                 ->badgeColor('info'),
                 
             'surcharges' => Tab::make('Surcharges')
@@ -137,12 +137,32 @@ class ListRobawsArticles extends ListRecords
                 ->badgeColor('danger'),
                 
             'seafreight' => Tab::make('Seafreight')
-                ->modifyQueryUsing(fn (Builder $query) => $query->where('category', 'seafreight'))
-                ->badge(fn () => static::getModel()::where('category', 'seafreight')->count()),
+                ->modifyQueryUsing(fn (Builder $query) => $query->where(function($q) {
+                    $q->where('category', 'seafreight')
+                      ->orWhere('service_type', 'LIKE', '%SEAFREIGHT%')
+                      ->orWhere('article_name', 'LIKE', '%seafreight%')
+                      ->orWhere('article_name', 'LIKE', '%Seafreight%');
+                }))
+                ->badge(fn () => static::getModel()::where(function($q) {
+                    $q->where('category', 'seafreight')
+                      ->orWhere('service_type', 'LIKE', '%SEAFREIGHT%')
+                      ->orWhere('article_name', 'LIKE', '%seafreight%')
+                      ->orWhere('article_name', 'LIKE', '%Seafreight%');
+                })->count()),
                 
             'customs' => Tab::make('Customs')
-                ->modifyQueryUsing(fn (Builder $query) => $query->where('category', 'customs'))
-                ->badge(fn () => static::getModel()::where('category', 'customs')->count()),
+                ->modifyQueryUsing(fn (Builder $query) => $query->where(function($q) {
+                    $q->where('category', 'customs')
+                      ->orWhere('article_name', 'LIKE', '%customs%')
+                      ->orWhere('article_name', 'LIKE', '%Customs%')
+                      ->orWhere('article_name', 'LIKE', '%CUSTOMS%');
+                }))
+                ->badge(fn () => static::getModel()::where(function($q) {
+                    $q->where('category', 'customs')
+                      ->orWhere('article_name', 'LIKE', '%customs%')
+                      ->orWhere('article_name', 'LIKE', '%Customs%')
+                      ->orWhere('article_name', 'LIKE', '%CUSTOMS%');
+                })->count()),
         ];
     }
 }
