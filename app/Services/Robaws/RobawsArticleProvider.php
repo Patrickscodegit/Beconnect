@@ -1293,6 +1293,10 @@ class RobawsArticleProvider
         elseif (preg_match('/\(([A-Z]{3})\s+\d+\)/', $article->article_name, $matches)) {
             $polCode = $matches[1];
         }
+        // Pattern 3: (CODE numbers/numbers) format - e.g., (ANR 332/740), (RTM 123/456)
+        elseif (preg_match('/\(([A-Z]{3})\s+[\d\/]+\)/', $article->article_name, $matches)) {
+            $polCode = $matches[1];
+        }
         
         if ($polCode) {
             $polPort = \App\Models\Port::where('code', $polCode)->first();
@@ -1326,6 +1330,10 @@ class RobawsArticleProvider
         }
         // Pattern 5: (POL CODE) City Country format - e.g., "Grimaldi(ANR) Alexandria Egypt"
         elseif (preg_match('/\([A-Z]{3}\)\s+([A-Za-z\s]+?)\s+[A-Z][a-z]+/', $article->article_name, $matches)) {
+            $podName = trim($matches[1]);
+        }
+        // Pattern 6: (POL CODE numbers/numbers) City - Country format - e.g., "Sallaum(ANR 332/740) Abidjan - Ivory Coast"
+        elseif (preg_match('/\([A-Z]{3}\s+[\d\/]+\)\s+([A-Za-z\s]+?)\s+-/', $article->article_name, $matches)) {
             $podName = trim($matches[1]);
         }
         
