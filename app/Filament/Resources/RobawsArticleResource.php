@@ -196,6 +196,46 @@ class RobawsArticleResource extends Resource
                 Tables\Columns\TextColumn::make('unit_price')
                     ->money('EUR')
                     ->sortable(),
+                
+                Tables\Columns\BadgeColumn::make('shipping_line')
+                    ->label('Shipping Line')
+                    ->colors([
+                        'success' => fn ($state) => $state !== null,
+                        'danger' => fn ($state) => $state === null,
+                    ])
+                    ->formatStateUsing(fn ($state) => $state ?? 'No Data')
+                    ->toggleable(),
+                    
+                Tables\Columns\BadgeColumn::make('service_type')
+                    ->label('Service Type')
+                    ->colors([
+                        'success' => fn ($state) => $state !== null,
+                        'danger' => fn ($state) => $state === null,
+                    ])
+                    ->formatStateUsing(fn ($state) => $state ?? 'No Data')
+                    ->toggleable(),
+                    
+                Tables\Columns\BadgeColumn::make('pol_terminal')
+                    ->label('POL Terminal')
+                    ->colors([
+                        'success' => fn ($state) => $state !== null,
+                        'danger' => fn ($state) => $state === null,
+                    ])
+                    ->formatStateUsing(fn ($state) => $state ?? 'No Data')
+                    ->toggleable(),
+                    
+                Tables\Columns\IconColumn::make('is_parent_item')
+                    ->boolean()
+                    ->label('Parent Item')
+                    ->tooltip(fn ($state) => $state ? 'Has composite items' : 'Not a parent')
+                    ->toggleable(),
+                    
+                Tables\Columns\TextColumn::make('validity_date')
+                    ->date()
+                    ->label('Valid Until')
+                    ->color(fn ($state) => $state && $state >= now() ? 'success' : 'danger')
+                    ->formatStateUsing(fn ($state) => $state ? $state->format('M d, Y') : 'N/A')
+                    ->toggleable(),
                     
             Tables\Columns\TextColumn::make('applicable_services')
                 ->badge()
@@ -284,6 +324,43 @@ class RobawsArticleResource extends Resource
                     ->toggleable(),
             ])
             ->filters([
+                Tables\Filters\SelectFilter::make('shipping_line')
+                    ->label('Shipping Line')
+                    ->options(fn () => RobawsArticleCache::distinct()
+                        ->whereNotNull('shipping_line')
+                        ->pluck('shipping_line', 'shipping_line')
+                        ->toArray()),
+                        
+                Tables\Filters\SelectFilter::make('service_type')
+                    ->label('Service Type')
+                    ->options(fn () => RobawsArticleCache::distinct()
+                        ->whereNotNull('service_type')
+                        ->pluck('service_type', 'service_type')
+                        ->toArray()),
+                        
+                Tables\Filters\SelectFilter::make('pol_terminal')
+                    ->label('POL Terminal')
+                    ->options(fn () => RobawsArticleCache::distinct()
+                        ->whereNotNull('pol_terminal')
+                        ->pluck('pol_terminal', 'pol_terminal')
+                        ->toArray()),
+                    
+                Tables\Filters\TernaryFilter::make('is_parent_item')
+                    ->label('Parent Items Only')
+                    ->placeholder('All items')
+                    ->trueLabel('Only parent items')
+                    ->falseLabel('Only non-parent items'),
+                    
+                Tables\Filters\TernaryFilter::make('has_metadata')
+                    ->label('Has Metadata')
+                    ->placeholder('All articles')
+                    ->trueLabel('With metadata')
+                    ->falseLabel('Missing metadata')
+                    ->queries(
+                        true: fn (Builder $query) => $query->whereNotNull('shipping_line'),
+                        false: fn (Builder $query) => $query->whereNull('shipping_line'),
+                    ),
+                    
                 Tables\Filters\SelectFilter::make('category')
                     ->options([
                         'seafreight' => 'Seafreight',
@@ -317,41 +394,54 @@ class RobawsArticleResource extends Resource
                     ->label('Requires Review'),
             ])
             ->actions([
+                Tables\Actions\Action::make('sync_metadata')
+                    ->label('Sync Metadata')
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('primary')
+                    ->action(function (RobawsArticleCache $record) {
+                        \App\Jobs\SyncSingleArticleMetadataJob::dispatch($record->id);
+                        
+                        Notification::make()
+                            ->title('Metadata sync started')
+                            ->body("Syncing metadata for: {$record->article_name}")
+                            ->success()
+                            ->send();
+                    })
+                    ->requiresConfirmation()
+                    ->modalHeading('Sync article metadata')
+                    ->modalDescription('This will fetch shipping line, service type, POL terminal, and composite items from Robaws.')
+                    ->modalSubmitActionLabel('Sync'),
+                    
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\BulkAction::make('sync_metadata')
+                        ->label('Sync Metadata')
+                        ->icon('heroicon-o-arrow-path')
+                        ->color('primary')
+                        ->action(function (\Illuminate\Support\Collection $records) {
+                            $articleIds = $records->pluck('id')->toArray();
+                            \App\Jobs\SyncArticlesMetadataBulkJob::dispatch($articleIds);
+                            
+                            Notification::make()
+                                ->title('Bulk metadata sync started')
+                                ->body('Syncing metadata for ' . count($articleIds) . ' articles in background...')
+                                ->success()
+                                ->send();
+                        })
+                        ->requiresConfirmation()
+                        ->modalHeading('Sync metadata for selected articles')
+                        ->modalDescription('This will fetch metadata for all selected articles from Robaws. This may take a few minutes.')
+                        ->modalSubmitActionLabel('Start Sync')
+                        ->deselectRecordsAfterCompletion(),
+                        
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ])
             ->headerActions([
-                Tables\Actions\Action::make('sync')
-                    ->label('Sync from Robaws')
-                    ->icon('heroicon-o-arrow-path')
-                    ->color('primary')
-                    ->action(function () {
-                        try {
-                            $articleProvider = app(RobawsArticleProvider::class);
-                            $count = $articleProvider->syncArticles();
-                            
-                            Notification::make()
-                                ->title('Articles synced successfully')
-                                ->body("Synced {$count} articles from Robaws.")
-                                ->success()
-                                ->send();
-                        } catch (\Exception $e) {
-                            Notification::make()
-                                ->title('Sync failed')
-                                ->body($e->getMessage())
-                                ->danger()
-                                ->send();
-                        }
-                    })
-                    ->requiresConfirmation()
-                    ->modalHeading('Sync articles from Robaws')
-                    ->modalDescription('This will fetch the latest articles from Robaws offers. This may take a few minutes.')
-                    ->modalSubmitActionLabel('Start Sync'),
+                // Old article sync removed - metadata sync now handled via bulk/row actions
             ])
             ->defaultSort('last_synced_at', 'desc');
     }

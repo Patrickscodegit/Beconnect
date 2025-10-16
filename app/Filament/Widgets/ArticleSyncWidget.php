@@ -10,27 +10,29 @@ class ArticleSyncWidget extends BaseWidget
 {
     protected function getStats(): array
     {
-        $totalArticles = RobawsArticleCache::count();
-        $lastSyncRecord = RobawsArticleCache::whereNotNull('last_synced_at')
-            ->orderBy('last_synced_at', 'desc')
-            ->first();
-        $todaySync = RobawsArticleCache::whereDate('last_synced_at', today())->count();
+        $total = RobawsArticleCache::count();
+        $withMetadata = RobawsArticleCache::whereNotNull('shipping_line')->count();
+        $withoutMetadata = $total - $withMetadata;
+        $lastMetadataSync = RobawsArticleCache::whereNotNull('shipping_line')
+            ->max('updated_at');
+        
+        $percentage = $total > 0 ? round(($withMetadata / $total) * 100) : 0;
         
         return [
-            Stat::make('Total Articles', $totalArticles)
-                ->description('From Robaws Articles API')
+            Stat::make('Total Articles', $total)
+                ->description('Cached from Robaws')
                 ->icon('heroicon-o-cube')
-                ->color('success'),
+                ->color('primary'),
                 
-            Stat::make('Synced Today', $todaySync)
-                ->description('Articles updated today')
-                ->icon('heroicon-o-bolt')
-                ->color('info'),
+            Stat::make('With Metadata', $withMetadata)
+                ->description("{$withoutMetadata} missing metadata ({$percentage}% complete)")
+                ->icon('heroicon-o-check-circle')
+                ->color($withMetadata > 0 ? 'success' : 'danger'),
                 
-            Stat::make('Last Sync', $lastSyncRecord ? $lastSyncRecord->last_synced_at->diffForHumans() : 'Never')
-                ->description('Next sync at 2:00 AM')
+            Stat::make('Last Metadata Sync', $lastMetadataSync ? \Carbon\Carbon::parse($lastMetadataSync)->diffForHumans() : 'Never')
+                ->description('Shipping line, service type, terminal')
                 ->icon('heroicon-o-clock')
-                ->color('warning'),
+                ->color($lastMetadataSync ? 'success' : 'warning'),
         ];
     }
 }
