@@ -199,100 +199,76 @@ class RobawsArticleResource extends Resource
                 
                 Tables\Columns\BadgeColumn::make('shipping_line')
                     ->label('Shipping Line')
-                    ->colors([
-                        'success' => fn ($state) => $state !== null,
-                        'danger' => fn ($state) => $state === null,
-                    ])
-                    ->formatStateUsing(fn ($state) => $state ?? 'No Data')
+                    ->formatStateUsing(fn ($state) => $state ?: 'Not specified')
+                    ->color(fn ($state) => $state ? 'primary' : 'gray')
                     ->toggleable(),
                     
                 Tables\Columns\BadgeColumn::make('service_type')
                     ->label('Service Type')
-                    ->colors([
-                        'success' => fn ($state) => $state !== null,
-                        'danger' => fn ($state) => $state === null,
-                    ])
-                    ->formatStateUsing(fn ($state) => $state ?? 'No Data')
+                    ->formatStateUsing(fn ($state) => $state ?: 'Not specified')
+                    ->color(fn ($state) => $state ? 'success' : 'gray')
                     ->toggleable(),
                     
-                Tables\Columns\BadgeColumn::make('pol_terminal')
+                Tables\Columns\TextColumn::make('pol_terminal')
                     ->label('POL Terminal')
-                    ->colors([
-                        'success' => fn ($state) => $state !== null,
-                        'danger' => fn ($state) => $state === null,
-                    ])
-                    ->formatStateUsing(fn ($state) => $state ?? 'No Data')
+                    ->formatStateUsing(fn ($state) => $state ?: 'N/A')
+                    ->color(fn ($state) => $state ? 'primary' : 'gray')
+                    ->tooltip(fn ($state) => $state ? null : 'Not available in Robaws')
                     ->toggleable(),
                     
                 Tables\Columns\IconColumn::make('is_parent_item')
                     ->boolean()
-                    ->label('Parent Item')
-                    ->tooltip(fn ($state) => $state ? 'Has composite items' : 'Not a parent')
+                    ->label('Parent')
+                    ->tooltip('Parent item status from Robaws API')
                     ->toggleable(),
                     
                 Tables\Columns\TextColumn::make('validity_date')
-                    ->date()
+                    ->date('M d, Y')
                     ->label('Valid Until')
-                    ->color(fn ($state) => $state && $state >= now() ? 'success' : 'danger')
-                    ->formatStateUsing(fn ($state) => $state ? $state->format('M d, Y') : 'N/A')
+                    ->placeholder('Not set')
+                    ->color(fn ($state) => $state && $state >= now() ? 'success' : 'gray')
                     ->toggleable(),
                     
             Tables\Columns\TextColumn::make('applicable_services')
                 ->badge()
-                ->formatStateUsing(function ($state): string {
-                    // Handle both array and JSON string cases
-                    if (is_string($state)) {
-                        $decoded = json_decode($state, true);
-                        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-                            if (count($decoded) > 0) {
-                                return implode(', ', array_map(fn($s) => str_replace('_', ' ', $s), $decoded));
-                            }
-                            return 'None';
+                ->formatStateUsing(function ($state, $record) {
+                    // Parse array from JSON if needed
+                    $services = is_string($state) ? json_decode($state, true) : $state;
+                    if (!is_array($services)) {
+                        return 'None';
+                    }
+                    
+                    // If service_type is known, show only relevant services
+                    if ($record->service_type) {
+                        $relevant = [$record->service_type];
+                        
+                        // Add CONSOL variant if it exists
+                        $consol = $record->service_type . ' CONSOL';
+                        if (in_array($consol, $services)) {
+                            $relevant[] = $consol;
                         }
-                        // If it's a simple string (like "FCL_IMPORT" directly), format it
-                        return str_replace('_', ' ', $state);
+                        
+                        return implode(', ', array_map(fn($s) => str_replace('_', ' ', $s), $relevant));
                     }
-                    if (is_array($state) && count($state) > 0) {
-                        return implode(', ', array_map(fn($s) => str_replace('_', ' ', $s), $state));
+                    
+                    // Otherwise show max 3 services
+                    $limited = array_slice($services, 0, 3);
+                    $more = count($services) - 3;
+                    $result = implode(', ', array_map(fn($s) => str_replace('_', ' ', $s), $limited));
+                    if ($more > 0) {
+                        $result .= " +{$more} more";
                     }
-                    return 'None';
+                    return $result ?: 'None';
                 })
-                ->color(function ($state): string {
-                    if (is_string($state)) {
-                        $decoded = json_decode($state, true);
-                        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-                            return count($decoded) > 0 ? 'success' : 'gray';
-                        }
-                        // Simple strings are valid too
-                        return 'success';
-                    }
-                    if (is_array($state) && count($state) > 0) {
-                        return 'success';
-                    }
-                    return 'gray';
-                })
-                ->tooltip(function ($state): ?string {
-                    if (is_string($state)) {
-                        $decoded = json_decode($state, true);
-                        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-                            if (count($decoded) > 0) {
-                                return implode(', ', array_map(fn($s) => str_replace('_', ' ', $s), $decoded));
-                            }
-                            return null;
-                        }
-                        // Simple string tooltip
-                        return str_replace('_', ' ', $state);
-                    }
-                    if (is_array($state) && count($state) > 0) {
-                        return implode(', ', array_map(fn($s) => str_replace('_', ' ', $s), $state));
+                ->color(fn ($state) => $state ? 'success' : 'gray')
+                ->tooltip(function ($state) {
+                    $services = is_string($state) ? json_decode($state, true) : $state;
+                    if (is_array($services) && count($services) > 0) {
+                        return implode(', ', array_map(fn($s) => str_replace('_', ' ', $s), $services));
                     }
                     return null;
-                }),
-                    
-                Tables\Columns\IconColumn::make('is_parent_article')
-                    ->boolean()
-                    ->label('Parent')
-                    ->toggleable(),
+                })
+                ->toggleable(),
                     
                 Tables\Columns\TextColumn::make('children_count')
                     ->counts('children')

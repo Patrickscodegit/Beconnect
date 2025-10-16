@@ -1234,10 +1234,27 @@ class RobawsArticleProvider
             $article->article_name
         );
         
-        // Extract POL terminal from description
-        $metadata['pol_terminal'] = $this->extractPolTerminalFromDescription(
-            $article->article_name
-        );
+        // NEW: Extract POL terminal from article name
+        // Pattern: "FCL - Conakry (ANR) - Guinee, 40ft HC seafreight"
+        // Look for 3-letter code in parentheses (e.g., (ANR) = Antwerp)
+        if (preg_match('/\(([A-Z]{3})\)/', $article->article_name, $matches)) {
+            $terminalCode = $matches[1]; // e.g., "ANR"
+            
+            // Try to find matching port in database
+            $port = \App\Models\Port::where('code', $terminalCode)->first();
+            
+            if ($port && $port->terminal_code) {
+                $metadata['pol_terminal'] = $port->terminal_code; // e.g., "ST 332"
+            } else {
+                // Fallback: use the code as-is
+                $metadata['pol_terminal'] = $terminalCode; // e.g., "ANR"
+            }
+        } else {
+            // Fallback to old extraction method if no parentheses code found
+            $metadata['pol_terminal'] = $this->extractPolTerminalFromDescription(
+                $article->article_name
+            );
+        }
         
         // Cannot determine parent status from description alone
         // Only the Robaws API "PARENT ITEM" checkbox is authoritative
