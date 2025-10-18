@@ -2023,4 +2023,28 @@ final class RobawsApiClient
             'total' => count($allArticles)
         ];
     }
+
+    /**
+     * Get the daily API call limit
+     */
+    public function getDailyLimit(): int
+    {
+        return $this->dailyLimit;
+    }
+
+    /**
+     * Get the remaining daily API calls
+     */
+    public function getDailyRemaining(): int
+    {
+        return $this->dailyRemaining;
+    }
+
+    /**
+     * Get the per-second rate limit
+     */
+    public function getPerSecondLimit(): int
+    {
+        return $this->perSecondLimit;
+    }
 }
