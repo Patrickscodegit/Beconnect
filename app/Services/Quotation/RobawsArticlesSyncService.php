@@ -13,11 +13,17 @@ class RobawsArticlesSyncService
 {
     protected RobawsApiClient $apiClient;
     protected ArticleNameParser $parser;
+    protected RobawsArticleProvider $articleProvider;
 
-    public function __construct(RobawsApiClient $apiClient, ArticleNameParser $parser)
+    public function __construct(
+        RobawsApiClient $apiClient, 
+        ArticleNameParser $parser,
+        RobawsArticleProvider $articleProvider
+    )
     {
         $this->apiClient = $apiClient;
         $this->parser = $parser;
+        $this->articleProvider = $articleProvider;
     }
 
     /**

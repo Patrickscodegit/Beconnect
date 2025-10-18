@@ -903,7 +903,7 @@ class RobawsArticleProvider
      * @param int $articleId The article cache ID
      * @param bool $useApi Whether to attempt API call (default: false for speed)
      */
-    public function syncArticleMetadata(int $articleId, bool $useApi = false): array
+    public function syncArticleMetadata(int|string $articleId, bool $useApi = false): array
     {
         try {
             $article = RobawsArticleCache::find($articleId);
