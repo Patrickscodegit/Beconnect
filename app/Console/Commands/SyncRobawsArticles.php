@@ -11,19 +11,50 @@ class SyncRobawsArticles extends Command
 {
     protected $signature = 'robaws:sync-articles 
                             {--rebuild : Clear and rebuild entire cache}
+                            {--incremental : Only sync articles changed since last sync (recommended for scheduled runs)}
                             {--metadata-only : Only sync metadata for existing articles}
-                            {--skip-metadata : Skip automatic metadata sync after article sync}';
+                            {--skip-metadata : Skip automatic metadata sync after article sync}
+                            {--use-api : Use Robaws API for metadata (slower, more complete data)}';
     
     protected $description = 'Sync articles from Robaws Articles API';
 
     public function handle(RobawsArticlesSyncService $syncService): int
     {
         try {
-            // Option 1: Metadata only (no article sync)
+            // Option 1: Incremental sync (recommended for scheduled runs)
+            if ($this->option('incremental')) {
+                $this->info('🔄 Starting incremental sync (only changed articles)...');
+                
+                $result = $syncService->syncIncremental();
+                
+                $this->info("✅ Incremental sync completed!");
+                $this->table(
+                    ['Metric', 'Value'],
+                    [
+                        ['Total Modified', $result['total']],
+                        ['Synced', $result['synced']],
+                        ['Errors', $result['errors']],
+                        ['Last Sync', $result['last_sync'] ?? 'N/A'],
+                    ]
+                );
+                
+                return Command::SUCCESS;
+            }
+            
+            // Option 2: Metadata only (no article sync)
             if ($this->option('metadata-only')) {
                 $this->info('Syncing metadata for all existing articles...');
                 
-                $result = $syncService->syncAllMetadata();
+                // Pass useApi flag to service
+                $useApi = $this->option('use-api');
+                
+                if ($useApi) {
+                    $this->warn('⚠️  Using API calls (may hit rate limits and be slow)...');
+                } else {
+                    $this->info('ℹ️  Using fast extraction (no API calls, except for parent items)');
+                }
+                
+                $result = $syncService->syncAllMetadata(useApi: $useApi);
                 
                 $this->info("✅ Metadata sync completed!");
                 $this->table(
@@ -37,7 +68,7 @@ class SyncRobawsArticles extends Command
                 return Command::SUCCESS;
             }
             
-            // Option 2: Full article sync (with or without metadata)
+            // Option 3: Full article sync (with or without metadata)
             $this->info('Starting Robaws articles sync...');
             
             if ($this->option('rebuild')) {

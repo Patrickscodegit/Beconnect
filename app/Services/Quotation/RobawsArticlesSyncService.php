@@ -4,16 +4,20 @@ namespace App\Services\Quotation;
 
 use App\Models\RobawsArticleCache;
 use App\Services\Export\Clients\RobawsApiClient;
+use App\Services\Robaws\RobawsArticleProvider;
+use App\Services\Robaws\ArticleNameParser;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class RobawsArticlesSyncService
 {
     protected RobawsApiClient $apiClient;
+    protected ArticleNameParser $parser;
 
-    public function __construct(RobawsApiClient $apiClient)
+    public function __construct(RobawsApiClient $apiClient, ArticleNameParser $parser)
     {
         $this->apiClient = $apiClient;
+        $this->parser = $parser;
     }
 
     /**
@@ -60,11 +64,159 @@ class RobawsArticlesSyncService
             'errors' => $errors
         ];
     }
+    
+    /**
+     * Incremental sync - only fetch articles changed since last sync
+     * This is the recommended approach for nightly scheduled syncs
+     */
+    public function syncIncremental(): array
+    {
+        Log::info('Starting incremental articles sync');
+        
+        // Get the last sync timestamp
+        $lastSyncTimestamp = RobawsArticleCache::max('last_modified_at') ?? RobawsArticleCache::max('last_synced_at');
+        
+        if (!$lastSyncTimestamp) {
+            Log::info('No previous sync found, running full sync');
+            return $this->sync();
+        }
+        
+        $lastSync = \Carbon\Carbon::parse($lastSyncTimestamp);
+        $lastSyncFormatted = $lastSync->toIso8601String();
+        
+        Log::info('Fetching articles modified since', ['last_sync' => $lastSyncFormatted]);
+        
+        // Fetch articles modified since last sync
+        $result = $this->apiClient->getArticles([
+            'lastModified' => $lastSyncFormatted,
+            'page' => 0,
+            'size' => 100
+        ]);
+        
+        if (!$result['success']) {
+            Log::error('Incremental sync failed', ['error' => $result['error'] ?? 'Unknown']);
+            throw new \RuntimeException('Failed to fetch modified articles from Robaws API');
+        }
+        
+        $data = $result['data'];
+        $articles = $data['items'] ?? [];
+        $synced = 0;
+        $errors = 0;
+        
+        // Handle pagination if there are more results
+        $totalPages = $data['totalPages'] ?? 1;
+        for ($page = 1; $page < $totalPages; $page++) {
+            $pageResult = $this->apiClient->getArticles([
+                'lastModified' => $lastSyncFormatted,
+                'page' => $page,
+                'size' => 100
+            ]);
+            
+            if ($pageResult['success']) {
+                $articles = array_merge($articles, $pageResult['data']['items'] ?? []);
+            }
+        }
+        
+        Log::info('Found modified articles', ['count' => count($articles)]);
+        
+        // Process each modified article (NO API calls - webhooks handle real-time)
+        foreach ($articles as $articleData) {
+            try {
+                // Only process basic data, skip API call for extraFields
+                $this->processArticle($articleData, fetchFullDetails: false);
+                
+                // Extract metadata from stored data
+                $this->articleProvider->syncArticleMetadata(
+                    $articleData['id'],
+                    useApi: false
+                );
+                
+                $synced++;
+                
+                if ($synced % 10 === 0) {
+                    Log::info('Incremental sync progress', [
+                        'processed' => $synced,
+                        'total' => count($articles),
+                        'note' => 'Fast sync - no API calls (webhooks handle real-time)'
+                    ]);
+                }
+            } catch (\RuntimeException $e) {
+                // Handle daily quota exceeded (shouldn't happen with no API calls)
+                if (str_contains($e->getMessage(), 'Daily API quota')) {
+                    Log::critical('Sync stopped: Daily API quota exhausted', [
+                        'synced' => $synced,
+                        'remaining' => count($articles) - $synced
+                    ]);
+                    break; // Stop sync to preserve quota
+                }
+                // Re-throw other runtime exceptions
+                throw $e;
+            } catch (\Exception $e) {
+                $errors++;
+                Log::warning('Failed to process modified article', [
+                    'article_id' => $articleData['id'] ?? 'unknown',
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+        
+        Log::info('Incremental sync completed', [
+            'total_modified' => count($articles),
+            'synced' => $synced,
+            'errors' => $errors
+        ]);
+        
+        return [
+            'success' => true,
+            'total' => count($articles),
+            'synced' => $synced,
+            'errors' => $errors,
+            'last_sync' => $lastSyncFormatted
+        ];
+    }
+
+    /**
+     * Process article from webhook event (no API calls needed)
+     */
+    public function processArticleFromWebhook(array $articleData, string $event): void
+    {
+        Log::info('Processing webhook event', [
+            'event' => $event,
+            'article_id' => $articleData['id'] ?? null,
+            'article_name' => $articleData['name'] ?? null
+        ]);
+        
+        // Webhook includes full article data - no API call needed!
+        $this->processArticle($articleData, fetchFullDetails: false);
+        
+        // Extract metadata from the article name
+        if (isset($articleData['id'])) {
+            try {
+                $this->articleProvider->syncArticleMetadata(
+                    $articleData['id'],
+                    useApi: false // Use webhook data, not API
+                );
+            } catch (\Exception $e) {
+                Log::warning('Failed to sync metadata from webhook', [
+                    'article_id' => $articleData['id'],
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+        
+        Log::info('Webhook event processed successfully', [
+            'event' => $event,
+            'article_id' => $articleData['id'] ?? null
+        ]);
+    }
 
     /**
      * Process and store article from Robaws API
+     * 
+     * @param array $article Article data from Robaws API
+     * @param bool $fetchFullDetails Whether to fetch full details with extraFields (for incremental sync)
      */
-    protected function processArticle(array $article): void
+    protected function processArticle(array $article, bool $fetchFullDetails = false): void
     {
         // Map Robaws API article fields to our cache structure
         $articleName = $article['name'] ?? $article['description'] ?? 'Unnamed Article';
@@ -85,6 +237,7 @@ class RobawsArticlesSyncService
             'min_quantity' => 1,
             'max_quantity' => 999999,
             'last_synced_at' => now(),
+            'last_modified_at' => isset($article['lastModified']) ? \Carbon\Carbon::parse($article['lastModified']) : now(),
         ];
         
         // Parse article code if available
@@ -93,7 +246,25 @@ class RobawsArticlesSyncService
             $data = array_merge($data, $parsed);
         }
         
-        // Upsert the article
+        // Fetch full article details including extraFields if requested (for incremental sync)
+        if ($fetchFullDetails) {
+            try {
+                $fullDetails = $this->fetchFullArticleDetails($data['robaws_article_id']);
+                if ($fullDetails) {
+                    // Extract and store all metadata from full details
+                    $metadata = $this->extractMetadataFromFullDetails($fullDetails, $articleName);
+                    $data = array_merge($data, $metadata);
+                }
+            } catch (\Exception $e) {
+                Log::warning('Failed to fetch full article details during sync', [
+                    'article_id' => $data['robaws_article_id'],
+                    'error' => $e->getMessage()
+                ]);
+                // Continue with basic data only
+            }
+        }
+        
+        // Upsert the article with all metadata
         RobawsArticleCache::updateOrCreate(
             ['robaws_article_id' => $data['robaws_article_id']],
             $data
@@ -238,8 +409,10 @@ class RobawsArticlesSyncService
     
     /**
      * Sync metadata for all articles synchronously
+     * 
+     * @param bool $useApi Whether to use Robaws API (slower, more complete) or fast fallback extraction
      */
-    public function syncAllMetadata(): array
+    public function syncAllMetadata(bool $useApi = false): array
     {
         $articles = RobawsArticleCache::all();
         $total = $articles->count();
@@ -247,14 +420,17 @@ class RobawsArticlesSyncService
         $failCount = 0;
         
         Log::info('Starting synchronous metadata sync', [
-            'total_articles' => $total
+            'total_articles' => $total,
+            'use_api' => $useApi
         ]);
         
         foreach ($articles as $index => $article) {
             try {
-                // Use the RobawsArticleProvider to sync metadata
                 $provider = app(\App\Services\Robaws\RobawsArticleProvider::class);
-                $provider->syncArticleMetadata($article->id);
+                
+                // Use fast fallback extraction by default (no API calls)
+                // API will still be used automatically for parent items (composite articles)
+                $provider->syncArticleMetadata($article->id, useApi: $useApi);
                 
                 $successCount++;
                 
@@ -289,5 +465,148 @@ class RobawsArticlesSyncService
             'failed' => $failCount
         ];
     }
+    
+    /**
+     * Fetch full article details including extraFields from Robaws API
+     */
+    protected function fetchFullArticleDetails(string $articleId): ?array
+    {
+        try {
+            $provider = app(RobawsArticleProvider::class);
+            return $provider->getArticleDetails($articleId);
+        } catch (\Exception $e) {
+            Log::debug('Failed to fetch full article details', [
+                'article_id' => $articleId,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
+    
+    /**
+     * Extract metadata from full article details (including extraFields)
+     * This replicates the logic from RobawsArticleProvider::parseArticleMetadata
+     */
+    protected function extractMetadataFromFullDetails(array $fullDetails, string $articleName): array
+    {
+        $metadata = [];
+        
+        // Parse extraFields for metadata
+        $extraFields = $fullDetails['extraFields'] ?? [];
+        
+        foreach ($extraFields as $fieldName => $field) {
+            $value = $field['stringValue'] ?? $field['booleanValue'] ?? $field['value'] ?? null;
+            
+            switch ($fieldName) {
+                case 'SHIPPING LINE':
+                    $metadata['shipping_line'] = $value;
+                    break;
+                case 'SERVICE TYPE':
+                    $metadata['service_type'] = $value;
+                    break;
+                case 'POL TERMINAL':
+                    $metadata['pol_terminal'] = $value;
+                    break;
+                case 'PARENT ITEM':
+                    $metadata['is_parent_item'] = (bool) $value;
+                    break;
+                case 'ARTICLE_INFO':
+                case 'INFO':
+                    $metadata['article_info'] = $value;
+                    break;
+                case 'UPDATE DATE':
+                case 'UPDATE_DATE':
+                    $metadata['update_date'] = $value ? \Carbon\Carbon::parse($value)->format('Y-m-d') : null;
+                    break;
+                case 'VALIDITY DATE':
+                case 'VALIDITY_DATE':
+                    $metadata['validity_date'] = $value ? \Carbon\Carbon::parse($value)->format('Y-m-d') : null;
+                    break;
+            }
+        }
+        
+        // Extract POL/POD from article name using the same logic as RobawsArticleProvider
+        $polPodData = $this->extractPolPodFromArticleName($articleName);
+        $metadata = array_merge($metadata, $polPodData);
+        
+        // Extract service type from description if not found in extraFields
+        if (empty($metadata['service_type'])) {
+            $metadata['service_type'] = $this->extractServiceTypeFromDescription($fullDetails['description'] ?? $articleName);
+        }
+        
+        // Extract shipping line from description if not found in extraFields
+        if (empty($metadata['shipping_line'])) {
+            $metadata['shipping_line'] = $this->extractShippingLineFromDescription($fullDetails['description'] ?? $articleName);
+        }
+        
+        return $metadata;
+    }
+    
+    /**
+     * Extract POL/POD from article name using centralized parser
+     */
+    protected function extractPolPodFromArticleName(string $articleName): array
+    {
+        $data = [];
+        
+        // Use centralized parser for POL
+        $polData = $this->parser->extractPOL($articleName);
+        if ($polData) {
+            $data['pol_code'] = $polData['formatted'];
+            if ($polData['terminal']) {
+                $data['pol_terminal'] = $polData['terminal'];
+            }
+        }
+        
+        // Use centralized parser for POD
+        $podData = $this->parser->extractPOD($articleName);
+        if ($podData) {
+            $data['pod_name'] = $podData['formatted'];
+        }
+        
+        return $data;
+    }
+    
+    /**
+     * Extract service type from description
+     */
+    protected function extractServiceTypeFromDescription(string $description): ?string
+    {
+        $desc = strtoupper($description);
+        
+        if (str_contains($desc, 'EXPORT')) {
+            return str_contains($desc, 'FCL') ? 'FCL EXPORT' : 'EXPORT';
+        } elseif (str_contains($desc, 'IMPORT')) {
+            return str_contains($desc, 'FCL') ? 'FCL IMPORT' : 'IMPORT';
+        } elseif (str_contains($desc, 'RORO')) {
+            return 'RORO';
+        } elseif (str_contains($desc, 'FCL')) {
+            return 'FCL';
+        } elseif (str_contains($desc, 'STATIC')) {
+            return 'STATIC CARGO';
+        } elseif (str_contains($desc, 'SEAFREIGHT')) {
+            return 'SEAFREIGHT';
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Extract shipping line from description
+     */
+    protected function extractShippingLineFromDescription(string $description): ?string
+    {
+        $knownCarriers = config('quotation.known_carriers', []);
+        $desc = strtoupper($description);
+        
+        foreach ($knownCarriers as $carrier) {
+            if (str_contains($desc, strtoupper($carrier))) {
+                return $carrier;
+            }
+        }
+        
+        return null;
+    }
 }
+
 

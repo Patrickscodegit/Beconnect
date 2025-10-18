@@ -421,23 +421,42 @@ class RobawsArticleResource extends Resource
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\BulkAction::make('sync_metadata')
-                        ->label('Sync Metadata')
+                        ->label('Sync Metadata (Fast)')
                         ->icon('heroicon-o-arrow-path')
-                        ->color('primary')
+                        ->color('success')
                         ->action(function (\Illuminate\Support\Collection $records) {
-                            $articleIds = $records->pluck('id')->toArray();
-                            \App\Jobs\SyncArticlesMetadataBulkJob::dispatch($articleIds);
+                            $provider = app(\App\Services\Robaws\RobawsArticleProvider::class);
+                            
+                            $successCount = 0;
+                            $failCount = 0;
+                            $totalCount = $records->count();
+                            
+                            foreach ($records as $record) {
+                                try {
+                                    // Use fast metadata extraction (no API calls)
+                                    $provider->syncArticleMetadata($record->id, useApi: false);
+                                    $successCount++;
+                                } catch (\Exception $e) {
+                                    $failCount++;
+                                    \Illuminate\Support\Facades\Log::warning('Bulk metadata sync failed for article', [
+                                        'article_id' => $record->id,
+                                        'article_name' => $record->article_name,
+                                        'error' => $e->getMessage()
+                                    ]);
+                                }
+                            }
                             
                             Notification::make()
-                                ->title('Bulk metadata sync started')
-                                ->body('Syncing metadata for ' . count($articleIds) . ' articles in background...')
+                                ->title('Bulk metadata sync completed!')
+                                ->body("Processed {$totalCount} articles. Success: {$successCount}, Failed: {$failCount}")
                                 ->success()
+                                ->duration(8000)
                                 ->send();
                         })
                         ->requiresConfirmation()
                         ->modalHeading('Sync metadata for selected articles')
-                        ->modalDescription('This will fetch metadata for all selected articles from Robaws. This may take a few minutes.')
-                        ->modalSubmitActionLabel('Start Sync')
+                        ->modalDescription('This will fast-sync metadata (POL/POD, service type, shipping line) for the selected articles using name extraction. No API calls needed - instant processing.')
+                        ->modalSubmitActionLabel('Sync Now')
                         ->deselectRecordsAfterCompletion(),
                         
                     Tables\Actions\DeleteBulkAction::make(),

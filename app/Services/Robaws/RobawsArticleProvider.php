@@ -15,7 +15,8 @@ class RobawsArticleProvider
     private const RATE_LIMIT_CACHE_KEY = 'robaws_rate_limit';
 
     public function __construct(
-        private RobawsApiClient $robawsClient
+        private RobawsApiClient $robawsClient,
+        private ArticleNameParser $parser
     ) {}
 
     /**
@@ -896,10 +897,13 @@ class RobawsArticleProvider
 
     /**
      * Sync article metadata for a specific article
-     * Fetches IMPORTANT INFO and ARTICLE INFO metadata from Robaws
-     * Falls back to description extraction if API is unavailable
+     * Now works from stored data (no API calls needed) since metadata is fetched during initial sync
+     * Falls back to API call only if explicitly requested
+     * 
+     * @param int $articleId The article cache ID
+     * @param bool $useApi Whether to attempt API call (default: false for speed)
      */
-    public function syncArticleMetadata(int $articleId): array
+    public function syncArticleMetadata(int $articleId, bool $useApi = false): array
     {
         try {
             $article = RobawsArticleCache::find($articleId);
@@ -908,61 +912,72 @@ class RobawsArticleProvider
                 throw new \Exception("Article not found in cache: {$articleId}");
             }
 
-            // Try to fetch full article details from Robaws API first
-            $details = $this->getArticleDetails($article->robaws_article_id);
+            // Check if critical metadata (POL/POD) is already populated
+            $hasPolPod = !empty($article->pol_code) && !empty($article->pod_name);
             
-            if ($details) {
-                // ✅ API success - parse from API response
-                $metadata = $this->parseArticleMetadata($details);
-                $source = 'api';
+            if ($hasPolPod && !$useApi) {
+                // POL/POD already exists - just extract applicable_services
+                $metadata = $this->extractMetadataFromArticle($article);
+                $source = 'stored';
                 
-                // SUPPLEMENT: Always try to extract POL/POD from article name
-                // This fills gaps when API doesn't provide complete routing info
-                // Pass existing service_type to extraction for direction detection
-                $nameExtraction = $this->extractMetadataFromArticleWithContext($article, $metadata);
-                
-                // Merge POL/POD from article name if API didn't provide them
-                if (empty($metadata['pol_code']) && !empty($nameExtraction['pol_code'])) {
-                    $metadata['pol_code'] = $nameExtraction['pol_code'];
-                    Log::info('Supplemented POL from article name', [
-                        'article_id' => $articleId,
-                        'pol_code' => $nameExtraction['pol_code']
-                    ]);
-                }
-                
-                if (empty($metadata['pod_name']) && !empty($nameExtraction['pod_name'])) {
-                    $metadata['pod_name'] = $nameExtraction['pod_name'];
-                    Log::info('Supplemented POD from article name', [
-                        'article_id' => $articleId,
-                        'pod_name' => $nameExtraction['pod_name']
-                    ]);
-                }
-                
-                // Also supplement pol_terminal if not provided by API
-                if (empty($metadata['pol_terminal']) && !empty($nameExtraction['pol_terminal'])) {
-                    $metadata['pol_terminal'] = $nameExtraction['pol_terminal'];
-                }
-                
-                // IMPORTANT: Always use direction-aware applicable_services from name extraction
-                // This overrides API data which may not be direction-aware
-                if (!empty($nameExtraction['applicable_services'])) {
-                    $metadata['applicable_services'] = $nameExtraction['applicable_services'];
-                    Log::info('Using direction-aware applicable_services from article name', [
-                        'article_id' => $articleId,
-                        'services' => $nameExtraction['applicable_services']
-                    ]);
-                }
-                
-            } else {
-                // ⚠️ API failed - use fallback extraction from article description
-                Log::warning('Robaws API unavailable, using fallback extraction', [
+                Log::debug('Using stored POL/POD metadata from initial sync', [
                     'article_id' => $articleId,
-                    'robaws_article_id' => $article->robaws_article_id,
                     'article_name' => $article->article_name
                 ]);
-                
-                $metadata = $this->extractMetadataFromArticle($article);
-                $source = 'fallback';
+            } else {
+                // Either no metadata stored OR API explicitly requested
+                if ($useApi || $article->is_parent_item) {
+                    // Try to fetch full article details from Robaws API
+                    $details = $this->getArticleDetails($article->robaws_article_id);
+                    
+                    if ($details) {
+                        // ✅ API success - parse from API response
+                        $metadata = $this->parseArticleMetadata($details);
+                        $source = 'api';
+                        
+                        // SUPPLEMENT: Always try to extract POL/POD from article name
+                        $nameExtraction = $this->extractMetadataFromArticleWithContext($article, $metadata);
+                        
+                        // Merge POL/POD from article name if API didn't provide them
+                        if (empty($metadata['pol_code']) && !empty($nameExtraction['pol_code'])) {
+                            $metadata['pol_code'] = $nameExtraction['pol_code'];
+                        }
+                        
+                        if (empty($metadata['pod_name']) && !empty($nameExtraction['pod_name'])) {
+                            $metadata['pod_name'] = $nameExtraction['pod_name'];
+                        }
+                        
+                        // Also supplement pol_terminal if not provided by API
+                        if (empty($metadata['pol_terminal']) && !empty($nameExtraction['pol_terminal'])) {
+                            $metadata['pol_terminal'] = $nameExtraction['pol_terminal'];
+                        }
+                        
+                        // IMPORTANT: Always use direction-aware applicable_services from name extraction
+                        if (!empty($nameExtraction['applicable_services'])) {
+                            $metadata['applicable_services'] = $nameExtraction['applicable_services'];
+                        }
+                        
+                    } else {
+                        // ⚠️ API failed - use fallback extraction from article description
+                        Log::warning('Robaws API unavailable, using fallback extraction', [
+                            'article_id' => $articleId,
+                            'robaws_article_id' => $article->robaws_article_id,
+                            'article_name' => $article->article_name
+                        ]);
+                        
+                        $metadata = $this->extractMetadataFromArticle($article);
+                        $source = 'fallback';
+                    }
+                } else {
+                    // Fast path: Use name extraction directly (no API call)
+                    $metadata = $this->extractMetadataFromArticle($article);
+                    $source = 'fallback';
+                    
+                    Log::debug('Using fast fallback extraction (no API call)', [
+                        'article_id' => $articleId,
+                        'article_name' => $article->article_name
+                    ]);
+                }
             }
             
             // Update article with metadata
@@ -1279,72 +1294,28 @@ class RobawsArticleProvider
             $article->article_name
         );
         
-        // Extract POL and POD, store port objects for direction detection
+        // Extract POL and POD using centralized parser
         $polPort = null;
         $podPort = null;
-        $polCode = null;
         
-        // Extract POL with multiple patterns:
-        // Pattern 1: Standard (CODE) format - e.g., (ANR), (RTM)
-        if (preg_match('/\(([A-Z]{3})\)/', $article->article_name, $matches)) {
-            $polCode = $matches[1];
-        }
-        // Pattern 2: (CODE numbers) format - e.g., (ANR 1333), (ZEE 456)
-        elseif (preg_match('/\(([A-Z]{3})\s+\d+\)/', $article->article_name, $matches)) {
-            $polCode = $matches[1];
-        }
-        // Pattern 3: (CODE numbers/numbers) format - e.g., (ANR 332/740), (RTM 123/456)
-        elseif (preg_match('/\(([A-Z]{3})\s+[\d\/]+\)/', $article->article_name, $matches)) {
-            $polCode = $matches[1];
-        }
-        
-        if ($polCode) {
-            $polPort = \App\Models\Port::where('code', $polCode)->first();
-            
-            if ($polPort) {
-                $metadata['pol_code'] = $polPort->name . ', ' . $polPort->country . ' (' . $polPort->code . ')';
-                if ($polPort->terminal_code ?? null) {
-                    $metadata['pol_terminal'] = $polPort->terminal_code;
-                }
+        $polData = $this->parser->extractPOL($article->article_name);
+        if ($polData) {
+            $metadata['pol_code'] = $polData['formatted'];
+            if ($polData['terminal']) {
+                $metadata['pol_terminal'] = $polData['terminal'];
+            }
+            // Get Port model for direction detection
+            if ($polData['code']) {
+                $polPort = \App\Models\Port::where('code', $polData['code'])->first();
             }
         }
         
-        // Extract POD - try multiple patterns
-        $podName = null;
-        
-        // Pattern 1: FCL - City (CODE) format
-        if (preg_match('/(?:FCL|RORO)\s*-\s*([A-Za-z\s]+?)\s*\([A-Z]{3}\)/', $article->article_name, $matches)) {
-            $podName = trim($matches[1]);
-        }
-        // Pattern 2: City(CODE) - Country format  
-        elseif (preg_match('/([A-Za-z\s]+?)\s*\([A-Z]{3}\)\s*-\s*[A-Za-z\s,]+/', $article->article_name, $matches)) {
-            $podName = trim($matches[1]);
-        }
-        // Pattern 3: Any city before (CODE) format
-        elseif (preg_match('/([A-Za-z\s]+?)\s*\([A-Z]{3}\)/', $article->article_name, $matches)) {
-            $podName = trim($matches[1]);
-        }
-        // Pattern 4: (POL CODE numbers) City Country format - e.g., "ACL(ANR 1333) Halifax Canada"
-        elseif (preg_match('/\([A-Z]{3}\s+\d+\)\s+([A-Za-z\s]+?)\s+[A-Z][a-z]+/', $article->article_name, $matches)) {
-            $podName = trim($matches[1]);
-        }
-        // Pattern 5: (POL CODE) City Country format - e.g., "Grimaldi(ANR) Alexandria Egypt"
-        elseif (preg_match('/\([A-Z]{3}\)\s+([A-Za-z\s]+?)\s+[A-Z][a-z]+/', $article->article_name, $matches)) {
-            $podName = trim($matches[1]);
-        }
-        // Pattern 6: (POL CODE numbers/numbers) City - Country format - e.g., "Sallaum(ANR 332/740) Abidjan - Ivory Coast"
-        elseif (preg_match('/\([A-Z]{3}\s+[\d\/]+\)\s+([A-Za-z\s]+?)\s+-/', $article->article_name, $matches)) {
-            $podName = trim($matches[1]);
-        }
-        
-        if ($podName) {
-            $podPort = \App\Models\Port::where('name', 'LIKE', '%' . $podName . '%')->first();
-            
-            if ($podPort) {
-                $metadata['pod_name'] = $podPort->name . ', ' . $podPort->country . ' (' . $podPort->code . ')';
-            } else {
-                // Fallback: use extracted name if port not found
-                $metadata['pod_name'] = $podName;
+        $podData = $this->parser->extractPOD($article->article_name);
+        if ($podData) {
+            $metadata['pod_name'] = $podData['formatted'];
+            // Get Port model for direction detection
+            if ($podData['name']) {
+                $podPort = \App\Models\Port::where('name', 'LIKE', '%' . $podData['name'] . '%')->first();
             }
         }
         
@@ -1381,28 +1352,19 @@ class RobawsArticleProvider
             $article->article_name
         );
         
-        // Extract POL and POD, store port objects for direction detection
+        // Extract POL and POD using centralized parser
         $polPort = null;
         $podPort = null;
         
-        // NEW: Extract POL code from parentheses and format as schedule: (ANR) → "Antwerp, Belgium (ANR)"
-        if (preg_match('/\(([A-Z]{3})\)/', $article->article_name, $matches)) {
-            $polCode = $matches[1]; // e.g., "ANR"
-            
-            // Lookup POL in ports table
-            $polPort = \App\Models\Port::where('code', $polCode)->first();
-            
-            if ($polPort) {
-                // Format as schedule: "Antwerp, Belgium (ANR)"
-                $metadata['pol_code'] = $polPort->name . ', ' . $polPort->country . ' (' . $polPort->code . ')';
-                
-                // Also populate pol_terminal if available
-                if ($polPort->terminal_code ?? null) {
-                    $metadata['pol_terminal'] = $polPort->terminal_code;
-                }
-            } else {
-                // Fallback: use extracted code if port not found
-                $metadata['pol_code'] = $polCode;
+        $polData = $this->parser->extractPOL($article->article_name);
+        if ($polData) {
+            $metadata['pol_code'] = $polData['formatted'];
+            if ($polData['terminal']) {
+                $metadata['pol_terminal'] = $polData['terminal'];
+            }
+            // Get Port model for direction detection
+            if ($polData['code']) {
+                $polPort = \App\Models\Port::where('code', $polData['code'])->first();
             }
         } else {
             // Fallback to old extraction method if no parentheses code found
@@ -1411,19 +1373,12 @@ class RobawsArticleProvider
             );
         }
         
-        // NEW: Extract POD name and format as schedule: "Conakry" → "Conakry, Guinea (CKY)"
-        if (preg_match('/(?:FCL|RORO)\s*-\s*([A-Za-z\s]+?)\s*\([A-Z]{3}\)/', $article->article_name, $matches)) {
-            $podName = trim($matches[1]); // e.g., "Conakry"
-            
-            // Lookup POD in ports table (case-insensitive, fuzzy match)
-            $podPort = \App\Models\Port::where('name', 'LIKE', '%' . $podName . '%')->first();
-            
-            if ($podPort) {
-                // Format as schedule: "Conakry, Guinea (CKY)"
-                $metadata['pod_name'] = $podPort->name . ', ' . $podPort->country . ' (' . $podPort->code . ')';
-            } else {
-                // Fallback: use extracted name if port not found
-                $metadata['pod_name'] = $podName;
+        $podData = $this->parser->extractPOD($article->article_name);
+        if ($podData) {
+            $metadata['pod_name'] = $podData['formatted'];
+            // Get Port model for direction detection
+            if ($podData['name']) {
+                $podPort = \App\Models\Port::where('name', 'LIKE', '%' . $podData['name'] . '%')->first();
             }
         }
         

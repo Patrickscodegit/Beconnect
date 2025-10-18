@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\RobawsWebhookController;
 use App\Http\Controllers\IntakeStatusController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -11,6 +12,6 @@ Route::get('/user', function (Request $request) {
 // Intake status API
 Route::get('/intakes/{intake}/status', [IntakeStatusController::class, 'show'])->name('intakes.status');
 
-// Robaws Webhook (no auth - verified by signature)
-Route::post('/webhooks/robaws', [\App\Http\Controllers\RobawsWebhookController::class, 'handle'])
-    ->name('webhooks.robaws');
+// Robaws Webhooks (no auth - verified by signature)
+Route::post('/webhooks/robaws/articles', [RobawsWebhookController::class, 'handleArticle'])
+    ->name('webhooks.robaws.articles');

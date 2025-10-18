@@ -19,14 +19,44 @@ class ListRobawsArticles extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\Action::make('syncAll')
-                ->label('Sync All Articles')
+            Actions\Action::make('syncIncremental')
+                ->label('Sync Changed Articles')
                 ->icon('heroicon-o-arrow-path')
-                ->color('primary')
+                ->color('success')
+                ->requiresConfirmation()
+                ->modalHeading('Sync Changed Articles from Robaws?')
+                ->modalDescription('This will fetch only articles that changed since the last sync. This is fast, rate-limit friendly, and recommended for regular updates.')
+                ->modalSubmitActionLabel('Yes, sync changes')
+                ->action(function () {
+                    try {
+                        $syncService = app(RobawsArticlesSyncService::class);
+                        $result = $syncService->syncIncremental();
+                        
+                        Notification::make()
+                            ->title('Incremental sync completed!')
+                            ->body("Synced {$result['synced']} changed articles out of {$result['total']} modified. Errors: {$result['errors']}")
+                            ->success()
+                            ->duration(10000) // 10 seconds
+                            ->send();
+                            
+                        $this->redirect(static::getUrl());
+                    } catch (\Exception $e) {
+                        Notification::make()
+                            ->title('Incremental sync failed')
+                            ->body($e->getMessage())
+                            ->danger()
+                            ->send();
+                    }
+                }),
+                
+            Actions\Action::make('syncAll')
+                ->label('Full Sync (All Articles)')
+                ->icon('heroicon-o-arrow-path')
+                ->color('warning')
                 ->requiresConfirmation()
                 ->modalHeading('Sync All Articles from Robaws?')
-                ->modalDescription('This will fetch all articles from the Robaws API and update the cache. Metadata will be synced in the background.')
-                ->modalSubmitActionLabel('Yes, sync now')
+                ->modalDescription('This will fetch ALL articles from the Robaws API (not just changed ones). Use "Sync Changed Articles" instead for regular updates to avoid rate limits.')
+                ->modalSubmitActionLabel('Yes, sync all')
                 ->action(function () {
                     try {
                         $syncService = app(RobawsArticlesSyncService::class);
@@ -36,8 +66,8 @@ class ListRobawsArticles extends ListRecords
                         $metadataResult = $syncService->syncAllMetadata();
                         
                         Notification::make()
-                            ->title('Articles synced successfully!')
-                            ->body("Synced {$result['synced']} articles. Metadata sync completed: {$metadataResult['success']}/{$metadataResult['total']} articles.")
+                            ->title('Full sync completed!')
+                            ->body("Synced {$result['synced']} articles. Metadata sync: {$metadataResult['success']}/{$metadataResult['total']} articles.")
                             ->success()
                             ->duration(10000) // 10 seconds
                             ->send();

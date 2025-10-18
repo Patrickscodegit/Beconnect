@@ -1,323 +1,608 @@
-# Pipeline Architecture - All Phases Complete ✅
+<!-- 072fb580-7ab2-41da-81de-d5cd7c2d9760 45b213f7-485a-4174-b241-d8d7f513c717 -->
+# Implement Robaws Webhooks for Real-time Article Updates
 
-**Status:** All 3 phases complete, tested, and deployed  
-**Date:** October 16, 2025
+## Overview
 
----
+Based on the [Robaws Webhooks documentation](https://support.robaws.com/nl/article/webhooks-1kqzzp7/), implement a webhook endpoint to receive real-time article updates, drastically reducing API calls and keeping data fresh.
 
-## ✅ Completed Work
+## Current Problem
 
-### Phase 1: Email Pipeline Isolation - COMPLETE ✅
-- Created `IntakePipelineInterface` - foundation for all pipelines
-- Created `EmailIntakePipeline` - handles .eml and .msg files
-- Created `IntakePipelineFactory` - intelligent MIME-based routing
-- Created `ProcessEmailIntakeJob` & `ExtractEmailDataJob`
-- 8 tests, all passing (23 assertions)
-- **Committed:** `476ac8d`
-- **Status:** Deployed to GitHub ✅
+- Incremental sync makes 1,576 API calls (one per article) 
+- Takes 3-4 minutes even with rate limiting
+- Only runs once per day (3 AM)
+- Data can be stale between syncs
 
-### Phase 2: PDF Pipeline Isolation - COMPLETE ✅
-- Created `PdfIntakePipeline` - handles .pdf files
-- Created `ProcessPdfIntakeJob` & `ExtractPdfDataJob`
-- Updated `IntakePipelineFactory` to include PDF routing
-- 8 tests, all passing (24 assertions)
-- **Committed:** `386261a`
-- **Status:** Deployed to GitHub ✅
+## Solution: Webhooks Only (One-Way Sync)
 
-### Phase 3: Image Pipeline Isolation - COMPLETE ✅
-- Created `ImageIntakePipeline` - handles 7 image formats
-- Created `ProcessImageIntakeJob` & `ExtractImageDataJob`
-- Updated `IntakePipelineFactory` to include Image routing
-- 9 tests, all passing (35 assertions)
-- **Committed:** `c29ee2f`
-- **Status:** Deployed to GitHub ✅
+**Decision: Implement webhooks for Robaws → Bconnect ONLY**
+- Real-time updates from Robaws
+- Zero API calls for article updates
+- Bi-directional sync (Bconnect → Robaws) deferred to future
 
-### Documentation - COMPLETE ✅
-- Created `PIPELINE_ARCHITECTURE_COMPLETE.md` - comprehensive overview
-- Created `PIPELINE_TEST_REPORT.md` - full test results
-- Created phase-specific summaries (Phases 1, 2, 3)
-- **Committed:** `875b78e`, `57c3c8b`
-- **Status:** Deployed to GitHub ✅
+## Implementation Decisions (Finalized)
 
----
+### ✅ Hosting:
+- **Production URL**: `https://app.belgaco.be`
+- **Server**: Laravel Forge (bubbling-lagoon)
+- **IP**: `64.226.120.45`
+- **SSL**: Let's Encrypt (auto-renewing)
 
-## 📊 Final Statistics
+### ✅ Webhook Processing:
+- **Synchronous processing** (not queued)
+- Responds within 50-100ms (well within 2 second limit)
+- Simpler code, easier debugging
+- Suitable for article update volume
 
-### Code Metrics
-- **3 Specialized Pipelines** (Email, PDF, Image) ✅
-- **9 Dedicated Jobs** (3 per pipeline) ✅
-- **1 Pipeline Factory** (intelligent routing) ✅
-- **1 Pipeline Interface** (clean abstraction) ✅
-- **25 Tests** (82 assertions, 100% passing) ✅
-- **0 Breaking Changes** (fully backward compatible) ✅
+### ✅ Webhook Events:
+Subscribe to **all three events**:
+- `article.created` - New articles
+- `article.updated` - Article modifications
+- `article.stock-changed` - Stock quantity changes
 
-### Architecture
-```
-Upload → IntakeOrchestratorJob → PipelineFactory
-                                      ↓
-                    ┌─────────────────┼─────────────────┬─────────────────┐
-                    ↓                 ↓                 ↓                 ↓
-            EmailIntakePipeline  PdfIntakePipeline  ImageIntakePipeline Generic
-            (Priority: 100)      (Priority: 80)     (Priority: 60)     (Fallback)
-                    ↓                 ↓                 ↓                 ↓
-            emails queue         pdfs queue         images queue      default queue
-```
+### ✅ Sync Direction:
+- **One-way only** (Robaws → Bconnect)
+- Bi-directional sync (Bconnect → Robaws) deferred to Phase 7 (future)
+- Simpler initial implementation
+- Solves main problem (1,576 API calls)
+
+### ✅ Environment Strategy:
+- **Production**: `app.belgaco.be` with webhooks
+- **Local**: No webhooks (test with manual sync)
+- **Staging**: Not needed (skip for now)
 
 ---
 
-## 🚀 Next Steps - Choose Your Direction
+## Phase 1: Database Migration (5 min)
 
-### Option 1: Deploy to Production (Recommended Next)
-**Time:** 15-20 minutes  
-**Priority:** High  
-**Status:** Code is production-ready
+**Create migration for webhook configurations:**
 
-**What to do:**
-1. Deploy to production server
-2. Monitor queue performance for 24-48 hours
-3. Gather metrics (processing times, error rates)
-4. Validate with real files (.eml, .pdf, .jpg)
-
-**Deployment Steps:**
 ```bash
-# On production server:
-cd ~/bconnect.64.226.120.45.nip.io
-git pull origin main
-composer install --no-dev --optimize-autoloader
-php artisan cache:clear
-php artisan view:clear
-php artisan config:cache
-php artisan route:cache
-php artisan queue:restart
+php artisan make:migration create_webhook_configurations_table
 ```
 
-**Post-Deployment Validation:**
-- [ ] Upload .eml file → verify `emails` queue
-- [ ] Upload .pdf file → verify `pdfs` queue
-- [ ] Upload .jpg file → verify `images` queue
-- [ ] Check Laravel logs for routing messages
-- [ ] Verify Robaws offers created correctly
-- [ ] Monitor queue workers
+**Migration: `database/migrations/xxxx_create_webhook_configurations_table.php`**
+
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('webhook_configurations', function (Blueprint $table) {
+            $table->id();
+            $table->string('provider')->default('robaws'); // 'robaws'
+            $table->string('webhook_id')->nullable(); // ID from Robaws
+            $table->text('secret'); // For signature verification
+            $table->string('url'); // Our endpoint URL
+            $table->json('events'); // ['article.created', 'article.updated', 'article.stock-changed']
+            $table->boolean('is_active')->default(true);
+            $table->timestamp('registered_at')->nullable();
+            $table->timestamps();
+            
+            $table->index(['provider', 'is_active']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('webhook_configurations');
+    }
+};
+```
+
+**Run migration:**
+```bash
+php artisan migrate
+```
 
 ---
 
-### Option 2: Commodity System Integration
-**Time:** 6-8 hours  
-**Priority:** Medium  
-**Dependencies:** None (can start immediately)
+## Phase 2: Webhook Registration Command (10 min)
 
-**Goal:** Auto-populate commodity items from extracted intake data
+**Create command:**
 
-**Why This Matters:**
-- User previously requested this feature
-- Extraction data can auto-fill vehicle details, dimensions, weights
-- Reduces manual data entry
-- Improves user experience
+```bash
+php artisan make:command RegisterRobawsWebhook
+```
 
-**Implementation Plan:**
-1. **Create CommodityMappingService** (2 hours)
-   - Map extraction data to commodity item fields
-   - Handle VIN → make/model lookup
-   - Map dimensions, weights, etc.
+**File: `app/Console/Commands/RegisterRobawsWebhook.php`**
 
-2. **Update Intake Processing** (2 hours)
-   - Modify `CreateRobawsOfferJob` to populate commodities
-   - Add commodity items to quotation requests
-   - Handle multiple vehicles from extraction
+```php
+<?php
 
-3. **Frontend Integration** (2 hours)
-   - Pre-populate commodity repeater in quotation forms
-   - Allow user to review/edit auto-populated items
-   - Add validation
+namespace App\Console\Commands;
 
-4. **Testing** (2 hours)
-   - Create comprehensive tests
-   - Test with real intake data
-   - Verify commodity items populated correctly
+use App\Services\Export\Clients\RobawsApiClient;
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
-**Expected Benefits:**
-- 80% reduction in manual data entry
-- Faster quotation creation
-- Fewer data entry errors
-- Better user experience
+class RegisterRobawsWebhook extends Command
+{
+    protected $signature = 'robaws:register-webhook 
+                            {--url= : Webhook URL (defaults to app URL)}';
+    
+    protected $description = 'Register webhook endpoint with Robaws API';
 
----
+    public function __construct(
+        private RobawsApiClient $apiClient
+    ) {
+        parent::__construct();
+    }
 
-### Option 3: OCR Enhancement
-**Time:** 8-10 hours  
-**Priority:** Medium  
-**Dependencies:** Consider after production deployment
+    public function handle(): int
+    {
+        $environment = config('app.env');
+        $webhookUrl = $this->option('url') ?? config('app.url') . '/api/webhooks/robaws/articles';
+        
+        $this->info("🔄 Registering webhook for {$environment} environment");
+        $this->info("URL: {$webhookUrl}");
+        
+        // Check if already registered
+        $existing = DB::table('webhook_configurations')
+            ->where('provider', 'robaws')
+            ->where('is_active', true)
+            ->first();
+            
+        if ($existing) {
+            $this->warn('⚠️  Webhook already registered!');
+            $this->line("Webhook ID: {$existing->webhook_id}");
+            $this->line("URL: {$existing->url}");
+            
+            if (!$this->confirm('Do you want to register a new webhook anyway?')) {
+                return 0;
+            }
+        }
+        
+        try {
+            // Register webhook with Robaws
+            $result = $this->apiClient->registerWebhook([
+                'url' => $webhookUrl,
+                'events' => ['article.created', 'article.updated', 'article.stock-changed']
+            ]);
+            
+            if ($result['success']) {
+                $webhookId = $result['data']['id'] ?? null;
+                $secret = $result['data']['secret'] ?? null;
+                
+                // Store in database
+                DB::table('webhook_configurations')->insert([
+                    'provider' => 'robaws',
+                    'webhook_id' => $webhookId,
+                    'secret' => $secret,
+                    'url' => $webhookUrl,
+                    'events' => json_encode(['article.created', 'article.updated', 'article.stock-changed']),
+                    'is_active' => true,
+                    'registered_at' => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                
+                $this->info("✅ Webhook registered successfully!");
+                $this->line("Webhook ID: {$webhookId}");
+                $this->newLine();
+                $this->warn("⚠️  IMPORTANT: Add this to your .env file:");
+                $this->line("ROBAWS_WEBHOOK_SECRET={$secret}");
+                
+                return 0;
+            }
+            
+            $this->error('❌ Failed to register webhook');
+            $this->line('Error: ' . ($result['error'] ?? 'Unknown error'));
+            return 1;
+            
+        } catch (\Exception $e) {
+            $this->error('❌ Exception: ' . $e->getMessage());
+            return 1;
+        }
+    }
+}
+```
 
-**Goal:** Add OCR capabilities for images and scanned PDFs
+**Add `registerWebhook()` method to `RobawsApiClient`:**
 
-**Why This Matters:**
-- Many intake documents are scanned (no text layer)
-- Current extraction fails on scanned documents
-- OCR would unlock significant value
+```php
+public function registerWebhook(array $payload): array
+{
+    try {
+        $this->enforceRateLimit();
+        
+        $response = $this->getHttpClient()->post('/api/v2/webhook-endpoints', $payload);
+        
+        $this->updateRateLimitsFromResponse($response);
 
-**Implementation Options:**
+        if ($response->successful()) {
+            return [
+                'success' => true,
+                'data' => $response->json(),
+            ];
+        }
 
-**Option A: Tesseract (Free, Self-Hosted)**
-- Install Tesseract on server
-- Use `thiagoalessio/tesseract_ocr` package
-- Pros: Free, good accuracy, self-hosted
-- Cons: Slower, requires server setup
-
-**Option B: AWS Textract (Paid, Cloud)**
-- Use AWS Textract API
-- Use AWS SDK for PHP
-- Pros: Excellent accuracy, fast, managed service
-- Cons: Costs money per page
-
-**Option C: Google Cloud Vision (Paid, Cloud)**
-- Use Google Cloud Vision API
-- Use Google Cloud PHP SDK
-- Pros: Excellent accuracy, fast
-- Cons: Costs money per image
-
-**Recommended:** Start with Tesseract (free), upgrade to cloud if needed.
-
----
-
-### Option 4: Performance Monitoring
-**Time:** 3-4 hours  
-**Priority:** Low  
-**Dependencies:** Best done after production deployment
-
-**Goal:** Track and visualize pipeline performance metrics
-
-**What to Build:**
-1. **Metrics Collection**
-   - Processing time per pipeline
-   - Success/failure rates per file type
-   - Queue depth monitoring
-   - Error tracking
-
-2. **Dashboard**
-   - Filament widget showing pipeline stats
-   - Charts for processing times
-   - Error rate visualization
-   - Queue health indicators
-
-3. **Alerts**
-   - Slack/email notifications for high error rates
-   - Queue depth alerts
-   - Performance degradation warnings
-
-**Benefits:**
-- Identify bottlenecks
-- Track performance improvements
-- Proactive issue detection
-- Data-driven optimization
-
----
-
-### Option 5: Additional File Types
-**Time:** 2-3 hours per type  
-**Priority:** Low  
-**Dependencies:** None
-
-**Potential File Types:**
-1. **Word Documents** (.doc, .docx)
-   - Extract text, tables, metadata
-   - Use PHPWord package
-   
-2. **Excel Spreadsheets** (.xls, .xlsx)
-   - Extract vehicle lists, pricing tables
-   - Use PhpSpreadsheet package
-
-3. **ZIP Archives**
-   - Extract and process multiple files
-   - Combine into single intake
-
-**Pattern:** Same as existing pipelines (implement interface, create jobs, add to factory)
-
----
-
-## 🎯 My Recommendation
-
-### Recommended Path
-
-**Phase A: Production Deployment (Now)**
-1. Deploy pipeline architecture to production
-2. Monitor for 24-48 hours
-3. Gather performance metrics
-4. Validate with real user files
-
-**Phase B: Commodity Integration (Next Week)**
-1. Build `CommodityMappingService`
-2. Integrate with intake processing
-3. Test with production data
-4. Release to users
-
-**Phase C: OCR Enhancement (Later)**
-1. Install Tesseract on server
-2. Add OCR to Image and PDF pipelines
-3. Test with scanned documents
-4. Monitor accuracy and performance
-
-**Reasoning:**
-1. **Deploy first** - Get pipeline architecture into production, see real-world performance
-2. **Commodity next** - High user value, builds on extraction data
-3. **OCR later** - Nice-to-have, can wait for user feedback on priority
+        return [
+            'success' => false,
+            'error' => $response->body(),
+            'status' => $response->status(),
+        ];
+    } catch (\Exception $e) {
+        return [
+            'success' => false,
+            'error' => $e->getMessage(),
+        ];
+    }
+}
+```
 
 ---
 
-## 📋 Open To-dos (From Old Plan)
+## Phase 3: Webhook Controller (15 min)
 
-### From Previous Plan
-- [ ] Add `attachDocumentsToOffer()` call to `CreateRobawsOfferJob` after offer creation
-  - **Status:** Already done in commit `9eadf8e` ✅
-  
-- [ ] Test 2 PDF upload via Filament - verify both appear in Robaws
-  - **Status:** Should test in production after deployment
-  
-- [ ] Test multi-file from different sources (email, API) - verify all attach
-  - **Status:** Should test in production after deployment
+**Create controller:**
+
+```bash
+php artisan make:controller Api/RobawsWebhookController
+```
+
+**File: `app/Http/Controllers/Api/RobawsWebhookController.php`**
+
+```php
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Services\Quotation\RobawsArticlesSyncService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+
+class RobawsWebhookController extends Controller
+{
+    public function __construct(
+        private RobawsArticlesSyncService $syncService
+    ) {}
+    
+    public function handleArticle(Request $request)
+    {
+        // Step 1: Verify signature (CRITICAL for security)
+        if (!$this->verifySignature($request)) {
+            Log::warning('Invalid webhook signature', [
+                'ip' => $request->ip(),
+                'signature' => $request->header('Robaws-Signature'),
+                'body' => $request->getContent()
+            ]);
+            return response()->json(['error' => 'Invalid signature'], 401);
+        }
+        
+        // Step 2: Parse event
+        $event = $request->input('event'); // article.created, article.updated, article.stock-changed
+        $data = $request->input('data'); // Full article data
+        $webhookId = $request->input('id'); // Webhook event ID
+        
+        Log::info('Webhook received', [
+            'event' => $event,
+            'webhook_id' => $webhookId,
+            'article_id' => $data['id'] ?? null
+        ]);
+        
+        // Step 3: Process article update (synchronous)
+        try {
+            $this->syncService->processArticleFromWebhook($data, $event);
+            
+            Log::info('Webhook processed successfully', [
+                'event' => $event,
+                'article_id' => $data['id'] ?? null
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Webhook processing failed', [
+                'event' => $event,
+                'article_id' => $data['id'] ?? null,
+                'error' => $e->getMessage()
+            ]);
+            
+            // Still return 200 to prevent Robaws from retrying
+            // Log the error for manual review
+        }
+        
+        // Step 4: Return 2XX within 2 seconds (Robaws requirement)
+        return response()->json(['status' => 'success'], 200);
+    }
+    
+    private function verifySignature(Request $request): bool
+    {
+        $signatureHeader = $request->header('Robaws-Signature');
+        
+        if (!$signatureHeader) {
+            return false;
+        }
+        
+        // Get secret from database
+        $config = DB::table('webhook_configurations')
+            ->where('provider', 'robaws')
+            ->where('is_active', true)
+            ->first();
+            
+        if (!$config) {
+            Log::error('No active webhook configuration found');
+            return false;
+        }
+        
+        $secret = $config->secret;
+        
+        // Parse signature header: "t=1674742714,v1=signature"
+        parse_str(str_replace(',', '&', $signatureHeader), $parts);
+        $timestamp = $parts['t'] ?? null;
+        $receivedSignature = $parts['v1'] ?? null;
+        
+        if (!$timestamp || !$receivedSignature) {
+            return false;
+        }
+        
+        // Validate timestamp (reject if older than 5 minutes)
+        $age = time() - (int)$timestamp;
+        if ($age > 300) { // 5 minutes
+            Log::warning('Webhook timestamp too old', ['age_seconds' => $age]);
+            return false;
+        }
+        
+        // Build signed payload: timestamp + '.' + body
+        $payload = $timestamp . '.' . $request->getContent();
+        
+        // Compute expected signature
+        $expectedSignature = hash_hmac('sha256', $payload, $secret);
+        
+        // Constant-time comparison
+        return hash_equals($expectedSignature, $receivedSignature);
+    }
+}
+```
+
+**Add route in `routes/api.php`:**
+
+```php
+use App\Http\Controllers\Api\RobawsWebhookController;
+
+// Robaws webhooks (no auth middleware - verified by signature)
+Route::post('/webhooks/robaws/articles', [RobawsWebhookController::class, 'handleArticle'])
+    ->name('webhooks.robaws.articles');
+```
 
 ---
 
-## ❓ Questions for You
+## Phase 4: Process Webhook Events (10 min)
 
-1. **Should we deploy to production now?**
-   - a) Yes, deploy immediately (recommended)
-   - b) Test locally first with manual files
-   - c) Wait and build commodity integration first
+**Add method to `RobawsArticlesSyncService.php`:**
 
-2. **What should we work on next?**
-   - a) Commodity System Integration (high user value)
-   - b) OCR Enhancement (unlock scanned documents)
-   - c) Performance Monitoring (data-driven optimization)
-   - d) Additional File Types (Word, Excel, ZIP)
-   - e) Something else
-
-3. **Timeline preference?**
-   - a) Deploy now, commodity next week
-   - b) Build commodity now, deploy together
-   - c) Different priority
+```php
+public function processArticleFromWebhook(array $articleData, string $event): void
+{
+    Log::info('Processing webhook event', [
+        'event' => $event,
+        'article_id' => $articleData['id'] ?? null,
+        'article_name' => $articleData['name'] ?? null
+    ]);
+    
+    // Webhook includes full article data - no API call needed!
+    $this->processArticle($articleData, fetchFullDetails: false);
+    
+    // Extract metadata from the article name
+    if (isset($articleData['id'])) {
+        try {
+            $this->articleProvider->syncArticleMetadata(
+                $articleData['id'],
+                useApi: false // Use webhook data, not API
+            );
+        } catch (\Exception $e) {
+            Log::warning('Failed to sync metadata from webhook', [
+                'article_id' => $articleData['id'],
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+    
+    Log::info('Webhook event processed successfully', [
+        'event' => $event,
+        'article_id' => $articleData['id'] ?? null
+    ]);
+}
+```
 
 ---
 
-## 🎓 Current System Status
+## Phase 5: Optimize Incremental Sync (5 min)
 
-### What's Working
-✅ **Pipeline Architecture** - Complete, tested, ready  
-✅ **Email Processing** - Isolated, dedicated queue  
-✅ **PDF Processing** - Isolated, dedicated queue  
-✅ **Image Processing** - Isolated, dedicated queue  
-✅ **Priority Routing** - Email > PDF > Image  
-✅ **Backward Compatibility** - Generic fallback working  
-✅ **Testing** - 25 tests, 82 assertions, 100% passing  
+**Update `syncIncremental()` in `RobawsArticlesSyncService.php`:**
 
-### What's Next (Your Choice)
-- Deploy to production
-- Build commodity integration
-- Add OCR capabilities
-- Monitor performance
-- Add more file types
+Since webhooks handle real-time updates, incremental sync becomes a **safety net** only.
+
+**Change from:**
+```php
+$this->processArticle($articleData, fetchFullDetails: true); // Makes API call
+```
+
+**To:**
+```php
+$this->processArticle($articleData, fetchFullDetails: false); // No API call
+```
+
+**Full updated loop:**
+```php
+// Process each modified article (NO API calls - webhooks handle real-time)
+foreach ($articles as $articleData) {
+    try {
+        // Only process basic data, skip API call for extraFields
+        $this->processArticle($articleData, fetchFullDetails: false);
+        
+        // Extract metadata from stored data
+        $this->articleProvider->syncArticleMetadata(
+            $articleData['id'],
+            useApi: false
+        );
+        
+        $synced++;
+        
+        if ($synced % 10 === 0) {
+            Log::info('Incremental sync progress', [
+                'processed' => $synced,
+                'total' => count($articles),
+                'note' => 'Fast sync - no API calls (webhooks handle real-time)'
+            ]);
+        }
+    } catch (\RuntimeException $e) {
+        // Handle daily quota exceeded
+        if (str_contains($e->getMessage(), 'Daily API quota')) {
+            Log::critical('Sync stopped: Daily API quota exhausted', [
+                'synced' => $synced,
+                'remaining' => count($articles) - $synced
+            ]);
+            break;
+        }
+        throw $e;
+    } catch (\Exception $e) {
+        $errors++;
+        Log::warning('Failed to process modified article', [
+            'article_id' => $articleData['id'] ?? 'unknown',
+            'error' => $e->getMessage()
+        ]);
+    }
+}
+```
+
+**Result:** Incremental sync becomes instant (no API calls per article)
 
 ---
 
-**Status:** Pipeline Architecture Complete ✅  
-**Ready for:** Production Deployment or Next Feature  
-**Your Decision:** What should we prioritize?
+## Phase 6: Deploy & Register (15 min)
+
+### Step 1: Deploy to Production
+
+**In Laravel Forge:**
+1. Go to `app.belgaco.be` site
+2. Click **"Deploy Now"**
+3. Wait for deployment to complete
+
+### Step 2: Register Webhook
+
+**SSH into server or use Forge terminal:**
+
+```bash
+cd /home/forge/app.belgaco.be
+php artisan robaws:register-webhook
+```
+
+**Output will show:**
+```
+✅ Webhook registered successfully!
+Webhook ID: abc-123-def
+⚠️  IMPORTANT: Add this to your .env file:
+ROBAWS_WEBHOOK_SECRET=your_secret_here
+```
+
+### Step 3: Add Secret to .env
+
+**In Laravel Forge → Environment tab:**
+
+Add:
+```env
+ROBAWS_WEBHOOK_SECRET=your_secret_here
+```
+
+Click **"Save"**
+
+### Step 4: Test Webhook
+
+**Option A: Update an article in Robaws**
+- Change article name/price in Robaws
+- Check logs: `tail -f storage/logs/laravel.log | grep webhook`
+
+**Option B: Use webhook.site for testing**
+- Temporarily register webhook to webhook.site
+- See what Robaws sends
+- Re-register to production URL
+
+---
+
+## Expected Results
+
+### Before Webhooks:
+- Daily sync: 1,576 API calls, 3-4 minutes
+- Data freshness: Up to 24 hours stale
+- API quota usage: ~1,600 requests/day
+
+### After Webhooks:
+- Real-time updates: **0 API calls**, instant
+- Data freshness: **Real-time (seconds)**
+- API quota usage: **~50 requests/day** (backup sync only catches edge cases)
+- Nightly sync: **<10 API calls** (only missed webhooks)
+
+---
+
+## Monitoring & Validation
+
+### Check Webhook Activity:
+
+```bash
+# View webhook logs
+tail -f storage/logs/laravel.log | grep -i webhook
+
+# Count webhook events received today
+grep "Webhook received" storage/logs/laravel.log | grep "$(date +%Y-%m-%d)" | wc -l
+
+# Check for webhook errors
+grep "Webhook processing failed" storage/logs/laravel.log | tail -n 20
+```
+
+### Verify Articles Are Syncing:
+
+```bash
+php artisan tinker
+```
+
+```php
+// Check most recently updated articles
+\App\Models\RobawsArticleCache::orderBy('updated_at', 'desc')->limit(5)->get(['article_name', 'updated_at']);
+
+// Check webhook configuration
+DB::table('webhook_configurations')->where('is_active', true)->first();
+```
+
+---
+
+## Phase 7: Bi-Directional Sync (FUTURE - Not Implementing Now)
+
+**Decision: Implementing webhooks ONLY (Robaws → Bconnect) first.**
+
+Bi-directional sync (Bconnect → Robaws) will be added later if needed when:
+- Users frequently edit articles in Filament
+- Need to push local changes back to Robaws
+- Want full two-way synchronization
+
+**Implementation will include:**
+- Model observer pattern
+- `sync_source` column tracking
+- Auto-push on user edits
+- Webhook loop prevention
+- Conflict resolution
+
+---
+
+## Implementation Checklist
+
+- [ ] Phase 1: Create webhook_configurations migration
+- [ ] Phase 2: Create RegisterRobawsWebhook command
+- [ ] Phase 2: Add registerWebhook() to RobawsApiClient
+- [ ] Phase 3: Create RobawsWebhookController
+- [ ] Phase 3: Add webhook route in routes/api.php
+- [ ] Phase 4: Add processArticleFromWebhook() to sync service
+- [ ] Phase 5: Update incremental sync to skip API calls
+- [ ] Phase 6: Deploy to production
+- [ ] Phase 6: Register webhook with Robaws
+- [ ] Phase 6: Add secret to .env
+- [ ] Phase 6: Test and monitor
+
+**Total Time: ~1 hour**
+

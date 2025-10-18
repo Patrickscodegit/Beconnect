@@ -10,11 +10,20 @@ use Illuminate\Support\Str;
 final class RobawsApiClient
 {
     private ?PendingRequest $http = null;
+    
+    // Rate limiting properties
+    private int $dailyLimit = 10000;
+    private int $dailyRemaining = 10000;
+    private int $perSecondLimit = 15;
+    private int $requestsThisSecond = 0;
+    private float $currentSecondStart;
+    private int $dailyMinBuffer = 500; // Reserve 500 requests for other operations
 
     public function __construct()
     {
         // Lazy initialization - don't create HTTP client in constructor
         // This prevents errors during composer autoload discovery
+        $this->currentSecondStart = microtime(true);
     }
 
     private function getHttpClient(): PendingRequest
@@ -1005,6 +1014,73 @@ final class RobawsApiClient
         ];
     }
 
+    /**
+     * Enforce API rate limits before making a request
+     * Respects both per-second (15 req/sec) and daily (10,000 req/day) limits
+     */
+    private function enforceRateLimit(): void
+    {
+        // Check daily quota (stop if below buffer)
+        if ($this->dailyRemaining <= $this->dailyMinBuffer) {
+            \Illuminate\Support\Facades\Log::critical('Approaching daily API quota limit', [
+                'remaining' => $this->dailyRemaining,
+                'buffer' => $this->dailyMinBuffer
+            ]);
+            throw new \RuntimeException("Daily API quota nearly exhausted. Remaining: {$this->dailyRemaining}. Reserved buffer: {$this->dailyMinBuffer}");
+        }
+        
+        // Check per-second limit
+        $now = microtime(true);
+        if (!isset($this->currentSecondStart)) {
+            $this->currentSecondStart = $now;
+            $this->requestsThisSecond = 0;
+        }
+        
+        // Reset counter if new second
+        if ($now - $this->currentSecondStart >= 1.0) {
+            $this->currentSecondStart = $now;
+            $this->requestsThisSecond = 0;
+        }
+        
+        // Throttle if at per-second limit
+        if ($this->requestsThisSecond >= $this->perSecondLimit) {
+            $sleepTime = 1.0 - ($now - $this->currentSecondStart);
+            if ($sleepTime > 0) {
+                usleep((int)($sleepTime * 1000000));
+                $this->currentSecondStart = microtime(true);
+                $this->requestsThisSecond = 0;
+            }
+        }
+        
+        $this->requestsThisSecond++;
+    }
+
+    /**
+     * Update rate limit tracking from API response headers
+     */
+    private function updateRateLimitsFromResponse($response): void
+    {
+        $headers = $response->headers();
+        
+        if (isset($headers['X-RateLimit-Daily-Remaining'][0])) {
+            $this->dailyRemaining = (int)$headers['X-RateLimit-Daily-Remaining'][0];
+        }
+        
+        if (isset($headers['X-RateLimit-Daily-Limit'][0])) {
+            $this->dailyLimit = (int)$headers['X-RateLimit-Daily-Limit'][0];
+        }
+        
+        // Log warning if getting close to daily limit
+        $percentRemaining = ($this->dailyRemaining / $this->dailyLimit) * 100;
+        if ($percentRemaining < 10) {
+            \Illuminate\Support\Facades\Log::warning('API daily quota running low', [
+                'remaining' => $this->dailyRemaining,
+                'limit' => $this->dailyLimit,
+                'percent' => round($percentRemaining, 2)
+            ]);
+        }
+    }
+
     private function createHttpClient(string $baseUrl, string $apiKey): PendingRequest
     {
         $headers = [
@@ -1783,6 +1859,9 @@ final class RobawsApiClient
     public function getArticles(array $params = []): array
     {
         try {
+            // Enforce rate limits before making request
+            $this->enforceRateLimit();
+            
             // Default parameters
             $query = array_merge([
                 'page' => 0,
@@ -1791,11 +1870,19 @@ final class RobawsApiClient
             ], $params);
 
             $response = $this->getHttpClient()->get('/api/v2/articles', $query);
+            
+            // Update rate limits from response headers
+            $this->updateRateLimitsFromResponse($response);
 
             if ($response->successful()) {
                 return [
                     'success' => true,
                     'data' => $response->json(),
+                    'articles' => $response->json()['items'] ?? [],
+                    'rate_limit' => [
+                        'daily_remaining' => $this->dailyRemaining,
+                        'daily_limit' => $this->dailyLimit,
+                    ],
                 ];
             }
 
@@ -1820,12 +1907,56 @@ final class RobawsApiClient
     public function getArticle(string $articleId, array $include = []): array
     {
         try {
+            // Enforce rate limits before making request
+            $this->enforceRateLimit();
+            
             $query = [];
             if (!empty($include)) {
                 $query['include'] = implode(',', $include);
             }
 
             $response = $this->getHttpClient()->get("/api/v2/articles/{$articleId}", $query);
+            
+            // Update rate limits from response headers
+            $this->updateRateLimitsFromResponse($response);
+
+            if ($response->successful()) {
+                return [
+                    'success' => true,
+                    'data' => $response->json(),
+                    'article' => $response->json(), // For backward compatibility
+                    'rate_limit' => [
+                        'daily_remaining' => $this->dailyRemaining,
+                        'daily_limit' => $this->dailyLimit,
+                    ],
+                ];
+            }
+
+            return [
+                'success' => false,
+                'error' => $response->body(),
+                'status' => $response->status(),
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'status' => 500,
+            ];
+        }
+    }
+
+    /**
+     * Register webhook endpoint with Robaws
+     */
+    public function registerWebhook(array $payload): array
+    {
+        try {
+            $this->enforceRateLimit();
+            
+            $response = $this->getHttpClient()->post('/api/v2/webhook-endpoints', $payload);
+            
+            $this->updateRateLimitsFromResponse($response);
 
             if ($response->successful()) {
                 return [
@@ -1843,7 +1974,6 @@ final class RobawsApiClient
             return [
                 'success' => false,
                 'error' => $e->getMessage(),
-                'status' => 500,
             ];
         }
     }

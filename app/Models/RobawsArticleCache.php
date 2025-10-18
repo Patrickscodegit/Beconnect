@@ -34,6 +34,7 @@ class RobawsArticleCache extends Model
         'is_active',
         'requires_manual_review',
         'last_synced_at',
+        'last_modified_at',
         // Article metadata from Robaws ARTICLE INFO
         'shipping_line',
         'service_type',
@@ -62,6 +63,7 @@ class RobawsArticleCache extends Model
         'is_active' => 'boolean',
         'requires_manual_review' => 'boolean',
         'last_synced_at' => 'datetime',
+        'last_modified_at' => 'datetime',
         // New metadata fields
         'is_parent_item' => 'boolean',
         'update_date' => 'date',
