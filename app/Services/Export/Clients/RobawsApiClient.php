@@ -1064,10 +1064,13 @@ final class RobawsApiClient
         
         if (isset($headers['X-RateLimit-Daily-Remaining'][0])) {
             $this->dailyRemaining = (int)$headers['X-RateLimit-Daily-Remaining'][0];
+            // Cache until end of day so widget can display across requests
+            Cache::put('robaws_daily_remaining', $this->dailyRemaining, now()->endOfDay());
         }
         
         if (isset($headers['X-RateLimit-Daily-Limit'][0])) {
             $this->dailyLimit = (int)$headers['X-RateLimit-Daily-Limit'][0];
+            Cache::put('robaws_daily_limit', $this->dailyLimit, now()->endOfDay());
         }
         
         // Log warning if getting close to daily limit
@@ -2029,7 +2032,7 @@ final class RobawsApiClient
      */
     public function getDailyLimit(): int
     {
-        return $this->dailyLimit;
+        return Cache::get('robaws_daily_limit', $this->dailyLimit);
     }
 
     /**
@@ -2037,7 +2040,7 @@ final class RobawsApiClient
      */
     public function getDailyRemaining(): int
     {
-        return $this->dailyRemaining;
+        return Cache::get('robaws_daily_remaining', $this->dailyRemaining);
     }
 
     /**
