@@ -1066,7 +1066,7 @@ final class RobawsApiClient
         // Handle both array and collection types
         $allHeaders = is_array($headers) ? $headers : $headers->all();
         
-        \Illuminate\Support\Facades\Log::debug('Robaws API response headers', [
+        \Illuminate\Support\Facades\Log::info('Robaws API response headers', [
             'all_headers' => $allHeaders,
             'ratelimit_headers' => array_filter($allHeaders, function($key) {
                 return str_contains(strtolower($key), 'ratelimit');
