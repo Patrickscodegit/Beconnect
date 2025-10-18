@@ -1062,15 +1062,25 @@ final class RobawsApiClient
     {
         $headers = $response->headers();
         
+        // Debug: Log all headers to see what Robaws actually sends
+        \Illuminate\Support\Facades\Log::debug('Robaws API response headers', [
+            'all_headers' => $headers->all(),
+            'ratelimit_headers' => array_filter($headers->all(), function($key) {
+                return str_contains(strtolower($key), 'ratelimit');
+            }, ARRAY_FILTER_USE_KEY)
+        ]);
+        
+        // Check for exact header names from Robaws documentation
         if (isset($headers['X-RateLimit-Daily-Remaining'][0])) {
             $this->dailyRemaining = (int)$headers['X-RateLimit-Daily-Remaining'][0];
-            // Cache until end of day so widget can display across requests
             Cache::put('robaws_daily_remaining', $this->dailyRemaining, now()->endOfDay());
+            \Illuminate\Support\Facades\Log::info('Updated daily remaining from API', ['remaining' => $this->dailyRemaining]);
         }
         
         if (isset($headers['X-RateLimit-Daily-Limit'][0])) {
             $this->dailyLimit = (int)$headers['X-RateLimit-Daily-Limit'][0];
             Cache::put('robaws_daily_limit', $this->dailyLimit, now()->endOfDay());
+            \Illuminate\Support\Facades\Log::info('Updated daily limit from API', ['limit' => $this->dailyLimit]);
         }
         
         // Log warning if getting close to daily limit
