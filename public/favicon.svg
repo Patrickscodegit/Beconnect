@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Background rounded square (like the logo) -->
+  <rect x="2" y="2" width="28" height="28" rx="4" ry="4" fill="#1e40af"/>
+  
+  <!-- Globe outline (simplified for favicon) -->
+  <circle cx="16" cy="12" r="8" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="0.6"/>
+  <path d="M8 12 Q16 8 24 12" stroke="#ffffff" stroke-width="1" opacity="0.6"/>
+  <path d="M8 12 Q16 16 24 12" stroke="#ffffff" stroke-width="1" opacity="0.6"/>
+  <path d="M16 4 L16 20" stroke="#ffffff" stroke-width="1" opacity="0.6"/>
+  
+  <!-- Container ship hull -->
+  <path d="M6 20 L26 20 L24 26 L8 26 Z" fill="#ffffff"/>
+  
+  <!-- Ship deck -->
+  <path d="M7 18 L25 18 L24 20 L8 20 Z" fill="#f8fafc"/>
+  
+  <!-- Orange containers on deck -->
+  <rect x="10" y="17" width="2" height="2" fill="#f97316"/>
+  <rect x="13" y="17" width="2" height="2" fill="#f97316"/>
+  <rect x="16" y="17" width="2" height="2" fill="#f97316"/>
+  <rect x="19" y="17" width="2" height="2" fill="#f97316"/>
+  
+  <!-- Ship superstructure -->
+  <rect x="20" y="14" width="4" height="6" fill="#ffffff"/>
+  
+  <!-- Water waves below -->
+  <path d="M4 26 Q8 24 12 26 T20 26 T28 26" stroke="#ffffff" stroke-width="1.5" fill="none" opacity="0.8"/>
+  <path d="M6 28 Q10 26 14 28 T22 28 T30 28" stroke="#ffffff" stroke-width="1" fill="none" opacity="0.6"/>
+</svg>
