@@ -1073,15 +1073,15 @@ final class RobawsApiClient
             }, ARRAY_FILTER_USE_KEY)
         ]);
         
-        // Check for exact header names from Robaws documentation
-        if (isset($headers['X-RateLimit-Daily-Remaining'][0])) {
-            $this->dailyRemaining = (int)$headers['X-RateLimit-Daily-Remaining'][0];
+        // Check for exact header names from Robaws documentation (lowercase!)
+        if (isset($headers['x-ratelimit-daily-remaining'][0])) {
+            $this->dailyRemaining = (int)$headers['x-ratelimit-daily-remaining'][0];
             Cache::put('robaws_daily_remaining', $this->dailyRemaining, now()->endOfDay());
             \Illuminate\Support\Facades\Log::info('Updated daily remaining from API', ['remaining' => $this->dailyRemaining]);
         }
         
-        if (isset($headers['X-RateLimit-Daily-Limit'][0])) {
-            $this->dailyLimit = (int)$headers['X-RateLimit-Daily-Limit'][0];
+        if (isset($headers['x-ratelimit-daily-limit'][0])) {
+            $this->dailyLimit = (int)$headers['x-ratelimit-daily-limit'][0];
             Cache::put('robaws_daily_limit', $this->dailyLimit, now()->endOfDay());
             \Illuminate\Support\Facades\Log::info('Updated daily limit from API', ['limit' => $this->dailyLimit]);
         }
