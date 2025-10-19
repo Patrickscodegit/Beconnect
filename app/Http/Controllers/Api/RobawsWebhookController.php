@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\RobawsWebhookLog;
 use App\Services\Quotation\RobawsArticlesSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -37,9 +38,20 @@ class RobawsWebhookController extends Controller
             'article_id' => $data['id'] ?? null
         ]);
         
+        // Create webhook log entry
+        $webhookLog = RobawsWebhookLog::create([
+            'event_type' => $event,
+            'robaws_id' => $webhookId,
+            'payload' => $request->all(),
+            'status' => 'received',
+        ]);
+        
         // Step 3: Process article update (synchronous)
         try {
             $this->syncService->processArticleFromWebhook($data, $event);
+            
+            // Mark as processed
+            $webhookLog->markAsProcessed();
             
             Log::info('Webhook processed successfully', [
                 'event' => $event,
@@ -47,6 +59,9 @@ class RobawsWebhookController extends Controller
             ]);
             
         } catch (\Exception $e) {
+            // Mark as failed
+            $webhookLog->markAsFailed($e->getMessage());
+            
             Log::error('Webhook processing failed', [
                 'event' => $event,
                 'article_id' => $data['id'] ?? null,
