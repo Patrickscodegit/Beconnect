@@ -18,6 +18,11 @@ class ListRobawsArticles extends ListRecords
 
     protected function getHeaderActions(): array
     {
+        // Get API usage for cost indicators
+        $apiClient = app(\App\Services\Export\Clients\RobawsApiClient::class);
+        $dailyRemaining = $apiClient->getDailyRemaining();
+        $articleCount = \App\Models\RobawsArticleCache::count();
+        
         return [
             Actions\Action::make('syncIncremental')
                 ->label('Sync Changed Articles')
@@ -25,7 +30,10 @@ class ListRobawsArticles extends ListRecords
                 ->color('success')
                 ->requiresConfirmation()
                 ->modalHeading('Sync Changed Articles from Robaws?')
-                ->modalDescription('This will fetch only articles that changed since the last sync. This is fast, rate-limit friendly, and recommended for regular updates.')
+                ->modalDescription(function () use ($dailyRemaining) {
+                    $estimatedCost = '~10-50 API calls';
+                    return "**Estimated API Cost:** {$estimatedCost}\n**API Quota Remaining:** " . number_format($dailyRemaining) . "\n\n**What this does:**\nFetches only articles modified since the last sync. This is fast, rate-limit friendly, and recommended for regular updates.\n\n**Best for:** Daily/hourly updates, webhook recovery";
+                })
                 ->modalSubmitActionLabel('Yes, sync changes')
                 ->action(function () {
                     try {
@@ -54,8 +62,14 @@ class ListRobawsArticles extends ListRecords
                 ->icon('heroicon-o-arrow-path')
                 ->color('warning')
                 ->requiresConfirmation()
-                ->modalHeading('Sync All Articles from Robaws?')
-                ->modalDescription('This will fetch ALL articles from the Robaws API (not just changed ones). Use "Sync Changed Articles" instead for regular updates to avoid rate limits.')
+                ->modalHeading('⚠️ Full Sync All Articles from Robaws?')
+                ->modalDescription(function () use ($dailyRemaining, $articleCount) {
+                    $estimatedCost = ceil($articleCount / 10) + 50; // Pagination estimate
+                    $safeToProcess = $dailyRemaining > ($estimatedCost + 500);
+                    $status = $safeToProcess ? '✅ Safe to proceed' : '⚠️ Low quota - proceed with caution';
+                    
+                    return "**Estimated API Cost:** ~{$estimatedCost} API calls\n**API Quota Remaining:** " . number_format($dailyRemaining) . "\n**Status:** {$status}\n**Duration:** ~3-5 minutes\n\n**What this does:**\nFetches ALL {$articleCount} articles from Robaws API and syncs metadata. This is a heavy operation.\n\n**Use this for:** Initial setup, major updates, data verification\n\n**⚠️ For regular updates, use \"Sync Changed Articles\" instead!**";
+                })
                 ->modalSubmitActionLabel('Yes, sync all')
                 ->action(function () {
                     try {
@@ -85,11 +99,17 @@ class ListRobawsArticles extends ListRecords
             Actions\Action::make('rebuildCache')
                 ->label('Rebuild Cache')
                 ->icon('heroicon-o-arrow-path-rounded-square')
-                ->color('warning')
+                ->color('danger')
                 ->requiresConfirmation()
-                ->modalHeading('Rebuild Entire Article Cache?')
-                ->modalDescription('This will clear all cached articles and fetch everything from Robaws API. Metadata will be synced in the background. This operation cannot be undone and may take several minutes.')
-                ->modalSubmitActionLabel('Yes, rebuild now')
+                ->modalHeading('🔴 Rebuild Entire Article Cache?')
+                ->modalDescription(function () use ($dailyRemaining, $articleCount) {
+                    $estimatedCost = ceil($articleCount / 10) + 50;
+                    $safeToProcess = $dailyRemaining > ($estimatedCost + 500);
+                    $status = $safeToProcess ? '✅ Safe to proceed' : '⚠️ Low quota - proceed with caution';
+                    
+                    return "**⚠️ DESTRUCTIVE OPERATION**\n\n**Estimated API Cost:** ~{$estimatedCost} API calls\n**API Quota Remaining:** " . number_format($dailyRemaining) . "\n**Status:** {$status}\n**Duration:** ~3-5 minutes\n\n**What this does:**\n1. **DELETES** all {$articleCount} cached articles\n2. Fetches everything from Robaws API\n3. Syncs metadata\n\n**Use this for:** Database corruption, schema migrations, complete system reset\n\n**⚠️ This operation cannot be undone!**\n**💡 Tip:** Try \"Full Sync\" first - it's safer!**";
+                })
+                ->modalSubmitActionLabel('Yes, delete and rebuild')
                 ->action(function () {
                     try {
                         $syncService = app(RobawsArticlesSyncService::class);
@@ -118,7 +138,9 @@ class ListRobawsArticles extends ListRecords
                 ->color('success')
                 ->requiresConfirmation()
                 ->modalHeading('Sync Metadata for All Articles?')
-                ->modalDescription('This will queue metadata sync (shipping line, POL/POD, service type) for all cached articles. This happens in the background.')
+                ->modalDescription(function () use ($dailyRemaining, $articleCount) {
+                    return "**Estimated API Cost:** ~0 API calls (uses name extraction)\n**API Quota Remaining:** " . number_format($dailyRemaining) . "\n**Status:** ✅ Safe, no API calls\n**Duration:** ~10-30 seconds\n\n**What this does:**\nExtracts metadata from {$articleCount} cached article names:\n• Shipping Line (ACL, Grimaldi, etc.)\n• POL/POD (ports of loading/discharge)\n• Service Type (Seafreight, RORO, etc.)\n• Trade Direction (Export/Import)\n\n**Use this for:** After parser updates, fixing missing metadata\n\n**💡 This is fast and safe - no API calls needed!**";
+                })
                 ->modalSubmitActionLabel('Yes, sync metadata')
                 ->action(function () {
                     try {
