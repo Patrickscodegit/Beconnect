@@ -10,8 +10,11 @@ class RobawsWebhookLog extends Model
     protected $fillable = [
         'event_type',
         'robaws_id',
+        'article_id',
         'payload',
         'status',
+        'retry_count',
+        'processing_duration_ms',
         'error_message',
         'processed_at',
     ];
@@ -65,5 +68,13 @@ class RobawsWebhookLog extends Model
             'error_message' => $errorMessage,
             'processed_at' => now(),
         ]);
+    }
+    
+    /**
+     * Relationship to article
+     */
+    public function article()
+    {
+        return $this->belongsTo(\App\Models\RobawsArticleCache::class, 'article_id');
     }
 }

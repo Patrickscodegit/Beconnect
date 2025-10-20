@@ -42,16 +42,36 @@ class RobawsWebhookController extends Controller
         $webhookLog = RobawsWebhookLog::create([
             'event_type' => $event,
             'robaws_id' => $webhookId,
+            'article_id' => null, // Will be updated after processing
             'payload' => $request->all(),
             'status' => 'received',
         ]);
         
         // Step 3: Process article update (synchronous)
+        $startTime = microtime(true);
+        
         try {
             $this->syncService->processArticleFromWebhook($data, $event);
             
+            // Calculate processing duration
+            $duration = (int) ((microtime(true) - $startTime) * 1000); // ms
+            
+            // Find article to link
+            $articleId = null;
+            if (isset($data['id'])) {
+                $article = \App\Models\RobawsArticleCache::where('robaws_article_id', $data['id'])->first();
+                if ($article) {
+                    $articleId = $article->id;
+                }
+            }
+            
             // Mark as processed
-            $webhookLog->markAsProcessed();
+            $webhookLog->update([
+                'status' => 'processed',
+                'processed_at' => now(),
+                'processing_duration_ms' => $duration,
+                'article_id' => $articleId,
+            ]);
             
             Log::info('Webhook processed successfully', [
                 'event' => $event,
