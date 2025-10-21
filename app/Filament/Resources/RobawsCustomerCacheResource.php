@@ -321,32 +321,34 @@ class RobawsCustomerCacheResource extends Resource
                     ->icon('heroicon-o-document-duplicate')
                     ->color('secondary')
                     ->modalHeading('Potential Duplicate Customers')
-                    ->modalDescription('Customers with the same name (case-insensitive) are listed below. Review and merge manually if needed.')
-                    ->modalContent(function () {
+                    ->modalDescription('Customers with the same name (case-insensitive) are listed below.')
+                    ->action(function () {
                         $duplicates = RobawsCustomerCache::select('name', DB::raw('count(*) as count'))
                             ->groupBy('name')
                             ->having('count', '>', 1)
                             ->get();
                         
                         if ($duplicates->isEmpty()) {
-                            return '<div class="p-4 text-center text-gray-500">No duplicates found by name.</div>';
+                            Notification::make()
+                                ->title('No duplicates found')
+                                ->body('No customers with duplicate names found.')
+                                ->success()
+                                ->send();
+                            return;
                         }
                         
-                        $html = '<div class="p-4">';
+                        $message = "Found " . $duplicates->count() . " duplicate groups:\n\n";
                         foreach ($duplicates as $duplicate) {
-                            $html .= '<h3 class="text-lg font-semibold mt-4">' . e($duplicate->name) . ' (' . $duplicate->count . ' entries)</h3>';
-                            $html .= '<ul class="list-disc list-inside ml-4">';
-                            $customers = RobawsCustomerCache::where('name', $duplicate->name)->get();
-                            foreach ($customers as $customer) {
-                                $html .= '<li><a href="' . RobawsCustomerCacheResource::getUrl('edit', ['record' => $customer->id]) . '" class="text-primary-600 hover:underline">' . e($customer->robaws_client_id) . ' - ' . e($customer->email ?? 'No Email') . '</a></li>';
-                            }
-                            $html .= '</ul>';
+                            $message .= "• " . $duplicate->name . " (" . $duplicate->count . " entries)\n";
                         }
-                        $html .= '</div>';
-                        return $html;
-                    })
-                    ->modalSubmitAction(false) // No submit button for this modal
-                    ->modalCancelActionLabel('Close'),
+                        
+                        Notification::make()
+                            ->title('Duplicates Found')
+                            ->body($message)
+                            ->warning()
+                            ->persistent()
+                            ->send();
+                    }),
                 Tables\Actions\Action::make('exportCustomers')
                     ->label('Export to CSV')
                     ->icon('heroicon-o-arrow-down-tray')
