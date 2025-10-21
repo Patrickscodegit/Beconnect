@@ -408,7 +408,15 @@ class RobawsCustomerCacheResource extends Resource
                                     ->content(function () use ($records) {
                                         $totalIntakes = $records->sum(fn ($r) => $r->intakes()->count());
                                         $mergeCount = $records->count() - 1;
-                                        return "• {$mergeCount} duplicate(s) will be merged and deleted\n• {$totalIntakes} intake(s) will be preserved\n• Non-null fields will be merged into primary record";
+                                        $hasValidRobawsId = $records->some(fn ($r) => !str_starts_with($r->robaws_client_id, 'NEW_'));
+                                        
+                                        $preview = "• {$mergeCount} duplicate(s) will be merged and deleted\n• {$totalIntakes} intake(s) will be preserved\n• Non-null fields will be merged into primary record";
+                                        
+                                        if ($hasValidRobawsId) {
+                                            $preview .= "\n• Merged customer data will be synced to Robaws";
+                                        }
+                                        
+                                        return $preview;
                                     }),
                             ];
                         })
@@ -420,11 +428,23 @@ class RobawsCustomerCacheResource extends Resource
                             $result = $mergeService->merge($primary, $duplicateIds);
                             
                             if ($result['success']) {
-                                Notification::make()
+                                $notification = Notification::make()
                                     ->title('Customers Merged Successfully')
                                     ->body($result['message'])
-                                    ->success()
-                                    ->send();
+                                    ->success();
+                                
+                                // Add additional info if synced to Robaws
+                                if ($result['pushed_to_robaws'] ?? false) {
+                                    $notification->actions([
+                                        \Filament\Notifications\Actions\Action::make('view_robaws')
+                                            ->label('View in Robaws')
+                                            ->url("https://app.robaws.com/#/objectRef/CLIENT:{$primary->robaws_client_id}")
+                                            ->openUrlInNewTab()
+                                            ->color('info'),
+                                    ]);
+                                }
+                                
+                                $notification->send();
                             } else {
                                 Notification::make()
                                     ->title('Merge Failed')

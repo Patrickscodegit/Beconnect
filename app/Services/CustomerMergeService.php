@@ -66,11 +66,37 @@ class CustomerMergeService
             // Save merged primary record
             $primary->save();
             
+            // Push merged customer to Robaws (if it has a valid Robaws ID)
+            $pushResult = null;
+            if (!str_starts_with($primary->robaws_client_id, 'NEW_')) {
+                try {
+                    $customerSyncService = app(\App\Services\Robaws\RobawsCustomerSyncService::class);
+                    $customerSyncService->pushCustomerToRobaws($primary);
+                    $pushResult = 'synced to Robaws';
+                    
+                    Log::info('Merged customer pushed to Robaws', [
+                        'customer_id' => $primary->id,
+                        'robaws_client_id' => $primary->robaws_client_id,
+                        'customer_name' => $primary->name,
+                    ]);
+                } catch (\Exception $e) {
+                    Log::warning('Failed to push merged customer to Robaws', [
+                        'customer_id' => $primary->id,
+                        'robaws_client_id' => $primary->robaws_client_id,
+                        'error' => $e->getMessage(),
+                    ]);
+                    $pushResult = 'failed to sync to Robaws';
+                }
+            }
+            
             DB::commit();
             
             $message = "Successfully merged {$mergedCount} duplicate(s) into {$primary->name}.";
             if ($totalIntakes > 0) {
                 $message .= " {$totalIntakes} intake(s) preserved.";
+            }
+            if ($pushResult) {
+                $message .= " Customer data {$pushResult}.";
             }
             
             return [
@@ -78,6 +104,7 @@ class CustomerMergeService
                 'message' => $message,
                 'merged_count' => $mergedCount,
                 'intakes_moved' => $totalIntakes,
+                'pushed_to_robaws' => $pushResult === 'synced to Robaws',
             ];
             
         } catch (\Exception $e) {
