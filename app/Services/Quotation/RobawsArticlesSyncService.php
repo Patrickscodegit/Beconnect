@@ -237,7 +237,7 @@ class RobawsArticlesSyncService
             'currency' => $article['currency'] ?? 'EUR',
             'unit_type' => $article['unit'] ?? 'piece',
             'is_active' => $article['active'] ?? true,
-            'is_parent_article' => false,
+            'is_parent_article' => $article['custom_fields']['parent_item'] ?? false,
             'is_surcharge' => false,
             'requires_manual_review' => false,
             'min_quantity' => 1,
