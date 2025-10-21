@@ -414,6 +414,7 @@ class RobawsCustomerCacheResource extends Resource
                                         
                                         if ($hasValidRobawsId) {
                                             $preview .= "\n• Merged customer data will be synced to Robaws";
+                                            $preview .= "\n• Duplicate customers will be deleted from Robaws";
                                         }
                                         
                                         return $preview;

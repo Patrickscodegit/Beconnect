@@ -314,5 +314,32 @@ class RobawsCustomerSyncService
         
         return $stats;
     }
+
+    /**
+     * Delete a customer from Robaws using the DELETE API endpoint
+     * Uses the official Robaws DELETE /clients/{id} endpoint
+     */
+    public function deleteCustomerFromRobaws(string $robawsClientId): bool
+    {
+        try {
+            // Use the official Robaws DELETE endpoint
+            $response = $this->apiClient->deleteClient((int) $robawsClientId);
+
+            if ($response) {
+                Log::info('Customer deleted from Robaws', [
+                    'robaws_client_id' => $robawsClientId,
+                ]);
+                return true;
+            }
+
+            return false;
+        } catch (\Exception $e) {
+            Log::error('Failed to delete customer from Robaws', [
+                'robaws_client_id' => $robawsClientId,
+                'error' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
+    }
 }
 

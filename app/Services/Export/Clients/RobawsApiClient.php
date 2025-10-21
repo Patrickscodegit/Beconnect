@@ -725,6 +725,39 @@ final class RobawsApiClient
     }
 
     /**
+     * Delete a client from Robaws using the DELETE API endpoint
+     * Reference: https://app.robaws.com/public/api-docs/robaws#/operations/delete_89
+     */
+    public function deleteClient(int $clientId): bool
+    {
+        try {
+            $response = $this->getHttpClient()
+                ->delete("/api/v2/clients/{$clientId}");
+
+            if ($response->successful()) {
+                \Illuminate\Support\Facades\Log::info('Client deleted from Robaws', [
+                    'client_id' => $clientId,
+                ]);
+                return true;
+            }
+
+            \Illuminate\Support\Facades\Log::error('Failed to delete client from Robaws', [
+                'client_id' => $clientId,
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+
+            return false;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Exception deleting client from Robaws', [
+                'client_id' => $clientId,
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
+    }
+
+    /**
      * Prepare contact person data for API
      */
     protected function prepareContactPerson($contactPerson): array

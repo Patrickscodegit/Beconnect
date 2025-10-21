@@ -66,18 +66,46 @@ class CustomerMergeService
             // Save merged primary record
             $primary->save();
             
-            // Push merged customer to Robaws (if it has a valid Robaws ID)
+            // Push merged customer to Robaws and delete duplicates (if it has a valid Robaws ID)
             $pushResult = null;
+            $deletedFromRobaws = 0;
+            
             if (!str_starts_with($primary->robaws_client_id, 'NEW_')) {
                 try {
                     $customerSyncService = app(\App\Services\Robaws\RobawsCustomerSyncService::class);
+                    
+                    // 1. Update the primary customer in Robaws
                     $customerSyncService->pushCustomerToRobaws($primary);
+                    
+                    // 2. Delete duplicate customers from Robaws
+                    foreach ($duplicates as $duplicate) {
+                        if (!str_starts_with($duplicate->robaws_client_id, 'NEW_')) {
+                            try {
+                                $customerSyncService->deleteCustomerFromRobaws($duplicate->robaws_client_id);
+                                $deletedFromRobaws++;
+                                
+                                Log::info('Duplicate customer deleted from Robaws', [
+                                    'duplicate_id' => $duplicate->id,
+                                    'robaws_client_id' => $duplicate->robaws_client_id,
+                                    'customer_name' => $duplicate->name,
+                                ]);
+                            } catch (\Exception $e) {
+                                Log::warning('Failed to delete duplicate customer from Robaws', [
+                                    'duplicate_id' => $duplicate->id,
+                                    'robaws_client_id' => $duplicate->robaws_client_id,
+                                    'error' => $e->getMessage(),
+                                ]);
+                            }
+                        }
+                    }
+                    
                     $pushResult = 'synced to Robaws';
                     
                     Log::info('Merged customer pushed to Robaws', [
                         'customer_id' => $primary->id,
                         'robaws_client_id' => $primary->robaws_client_id,
                         'customer_name' => $primary->name,
+                        'duplicates_deleted_from_robaws' => $deletedFromRobaws,
                     ]);
                 } catch (\Exception $e) {
                     Log::warning('Failed to push merged customer to Robaws', [
@@ -96,7 +124,11 @@ class CustomerMergeService
                 $message .= " {$totalIntakes} intake(s) preserved.";
             }
             if ($pushResult) {
-                $message .= " Customer data {$pushResult}.";
+                $message .= " Customer data {$pushResult}";
+                if ($deletedFromRobaws > 0) {
+                    $message .= " and {$deletedFromRobaws} duplicate(s) deleted from Robaws";
+                }
+                $message .= ".";
             }
             
             return [
@@ -105,6 +137,7 @@ class CustomerMergeService
                 'merged_count' => $mergedCount,
                 'intakes_moved' => $totalIntakes,
                 'pushed_to_robaws' => $pushResult === 'synced to Robaws',
+                'deleted_from_robaws' => $deletedFromRobaws,
             ];
             
         } catch (\Exception $e) {
