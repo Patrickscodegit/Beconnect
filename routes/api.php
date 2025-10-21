@@ -16,3 +16,7 @@ Route::get('/intakes/{intake}/status', [IntakeStatusController::class, 'show'])-
 Route::post('/webhooks/robaws/articles', [RobawsWebhookController::class, 'handleArticle'])
     ->middleware('throttle:60,1') // 60 requests per minute
     ->name('webhooks.robaws.articles');
+
+Route::post('/webhooks/robaws/customers', [RobawsWebhookController::class, 'handleCustomer'])
+    ->middleware('throttle:60,1') // 60 requests per minute
+    ->name('webhooks.robaws.customers');

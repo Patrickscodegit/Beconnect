@@ -64,5 +64,22 @@ Schedule::job(new UpdateShippingSchedulesJob())->daily()->at('03:00');
 // Schedule Robaws articles incremental sync daily at 3 AM (only syncs changed articles)
 Schedule::command('robaws:sync-articles --incremental')->dailyAt('03:00');
 
+// Schedule Robaws customers incremental sync daily at 3:30 AM
+Schedule::command('robaws:sync-customers')
+    ->daily()
+    ->at('03:30')
+    ->withoutOverlapping();
+
+// Schedule Robaws customers full sync weekly (safety net)
+Schedule::command('robaws:sync-customers --full')
+    ->weekly()
+    ->sundays()
+    ->at('04:00');
+
+// Schedule push pending customer changes daily at 10 PM
+Schedule::command('robaws:sync-customers --push')
+    ->daily()
+    ->at('22:00');
+
 // Schedule webhook health check hourly (with alerts)
 Schedule::command('robaws:check-webhook-health --alert')->hourly();

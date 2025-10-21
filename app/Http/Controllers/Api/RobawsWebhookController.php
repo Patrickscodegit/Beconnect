@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\RobawsWebhookLog;
 use App\Services\Quotation\RobawsArticlesSyncService;
+use App\Services\Robaws\RobawsCustomerSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -12,7 +13,8 @@ use Illuminate\Support\Facades\Log;
 class RobawsWebhookController extends Controller
 {
     public function __construct(
-        private RobawsArticlesSyncService $syncService
+        private RobawsArticlesSyncService $syncService,
+        private RobawsCustomerSyncService $customerSyncService
     ) {}
     
     public function handleArticle(Request $request)
@@ -85,6 +87,79 @@ class RobawsWebhookController extends Controller
             Log::error('Webhook processing failed', [
                 'event' => $event,
                 'article_id' => $data['id'] ?? null,
+                'error' => $e->getMessage()
+            ]);
+            
+            // Still return 200 to prevent Robaws from retrying
+            // Log the error for manual review
+        }
+        
+        // Step 4: Return 2XX within 2 seconds (Robaws requirement)
+        return response()->json(['status' => 'success'], 200);
+    }
+    
+    public function handleCustomer(Request $request)
+    {
+        // Step 1: Verify signature (CRITICAL for security)
+        if (!$this->verifySignature($request)) {
+            Log::warning('Invalid customer webhook signature', [
+                'ip' => $request->ip(),
+                'signature' => $request->header('Robaws-Signature'),
+                'body' => $request->getContent()
+            ]);
+            return response()->json(['error' => 'Invalid signature'], 401);
+        }
+        
+        // Step 2: Parse event
+        $event = $request->input('event'); // client.created, client.updated
+        $data = $request->input('data'); // Full customer data
+        $webhookId = $request->input('id'); // Webhook event ID
+        
+        Log::info('Customer webhook received', [
+            'event' => $event,
+            'webhook_id' => $webhookId,
+            'client_id' => $data['id'] ?? null
+        ]);
+        
+        // Create webhook log entry
+        $webhookLog = RobawsWebhookLog::create([
+            'event_type' => $event,
+            'robaws_id' => $webhookId,
+            'article_id' => null, // Not applicable for customers
+            'payload' => $request->all(),
+            'status' => 'received',
+        ]);
+        
+        // Step 3: Process customer update (synchronous)
+        $startTime = microtime(true);
+        
+        try {
+            $customer = $this->customerSyncService->processCustomerFromWebhook($data);
+            
+            // Calculate processing duration
+            $duration = (int) ((microtime(true) - $startTime) * 1000); // ms
+            
+            // Mark as processed
+            $webhookLog->update([
+                'status' => 'processed',
+                'processed_at' => now(),
+                'processing_duration_ms' => $duration,
+            ]);
+            
+            Log::info('Customer webhook processed successfully', [
+                'event' => $event,
+                'client_id' => $data['id'] ?? null,
+                'customer_name' => $customer->name,
+                'customer_role' => $customer->role
+            ]);
+            
+        } catch (\Exception $e) {
+            // Mark as failed
+            $webhookLog->markAsFailed($e->getMessage());
+            
+            Log::error('Customer webhook processing failed', [
+                'event' => $event,
+                'client_id' => $data['id'] ?? null,
                 'error' => $e->getMessage()
             ]);
             

@@ -78,6 +78,71 @@ class IntakeResource extends Resource
                 Forms\Components\Section::make('Contact Information (Optional)')
                     ->description('Pre-seed contact information if known. This will be merged with extracted data.')
                     ->schema([
+                        Forms\Components\Select::make('robaws_client_id')
+                            ->label('Customer')
+                            ->searchable()
+                            ->getSearchResultsUsing(fn (string $search) => 
+                                \App\Models\RobawsCustomerCache::where('name', 'like', "%{$search}%")
+                                    ->orWhere('email', 'like', "%{$search}%")
+                                    ->limit(50)
+                                    ->pluck('name', 'robaws_client_id')
+                            )
+                            ->getOptionLabelUsing(fn ($value) => 
+                                \App\Models\RobawsCustomerCache::where('robaws_client_id', $value)->first()?->name
+                            )
+                            ->afterStateUpdated(function ($state, Forms\Set $set) {
+                                // Auto-fill other customer details if a customer is selected
+                                if ($state) {
+                                    $customer = \App\Models\RobawsCustomerCache::where('robaws_client_id', $state)->first();
+                                    if ($customer) {
+                                        $set('customer_name', $customer->name);
+                                        $set('contact_email', $customer->email);
+                                        $set('contact_phone', $customer->phone);
+                                    }
+                                }
+                            })
+                            ->live() // Make it live to trigger afterStateUpdated
+                            ->createOptionForm([ // Allow creating new customer from here
+                                Forms\Components\TextInput::make('name')->required(),
+                                Forms\Components\TextInput::make('email')->email(),
+                                Forms\Components\TextInput::make('phone')->tel(),
+                                Forms\Components\Select::make('role')
+                                    ->options([
+                                        'FORWARDER' => 'FORWARDER',
+                                        'POV' => 'POV',
+                                        'BROKER' => 'BROKER',
+                                        'SHIPPING LINE' => 'SHIPPING LINE',
+                                        'CAR DEALER' => 'CAR DEALER',
+                                        'LUXURY CAR DEALER' => 'LUXURY CAR DEALER',
+                                        'EMBASSY' => 'EMBASSY',
+                                        'TRANSPORT COMPANY' => 'TRANSPORT COMPANY',
+                                        'OEM' => 'OEM',
+                                        'RENTAL' => 'RENTAL',
+                                        'CONSTRUCTION COMPANY' => 'CONSTRUCTION COMPANY',
+                                        'MINING COMPANY' => 'MINING COMPANY',
+                                        'TOURIST' => 'TOURIST',
+                                        'BLACKLISTED' => 'BLACKLISTED',
+                                        'RORO' => 'RORO',
+                                        'HOLLANDICO' => 'HOLLANDICO',
+                                        'UNKNOWN' => 'UNKNOWN',
+                                    ])
+                                    ->required(),
+                            ])
+                            ->createOptionUsing(function (array $data) {
+                                $newCustomer = \App\Models\RobawsCustomerCache::create([
+                                    'robaws_client_id' => 'NEW_' . \Illuminate\Support\Str::uuid(), // Temporary ID
+                                    'name' => $data['name'],
+                                    'email' => $data['email'],
+                                    'phone' => $data['phone'],
+                                    'role' => $data['role'],
+                                    'is_active' => true,
+                                    'last_synced_at' => now(),
+                                ]);
+                                // Optionally push to Robaws immediately or queue
+                                \Illuminate\Support\Facades\Artisan::queue('robaws:sync-customers', ['--client-id' => $newCustomer->robaws_client_id, '--push' => true]);
+                                return $newCustomer->robaws_client_id;
+                            }),
+                            
                         Forms\Components\TextInput::make('customer_name')
                             ->label('Customer Name')
                             ->placeholder('Customer or company name'),
@@ -92,7 +157,7 @@ class IntakeResource extends Resource
                             ->tel()
                             ->placeholder('+1 (555) 123-4567'),
                     ])
-                    ->columns(3)
+                    ->columns(2)
                     ->collapsible(),
                     
                 Forms\Components\Section::make('File Upload')

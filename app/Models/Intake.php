@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Intake extends Model
 {
@@ -69,5 +70,13 @@ class Intake extends Model
     public function quotationRequest(): HasOne
     {
         return $this->hasOne(QuotationRequest::class, 'intake_id');
+    }
+    
+    /**
+     * Get the customer associated with this intake
+     */
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(RobawsCustomerCache::class, 'robaws_client_id', 'robaws_client_id');
     }
 }
