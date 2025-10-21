@@ -187,7 +187,11 @@ class RobawsCustomerCacheResource extends Resource
                         $duplicates = $record->getDuplicates();
                         $allDuplicates = $duplicates->push($record)->sortBy('name');
                         
-                        $duplicateList = $allDuplicates->map(function ($dup, $index) {
+                        // Limit display to first 10 duplicates to avoid overwhelming notifications
+                        $displayDuplicates = $allDuplicates->take(10);
+                        $totalCount = $allDuplicates->count();
+                        
+                        $duplicateList = $displayDuplicates->map(function ($dup, $index) {
                             $details = [($index + 1) . '. ' . $dup->name];
                             if ($dup->email) $details[] = 'Email: ' . $dup->email;
                             if ($dup->city) $details[] = 'City: ' . $dup->city;
@@ -196,9 +200,14 @@ class RobawsCustomerCacheResource extends Resource
                             return implode("\n   ", $details);
                         })->join("\n\n");
                         
+                        $body = $duplicateList;
+                        if ($totalCount > 10) {
+                            $body .= "\n\n... and " . ($totalCount - 10) . " more duplicates";
+                        }
+                        
                         \Filament\Notifications\Notification::make()
-                            ->title("Duplicate Group: '{$record->name}' ({$allDuplicates->count()} customers)")
-                            ->body($duplicateList)
+                            ->title("Duplicate Group: '{$record->name}' ({$totalCount} customers)")
+                            ->body($body)
                             ->info()
                             ->persistent()
                             ->send();
