@@ -176,22 +176,28 @@ class RobawsCustomerCacheResource extends Resource
                     )
                     ->action(function (RobawsCustomerCache $record) {
                         if (!$record->hasDuplicates()) {
+                            \Filament\Notifications\Notification::make()
+                                ->title('No Duplicates')
+                                ->body('This customer has no duplicates.')
+                                ->warning()
+                                ->send();
                             return;
                         }
                         
                         $duplicates = $record->getDuplicates();
                         $allDuplicates = $duplicates->push($record)->sortBy('name');
                         
-                        $duplicateList = $allDuplicates->map(function ($dup) {
-                            $details = [$dup->name];
-                            if ($dup->email) $details[] = $dup->email;
-                            if ($dup->city) $details[] = $dup->city;
-                            $details[] = "ID: {$dup->robaws_client_id}";
-                            return implode(' • ', $details);
-                        })->join("\n");
+                        $duplicateList = $allDuplicates->map(function ($dup, $index) {
+                            $details = [($index + 1) . '. ' . $dup->name];
+                            if ($dup->email) $details[] = 'Email: ' . $dup->email;
+                            if ($dup->city) $details[] = 'City: ' . $dup->city;
+                            if ($dup->role) $details[] = 'Role: ' . $dup->role;
+                            $details[] = 'ID: ' . $dup->robaws_client_id;
+                            return implode("\n   ", $details);
+                        })->join("\n\n");
                         
                         \Filament\Notifications\Notification::make()
-                            ->title("Duplicate Group ({$allDuplicates->count()} customers)")
+                            ->title("Duplicate Group: '{$record->name}' ({$allDuplicates->count()} customers)")
                             ->body($duplicateList)
                             ->info()
                             ->persistent()
