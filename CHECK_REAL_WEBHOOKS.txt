@@ -1,0 +1,37 @@
+🔍 CHECK FOR REAL ROBAWS WEBHOOKS
+Copy and paste these commands on production server to investigate
+
+================================================================================
+STEP 1: SSH into production
+================================================================================
+ssh forge@bconnect.64.226.120.45.nip.io
+
+================================================================================
+STEP 2: Navigate to project
+================================================================================
+cd app.belgaco.be
+
+================================================================================
+STEP 3: Check nginx access logs for ANY webhook POST requests
+================================================================================
+sudo tail -200 /var/log/nginx/access.log | grep "POST.*webhooks/robaws"
+
+================================================================================
+STEP 4: Check Laravel logs for webhook-related activity
+================================================================================
+tail -100 storage/logs/laravel.log | grep -i webhook
+
+================================================================================
+STEP 5: Check all webhook logs in database (not just last 5)
+================================================================================
+php artisan tinker --execute="\$logs = \App\Models\RobawsWebhookLog::orderBy('created_at', 'desc')->get(['id', 'event_type', 'robaws_id', 'status', 'created_at']); echo 'Total webhook logs: ' . \$logs->count() . PHP_EOL . PHP_EOL; \$logs->each(function(\$log) { echo \"[\$log->id] \$log->event_type - \$log->status - \" . \$log->created_at->format('Y-m-d H:i:s') . \" - Robaws ID: \$log->robaws_id\" . PHP_EOL; });"
+
+================================================================================
+STEP 6: Check webhook configuration in database
+================================================================================
+php artisan tinker --execute="DB::table('webhook_configurations')->where('provider', 'robaws')->get(['id', 'webhook_id', 'url', 'events', 'is_active', 'registered_at'])->each(function(\$config) { echo 'ID: ' . \$config->id . PHP_EOL; echo 'Webhook ID: ' . \$config->webhook_id . PHP_EOL; echo 'URL: ' . \$config->url . PHP_EOL; echo 'Events: ' . \$config->events . PHP_EOL; echo 'Active: ' . (\$config->is_active ? 'Yes' : 'No') . PHP_EOL; echo 'Registered: ' . \$config->registered_at . PHP_EOL; });"
+
+================================================================================
+After running, paste the output here!
+================================================================================
+

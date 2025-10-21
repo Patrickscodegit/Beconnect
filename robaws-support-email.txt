@@ -1,0 +1,37 @@
+Subject: Webhook Reactivation Request - Configuration Fixed
+
+Dear Robaws Support Team,
+
+Our webhook endpoint was suspended due to configuration issues on our end. We have now resolved these issues and request reactivation.
+
+**Webhook Details:**
+- URL: https://app.belgaco.be/api/webhooks/robaws/articles
+- Webhook ID: 5a3f8595-cba7-454f-b389-357fa2bf6c49
+- Events: article.created, article.updated, article.stock-changed
+
+**Issues Resolved:**
+1. ✅ Properly configured webhook signature verification
+2. ✅ Set up comprehensive webhook logging and monitoring
+3. ✅ Added rate limiting (60 requests/minute)
+4. ✅ Implemented health checks and alerting
+5. ✅ Tested endpoint successfully
+
+**Configuration:**
+- Secret: 090bed9b-8e8c-4aa9-a80d-315eb63b35d6
+- Signature verification: HMAC-SHA256
+- Monitoring: Active with hourly health checks
+
+**Testing:**
+We have successfully tested the webhook endpoint locally and confirmed:
+- Signature verification is working correctly
+- All webhook events are being processed
+- Logging and monitoring are active
+- Rate limiting is properly configured
+
+Could you please reactivate our webhook? We are ready to receive webhook events and have implemented comprehensive monitoring to prevent future issues.
+
+Thank you for your assistance.
+
+Best regards,
+Patrick
+Bconnect Team

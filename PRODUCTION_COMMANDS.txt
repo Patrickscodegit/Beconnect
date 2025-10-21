@@ -1,0 +1,30 @@
+🚨 PRODUCTION SERVER COMMANDS - Copy and paste these in order:
+
+# 1. Navigate to project directory
+cd app.belgaco.be
+
+# 2. Pull latest code (if not already deployed)
+git pull origin main
+
+# 3. Run migrations to ensure webhook tables exist
+php artisan migrate --force
+
+# 4. Register webhook with Robaws (CRITICAL - this creates the database record)
+php artisan robaws:register-webhook --url=https://app.belgaco.be/api/webhooks/robaws/articles
+
+# 5. Test the webhook endpoint
+php artisan robaws:test-webhook --url=https://app.belgaco.be/api/webhooks/robaws/articles
+
+# 6. Check webhook health
+php artisan robaws:check-webhook-health
+
+# 7. Clear and cache config
+php artisan config:clear
+php artisan config:cache
+
+# 8. Restart queue workers
+php artisan queue:restart
+
+# Done! ✅
+# After this, contact Robaws support to reactivate the webhook
+

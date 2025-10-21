@@ -1,0 +1,37 @@
+🧪 PRODUCTION WEBHOOK TEST COMMANDS
+Copy and paste these commands one by one on your production server
+
+================================================================================
+STEP 1: SSH into production server
+================================================================================
+ssh forge@bconnect.64.226.120.45.nip.io
+
+================================================================================
+STEP 2: Navigate to project directory
+================================================================================
+cd app.belgaco.be
+
+================================================================================
+STEP 3: Check webhook logs in production database
+================================================================================
+php artisan tinker --execute="echo 'Total webhooks: ' . \App\Models\RobawsWebhookLog::count() . PHP_EOL; echo 'Last 24h: ' . \App\Models\RobawsWebhookLog::where('created_at', '>=', now()->subDay())->count() . PHP_EOL; echo PHP_EOL . 'Recent webhooks:' . PHP_EOL; \App\Models\RobawsWebhookLog::latest()->limit(5)->get(['id', 'event_type', 'status', 'created_at', 'robaws_id'])->each(function(\$log) { echo \"  [\$log->id] \$log->event_type - \$log->status (\" . \$log->created_at->format('Y-m-d H:i:s') . \") - Robaws ID: \$log->robaws_id\" . PHP_EOL; });"
+
+================================================================================
+STEP 4: Check webhook health
+================================================================================
+php artisan robaws:check-webhook-health
+
+================================================================================
+STEP 5: Test webhook endpoint with production secret
+================================================================================
+php artisan robaws:test-webhook --url=https://app.belgaco.be/api/webhooks/robaws/articles
+
+================================================================================
+STEP 6: Check if webhooks are being received from Robaws
+================================================================================
+php artisan tinker --execute="echo 'Webhook Configuration:' . PHP_EOL; \$config = DB::table('webhook_configurations')->where('provider', 'robaws')->first(); echo 'Webhook ID: ' . \$config->webhook_id . PHP_EOL; echo 'URL: ' . \$config->url . PHP_EOL; echo 'Active: ' . (\$config->is_active ? 'Yes' : 'No') . PHP_EOL; echo 'Registered: ' . \$config->registered_at . PHP_EOL;"
+
+================================================================================
+After running these commands, paste the output here so I can analyze the results!
+================================================================================
+
