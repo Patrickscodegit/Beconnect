@@ -300,10 +300,24 @@ class RobawsArticlesSyncService
         }
         
         // Upsert the article with all metadata
-        RobawsArticleCache::updateOrCreate(
+        $article = RobawsArticleCache::updateOrCreate(
             ['robaws_article_id' => $data['robaws_article_id']],
             $data
         );
+        
+        // Sync composite items as relational links if this is a parent article
+        if (!empty($data['composite_items']) && $data['is_parent_article']) {
+            try {
+                $this->syncCompositeItemsAsRelations($article, $data['composite_items']);
+            } catch (\Exception $e) {
+                Log::warning('Failed to sync composite items as relations', [
+                    'article_id' => $article->robaws_article_id,
+                    'article_name' => $article->article_name,
+                    'error' => $e->getMessage()
+                ]);
+                // Don't fail the whole sync if composite items fail
+            }
+        }
     }
 
     /**
@@ -695,17 +709,135 @@ class RobawsArticlesSyncService
         foreach ($compositeItems as $item) {
             $items[] = [
                 'id' => $item['id'] ?? null,
+                'article_id' => $item['articleId'] ?? null,
                 'name' => $item['name'] ?? $item['description'] ?? null,
                 'article_number' => $item['articleNumber'] ?? null,
                 'quantity' => $item['quantity'] ?? 1,
                 'unit_type' => $item['unitType'] ?? null,
                 'cost_price' => $item['costPrice'] ?? null,
-                'cost_type' => $item['costType'] ?? $item['type'] ?? null,
+                'cost_type' => $item['costType'] ?? $item['type'] ?? 'Material',
                 'description' => $item['description'] ?? null,
+                'is_required' => $item['isRequired'] ?? true,
             ];
         }
         
         return $items;
+    }
+    
+    /**
+     * Sync composite items as relational links for offer creation
+     * Creates or updates the article_children pivot table
+     * 
+     * @param \App\Models\RobawsArticleCache $parent
+     * @param array $compositeItems
+     * @return int Number of composite items synced
+     */
+    protected function syncCompositeItemsAsRelations(RobawsArticleCache $parent, array $compositeItems): int
+    {
+        if (empty($compositeItems)) {
+            return 0;
+        }
+        
+        $syncedCount = 0;
+        $pivotData = [];
+        
+        foreach ($compositeItems as $index => $itemData) {
+            $child = $this->findOrCreateChildArticle($itemData);
+            
+            if ($child) {
+                // Prepare pivot data for sync
+                $pivotData[$child->id] = [
+                    'sort_order' => $index + 1,
+                    'is_required' => $itemData['is_required'] ?? true,
+                    'is_conditional' => false,
+                    'cost_type' => $itemData['cost_type'] ?? 'Material',
+                    'default_quantity' => $itemData['quantity'] ?? 1.0,
+                    'default_cost_price' => $itemData['cost_price'] ?? null,
+                    'unit_type' => $itemData['unit_type'] ?? null,
+                ];
+                
+                $syncedCount++;
+            }
+        }
+        
+        // Sync all at once (more efficient than attach in loop)
+        if (!empty($pivotData)) {
+            $parent->children()->sync($pivotData);
+            
+            Log::info('Synced composite items as relations', [
+                'parent_article_id' => $parent->robaws_article_id,
+                'parent_name' => $parent->article_name,
+                'children_count' => $syncedCount
+            ]);
+        }
+        
+        return $syncedCount;
+    }
+    
+    /**
+     * Find or create a child article from composite item data
+     * 
+     * @param array $itemData
+     * @return \App\Models\RobawsArticleCache|null
+     */
+    protected function findOrCreateChildArticle(array $itemData): ?RobawsArticleCache
+    {
+        // Try to find by Robaws article ID first
+        $articleId = $itemData['article_id'] ?? $itemData['id'] ?? null;
+        
+        if ($articleId) {
+            $child = RobawsArticleCache::where('robaws_article_id', $articleId)->first();
+            
+            if ($child) {
+                return $child;
+            }
+        }
+        
+        // Try to find by article number
+        if (!empty($itemData['article_number'])) {
+            $child = RobawsArticleCache::where('article_number', $itemData['article_number'])->first();
+            
+            if ($child) {
+                return $child;
+            }
+        }
+        
+        // Try to find by name (for existing surcharges)
+        $name = $itemData['name'] ?? null;
+        if ($name) {
+            $child = RobawsArticleCache::where('article_name', $name)
+                ->where('is_surcharge', true)
+                ->first();
+            
+            if ($child) {
+                return $child;
+            }
+        }
+        
+        // Create new surcharge article if not found
+        try {
+            return RobawsArticleCache::create([
+                'robaws_article_id' => $articleId ?? ('COMPOSITE_' . uniqid()),
+                'article_number' => $itemData['article_number'] ?? null,
+                'article_name' => $name ?? 'Unnamed Surcharge',
+                'description' => $itemData['description'] ?? '',
+                'category' => 'miscellaneous',
+                'unit_price' => $itemData['cost_price'] ?? 0,
+                'cost_price' => $itemData['cost_price'] ?? 0,
+                'unit_type' => $itemData['unit_type'] ?? null,
+                'currency' => 'EUR',
+                'is_surcharge' => true,
+                'is_active' => true,
+                'last_synced_at' => now(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to create child article', [
+                'item_data' => $itemData,
+                'error' => $e->getMessage()
+            ]);
+            
+            return null;
+        }
     }
 }
 
