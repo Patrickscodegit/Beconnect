@@ -237,7 +237,7 @@ class RobawsArticlesSyncService
             'currency' => $article['currency'] ?? 'EUR',
             'unit_type' => $article['unit'] ?? 'piece',
             'is_active' => $article['active'] ?? true,
-            'is_parent_article' => $article['custom_fields']['parent_item'] ?? false,
+            'is_parent_article' => $this->extractParentItemFromArticle($article),
             'is_surcharge' => false,
             'requires_manual_review' => false,
             'min_quantity' => 1,
@@ -612,6 +612,32 @@ class RobawsArticlesSyncService
         }
         
         return null;
+    }
+    
+    /**
+     * Extract Parent Item boolean from article data
+     * Handles both API format (custom_fields) and webhook format (extraFields)
+     */
+    protected function extractParentItemFromArticle(array $article): bool
+    {
+        // Try custom_fields first (API format)
+        if (isset($article['custom_fields']['parent_item'])) {
+            return (bool) $article['custom_fields']['parent_item'];
+        }
+        
+        // Try extraFields (webhook format)
+        // The field ID is C965754A-4523-4916-A127-3522DE1A7001
+        if (isset($article['extraFields']['C965754A-4523-4916-A127-3522DE1A7001']['booleanValue'])) {
+            return (bool) $article['extraFields']['C965754A-4523-4916-A127-3522DE1A7001']['booleanValue'];
+        }
+        
+        // Try alternative webhook format (extraFields with parent_item key)
+        if (isset($article['extraFields']['parent_item'])) {
+            $field = $article['extraFields']['parent_item'];
+            return (bool) ($field['booleanValue'] ?? $field['value'] ?? false);
+        }
+        
+        return false;
     }
 }
 
