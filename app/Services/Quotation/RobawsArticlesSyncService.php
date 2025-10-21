@@ -678,10 +678,12 @@ class RobawsArticlesSyncService
      */
     protected function extractCompositeItems(array $article): ?array
     {
-        // Check if article has composite items/lines
+        // Check multiple possible field names for composite items
         $compositeItems = $article['compositeItems'] ?? 
                           $article['lines'] ?? 
                           $article['articleLines'] ?? 
+                          $article['additionalItems'] ?? 
+                          $article['items'] ?? 
                           null;
         
         if (empty($compositeItems) || !is_array($compositeItems)) {
