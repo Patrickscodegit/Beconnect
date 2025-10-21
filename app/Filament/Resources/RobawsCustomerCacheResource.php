@@ -174,7 +174,7 @@ class RobawsCustomerCacheResource extends Resource
                     ->tooltip(fn (RobawsCustomerCache $record) => 
                         $record->hasDuplicates() ? 'Click to view duplicates' : null
                     )
-                    ->action(function (RobawsCustomerCache $record) {
+                    ->action(function (RobawsCustomerCache $record, $livewire) {
                         if (!$record->hasDuplicates()) {
                             \Filament\Notifications\Notification::make()
                                 ->title('No Duplicates')
@@ -186,6 +186,15 @@ class RobawsCustomerCacheResource extends Resource
                         
                         $duplicates = $record->getDuplicates();
                         $allDuplicates = $duplicates->push($record)->sortBy('name');
+                        
+                        // Get all IDs in this duplicate group
+                        $duplicateIds = $allDuplicates->pluck('id')->toArray();
+                        
+                        // Filter the table to show only these duplicates
+                        $livewire->tableFilters['duplicate_group'] = [
+                            'isActive' => true,
+                            'state' => $duplicateIds
+                        ];
                         
                         // Limit display to first 10 duplicates to avoid overwhelming notifications
                         $displayDuplicates = $allDuplicates->take(10);
@@ -207,7 +216,7 @@ class RobawsCustomerCacheResource extends Resource
                         
                         \Filament\Notifications\Notification::make()
                             ->title("Duplicate Group: '{$record->name}' ({$totalCount} customers)")
-                            ->body($body)
+                            ->body($body . "\n\n✅ Table filtered to show only these duplicates")
                             ->info()
                             ->persistent()
                             ->send();
@@ -268,6 +277,15 @@ class RobawsCustomerCacheResource extends Resource
                     ->query(fn ($query) => $query->withDuplicates())
                     ->label('Has Duplicates')
                     ->toggle(),
+                Tables\Filters\Filter::make('duplicate_group')
+                    ->query(function ($query, array $data) {
+                        if (isset($data['state']) && is_array($data['state']) && !empty($data['state'])) {
+                            return $query->whereIn('id', $data['state']);
+                        }
+                        return $query;
+                    })
+                    ->label('Duplicate Group')
+                    ->hidden(), // Hidden filter, only used programmatically
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
