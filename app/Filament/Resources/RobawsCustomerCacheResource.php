@@ -187,13 +187,9 @@ class RobawsCustomerCacheResource extends Resource
                         $duplicates = $record->getDuplicates();
                         $allDuplicates = $duplicates->push($record)->sortBy('name');
                         
-                        // Get all IDs in this duplicate group
-                        $duplicateIds = $allDuplicates->pluck('id')->toArray();
-                        
-                        // Filter the table to show only these duplicates
-                        $livewire->tableFilters['duplicate_group'] = [
-                            'isActive' => true,
-                            'state' => $duplicateIds
+                        // Apply filter using the customer name
+                        $livewire->tableFilters['duplicate_group_name'] = [
+                            'value' => $record->name
                         ];
                         
                         // Limit display to first 10 duplicates to avoid overwhelming notifications
@@ -216,7 +212,7 @@ class RobawsCustomerCacheResource extends Resource
                         
                         \Filament\Notifications\Notification::make()
                             ->title("Duplicate Group: '{$record->name}' ({$totalCount} customers)")
-                            ->body($body . "\n\n✅ Table filtered to show only these duplicates")
+                            ->body($body . "\n\n✅ Table filtered to show only these duplicates. Clear the 'Duplicate Group' filter to see all customers.")
                             ->info()
                             ->persistent()
                             ->send();
@@ -277,15 +273,23 @@ class RobawsCustomerCacheResource extends Resource
                     ->query(fn ($query) => $query->withDuplicates())
                     ->label('Has Duplicates')
                     ->toggle(),
-                Tables\Filters\Filter::make('duplicate_group')
+                Tables\Filters\Filter::make('duplicate_group_name')
+                    ->form([
+                        Forms\Components\Hidden::make('value'),
+                    ])
                     ->query(function ($query, array $data) {
-                        if (isset($data['state']) && is_array($data['state']) && !empty($data['state'])) {
-                            return $query->whereIn('id', $data['state']);
+                        if (isset($data['value']) && !empty($data['value'])) {
+                            return $query->where('name', $data['value']);
                         }
                         return $query;
                     })
                     ->label('Duplicate Group')
-                    ->hidden(), // Hidden filter, only used programmatically
+                    ->indicateUsing(function (array $data) {
+                        if (isset($data['value']) && !empty($data['value'])) {
+                            return 'Showing duplicate group: ' . $data['value'];
+                        }
+                        return null;
+                    }),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
