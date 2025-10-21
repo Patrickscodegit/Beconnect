@@ -172,8 +172,31 @@ class RobawsCustomerCacheResource extends Resource
                     ->color('warning')
                     ->icon('heroicon-o-document-duplicate')
                     ->tooltip(fn (RobawsCustomerCache $record) => 
-                        $record->hasDuplicates() ? 'This customer has duplicates' : null
-                    ),
+                        $record->hasDuplicates() ? 'Click to view duplicates' : null
+                    )
+                    ->action(function (RobawsCustomerCache $record) {
+                        if (!$record->hasDuplicates()) {
+                            return;
+                        }
+                        
+                        $duplicates = $record->getDuplicates();
+                        $allDuplicates = $duplicates->push($record)->sortBy('name');
+                        
+                        $duplicateList = $allDuplicates->map(function ($dup) {
+                            $details = [$dup->name];
+                            if ($dup->email) $details[] = $dup->email;
+                            if ($dup->city) $details[] = $dup->city;
+                            $details[] = "ID: {$dup->robaws_client_id}";
+                            return implode(' • ', $details);
+                        })->join("\n");
+                        
+                        \Filament\Notifications\Notification::make()
+                            ->title("Duplicate Group ({$allDuplicates->count()} customers)")
+                            ->body($duplicateList)
+                            ->info()
+                            ->persistent()
+                            ->send();
+                    }),
                 Tables\Columns\TextColumn::make('last_synced_at')
                     ->dateTime()
                     ->sortable()
