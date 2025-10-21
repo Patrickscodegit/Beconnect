@@ -33,11 +33,17 @@ class CustomerMergeService
             
             $mergedCount = 0;
             $totalIntakes = 0;
+            $duplicateRobawsIds = []; // Store Robaws IDs before deletion
             
             foreach ($duplicates as $duplicate) {
                 // Don't merge into itself
                 if ($duplicate->id === $primary->id) {
                     continue;
+                }
+                
+                // Store Robaws ID before deletion
+                if (!str_starts_with($duplicate->robaws_client_id, 'NEW_')) {
+                    $duplicateRobawsIds[] = $duplicate->robaws_client_id;
                 }
                 
                 // Merge non-null fields from duplicate into primary
@@ -77,25 +83,20 @@ class CustomerMergeService
                     // 1. Update the primary customer in Robaws
                     $customerSyncService->pushCustomerToRobaws($primary);
                     
-                    // 2. Delete duplicate customers from Robaws
-                    foreach ($duplicates as $duplicate) {
-                        if (!str_starts_with($duplicate->robaws_client_id, 'NEW_')) {
-                            try {
-                                $customerSyncService->deleteCustomerFromRobaws($duplicate->robaws_client_id);
-                                $deletedFromRobaws++;
-                                
-                                Log::info('Duplicate customer deleted from Robaws', [
-                                    'duplicate_id' => $duplicate->id,
-                                    'robaws_client_id' => $duplicate->robaws_client_id,
-                                    'customer_name' => $duplicate->name,
-                                ]);
-                            } catch (\Exception $e) {
-                                Log::warning('Failed to delete duplicate customer from Robaws', [
-                                    'duplicate_id' => $duplicate->id,
-                                    'robaws_client_id' => $duplicate->robaws_client_id,
-                                    'error' => $e->getMessage(),
-                                ]);
-                            }
+                    // 2. Delete duplicate customers from Robaws using stored IDs
+                    foreach ($duplicateRobawsIds as $robawsId) {
+                        try {
+                            $customerSyncService->deleteCustomerFromRobaws($robawsId);
+                            $deletedFromRobaws++;
+                            
+                            Log::info('Duplicate customer deleted from Robaws', [
+                                'robaws_client_id' => $robawsId,
+                            ]);
+                        } catch (\Exception $e) {
+                            Log::warning('Failed to delete duplicate customer from Robaws', [
+                                'robaws_client_id' => $robawsId,
+                                'error' => $e->getMessage(),
+                            ]);
                         }
                     }
                     
