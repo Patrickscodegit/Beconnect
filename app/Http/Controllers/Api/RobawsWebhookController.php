@@ -101,7 +101,7 @@ class RobawsWebhookController extends Controller
     public function handleCustomer(Request $request)
     {
         // Step 1: Verify signature (CRITICAL for security)
-        if (!$this->verifySignature($request)) {
+        if (!$this->verifySignature($request, 'robaws_customers')) {
             Log::warning('Invalid customer webhook signature', [
                 'ip' => $request->ip(),
                 'signature' => $request->header('Robaws-Signature'),
@@ -171,7 +171,7 @@ class RobawsWebhookController extends Controller
         return response()->json(['status' => 'success'], 200);
     }
     
-    private function verifySignature(Request $request): bool
+    private function verifySignature(Request $request, string $provider = 'robaws'): bool
     {
         $signatureHeader = $request->header('Robaws-Signature');
         
@@ -181,12 +181,12 @@ class RobawsWebhookController extends Controller
         
         // Get secret from database
         $config = DB::table('webhook_configurations')
-            ->where('provider', 'robaws')
+            ->where('provider', $provider)
             ->where('is_active', true)
             ->first();
             
         if (!$config) {
-            Log::error('No active webhook configuration found');
+            Log::error('No active webhook configuration found', ['provider' => $provider]);
             return false;
         }
         
