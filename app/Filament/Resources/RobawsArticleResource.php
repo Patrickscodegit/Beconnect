@@ -531,7 +531,7 @@ class RobawsArticleResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            RelationManagers\CompositeItemsRelationManager::class,
         ];
     }
     
