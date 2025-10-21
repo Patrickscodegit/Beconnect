@@ -20,6 +20,7 @@ return [
     'allowed_methods' => ['*'],
 
     'allowed_origins' => [
+        'https://app.belgaco.be',
         'https://bconnect.64.226.120.45.nip.io',
         'http://bconnect.64.226.120.45.nip.io',
         'https://localhost',
