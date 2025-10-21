@@ -196,6 +196,59 @@ class RobawsArticleResource extends Resource
                 Tables\Columns\TextColumn::make('unit_price')
                     ->money('EUR')
                     ->sortable(),
+                    
+                Tables\Columns\TextColumn::make('sales_name')
+                    ->label('Sales Name')
+                    ->searchable()
+                    ->limit(40)
+                    ->toggleable(isToggledHiddenByDefault: true),
+                    
+                Tables\Columns\TextColumn::make('brand')
+                    ->searchable()
+                    ->badge()
+                    ->color('info')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                    
+                Tables\Columns\TextColumn::make('article_number')
+                    ->label('Article #')
+                    ->searchable()
+                    ->toggleable(),
+                    
+                Tables\Columns\TextColumn::make('barcode')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                    
+                Tables\Columns\TextColumn::make('sale_price')
+                    ->label('Sale Price')
+                    ->money('EUR')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                    
+                Tables\Columns\TextColumn::make('cost_price')
+                    ->label('Cost Price')
+                    ->money('EUR')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                    
+                Tables\Columns\TextColumn::make('weight_kg')
+                    ->label('Weight (kg)')
+                    ->numeric(2)
+                    ->toggleable(isToggledHiddenByDefault: true),
+                    
+                Tables\Columns\IconColumn::make('stock_article')
+                    ->label('Stock')
+                    ->boolean()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                    
+                Tables\Columns\IconColumn::make('wappy')
+                    ->boolean()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                    
+                Tables\Columns\TextColumn::make('composite_items')
+                    ->label('Composite Items')
+                    ->formatStateUsing(fn ($state) => $state ? count($state) . ' items' : '-')
+                    ->badge()
+                    ->color(fn ($state) => $state ? 'success' : 'gray')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 
                 Tables\Columns\BadgeColumn::make('shipping_line')
                     ->label('Shipping Line')
@@ -313,6 +366,13 @@ class RobawsArticleResource extends Resource
                     ->toggleable(),
             ])
             ->filters([
+                Tables\Filters\SelectFilter::make('brand')
+                    ->label('Brand')
+                    ->options(fn () => RobawsArticleCache::distinct()
+                        ->whereNotNull('brand')
+                        ->pluck('brand', 'brand')
+                        ->toArray()),
+                        
                 Tables\Filters\SelectFilter::make('shipping_line')
                     ->label('Shipping Line')
                     ->options(fn () => RobawsArticleCache::distinct()

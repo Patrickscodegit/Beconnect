@@ -233,11 +233,40 @@ class RobawsArticlesSyncService
             'article_name' => $articleName,
             'description' => $article['description'] ?? $article['notes'] ?? null,
             'category' => $article['category'] ?? 'general',
-            'unit_price' => $article['price'] ?? $article['unitPrice'] ?? 0,
+            'unit_price' => $article['price'] ?? $article['unitPrice'] ?? $article['salePrice'] ?? 0,
             'currency' => $article['currency'] ?? 'EUR',
-            'unit_type' => $article['unit'] ?? 'piece',
+            'unit_type' => $article['unit'] ?? $article['unitType'] ?? 'piece',
             'is_active' => $article['active'] ?? true,
             'is_parent_article' => $this->extractParentItemFromArticle($article),
+            
+            // Standard Robaws fields - Sales & Display
+            'sales_name' => $article['saleName'] ?? null,
+            'brand' => $article['brand'] ?? null,
+            'barcode' => $article['barcode'] ?? null,
+            'article_number' => $article['articleNumber'] ?? null,
+            
+            // Detailed pricing
+            'sale_price' => $article['salePrice'] ?? null,
+            'cost_price' => $article['costPrice'] ?? null,
+            'sale_price_strategy' => $article['salePriceStrategy'] ?? null,
+            'cost_price_strategy' => $article['costPriceStrategy'] ?? null,
+            'margin' => $article['margin'] ?? null,
+            
+            // Product attributes
+            'weight_kg' => $article['weightKg'] ?? $article['weight'] ?? null,
+            'vat_tariff_id' => $article['vatTariffId'] ?? null,
+            'stock_article' => $article['stockArticle'] ?? false,
+            'time_operation' => $article['timeOperation'] ?? false,
+            'installation' => $article['installation'] ?? false,
+            'wappy' => $article['wappy'] ?? false,
+            
+            // Images & media
+            'image_id' => $article['imageId'] ?? null,
+            
+            // Composite items (store as JSON)
+            'composite_items' => $this->extractCompositeItems($article),
+            
+            // Existing metadata
             'is_surcharge' => false,
             'requires_manual_review' => false,
             'min_quantity' => 1,
@@ -638,6 +667,43 @@ class RobawsArticlesSyncService
         }
         
         return false;
+    }
+    
+    /**
+     * Extract composite items/surcharges from article data
+     * Stores the structure from Robaws without creating child relationships
+     * 
+     * @param array $article
+     * @return array|null
+     */
+    protected function extractCompositeItems(array $article): ?array
+    {
+        // Check if article has composite items/lines
+        $compositeItems = $article['compositeItems'] ?? 
+                          $article['lines'] ?? 
+                          $article['articleLines'] ?? 
+                          null;
+        
+        if (empty($compositeItems) || !is_array($compositeItems)) {
+            return null;
+        }
+        
+        // Extract relevant data from each composite item
+        $items = [];
+        foreach ($compositeItems as $item) {
+            $items[] = [
+                'id' => $item['id'] ?? null,
+                'name' => $item['name'] ?? $item['description'] ?? null,
+                'article_number' => $item['articleNumber'] ?? null,
+                'quantity' => $item['quantity'] ?? 1,
+                'unit_type' => $item['unitType'] ?? null,
+                'cost_price' => $item['costPrice'] ?? null,
+                'cost_type' => $item['costType'] ?? $item['type'] ?? null,
+                'description' => $item['description'] ?? null,
+            ];
+        }
+        
+        return $items;
     }
 }
 

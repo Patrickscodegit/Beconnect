@@ -47,6 +47,24 @@ class RobawsArticleCache extends Model
         // Port information in schedule format
         'pol_code',
         'pod_name',
+        // Standard Robaws article fields
+        'sales_name',
+        'brand',
+        'barcode',
+        'article_number',
+        'sale_price',
+        'cost_price',
+        'sale_price_strategy',
+        'cost_price_strategy',
+        'margin',
+        'weight_kg',
+        'vat_tariff_id',
+        'stock_article',
+        'time_operation',
+        'installation',
+        'wappy',
+        'image_id',
+        'composite_items',
     ];
 
     protected $casts = [
@@ -68,6 +86,16 @@ class RobawsArticleCache extends Model
         'is_parent_item' => 'boolean',
         'update_date' => 'date',
         'validity_date' => 'date',
+        // Standard Robaws field casts
+        'sale_price' => 'decimal:2',
+        'cost_price' => 'decimal:2',
+        'margin' => 'decimal:2',
+        'weight_kg' => 'decimal:2',
+        'stock_article' => 'boolean',
+        'time_operation' => 'boolean',
+        'installation' => 'boolean',
+        'wappy' => 'boolean',
+        'composite_items' => 'array',
     ];
 
     protected static function boot()
