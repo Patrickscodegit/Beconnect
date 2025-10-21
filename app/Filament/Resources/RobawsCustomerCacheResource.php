@@ -393,9 +393,13 @@ class RobawsCustomerCacheResource extends Resource
                             return [
                                 Forms\Components\Radio::make('primary_id')
                                     ->label('Keep this record as primary')
-                                    ->options($records->mapWithKeys(fn ($record) => [
-                                        $record->id => $record->name_with_details
-                                    ]))
+                                    ->options($records->mapWithKeys(function ($record) {
+                                        $details = [$record->name];
+                                        if ($record->email) $details[] = $record->email;
+                                        if ($record->city) $details[] = $record->city;
+                                        $details[] = "ID: {$record->robaws_client_id}";
+                                        return [$record->id => implode(' • ', $details)];
+                                    }))
                                     ->default($suggested->id)
                                     ->required()
                                     ->helperText('The suggested record has the most complete data and/or intakes.'),
