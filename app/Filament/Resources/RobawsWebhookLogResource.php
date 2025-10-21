@@ -108,7 +108,7 @@ class RobawsWebhookLogResource extends Resource
                     ->label('Error')
                     ->limit(50)
                     ->tooltip(fn ($record) => $record->error_message)
-                    ->visible(fn () => request()->get('tableFilters')['status']['value'] === 'failed'),
+                    ->toggleable(isToggledHiddenByDefault: true),
                 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Received')
