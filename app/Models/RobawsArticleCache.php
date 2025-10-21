@@ -104,7 +104,7 @@ class RobawsArticleCache extends Model
 
         static::creating(function ($article) {
             if (empty($article->article_code)) {
-                $article->article_code = static::generateArticleCode($article->article_name);
+                $article->article_code = $article->article_name ? substr($article->article_name, 0, 20) : 'UNKNOWN';
             }
         });
         
