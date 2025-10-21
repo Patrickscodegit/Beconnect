@@ -163,6 +163,45 @@ class ListRobawsArticles extends ListRecords
                     }
                 }),
                 
+            Actions\Action::make('syncExtraFields')
+                ->label('Sync Extra Fields')
+                ->icon('heroicon-o-tag')
+                ->color('info')
+                ->requiresConfirmation()
+                ->modalHeading('Sync Extra Fields from Robaws API?')
+                ->modalDescription(function () use ($dailyRemaining, $articleCount) {
+                    $estimatedCost = $articleCount; // One API call per article
+                    $estimatedTime = ceil($articleCount * 2 / 60); // ~2 seconds per article
+                    $safeToProcess = $dailyRemaining > ($estimatedCost + 500);
+                    $status = $safeToProcess ? '✅ Safe to proceed' : '⚠️ Low quota - proceed with caution';
+                    
+                    return "**Estimated API Cost:** ~{$estimatedCost} API calls (1 per article)\n**API Quota Remaining:** " . number_format($dailyRemaining) . "\n**Status:** {$status}\n**Duration:** ~{$estimatedTime} minutes\n\n**What this does:**\nFetches extra fields from Robaws API for ALL {$articleCount} articles:\n• Parent Item status (checkbox)\n• Shipping Line\n• Service Type\n• POL Terminal\n• Update/Validity dates\n• Article Info\n\n**Use this for:** Syncing custom fields, parent items, extra metadata\n\n**⚠️ This is a long-running operation!** It will run in the background via queue.";
+                })
+                ->modalSubmitActionLabel('Yes, sync extra fields')
+                ->action(function () {
+                    try {
+                        // Run in background via Artisan queue
+                        \Illuminate\Support\Facades\Artisan::queue('robaws:sync-extra-fields', [
+                            '--batch-size' => 50,
+                            '--delay' => 2
+                        ]);
+                        
+                        Notification::make()
+                            ->title('Extra fields sync queued!')
+                            ->body('Syncing parent items, shipping lines, and extra fields in the background. This will take 30-60 minutes. You can close this page.')
+                            ->success()
+                            ->duration(10000)
+                            ->send();
+                            
+                    } catch (\Exception $e) {
+                        Notification::make()
+                            ->title('Failed to queue extra fields sync')
+                            ->body($e->getMessage())
+                            ->danger()
+                            ->send();
+                    }
+                }),
+                
             Actions\CreateAction::make(),
         ];
     }
