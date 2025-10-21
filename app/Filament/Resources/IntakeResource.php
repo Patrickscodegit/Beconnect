@@ -82,10 +82,20 @@ class IntakeResource extends Resource
                             ->label('Customer')
                             ->searchable()
                             ->getSearchResultsUsing(fn (string $search) => 
-                                \App\Models\RobawsCustomerCache::where('name', 'like', "%{$search}%")
-                                    ->orWhere('email', 'like', "%{$search}%")
-                                    ->limit(50)
-                                    ->pluck('name', 'robaws_client_id')
+                                \App\Models\RobawsCustomerCache::where(function ($query) use ($search) {
+                                    $query->where('name', 'ilike', "%{$search}%")
+                                          ->orWhere('email', 'ilike', "%{$search}%")
+                                          ->orWhere('city', 'ilike', "%{$search}%")
+                                          ->orWhere('robaws_client_id', 'like', "%{$search}%");
+                                })
+                                ->limit(50)
+                                ->get()
+                                ->mapWithKeys(fn ($customer) => [
+                                    $customer->robaws_client_id => $customer->name . 
+                                        ($customer->email ? " ({$customer->email})" : '') . 
+                                        ($customer->city ? " - {$customer->city}" : '') .
+                                        " [ID: {$customer->robaws_client_id}]"
+                                ])
                             )
                             ->getOptionLabelUsing(fn ($value) => 
                                 \App\Models\RobawsCustomerCache::where('robaws_client_id', $value)->first()?->name
