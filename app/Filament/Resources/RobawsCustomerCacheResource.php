@@ -325,7 +325,7 @@ class RobawsCustomerCacheResource extends Resource
                     ->action(function () {
                         $duplicates = RobawsCustomerCache::select('name', DB::raw('count(*) as count'))
                             ->groupBy('name')
-                            ->having('count', '>', 1)
+                            ->havingRaw('count(*) > 1')
                             ->get();
                         
                         if ($duplicates->isEmpty()) {
