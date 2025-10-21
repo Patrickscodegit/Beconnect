@@ -351,8 +351,8 @@ class RobawsCustomerCacheResource extends Resource
                             return;
                         }
                         
-                        // Apply the "has_duplicates" filter
-                        $livewire->tableFilters['has_duplicates'] = true;
+                        // Apply the "has_duplicates" filter (needs to be an array, not boolean)
+                        $livewire->tableFilters['has_duplicates'] = ['isActive' => true];
                         
                         $totalDuplicates = $duplicateService->getTotalDuplicateCustomersCount();
                         
