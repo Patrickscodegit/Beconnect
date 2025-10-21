@@ -1,0 +1,127 @@
+# Deploy Comprehensive Article Fields Sync to Production
+
+## What This Deployment Does
+
+Adds comprehensive field syncing from Robaws Articles API:
+- Sales & Display fields: sales_name, brand, barcode, article_number
+- Detailed Pricing: sale_price, cost_price, sale_price_strategy, cost_price_strategy, margin
+- Product Attributes: weight_kg, vat_tariff_id, stock_article, time_operation, installation, wappy
+- Media: image_id
+- Composite Items: Stored as JSON (surcharges, components, etc.)
+
+## Production Deployment Commands
+
+```bash
+# SSH into production
+ssh forge@bconnect.64.226.120.45.nip.io
+cd /home/forge/app.belgaco.be
+
+# Pull latest changes
+git pull origin main
+
+# Run the migration
+php artisan migrate --force
+
+# Clear caches
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+
+# Restart queue workers
+php artisan queue:restart
+```
+
+## Post-Deployment Testing
+
+### 1. Verify Migration
+```bash
+php artisan tinker --execute="
+\$article = App\Models\RobawsArticleCache::first();
+echo 'Article ID: ' . \$article->id . PHP_EOL;
+echo 'Sales Name: ' . (\$article->sales_name ?? 'NULL') . PHP_EOL;
+echo 'Brand: ' . (\$article->brand ?? 'NULL') . PHP_EOL;
+echo 'Article Number: ' . (\$article->article_number ?? 'NULL') . PHP_EOL;
+echo 'Sale Price: ' . (\$article->sale_price ?? 'NULL') . PHP_EOL;
+echo 'Cost Price: ' . (\$article->cost_price ?? 'NULL') . PHP_EOL;
+echo 'Weight: ' . (\$article->weight_kg ?? 'NULL') . ' kg' . PHP_EOL;
+echo 'Wappy: ' . (\$article->wappy ? 'YES' : 'NO') . PHP_EOL;
+echo 'Composite Items: ' . (\$article->composite_items ? count(\$article->composite_items) . ' items' : 'NULL') . PHP_EOL;
+"
+```
+
+### 2. Test Incremental Sync
+```bash
+# Run incremental sync to populate new fields
+php artisan robaws:sync-articles --incremental
+```
+
+### 3. Check Filament Display
+1. Go to: https://app.belgaco.be/admin/robaws-articles
+2. Click "Toggle Columns" button
+3. Enable these new columns:
+   - Sales Name
+   - Brand
+   - Article #
+   - Sale Price
+   - Cost Price
+   - Weight (kg)
+   - Stock
+   - Wappy
+   - Composite Items
+4. Verify data displays correctly
+5. Test brand filter
+
+### 4. Test Webhook Sync
+1. Go to Robaws and edit an article
+2. Change brand, barcode, or weight
+3. Save the article
+4. Check in Filament that the changes synced
+
+### 5. Verify Composite Items
+```bash
+# Check if composite items are being stored
+php artisan tinker --execute="
+\$article = App\Models\RobawsArticleCache::where('is_parent_item', true)->first();
+if (\$article) {
+    echo 'Parent Article: ' . \$article->article_name . PHP_EOL;
+    echo 'Composite Items: ' . print_r(\$article->composite_items, true) . PHP_EOL;
+} else {
+    echo 'No parent items found yet' . PHP_EOL;
+}
+"
+```
+
+## Expected Results
+
+After deployment and sync:
+- All articles should have populated standard fields (brand, barcode, prices, etc.)
+- Webhook updates will sync all new fields in real-time
+- Filament admin shows all new columns (toggle to enable them)
+- Composite items stored as JSON arrays for parent articles
+- Brand filter works in Filament
+
+## Rollback Plan
+
+If issues occur:
+
+```bash
+# Rollback migration
+php artisan migrate:rollback --step=1
+
+# Revert code changes
+git revert HEAD
+git push origin main
+
+# Clear caches
+php artisan config:cache
+php artisan route:cache
+```
+
+## Notes
+
+- Migration adds 17 new columns to robaws_articles_cache table
+- Existing data is preserved
+- New fields will populate on next sync (webhooks or incremental sync)
+- All new columns are nullable - no impact on existing functionality
+- Composite items extraction works for both API and webhook formats
+
