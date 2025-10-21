@@ -189,7 +189,7 @@ class RobawsArticleCache extends Model
             'article_children',
             'parent_article_id',
             'child_article_id'
-        )->withPivot(['sort_order', 'is_required', 'is_conditional', 'conditions'])
+        )->withPivot(['sort_order', 'is_required', 'is_conditional', 'conditions', 'cost_type', 'default_quantity', 'default_cost_price', 'unit_type'])
           ->withTimestamps()
           ->orderBy('sort_order');
     }
@@ -204,7 +204,7 @@ class RobawsArticleCache extends Model
             'article_children',
             'child_article_id',
             'parent_article_id'
-        )->withPivot(['sort_order', 'is_required', 'is_conditional', 'conditions'])
+        )->withPivot(['sort_order', 'is_required', 'is_conditional', 'conditions', 'cost_type', 'default_quantity', 'default_cost_price', 'unit_type'])
           ->withTimestamps();
     }
 
