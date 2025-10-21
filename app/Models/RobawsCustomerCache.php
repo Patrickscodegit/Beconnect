@@ -90,5 +90,66 @@ class RobawsCustomerCache extends Model
     {
         return $this->name . ($this->role ? " ({$this->role})" : '');
     }
+    
+    /**
+     * Check if this customer has duplicates
+     */
+    public function hasDuplicates(): bool
+    {
+        return static::where('name', $this->name)
+            ->where('id', '!=', $this->id)
+            ->exists();
+    }
+    
+    /**
+     * Get all duplicate customers (same name)
+     */
+    public function getDuplicates()
+    {
+        return static::where('name', $this->name)
+            ->where('id', '!=', $this->id)
+            ->get();
+    }
+    
+    /**
+     * Get duplicate count
+     */
+    public function getDuplicateCount(): int
+    {
+        return static::where('name', $this->name)
+            ->where('id', '!=', $this->id)
+            ->count();
+    }
+    
+    /**
+     * Scope to filter only customers with duplicates
+     */
+    public function scopeWithDuplicates($query)
+    {
+        return $query->whereIn('name', function ($subquery) {
+            $subquery->select('name')
+                ->from('robaws_customers_cache')
+                ->groupBy('name')
+                ->havingRaw('count(*) > 1');
+        });
+    }
+    
+    /**
+     * Get name with details for display (includes ID and email for disambiguation)
+     */
+    public function getNameWithDetailsAttribute(): string
+    {
+        $details = [$this->name];
+        
+        if ($this->email) {
+            $details[] = $this->email;
+        }
+        if ($this->city) {
+            $details[] = $this->city;
+        }
+        $details[] = "ID: {$this->robaws_client_id}";
+        
+        return implode(' • ', $details);
+    }
 }
 

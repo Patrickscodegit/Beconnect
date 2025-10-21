@@ -5,6 +5,8 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\RobawsCustomerCacheResource\Pages;
 use App\Models\RobawsCustomerCache;
 use App\Models\Intake;
+use App\Services\CustomerDuplicateService;
+use App\Services\CustomerMergeService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -13,6 +15,7 @@ use Filament\Tables\Table;
 use Illuminate\Support\Facades\Artisan;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Eloquent\Collection;
 
 class RobawsCustomerCacheResource extends Resource
 {
@@ -160,6 +163,17 @@ class RobawsCustomerCacheResource extends Resource
                     ->counts('intakes')
                     ->label('Intakes')
                     ->sortable(),
+                Tables\Columns\TextColumn::make('duplicate_status')
+                    ->label('Duplicates')
+                    ->badge()
+                    ->getStateUsing(fn (RobawsCustomerCache $record) => 
+                        $record->hasDuplicates() ? ($record->getDuplicateCount() + 1) . ' total' : null
+                    )
+                    ->color('warning')
+                    ->icon('heroicon-o-document-duplicate')
+                    ->tooltip(fn (RobawsCustomerCache $record) => 
+                        $record->hasDuplicates() ? 'This customer has duplicates' : null
+                    ),
                 Tables\Columns\TextColumn::make('last_synced_at')
                     ->dateTime()
                     ->sortable()
@@ -212,6 +226,10 @@ class RobawsCustomerCacheResource extends Resource
                 Tables\Filters\Filter::make('has_phone')
                     ->query(fn ($query) => $query->whereNotNull('phone'))
                     ->label('Has Phone'),
+                Tables\Filters\Filter::make('has_duplicates')
+                    ->query(fn ($query) => $query->withDuplicates())
+                    ->label('Has Duplicates')
+                    ->toggle(),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
@@ -319,32 +337,28 @@ class RobawsCustomerCacheResource extends Resource
                 Tables\Actions\Action::make('findDuplicates')
                     ->label('Find Duplicates')
                     ->icon('heroicon-o-document-duplicate')
-                    ->color('secondary')
-                    ->modalHeading('Potential Duplicate Customers')
-                    ->modalDescription('Customers with the same name (case-insensitive) are listed below.')
-                    ->action(function () {
-                        $duplicates = RobawsCustomerCache::select('name', DB::raw('count(*) as count'))
-                            ->groupBy('name')
-                            ->havingRaw('count(*) > 1')
-                            ->get();
+                    ->color('warning')
+                    ->action(function ($livewire) {
+                        $duplicateService = app(CustomerDuplicateService::class);
+                        $groups = $duplicateService->findDuplicateGroups();
                         
-                        if ($duplicates->isEmpty()) {
+                        if ($groups->isEmpty()) {
                             Notification::make()
-                                ->title('No duplicates found')
+                                ->title('No Duplicates Found')
                                 ->body('No customers with duplicate names found.')
                                 ->success()
                                 ->send();
                             return;
                         }
                         
-                        $message = "Found " . $duplicates->count() . " duplicate groups:\n\n";
-                        foreach ($duplicates as $duplicate) {
-                            $message .= "• " . $duplicate->name . " (" . $duplicate->count . " entries)\n";
-                        }
+                        // Apply the "has_duplicates" filter
+                        $livewire->tableFilters['has_duplicates'] = true;
+                        
+                        $totalDuplicates = $duplicateService->getTotalDuplicateCustomersCount();
                         
                         Notification::make()
-                            ->title('Duplicates Found')
-                            ->body($message)
+                            ->title('Duplicates Found!')
+                            ->body("Found {$groups->count()} duplicate groups ({$totalDuplicates} total records). Table filtered to show duplicates only. Select duplicates and use 'Merge Duplicates' bulk action.")
                             ->warning()
                             ->persistent()
                             ->send();
@@ -362,6 +376,77 @@ class RobawsCustomerCacheResource extends Resource
                             echo $csv->getContent();
                         }, 'robaws_customers_export_' . now()->format('Ymd_His') . '.csv');
                     }),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\BulkAction::make('merge')
+                        ->label('Merge Duplicates')
+                        ->icon('heroicon-o-arrows-pointing-in')
+                        ->color('warning')
+                        ->requiresConfirmation()
+                        ->modalHeading('Merge Duplicate Customers')
+                        ->modalDescription('Select which record to keep as the primary customer. All other selected records will be merged into it and deleted.')
+                        ->form(function (Collection $records) {
+                            $duplicateService = app(CustomerDuplicateService::class);
+                            $suggested = $duplicateService->suggestPrimaryRecord($records);
+                            
+                            return [
+                                Forms\Components\Radio::make('primary_id')
+                                    ->label('Keep this record as primary')
+                                    ->options($records->mapWithKeys(fn ($record) => [
+                                        $record->id => $record->name_with_details
+                                    ]))
+                                    ->default($suggested->id)
+                                    ->required()
+                                    ->helperText('The suggested record has the most complete data and/or intakes.'),
+                                Forms\Components\Placeholder::make('preview')
+                                    ->label('What will happen:')
+                                    ->content(function () use ($records) {
+                                        $totalIntakes = $records->sum(fn ($r) => $r->intakes()->count());
+                                        $mergeCount = $records->count() - 1;
+                                        return "• {$mergeCount} duplicate(s) will be merged and deleted\n• {$totalIntakes} intake(s) will be preserved\n• Non-null fields will be merged into primary record";
+                                    }),
+                            ];
+                        })
+                        ->action(function (Collection $records, array $data) {
+                            $mergeService = app(CustomerMergeService::class);
+                            $primary = $records->find($data['primary_id']);
+                            $duplicateIds = $records->except($data['primary_id'])->pluck('id')->toArray();
+                            
+                            $result = $mergeService->merge($primary, $duplicateIds);
+                            
+                            if ($result['success']) {
+                                Notification::make()
+                                    ->title('Customers Merged Successfully')
+                                    ->body($result['message'])
+                                    ->success()
+                                    ->send();
+                            } else {
+                                Notification::make()
+                                    ->title('Merge Failed')
+                                    ->body($result['message'])
+                                    ->danger()
+                                    ->send();
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                    
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->before(function (Collection $records) {
+                            // Check if any records have intakes
+                            foreach ($records as $record) {
+                                $intakeCount = $record->intakes()->count();
+                                if ($intakeCount > 0) {
+                                    throw new \Exception(
+                                        "Cannot delete '{$record->name}' (ID: {$record->robaws_client_id}): has {$intakeCount} related intake(s). Please merge or reassign intakes first."
+                                    );
+                                }
+                            }
+                        })
+                        ->modalHeading('Delete Customers')
+                        ->modalDescription('Are you sure you want to delete the selected customers? This action cannot be undone.')
+                        ->successNotificationTitle('Customers deleted successfully'),
+                ]),
             ])
             ->defaultSort('last_synced_at', 'desc');
     }
