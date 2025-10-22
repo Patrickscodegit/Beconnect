@@ -188,6 +188,7 @@ class CreateRobawsClientJob implements ShouldQueue
                 'receives_quotes' => true,
                 'language'      => 'en',
                 'currency'      => 'EUR',
+                'role'          => $intake->customer_role ?? 'BUYER', // Pass customer role for Robaws extra field
             ];
 
             // Create or resolve client

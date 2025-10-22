@@ -166,6 +166,18 @@ class IntakeResource extends Resource
                             ->label('Contact Phone')
                             ->tel()
                             ->placeholder('+1 (555) 123-4567'),
+                            
+                        Forms\Components\Select::make('customer_role')
+                            ->label('Customer Role')
+                            ->options(fn() => array_combine(
+                                config('customer_roles', []),
+                                config('customer_roles', [])
+                            ))
+                            ->searchable()
+                            ->required()
+                            ->default('BUYER')
+                            ->helperText('Select the customer type/role (will be set on Robaws client as permanent field)')
+                            ->columnSpanFull(),
                     ])
                     ->columns(2)
                     ->collapsible(),

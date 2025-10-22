@@ -36,6 +36,7 @@ class Intake extends Model
         'customer_name',
         'contact_email',
         'contact_phone',
+        'customer_role',
     ];
 
     protected $casts = [

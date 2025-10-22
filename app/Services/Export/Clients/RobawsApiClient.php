@@ -1651,10 +1651,16 @@ final class RobawsApiClient
                 }
             }
 
-            // 2) If found → ensure contact exists on it, then return
+            // 2) If found → ensure contact exists on it, update Role if provided, then return
             if ($client && !empty($client['id'])) {
                 $clientId = (int)$client['id'];
                 \Log::info('Using existing client', ['client_id' => $clientId, 'client_name' => $client['name'] ?? 'unknown']);
+                
+                // Update Role extra field if provided for existing client
+                if (!empty($hints['role'])) {
+                    $this->updateClientExtraField($clientId, 'Role', $hints['role']);
+                }
+                
                 $this->ensureContactExists($clientId, $hints);
                 return ['id' => $clientId, 'created' => false, 'source' => 'resolved'];
             }
@@ -1691,6 +1697,15 @@ final class RobawsApiClient
                 $payload['address'] = $address;
             }
 
+            // Add Role extra field if provided
+            if (!empty($hints['role'])) {
+                $payload['extraFields'] = [
+                    'Role' => [
+                        'stringValue' => (string) $hints['role']
+                    ]
+                ];
+            }
+
             $resp = $this->executeWithRateLimitRetry(function() use ($idKey, $payload) {
                 return $this->getHttpClient()
                     ->withHeaders(['Idempotency-Key' => $idKey, 'Content-Type'=>'application/json'])
@@ -1708,6 +1723,38 @@ final class RobawsApiClient
             \Log::error('Failed to create client - no ID returned', ['response' => $resp]);
             throw new \RuntimeException('Failed to create or resolve client');
         });
+    }
+
+    /**
+     * Update a single extra field on a client
+     */
+    private function updateClientExtraField(int $clientId, string $fieldName, $value): void
+    {
+        if (!$value) return;
+        
+        try {
+            $this->executeWithRateLimitRetry(function() use ($clientId, $fieldName, $value) {
+                return $this->getHttpClient()
+                    ->withHeaders(['Content-Type' => 'application/merge-patch+json'])
+                    ->patch("/api/v2/clients/{$clientId}", [
+                        'extraFields' => [
+                            $fieldName => ['stringValue' => (string) $value]
+                        ]
+                    ]);
+            });
+            
+            \Illuminate\Support\Facades\Log::info('Updated client extra field', [
+                'client_id' => $clientId,
+                'field_name' => $fieldName,
+                'value' => $value
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to update client extra field', [
+                'client_id' => $clientId,
+                'field_name' => $fieldName,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 
     /**
