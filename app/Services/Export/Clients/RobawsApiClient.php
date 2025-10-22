@@ -26,6 +26,56 @@ final class RobawsApiClient
         $this->currentSecondStart = microtime(true);
     }
 
+    /**
+     * Execute HTTP request with automatic retry for rate limiting (HTTP 429)
+     */
+    private function executeWithRateLimitRetry(callable $requestCallback, int $maxRetries = 3): mixed
+    {
+        $attempt = 0;
+        
+        while ($attempt <= $maxRetries) {
+            try {
+                return $requestCallback();
+            } catch (\Illuminate\Http\Client\RequestException $e) {
+                $statusCode = $e->response?->status();
+                
+                // Handle rate limiting (HTTP 429)
+                if ($statusCode === 429) {
+                    $attempt++;
+                    
+                    if ($attempt <= $maxRetries) {
+                        // Exponential backoff: 2^attempt seconds
+                        $delay = pow(2, $attempt);
+                        
+                        \Illuminate\Support\Facades\Log::warning('Robaws API rate limited, retrying with exponential backoff', [
+                            'attempt' => $attempt,
+                            'max_retries' => $maxRetries,
+                            'delay_seconds' => $delay,
+                            'status_code' => $statusCode,
+                            'response_body' => $e->response?->body()
+                        ]);
+                        
+                        sleep($delay);
+                        continue;
+                    } else {
+                        \Illuminate\Support\Facades\Log::error('Robaws API rate limit exceeded after all retries', [
+                            'max_retries' => $maxRetries,
+                            'status_code' => $statusCode,
+                            'response_body' => $e->response?->body()
+                        ]);
+                        
+                        throw $e;
+                    }
+                } else {
+                    // Re-throw non-rate-limit errors immediately
+                    throw $e;
+                }
+            }
+        }
+        
+        throw new \RuntimeException('Rate limit retry logic failed unexpectedly');
+    }
+
     private function getHttpClient(): PendingRequest
     {
         if ($this->http === null) {
@@ -1338,9 +1388,11 @@ final class RobawsApiClient
 
         try {
             // POST to the client-scoped contacts collection
-            $response = $this->getHttpClient()
-                ->withHeaders(['Content-Type' => 'application/json', 'Accept' => 'application/json'])
-                ->post("/api/v2/clients/{$clientId}/contacts", $payload);
+            $response = $this->executeWithRateLimitRetry(function() use ($clientId, $payload) {
+                return $this->getHttpClient()
+                    ->withHeaders(['Content-Type' => 'application/json', 'Accept' => 'application/json'])
+                    ->post("/api/v2/clients/{$clientId}/contacts", $payload);
+            });
 
             if ($response->successful()) {
                 $result = $response->json();
@@ -1639,10 +1691,12 @@ final class RobawsApiClient
                 $payload['address'] = $address;
             }
 
-            $resp = $this->getHttpClient()
-                ->withHeaders(['Idempotency-Key' => $idKey, 'Content-Type'=>'application/json'])
-                ->post('/api/v2/clients', $payload)
-                ->throw()->json();
+            $resp = $this->executeWithRateLimitRetry(function() use ($idKey, $payload) {
+                return $this->getHttpClient()
+                    ->withHeaders(['Idempotency-Key' => $idKey, 'Content-Type'=>'application/json'])
+                    ->post('/api/v2/clients', $payload)
+                    ->throw()->json();
+            });
 
             $clientId = (int)($resp['id'] ?? 0);
             if ($clientId > 0) {

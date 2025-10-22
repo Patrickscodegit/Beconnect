@@ -14,8 +14,53 @@ use Illuminate\Support\Facades\DB;
 
 class IntakeCreationService
 {
+    /**
+     * Validate that an intake has at least one file attached
+     */
+    private function validateIntakeHasFiles(Intake $intake): void
+    {
+        $fileCount = $intake->files()->count();
+        
+        if ($fileCount === 0) {
+            Log::warning('Intake created without any files', [
+                'intake_id' => $intake->id,
+                'source' => $intake->source,
+                'status' => $intake->status
+            ]);
+            
+            // Update intake status to indicate the issue
+            $intake->update([
+                'status' => 'failed',
+                'notes' => array_merge($intake->notes ?? [], [
+                    'validation_error' => 'No files attached to intake',
+                    'error_time' => now()->toISOString()
+                ])
+            ]);
+            
+            throw new \InvalidArgumentException("Intake must have at least one file attached");
+        }
+    }
+
+    /**
+     * Validate intake data before processing
+     */
+    private function validateIntakeData(array $options): void
+    {
+        // Check for minimum required data
+        if (empty($options['customer_name']) && empty($options['contact_email'])) {
+            Log::warning('Intake created without customer name or email', [
+                'options' => array_keys($options),
+                'has_customer_name' => !empty($options['customer_name']),
+                'has_contact_email' => !empty($options['contact_email'])
+            ]);
+        }
+    }
+
     public function createFromUploadedFile(TemporaryUploadedFile|UploadedFile $file, array $options = []): Intake
     {
+        // Validate intake data
+        $this->validateIntakeData($options);
+        
         // Detect file type and determine initial status
         $mimeType = $file->getMimeType();
         $initialStatus = $this->determineInitialStatus($mimeType, $options);
@@ -34,6 +79,9 @@ class IntakeCreationService
 
         // Store file immediately (minimal operation - just move temp file)
         $this->storeFileMinimal($intake, $file);
+        
+        // Validate that intake has files
+        $this->validateIntakeHasFiles($intake);
         
         // Ensure database transaction is committed before dispatching job
         // Use a separate queue connection to avoid transaction context issues

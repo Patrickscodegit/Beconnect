@@ -16,9 +16,9 @@ class CreateRobawsClientJob implements ShouldQueue
 {
     use Batchable, Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $timeout = 120; // 2 minutes for client creation
-    public $tries = 3;
-    public $backoff = [30, 60, 120]; // Progressive backoff
+    public $timeout = 300; // 5 minutes for client creation (increased for extraction waiting)
+    public $tries = 5; // Increased from 3 to 5
+    public $backoff = [30, 60, 120, 180, 300]; // Progressive backoff with more attempts
 
     public function __construct(
         public int $intakeId,
@@ -89,9 +89,9 @@ class CreateRobawsClientJob implements ShouldQueue
             
             // If intake contact data is empty, try to get it from document extraction
             if (empty($freshContactData['name']) && empty($freshContactData['email'])) {
-                // Wait for extraction data to be available (similar to CreateRobawsOfferJob)
-                $maxRetries = 3;
-                $retryDelay = 2; // seconds
+                // Wait for extraction data to be available with improved retry logic
+                $maxRetries = 5; // Increased from 3 to 5
+                $retryDelay = 5; // Increased from 2 to 5 seconds
                 
                 for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
                     $intake->refresh(); // Refresh to get latest data
@@ -150,9 +150,19 @@ class CreateRobawsClientJob implements ShouldQueue
                         Log::info('Waiting for extraction data to be available for client creation', [
                             'intake_id' => $this->intakeId,
                             'attempt' => $attempt,
-                            'max_retries' => $maxRetries
+                            'max_retries' => $maxRetries,
+                            'retry_delay' => $retryDelay,
+                            'documents_count' => $documents->count(),
+                            'documents_with_extraction' => $documents->whereNotNull('extraction_data')->count()
                         ]);
                         sleep($retryDelay);
+                    } else {
+                        Log::warning('No extraction data found after all retry attempts', [
+                            'intake_id' => $this->intakeId,
+                            'max_retries' => $maxRetries,
+                            'documents_count' => $documents->count(),
+                            'documents_with_extraction' => $documents->whereNotNull('extraction_data')->count()
+                        ]);
                     }
                 }
             }
