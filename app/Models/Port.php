@@ -58,7 +58,11 @@ class Port extends Model
 
     public function scopeEuropeanOrigins($query)
     {
-        return $query->where('is_european_origin', true)->where('is_active', true);
+        // Explicitly list the 3 European POL ports for quotation forms
+        // This ensures reliability regardless of database flag values
+        return $query->whereIn('name', ['Antwerp', 'Flushing', 'Zeebrugge'])
+            ->where('is_active', true)
+            ->orderBy('name');
     }
 
     public function scopeAfricanDestinations($query)
