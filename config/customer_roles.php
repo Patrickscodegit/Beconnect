@@ -26,5 +26,6 @@ return [
     'EXCEPTION',
     'BUYER',
     'SELLER',
+    'EXHIBITOR',
 ];
 
