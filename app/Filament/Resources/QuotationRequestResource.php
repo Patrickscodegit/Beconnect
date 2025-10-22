@@ -167,7 +167,18 @@ class QuotationRequestResource extends Resource
                             
                         Forms\Components\Select::make('pol')
                             ->label('Port of Loading (POL)')
-                            ->options(function () {
+                            ->options(function (Forms\Get $get) {
+                                $serviceType = $get('service_type');
+                                
+                                // Show airports for airfreight services
+                                if (in_array($serviceType, ['AIRFREIGHT_EXPORT', 'AIRFREIGHT_IMPORT'])) {
+                                    $airports = config('airports', []);
+                                    return collect($airports)->mapWithKeys(function ($airport, $code) {
+                                        return [$airport['name'] => $airport['full_name']];
+                                    });
+                                }
+                                
+                                // Show seaports for all other services
                                 return \App\Models\Port::europeanOrigins()
                                     ->orderBy('name')
                                     ->get()
@@ -183,7 +194,18 @@ class QuotationRequestResource extends Resource
                             
                         Forms\Components\Select::make('pod')
                             ->label('Port of Discharge (POD)')
-                            ->options(function () {
+                            ->options(function (Forms\Get $get) {
+                                $serviceType = $get('service_type');
+                                
+                                // Show airports for airfreight services
+                                if (in_array($serviceType, ['AIRFREIGHT_EXPORT', 'AIRFREIGHT_IMPORT'])) {
+                                    $airports = config('airports', []);
+                                    return collect($airports)->mapWithKeys(function ($airport, $code) {
+                                        return [$airport['name'] => $airport['full_name']];
+                                    });
+                                }
+                                
+                                // Show seaports for all other services
                                 return \App\Models\Port::withActivePodSchedules()
                                     ->orderBy('name')
                                     ->get()
