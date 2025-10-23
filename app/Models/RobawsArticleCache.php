@@ -47,6 +47,8 @@ class RobawsArticleCache extends Model
         // Port information in schedule format
         'pol_code',
         'pod_name',
+        'pod_code',
+        'commodity_type',
         // Standard Robaws article fields
         'sales_name',
         'brand',
@@ -418,5 +420,153 @@ class RobawsArticleCache extends Model
             $q->whereNull('validity_date')
               ->orWhere('validity_date', '>=', $date->format('Y-m-d'));
         });
+    }
+
+    /**
+     * Scope for filtering by commodity type
+     */
+    public function scopeForCommodityType(Builder $query, string $commodityType): Builder
+    {
+        return $query->where('commodity_type', $commodityType);
+    }
+
+    /**
+     * Scope for filtering by POL and POD codes (exact match)
+     */
+    public function scopeForPolPodMatch(Builder $query, string $polCode, string $podCode): Builder
+    {
+        return $query->where('pol_code', $polCode)
+                     ->where('pod_code', $podCode);
+    }
+
+    /**
+     * Scope for filtering articles based on complete quotation context
+     * This is the main method for smart article selection
+     */
+    public function scopeForQuotationContext(Builder $query, \App\Models\QuotationRequest $quotation): Builder
+    {
+        // Only show parent items that are active and valid
+        $query->where('is_parent_item', true)
+              ->where('is_active', true)
+              ->validAsOf(now());
+
+        // Extract port codes from quotation
+        $polCode = $this->extractPortCodeFromString($quotation->pol);
+        $podCode = $this->extractPortCodeFromString($quotation->pod);
+
+        // Apply POL/POD filtering if available
+        if ($polCode && $podCode) {
+            $query->where(function ($q) use ($polCode, $podCode) {
+                // Exact match gets priority
+                $q->where(function ($exactMatch) use ($polCode, $podCode) {
+                    $exactMatch->where('pol_code', $polCode)
+                               ->where('pod_code', $podCode);
+                })
+                // Or partial match (either POL or POD)
+                ->orWhere('pol_code', $polCode)
+                ->orWhere('pod_code', $podCode);
+            });
+        }
+
+        // Apply service type filter if available
+        if ($quotation->service_type) {
+            $query->where(function ($q) use ($quotation) {
+                $q->where('service_type', $quotation->service_type)
+                  ->orWhereNull('service_type'); // Include articles without service type restriction
+            });
+        }
+
+        // Apply shipping line filter if schedule is selected
+        if ($quotation->selected_schedule_id && $quotation->selectedSchedule) {
+            $schedule = $quotation->selectedSchedule;
+            if ($schedule->carrier) {
+                $query->where(function ($q) use ($schedule) {
+                    $q->where('shipping_line', 'LIKE', '%' . $schedule->carrier->name . '%')
+                      ->orWhereNull('shipping_line'); // Include articles without carrier restriction
+                });
+            }
+        }
+
+        // Apply commodity type filter if commodity items exist
+        if ($quotation->commodityItems && $quotation->commodityItems->count() > 0) {
+            $commodityTypes = $quotation->commodityItems->map(function ($item) {
+                return $this->normalizeCommodityType($item);
+            })->filter()->unique()->values()->toArray();
+
+            if (!empty($commodityTypes)) {
+                $query->where(function ($q) use ($commodityTypes) {
+                    $q->whereIn('commodity_type', $commodityTypes)
+                      ->orWhereNull('commodity_type'); // Include articles without commodity restriction
+                });
+            }
+        }
+
+        return $query;
+    }
+
+    /**
+     * Extract port code from string format: "Antwerp (ANR), Belgium" → "ANR"
+     */
+    private function extractPortCodeFromString(?string $portString): ?string
+    {
+        if (empty($portString)) {
+            return null;
+        }
+
+        // Match pattern: "City (CODE), Country" or just "CODE"
+        if (preg_match('/\(([A-Z]{3,4})\)/', $portString, $matches)) {
+            return $matches[1];
+        }
+
+        // If it's already a code (3-4 uppercase letters)
+        if (preg_match('/^[A-Z]{3,4}$/', trim($portString))) {
+            return trim($portString);
+        }
+
+        return null;
+    }
+
+    /**
+     * Normalize commodity type from commodity item
+     */
+    private function normalizeCommodityType($commodityItem): ?string
+    {
+        if (!$commodityItem) {
+            return null;
+        }
+
+        $type = $commodityItem->commodity_type ?? null;
+
+        // Map internal commodity types to Robaws article types
+        $typeMapping = [
+            'vehicles' => $this->getVehicleCategoryMapping($commodityItem),
+            'machinery' => 'Machinery',
+            'boat' => 'Boat',
+            'general_cargo' => 'General Cargo',
+        ];
+
+        return $typeMapping[$type] ?? null;
+    }
+
+    /**
+     * Get specific vehicle category for mapping
+     */
+    private function getVehicleCategoryMapping($commodityItem): ?string
+    {
+        $category = $commodityItem->vehicle_category ?? null;
+
+        // Map vehicle categories to Robaws types
+        $vehicleMapping = [
+            'car' => 'Car',
+            'suv' => 'SUV',
+            'small_van' => 'Small Van',
+            'big_van' => 'Big Van',
+            'truck' => 'Truck',
+            'truckhead' => 'Truckhead',
+            'bus' => 'Bus',
+            'motorcycle' => 'Motorcycle',
+        ];
+
+        return $vehicleMapping[$category] ?? 'Car'; // Default to Car
     }
 }

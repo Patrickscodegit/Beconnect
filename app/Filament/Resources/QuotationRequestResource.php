@@ -688,6 +688,7 @@ class QuotationRequestResource extends Resource
                             ->serviceType(fn ($get) => $get('service_type'))
                             ->customerType(fn ($get) => $get('customer_role'))
                             ->carrierCode(fn ($get) => $get('preferred_carrier'))
+                            ->quotationId(fn ($record) => $record?->id)
                             ->columnSpanFull(),
                             
                         PriceCalculator::make('pricing_summary')
@@ -965,6 +966,81 @@ class QuotationRequestResource extends Resource
                         ])
                         ->action(function (\Illuminate\Database\Eloquent\Collection $records, array $data) {
                             $records->each->update(['status' => $data['status']]);
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                        
+                    Tables\Actions\BulkAction::make('syncSuggestedArticles')
+                        ->label('Sync Smart Articles')
+                        ->icon('heroicon-o-sparkles')
+                        ->color('primary')
+                        ->form([
+                            Forms\Components\Select::make('min_match_percentage')
+                                ->label('Minimum Match Percentage')
+                                ->options([
+                                    '20' => '20% (Very Broad)',
+                                    '30' => '30% (Recommended)',
+                                    '50' => '50% (Conservative)',
+                                    '70' => '70% (Strict)',
+                                ])
+                                ->default('30')
+                                ->required(),
+                                
+                            Forms\Components\Select::make('max_articles')
+                                ->label('Maximum Articles per Quotation')
+                                ->options([
+                                    '3' => '3 articles',
+                                    '5' => '5 articles',
+                                    '10' => '10 articles',
+                                ])
+                                ->default('5')
+                                ->required(),
+                                
+                            Forms\Components\Toggle::make('auto_attach')
+                                ->label('Automatically attach articles')
+                                ->helperText('If disabled, articles will be suggested but not attached')
+                                ->default(true),
+                        ])
+                        ->action(function (\Illuminate\Database\Eloquent\Collection $records, array $data) {
+                            $service = app(\App\Services\SmartArticleSelectionService::class);
+                            $attachedCount = 0;
+                            
+                            foreach ($records as $quotation) {
+                                try {
+                                    $suggestions = $service->getTopSuggestions(
+                                        $quotation, 
+                                        (int) $data['max_articles'], 
+                                        (int) $data['min_match_percentage']
+                                    );
+                                    
+                                    if ($data['auto_attach']) {
+                                        foreach ($suggestions as $suggestion) {
+                                            if (!$quotation->articles()->where('robaws_articles_cache.id', $suggestion['article']->id)->exists()) {
+                                                $quotation->articles()->attach($suggestion['article']->id);
+                                                $attachedCount++;
+                                            }
+                                        }
+                                    }
+                                } catch (\Exception $e) {
+                                    \Log::error('Failed to sync articles for quotation', [
+                                        'quotation_id' => $quotation->id,
+                                        'error' => $e->getMessage()
+                                    ]);
+                                }
+                            }
+                            
+                            if ($data['auto_attach']) {
+                                \Filament\Notifications\Notification::make()
+                                    ->title('Smart Articles Synced')
+                                    ->body("Successfully attached {$attachedCount} articles to {$records->count()} quotations")
+                                    ->success()
+                                    ->send();
+                            } else {
+                                \Filament\Notifications\Notification::make()
+                                    ->title('Smart Articles Suggested')
+                                    ->body("Generated suggestions for {$records->count()} quotations")
+                                    ->info()
+                                    ->send();
+                            }
                         })
                         ->deselectRecordsAfterCompletion(),
                         
