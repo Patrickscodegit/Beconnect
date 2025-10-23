@@ -880,7 +880,6 @@ function scheduleSelector() {
             if (!schedule) return null;
             
             return `
-                <div><strong>Carrier:</strong> ${schedule.carrier}</div>
                 <div><strong>Route:</strong> ${schedule.pol} → ${schedule.pod}</div>
                 <div><strong>Service:</strong> ${schedule.service_name}</div>
                 <div><strong>Departure:</strong> ${schedule.departure_date || 'TBA'}</div>

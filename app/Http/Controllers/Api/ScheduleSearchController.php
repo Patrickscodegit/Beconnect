@@ -38,6 +38,10 @@ class ScheduleSearchController extends Controller
                     $q->where('name', 'like', "%{$pod}%")
                       ->orWhere('code', 'like', "%{$pod}%");
                 })
+                ->where(function($q) {
+                    $q->whereDate('next_sailing_date', '>', now())
+                      ->orWhereNull('next_sailing_date'); // Include TBA dates
+                })
                 ->with(['carrier', 'polPort', 'podPort'])
                 ->orderBy('next_sailing_date', 'asc');
 
@@ -49,14 +53,14 @@ class ScheduleSearchController extends Controller
                 return [
                     'id' => $schedule->id,
                     'label' => sprintf(
-                        '%s - %s → %s | Departs: %s | Transit: %d days',
-                        $schedule->carrier->name ?? 'Unknown Carrier',
+                        '%s → %s | Departs: %s | Transit: %d days',
                         $schedule->polPort->name ?? 'Unknown POL',
                         $schedule->podPort->name ?? 'Unknown POD',
                         $schedule->next_sailing_date?->format('M d, Y') ?? 'TBA',
                         $schedule->transit_days ?? 0
                     ),
-                    'carrier' => $schedule->carrier->name ?? 'Unknown',
+                    'carrier' => $schedule->carrier->name ?? 'Unknown', // For admin use
+                    'hide_carrier' => true, // Flag to hide carrier from customers
                     'carrier_code' => $schedule->carrier->code ?? null,
                     'pol' => $schedule->polPort->name ?? 'Unknown',
                     'pol_code' => $schedule->polPort->code ?? null,
