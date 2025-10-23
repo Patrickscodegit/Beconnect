@@ -24,11 +24,11 @@ class ProspectQuotationController extends Controller
     public function create(Request $request)
     {
         try {
-            // Get filter options for the form (restricted port system)
-            // POL: Only Belgian ports (Antwerp, Flushing, Zeebrugge)
-            $polPorts = Port::belgianOrigins()->orderBy('name')->get();
-            // POD: Only destinations served by Sallaum carrier
-            $podPorts = Port::sallaumDestinations()->orderBy('name')->get();
+            // Get filter options for the form (aligned with Filament QuotationRequestResource)
+            // POL: European origins for seaports, airports for airfreight
+            $polPorts = Port::europeanOrigins()->orderBy('name')->get();
+            // POD: Ports with active schedules for seaports, airports for airfreight
+            $podPorts = Port::withActivePodSchedules()->orderBy('name')->get();
             $carriers = ShippingCarrier::where('is_active', true)->orderBy('name')->get();
             
             // Get airports for airfreight services
