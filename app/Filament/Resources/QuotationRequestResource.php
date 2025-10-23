@@ -189,6 +189,7 @@ class QuotationRequestResource extends Resource
                             ->searchable()
                             ->required()
                             ->live()
+                            ->reactive()
                             ->afterStateUpdated(fn (Forms\Set $set) => $set('selected_schedule_id', null))
                             ->columnSpan(1),
                             
@@ -216,6 +217,7 @@ class QuotationRequestResource extends Resource
                             ->searchable()
                             ->required()
                             ->live()
+                            ->reactive()
                             ->afterStateUpdated(fn (Forms\Set $set) => $set('selected_schedule_id', null))
                             ->columnSpan(1),
                             
