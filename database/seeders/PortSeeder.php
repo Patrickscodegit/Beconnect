@@ -35,6 +35,10 @@ class PortSeeder extends Seeder
             ['name' => 'Casablanca', 'code' => 'CAS', 'country' => 'Morocco', 'region' => 'Africa'],
             ['name' => 'Algiers', 'code' => 'ALG', 'country' => 'Algeria', 'region' => 'Africa'],
             ['name' => 'Tunis', 'code' => 'TUN', 'country' => 'Tunisia', 'region' => 'Africa'],
+            ['name' => 'Nouakchott', 'code' => 'NKC', 'country' => 'Mauritania', 'region' => 'Africa'],
+            ['name' => 'Libreville', 'code' => 'LBV', 'country' => 'Gabon', 'region' => 'Africa'],
+            ['name' => 'Freetown', 'code' => 'FNA', 'country' => 'Sierra Leone', 'region' => 'Africa'],
+            ['name' => 'Abidjan', 'code' => 'ABJ', 'country' => 'Ivory Coast', 'region' => 'Africa'],
             ['name' => 'Matadi', 'code' => 'MAT', 'country' => 'Congo', 'region' => 'Africa'],
             ['name' => 'Pointe-Noire', 'code' => 'PNR', 'country' => 'Congo', 'region' => 'Africa'],
 
@@ -85,7 +89,10 @@ class PortSeeder extends Seeder
         ];
         
         foreach ($ports as $port) {
-            Port::create($port);
+            Port::updateOrCreate(
+                ['code' => $port['code']],
+                $port
+            );
         }
     }
 }
