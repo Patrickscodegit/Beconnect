@@ -182,10 +182,37 @@ class QuotationRequestResource extends Resource
                                     });
                             })
                             ->searchable()
+                            ->allowHtml()
+                            ->createOptionUsing(fn (string $value): string => $value)
+                            ->getSearchResultsUsing(function (string $search, Forms\Get $get) {
+                                $serviceType = $get('service_type');
+                                
+                                if (in_array($serviceType, ['AIRFREIGHT_EXPORT', 'AIRFREIGHT_IMPORT'])) {
+                                    $airports = config('airports', []);
+                                    $results = collect($airports)
+                                        ->filter(fn($airport) => 
+                                            str_contains(strtolower($airport['name']), strtolower($search)) ||
+                                            str_contains(strtolower($airport['code']), strtolower($search))
+                                        )
+                                        ->mapWithKeys(fn($airport) => [$airport['name'] => $airport['full_name']]);
+                                } else {
+                                    $results = \App\Models\Port::europeanOrigins()
+                                        ->where(function($q) use ($search) {
+                                            $q->where('name', 'like', "%{$search}%")
+                                              ->orWhere('code', 'like', "%{$search}%");
+                                        })
+                                        ->get()
+                                        ->mapWithKeys(fn($port) => [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country]);
+                                }
+                                
+                                // Always add the search term as a custom option
+                                return $results->put($search, "✏️ Custom: {$search} (team will review)")->all();
+                            })
                             ->required()
                             ->live()
                             ->reactive()
                             ->afterStateUpdated(fn (Forms\Set $set) => $set('selected_schedule_id', null))
+                            ->helperText('Select from list or type a custom port/airport name')
                             ->columnSpan(1),
                             
                         Forms\Components\Select::make('pod')
@@ -210,10 +237,37 @@ class QuotationRequestResource extends Resource
                                     });
                             })
                             ->searchable()
+                            ->allowHtml()
+                            ->createOptionUsing(fn (string $value): string => $value)
+                            ->getSearchResultsUsing(function (string $search, Forms\Get $get) {
+                                $serviceType = $get('service_type');
+                                
+                                if (in_array($serviceType, ['AIRFREIGHT_EXPORT', 'AIRFREIGHT_IMPORT'])) {
+                                    $airports = config('airports', []);
+                                    $results = collect($airports)
+                                        ->filter(fn($airport) => 
+                                            str_contains(strtolower($airport['name']), strtolower($search)) ||
+                                            str_contains(strtolower($airport['code']), strtolower($search))
+                                        )
+                                        ->mapWithKeys(fn($airport) => [$airport['name'] => $airport['full_name']]);
+                                } else {
+                                    $results = \App\Models\Port::withActivePodSchedules()
+                                        ->where(function($q) use ($search) {
+                                            $q->where('name', 'like', "%{$search}%")
+                                              ->orWhere('code', 'like', "%{$search}%");
+                                        })
+                                        ->get()
+                                        ->mapWithKeys(fn($port) => [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country]);
+                                }
+                                
+                                // Always add the search term as a custom option
+                                return $results->put($search, "✏️ Custom: {$search} (team will review)")->all();
+                            })
                             ->required()
                             ->live()
                             ->reactive()
                             ->afterStateUpdated(fn (Forms\Set $set) => $set('selected_schedule_id', null))
+                            ->helperText('Select from list or type a custom port/airport name')
                             ->columnSpan(1),
                             
                         Forms\Components\TextInput::make('fdest')
@@ -455,6 +509,58 @@ class QuotationRequestResource extends Resource
                 Forms\Components\Section::make('Select Sailing')
                     ->description('Choose a specific sailing to filter carrier-specific articles')
                     ->schema([
+                        Forms\Components\Placeholder::make('schedule_availability_status')
+                            ->label('')
+                            ->content(function (Forms\Get $get) {
+                                $pol = $get('pol');
+                                $pod = $get('pod');
+                                
+                                if (!$pol || !$pod) {
+                                    return new \Illuminate\Support\HtmlString(
+                                        '<div class="flex items-center gap-2 text-sm text-gray-500">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                            <span>Select POL and POD to check schedule availability</span>
+                                        </div>'
+                                    );
+                                }
+                                
+                                // Check if custom ports are used (not in database)
+                                $polIsCustom = !\App\Models\Port::where('name', 'like', "%{$pol}%")->exists();
+                                $podIsCustom = !\App\Models\Port::where('name', 'like', "%{$pod}%")->exists();
+                                
+                                if ($polIsCustom || $podIsCustom) {
+                                    return new \Illuminate\Support\HtmlString(
+                                        '<div class="flex items-center gap-2 p-3 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
+                                            <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                            <span><strong>Custom port entered</strong> - Team will review and confirm availability</span>
+                                        </div>'
+                                    );
+                                }
+                                
+                                // Check for schedules
+                                $scheduleCount = \App\Models\ShippingSchedule::active()
+                                    ->whereHas('polPort', fn($q) => $q->where('name', 'like', "%{$pol}%"))
+                                    ->whereHas('podPort', fn($q) => $q->where('name', 'like', "%{$pod}%"))
+                                    ->count();
+                                
+                                if ($scheduleCount > 0) {
+                                    return new \Illuminate\Support\HtmlString(
+                                        '<div class="flex items-center gap-2 p-3 rounded-lg bg-green-50 text-green-700 border border-green-200">
+                                            <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                            <span><strong>' . $scheduleCount . ' sailing' . ($scheduleCount > 1 ? 's' : '') . ' available</strong> - Select one below</span>
+                                        </div>'
+                                    );
+                                }
+                                
+                                return new \Illuminate\Support\HtmlString(
+                                    '<div class="flex items-center gap-2 p-3 rounded-lg bg-amber-50 text-amber-700 border border-amber-200">
+                                        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                                        <span><strong>No schedules found</strong> - Team review required for this port pair</span>
+                                    </div>'
+                                );
+                            })
+                            ->columnSpanFull(),
+                            
                         Forms\Components\Select::make('selected_schedule_id')
                             ->label('Available Sailings')
                             ->options(function (Forms\Get $get) {
