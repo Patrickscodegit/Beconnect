@@ -33,6 +33,14 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
             if ($response->successful()) {
                 $html = $response->body();
                 
+                // NEW: Detect HTML structure changes
+                if ($this->detectHtmlStructureChange($html)) {
+                    Log::error("Sallaum Lines: HTML structure may have changed! Manual review needed.", [
+                        'pol' => $polCode,
+                        'pod' => $podCode
+                    ]);
+                }
+                
                 Log::info("Sallaum Lines: Fetched schedule page, parsing for {$polCode}->{$podCode}");
                 
                 return $this->parseSallaumScheduleTable($html, $polCode, $podCode);
@@ -219,7 +227,7 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
                         // Sanity check: transit time should be positive and reasonable
                         // West Africa: 7-30 days, South Africa: 20-45 days, East Africa: 25-50 days
                         if ($transitDays > 0 && $transitDays <= 50) {
-                            $schedules[] = [
+                            $scheduleData = [
                                 'pol_code' => $polCode,
                                 'pod_code' => $podCode,
                                 'carrier_code' => 'SALLAUM',
@@ -237,6 +245,11 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
                                 'data_source' => 'website_table',
                                 'source_url' => 'https://sallaumlines.com/schedules/europe-to-west-and-south-africa/'
                             ];
+                            
+                            // NEW: Validate before adding
+                            if ($this->validateScheduleData($scheduleData)) {
+                                $schedules[] = $scheduleData;
+                            }
 
                             Log::info("Sallaum Lines: Created schedule", [
                                 'vessel' => $vesselName,
@@ -278,13 +291,18 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
     protected function extractDateFromCell(string $cellHtml): ?string
     {
         // Extract date from cell HTML, handling complex nested structure
-        // Format: <strong>27</strong> August 2025 (split across spans)
+        // NEW FORMAT: <div class="number"><strong><span class="number-style">DD</span></strong></div> MONTH YEAR
+        // OLD FORMAT: <strong>DD</strong> MONTH YEAR
         
         $day = null;
         $monthYear = null;
         
-        // Extract day from <strong> tag
-        if (preg_match('/<strong[^>]*>(\d+)<\/strong>/i', $cellHtml, $dayMatch)) {
+        // Strategy 1: NEW - Extract day from <span class="number-style"> tag
+        if (preg_match('/<span[^>]*class="number-style"[^>]*>(\d+)<\/span>/i', $cellHtml, $dayMatch)) {
+            $day = $dayMatch[1];
+        }
+        // Strategy 2: OLD - Extract day from <strong> tag (fallback)
+        elseif (preg_match('/<strong[^>]*>(\d+)<\/strong>/i', $cellHtml, $dayMatch)) {
             $day = $dayMatch[1];
         }
         
@@ -691,6 +709,63 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
         $parsedDate = $this->parseDate($dateText);
         
         return $parsedDate ?: null;
+    }
+
+    /**
+     * Detect if Sallaum's HTML structure has changed
+     * This helps alert us when the website format changes and scraping may break
+     */
+    protected function detectHtmlStructureChange(string $html): bool
+    {
+        // Check for expected HTML markers
+        $hasNewStructure = stripos($html, 'class="number-style"') !== false;
+        $hasOldStructure = preg_match('/<strong>\d+<\/strong>\s+\w+\s+\d{4}/', $html);
+        $hasTable = stripos($html, '<table') !== false;
+        
+        // If we don't find either the new or old structure AND there's a table,
+        // the HTML structure may have changed again
+        if ($hasTable && !$hasNewStructure && !$hasOldStructure) {
+            return true; // Structure changed - alert needed!
+        }
+        
+        return false; // Structure looks familiar
+    }
+
+    /**
+     * Validate schedule data before storing
+     * Prevents storing invalid/past schedules
+     */
+    protected function validateScheduleData(array $schedule): bool
+    {
+        // Must have a sailing date
+        if (!isset($schedule['next_sailing_date'])) {
+            Log::warning("Sallaum: Rejecting schedule - missing sailing date", $schedule);
+            return false;
+        }
+        
+        // Must be a future sailing (not in the past)
+        $sailingDate = strtotime($schedule['next_sailing_date']);
+        if ($sailingDate < strtotime('today')) {
+            Log::warning("Sallaum: Rejecting past sailing date", [
+                'date' => $schedule['next_sailing_date'],
+                'vessel' => $schedule['vessel_name'] ?? 'unknown'
+            ]);
+            return false;
+        }
+        
+        // Transit time must be reasonable (5-50 days for Sallaum routes)
+        if (isset($schedule['transit_days'])) {
+            if ($schedule['transit_days'] < 5 || $schedule['transit_days'] > 50) {
+                Log::warning("Sallaum: Rejecting invalid transit time", [
+                    'transit_days' => $schedule['transit_days'],
+                    'vessel' => $schedule['vessel_name'] ?? 'unknown',
+                    'route' => ($schedule['pol_code'] ?? '?') . '→' . ($schedule['pod_code'] ?? '?')
+                ]);
+                return false;
+            }
+        }
+        
+        return true;
     }
 
 }
