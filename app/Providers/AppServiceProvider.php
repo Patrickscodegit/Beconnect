@@ -88,5 +88,36 @@ class AppServiceProvider extends ServiceProvider
         // Quotation System Observers
         \App\Models\Intake::observe(\App\Observers\IntakeObserver::class);
         \App\Models\QuotationRequest::observe(\App\Observers\QuotationRequestObserver::class);
+        
+        // Configure Filament to display timestamps in Belgium timezone
+        $this->configureFilamentTimezone();
+    }
+    
+    /**
+     * Configure Filament components to use Belgium timezone for display
+     */
+    private function configureFilamentTimezone(): void
+    {
+        // Only configure if Filament is installed
+        if (class_exists(\Filament\Forms\Components\DateTimePicker::class)) {
+            \Filament\Forms\Components\DateTimePicker::configureUsing(
+                fn (\Filament\Forms\Components\DateTimePicker $component) => 
+                    $component->timezone('Europe/Brussels')
+            );
+        }
+        
+        if (class_exists(\Filament\Tables\Columns\TextColumn::class)) {
+            \Filament\Tables\Columns\TextColumn::configureUsing(
+                fn (\Filament\Tables\Columns\TextColumn $column) => 
+                    $column->timezone('Europe/Brussels')
+            );
+        }
+        
+        if (class_exists(\Filament\Infolists\Components\TextEntry::class)) {
+            \Filament\Infolists\Components\TextEntry::configureUsing(
+                fn (\Filament\Infolists\Components\TextEntry $entry) => 
+                    $entry->timezone('Europe/Brussels')
+            );
+        }
     }
 }
