@@ -31,6 +31,16 @@ class ProspectQuotationController extends Controller
             $podPorts = Port::withActivePodSchedules()->orderBy('name')->get();
             $carriers = ShippingCarrier::where('is_active', true)->orderBy('name')->get();
             
+            // Get airports for airfreight services
+            $airports = collect(config('airports', []))->map(function ($airport) {
+                return [
+                    'code' => $airport['code'],
+                    'name' => $airport['name'],
+                    'country' => $airport['country'],
+                    'full_name' => $airport['full_name'],
+                ];
+            })->values()->all();
+            
             // Service types from config
             $serviceTypes = config('quotation.service_types', []);
             
@@ -90,12 +100,19 @@ class ProspectQuotationController extends Controller
             $podPortsFormatted = $podPorts->mapWithKeys(function ($port) {
                 return [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country];
             });
+            
+            // Format airports for display
+            $airportsFormatted = collect($airports)->mapWithKeys(function ($airport) {
+                return [$airport['name'] => $airport['full_name']];
+            });
 
             return view('public.quotations.create', compact(
                 'polPorts', 
                 'podPorts', 
                 'polPortsFormatted',
                 'podPortsFormatted',
+                'airports',
+                'airportsFormatted',
                 'carriers', 
                 'serviceTypes',
                 'prefill',

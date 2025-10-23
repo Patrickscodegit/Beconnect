@@ -124,16 +124,16 @@
                             <label for="pol" class="block text-sm font-medium text-gray-700 mb-2">
                                 Port of Loading (POL) <span class="text-red-500">*</span>
                             </label>
-                            <select id="pol" name="pol" required
-                                    class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                                <option value="">Select POL</option>
-                                @foreach($polPortsFormatted as $name => $displayName)
-                                    <option value="{{ $name }}" 
-                                            {{ old('pol', $prefill['pol'] ?? '') == $name ? 'selected' : '' }}>
-                                        {{ $displayName }}
-                                    </option>
-                                @endforeach
-                            </select>
+                            <input type="text" 
+                                   id="pol" 
+                                   name="pol" 
+                                   required
+                                   value="{{ old('pol', $prefill['pol'] ?? '') }}"
+                                   class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                                   placeholder="Search or type any port/airport...">
+                            <p class="text-xs text-gray-500 mt-1">
+                                <i class="fas fa-info-circle"></i> Type to search, or enter a custom port/airport name
+                            </p>
                             @error('pol')
                                 <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
                             @enderror
@@ -143,16 +143,16 @@
                             <label for="pod" class="block text-sm font-medium text-gray-700 mb-2">
                                 Port of Discharge (POD) <span class="text-red-500">*</span>
                             </label>
-                            <select id="pod" name="pod" required
-                                    class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                                <option value="">Select POD</option>
-                                @foreach($podPortsFormatted as $name => $displayName)
-                                    <option value="{{ $name }}" 
-                                            {{ old('pod', $prefill['pod'] ?? '') == $name ? 'selected' : '' }}>
-                                        {{ $displayName }}
-                                    </option>
-                                @endforeach
-                            </select>
+                            <input type="text" 
+                                   id="pod" 
+                                   name="pod" 
+                                   required
+                                   value="{{ old('pod', $prefill['pod'] ?? '') }}"
+                                   class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                                   placeholder="Search or type any port/airport...">
+                            <p class="text-xs text-gray-500 mt-1">
+                                <i class="fas fa-info-circle"></i> Type to search, or enter a custom port/airport name
+                            </p>
                             @error('pod')
                                 <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
                             @enderror
@@ -657,6 +657,108 @@ function syncCommodityItems(event) {
     return true;
 }
 
+// Initialize searchable port/airport selects with custom input
+document.addEventListener('DOMContentLoaded', function() {
+    // Port and airport data from backend
+    const seaports = @json($polPortsFormatted->merge($podPortsFormatted)->unique());
+    const airports = @json($airportsFormatted);
+    const serviceTypeSelect = document.getElementById('service_type');
+    const polInput = document.getElementById('pol');
+    const podInput = document.getElementById('pod');
+    
+    // Initialize autocomplete for POL and POD
+    if (polInput && podInput && serviceTypeSelect) {
+        // Function to get current port list based on service type
+        function getCurrentPortList() {
+            const serviceType = serviceTypeSelect.value;
+            const isAirfreight = serviceType === 'AIRFREIGHT_EXPORT' || serviceType === 'AIRFREIGHT_IMPORT';
+            return isAirfreight ? airports : seaports;
+        }
+        
+        // Setup autocomplete for an input field
+        function setupAutocomplete(input) {
+            const wrapper = document.createElement('div');
+            wrapper.style.position = 'relative';
+            input.parentNode.insertBefore(wrapper, input);
+            wrapper.appendChild(input);
+            
+            const dropdown = document.createElement('div');
+            dropdown.className = 'absolute z-50 w-full bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto hidden';
+            wrapper.appendChild(dropdown);
+            
+            input.addEventListener('input', function() {
+                const query = this.value.toLowerCase().trim();
+                const portList = getCurrentPortList();
+                
+                if (query.length === 0) {
+                    dropdown.classList.add('hidden');
+                    return;
+                }
+                
+                // Filter matching ports
+                const matches = Object.entries(portList).filter(([key, value]) => 
+                    key.toLowerCase().includes(query) || value.toLowerCase().includes(query)
+                ).slice(0, 10);
+                
+                if (matches.length === 0) {
+                    dropdown.innerHTML = `
+                        <div class="px-4 py-3 text-sm text-gray-500">
+                            <i class="fas fa-info-circle mr-2"></i>
+                            No matches found. Press Enter to use "${this.value}" as a custom port.
+                        </div>
+                    `;
+                    dropdown.classList.remove('hidden');
+                } else {
+                    dropdown.innerHTML = matches.map(([key, value]) => `
+                        <div class="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0" 
+                             data-value="${key}">
+                            <div class="font-medium text-gray-900">${key}</div>
+                            <div class="text-sm text-gray-500">${value}</div>
+                        </div>
+                    `).join('');
+                    dropdown.classList.remove('hidden');
+                    
+                    // Add click handlers
+                    dropdown.querySelectorAll('[data-value]').forEach(item => {
+                        item.addEventListener('click', function() {
+                            input.value = this.dataset.value;
+                            dropdown.classList.add('hidden');
+                            input.dispatchEvent(new Event('change'));
+                        });
+                    });
+                }
+            });
+            
+            // Hide dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!wrapper.contains(e.target)) {
+                    dropdown.classList.add('hidden');
+                }
+            });
+            
+            // Allow pressing Enter to use custom value
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && this.value.trim()) {
+                    dropdown.classList.add('hidden');
+                    e.preventDefault();
+                }
+            });
+        }
+        
+        // Setup both inputs
+        setupAutocomplete(polInput);
+        setupAutocomplete(podInput);
+        
+        // Update placeholder text when service type changes
+        serviceTypeSelect.addEventListener('change', function() {
+            const isAirfreight = this.value === 'AIRFREIGHT_EXPORT' || this.value === 'AIRFREIGHT_IMPORT';
+            const placeholder = isAirfreight ? 'Search or type any airport...' : 'Search or type any port...';
+            polInput.placeholder = placeholder;
+            podInput.placeholder = placeholder;
+        });
+    }
+});
+
 // Alpine.js component for schedule selection
 function scheduleSelector() {
     return {
@@ -676,6 +778,10 @@ function scheduleSelector() {
                     this.polSelected = polSelect.value !== '';
                     this.fetchSchedules();
                 });
+                // Also check on input for text field
+                polSelect.addEventListener('input', () => {
+                    this.polSelected = polSelect.value !== '';
+                });
                 this.polSelected = polSelect.value !== '';
             }
             
@@ -683,6 +789,10 @@ function scheduleSelector() {
                 podSelect.addEventListener('change', () => {
                     this.podSelected = podSelect.value !== '';
                     this.fetchSchedules();
+                });
+                // Also check on input for text field
+                podSelect.addEventListener('input', () => {
+                    this.podSelected = podSelect.value !== '';
                 });
                 this.podSelected = podSelect.value !== '';
             }
