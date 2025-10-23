@@ -217,9 +217,9 @@ class QuotationRequestResource extends Resource
                                 
                                 return $results->all();
                             })
-                            ->getCreateOptionActionUsing(function ($data) {
+                            ->createOptionUsing(function (string $value): string {
                                 // Extract the actual search term from the __custom_ prefixed key
-                                return preg_replace('/^__custom_/', '', $data);
+                                return preg_replace('/^__custom_/', '', $value);
                             })
                             ->required()
                             ->live()
@@ -291,9 +291,9 @@ class QuotationRequestResource extends Resource
                                 
                                 return $results->all();
                             })
-                            ->getCreateOptionActionUsing(function ($data) {
+                            ->createOptionUsing(function (string $value): string {
                                 // Extract the actual search term from the __custom_ prefixed key
-                                return preg_replace('/^__custom_/', '', $data);
+                                return preg_replace('/^__custom_/', '', $value);
                             })
                             ->required()
                             ->live()
