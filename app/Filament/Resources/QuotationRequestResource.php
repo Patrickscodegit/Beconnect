@@ -198,7 +198,7 @@ class QuotationRequestResource extends Resource
                                     
                                     // Add custom option at the end for airports
                                     if (!empty($search)) {
-                                        $results->put("__custom_{$search}", '<div class="text-blue-600">✈️ Press Enter to use custom airport: <strong>' . $search . '</strong></div>');
+                                        $results->put($search, "Custom airport: {$search}");
                                     }
                                 } else {
                                     $results = \App\Models\Port::europeanOrigins()
@@ -211,24 +211,13 @@ class QuotationRequestResource extends Resource
                                     
                                     // Add custom option at the end for seaports
                                     if (!empty($search)) {
-                                        $results->put("__custom_{$search}", '<div class="text-blue-600">⚓ Press Enter to use custom seaport: <strong>' . $search . '</strong></div>');
+                                        $results->put($search, "Custom seaport: {$search}");
                                     }
                                 }
                                 
                                 return $results->all();
                             })
-                            ->createOptionUsing(function (string $value): string {
-                                // If it's a custom option with our prefix, extract the clean value
-                                if (str_starts_with($value, '__custom_')) {
-                                    return preg_replace('/^__custom_/', '', $value);
-                                }
-                                // Otherwise return the value as-is
-                                return $value;
-                            })
-                            ->getOptionLabelUsing(function (string $value): string {
-                                // For display, just show the clean value
-                                return $value;
-                            })
+                            ->createOptionUsing(fn (string $value): string => $value)
                             ->required()
                             ->live()
                             ->reactive()
@@ -280,7 +269,7 @@ class QuotationRequestResource extends Resource
                                     
                                     // Add custom option at the end for airports
                                     if (!empty($search)) {
-                                        $results->put("__custom_{$search}", '<div class="text-blue-600">✈️ Press Enter to use custom airport: <strong>' . $search . '</strong></div>');
+                                        $results->put($search, "Custom airport: {$search}");
                                     }
                                 } else {
                                     $results = \App\Models\Port::withActivePodSchedules()
@@ -293,24 +282,13 @@ class QuotationRequestResource extends Resource
                                     
                                     // Add custom option at the end for seaports
                                     if (!empty($search)) {
-                                        $results->put("__custom_{$search}", '<div class="text-blue-600">⚓ Press Enter to use custom seaport: <strong>' . $search . '</strong></div>');
+                                        $results->put($search, "Custom seaport: {$search}");
                                     }
                                 }
                                 
                                 return $results->all();
                             })
-                            ->createOptionUsing(function (string $value): string {
-                                // If it's a custom option with our prefix, extract the clean value
-                                if (str_starts_with($value, '__custom_')) {
-                                    return preg_replace('/^__custom_/', '', $value);
-                                }
-                                // Otherwise return the value as-is
-                                return $value;
-                            })
-                            ->getOptionLabelUsing(function (string $value): string {
-                                // For display, just show the clean value
-                                return $value;
-                            })
+                            ->createOptionUsing(fn (string $value): string => $value)
                             ->required()
                             ->live()
                             ->reactive()
