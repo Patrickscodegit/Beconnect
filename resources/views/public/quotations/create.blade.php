@@ -686,29 +686,29 @@ document.addEventListener('DOMContentLoaded', function() {
             dropdown.className = 'absolute z-50 w-full bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto hidden';
             wrapper.appendChild(dropdown);
             
-            input.addEventListener('input', function() {
-                const query = this.value.toLowerCase().trim();
+            // Function to render dropdown with matches
+            function renderDropdown(query = '') {
                 const portList = getCurrentPortList();
+                const lowerQuery = query.toLowerCase().trim();
                 
-                if (query.length === 0) {
-                    dropdown.classList.add('hidden');
-                    return;
+                // Filter matching ports (or show all if no query)
+                let matches = Object.entries(portList);
+                if (lowerQuery.length > 0) {
+                    matches = matches.filter(([key, value]) => 
+                        key.toLowerCase().includes(lowerQuery) || value.toLowerCase().includes(lowerQuery)
+                    );
                 }
+                matches = matches.slice(0, 10);
                 
-                // Filter matching ports
-                const matches = Object.entries(portList).filter(([key, value]) => 
-                    key.toLowerCase().includes(query) || value.toLowerCase().includes(query)
-                ).slice(0, 10);
-                
-                if (matches.length === 0) {
+                if (matches.length === 0 && lowerQuery.length > 0) {
                     dropdown.innerHTML = `
                         <div class="px-4 py-3 text-sm text-gray-500">
                             <i class="fas fa-info-circle mr-2"></i>
-                            No matches found. Press Enter to use "${this.value}" as a custom port.
+                            No matches found. Press Enter to use "${query}" as a custom port.
                         </div>
                     `;
                     dropdown.classList.remove('hidden');
-                } else {
+                } else if (matches.length > 0) {
                     dropdown.innerHTML = matches.map(([key, value]) => `
                         <div class="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0" 
                              data-value="${key}">
@@ -726,7 +726,23 @@ document.addEventListener('DOMContentLoaded', function() {
                             input.dispatchEvent(new Event('change'));
                         });
                     });
+                } else {
+                    dropdown.classList.add('hidden');
                 }
+            }
+            
+            // Show dropdown on focus/click
+            input.addEventListener('focus', function() {
+                renderDropdown(this.value);
+            });
+            
+            input.addEventListener('click', function() {
+                renderDropdown(this.value);
+            });
+            
+            // Update dropdown as user types
+            input.addEventListener('input', function() {
+                renderDropdown(this.value);
             });
             
             // Hide dropdown when clicking outside
