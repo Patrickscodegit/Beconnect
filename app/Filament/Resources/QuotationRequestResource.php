@@ -182,12 +182,56 @@ class QuotationRequestResource extends Resource
                                     });
                             })
                             ->searchable()
+                            ->allowHtml()
                             ->createOptionUsing(fn (string $value): string => $value)
+                            ->getSearchResultsUsing(function (string $search, Forms\Get $get) {
+                                $serviceType = $get('service_type');
+                                
+                                if (in_array($serviceType, ['AIRFREIGHT_EXPORT', 'AIRFREIGHT_IMPORT'])) {
+                                    $airports = config('airports', []);
+                                    $results = collect($airports)
+                                        ->filter(fn($airport) => 
+                                            str_contains(strtolower($airport['name']), strtolower($search)) ||
+                                            str_contains(strtolower($airport['code']), strtolower($search))
+                                        )
+                                        ->mapWithKeys(fn($airport) => [$airport['name'] => $airport['full_name']]);
+                                    
+                                    // Add custom option at the end for airports
+                                    if (!empty($search)) {
+                                        $results->put("__custom_{$search}", '<div class="text-blue-600">✈️ Press Enter to use custom airport: <strong>' . $search . '</strong></div>');
+                                    }
+                                } else {
+                                    $results = \App\Models\Port::europeanOrigins()
+                                        ->where(function($q) use ($search) {
+                                            $q->where('name', 'like', "%{$search}%")
+                                              ->orWhere('code', 'like', "%{$search}%");
+                                        })
+                                        ->get()
+                                        ->mapWithKeys(fn($port) => [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country]);
+                                    
+                                    // Add custom option at the end for seaports
+                                    if (!empty($search)) {
+                                        $results->put("__custom_{$search}", '<div class="text-blue-600">⚓ Press Enter to use custom seaport: <strong>' . $search . '</strong></div>');
+                                    }
+                                }
+                                
+                                return $results->all();
+                            })
+                            ->getCreateOptionActionUsing(function ($data) {
+                                // Extract the actual search term from the __custom_ prefixed key
+                                return preg_replace('/^__custom_/', '', $data);
+                            })
                             ->required()
                             ->live()
                             ->reactive()
                             ->afterStateUpdated(fn (Forms\Set $set) => $set('selected_schedule_id', null))
-                            ->helperText('Select from list or type custom port name (press Enter to create)')
+                            ->helperText(function (Forms\Get $get) {
+                                $serviceType = $get('service_type');
+                                if (in_array($serviceType, ['AIRFREIGHT_EXPORT', 'AIRFREIGHT_IMPORT'])) {
+                                    return 'Select airport or type custom name (press Enter)';
+                                }
+                                return 'Select seaport or type custom name (press Enter)';
+                            })
                             ->columnSpan(1),
                             
                         Forms\Components\Select::make('pod')
@@ -212,12 +256,56 @@ class QuotationRequestResource extends Resource
                                     });
                             })
                             ->searchable()
+                            ->allowHtml()
                             ->createOptionUsing(fn (string $value): string => $value)
+                            ->getSearchResultsUsing(function (string $search, Forms\Get $get) {
+                                $serviceType = $get('service_type');
+                                
+                                if (in_array($serviceType, ['AIRFREIGHT_EXPORT', 'AIRFREIGHT_IMPORT'])) {
+                                    $airports = config('airports', []);
+                                    $results = collect($airports)
+                                        ->filter(fn($airport) => 
+                                            str_contains(strtolower($airport['name']), strtolower($search)) ||
+                                            str_contains(strtolower($airport['code']), strtolower($search))
+                                        )
+                                        ->mapWithKeys(fn($airport) => [$airport['name'] => $airport['full_name']]);
+                                    
+                                    // Add custom option at the end for airports
+                                    if (!empty($search)) {
+                                        $results->put("__custom_{$search}", '<div class="text-blue-600">✈️ Press Enter to use custom airport: <strong>' . $search . '</strong></div>');
+                                    }
+                                } else {
+                                    $results = \App\Models\Port::withActivePodSchedules()
+                                        ->where(function($q) use ($search) {
+                                            $q->where('name', 'like', "%{$search}%")
+                                              ->orWhere('code', 'like', "%{$search}%");
+                                        })
+                                        ->get()
+                                        ->mapWithKeys(fn($port) => [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country]);
+                                    
+                                    // Add custom option at the end for seaports
+                                    if (!empty($search)) {
+                                        $results->put("__custom_{$search}", '<div class="text-blue-600">⚓ Press Enter to use custom seaport: <strong>' . $search . '</strong></div>');
+                                    }
+                                }
+                                
+                                return $results->all();
+                            })
+                            ->getCreateOptionActionUsing(function ($data) {
+                                // Extract the actual search term from the __custom_ prefixed key
+                                return preg_replace('/^__custom_/', '', $data);
+                            })
                             ->required()
                             ->live()
                             ->reactive()
                             ->afterStateUpdated(fn (Forms\Set $set) => $set('selected_schedule_id', null))
-                            ->helperText('Select from list or type custom port name (press Enter to create)')
+                            ->helperText(function (Forms\Get $get) {
+                                $serviceType = $get('service_type');
+                                if (in_array($serviceType, ['AIRFREIGHT_EXPORT', 'AIRFREIGHT_IMPORT'])) {
+                                    return 'Select airport or type custom name (press Enter)';
+                                }
+                                return 'Select seaport or type custom name (press Enter)';
+                            })
                             ->columnSpan(1),
                             
                         Forms\Components\TextInput::make('fdest')
