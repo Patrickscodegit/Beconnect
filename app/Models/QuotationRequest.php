@@ -29,6 +29,7 @@ class QuotationRequest extends Model
         'contact_company',
         'contact_function',
         'customer_reference',
+        'simple_service_type', // Customer-facing simplified service type
         'service_type',
         'trade_direction',
         'routing',

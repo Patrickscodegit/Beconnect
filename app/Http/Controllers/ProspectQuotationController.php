@@ -239,7 +239,7 @@ class ProspectQuotationController extends Controller
             'fdest' => 'nullable|string|max:255',
             
             // Service Information
-            'service_type' => 'required|string|in:' . implode(',', array_keys(config('quotation.service_types', []))),
+            'simple_service_type' => 'required|string|in:' . implode(',', array_keys(config('quotation.simple_service_types', []))),
             
             // Legacy Cargo Information (optional if commodity_items provided)
             'cargo_description' => 'required_without:commodity_items|nullable|string|max:1000',
@@ -282,6 +282,10 @@ class ProspectQuotationController extends Controller
      */
     protected function createQuotationRequest(Request $request)
     {
+        // Map simple service type to actual service type
+        $simpleServiceType = $request->simple_service_type;
+        $defaultServiceType = config("quotation.simple_service_types.{$simpleServiceType}.default_service_type", 'RORO_EXPORT');
+        
         $data = [
             'source' => 'prospect',
             'requester_type' => 'prospect',
@@ -310,8 +314,9 @@ class ProspectQuotationController extends Controller
             ],
             
             // Service
-            'service_type' => $request->service_type,
-            'trade_direction' => $this->getDirectionFromServiceType($request->service_type),
+            'simple_service_type' => $simpleServiceType, // Customer's choice
+            'service_type' => $defaultServiceType, // Auto-mapped, team can override
+            'trade_direction' => $this->getDirectionFromServiceType($defaultServiceType),
             'customer_type' => 'GENERAL', // Set by Belgaco team in admin panel
             'customer_role' => 'CONSIGNEE', // Set by Belgaco team in admin panel
             

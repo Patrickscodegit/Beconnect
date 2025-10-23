@@ -112,7 +112,44 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Service Types
+    | Simplified Service Types (Customer-Facing)
+    |--------------------------------------------------------------------------
+    |
+    | Simplified service type options shown to customers. These map to
+    | detailed service types that the Belgaco team can refine in admin.
+    |
+    */
+
+    'simple_service_types' => [
+        'SEA_CONTAINER' => [
+            'name' => 'By Sea - Container',
+            'description' => 'Containerized cargo shipping',
+            'icon' => '📦',
+            'default_service_type' => 'FCL_EXPORT',
+        ],
+        'SEA_RORO' => [
+            'name' => 'By Sea - RoRo',
+            'description' => 'Roll-on/Roll-off vehicle shipping',
+            'icon' => '🚗',
+            'default_service_type' => 'RORO_EXPORT',
+        ],
+        'SEA_BREAKBULK' => [
+            'name' => 'By Sea - Break Bulk',
+            'description' => 'Break bulk cargo (machinery, oversized items)',
+            'icon' => '🏗️',
+            'default_service_type' => 'BB_EXPORT',
+        ],
+        'AIR' => [
+            'name' => 'By Air',
+            'description' => 'Air cargo shipping',
+            'icon' => '✈️',
+            'default_service_type' => 'AIRFREIGHT_EXPORT',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Service Types (Detailed - Admin Use)
     |--------------------------------------------------------------------------
     |
     | All logistics service types offered based on tariff document.

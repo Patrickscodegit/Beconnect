@@ -137,7 +137,23 @@ class QuotationRequestResource extends Resource
                     
                 Forms\Components\Section::make('Route & Service Information')
                     ->schema([
+                        Forms\Components\Placeholder::make('simple_service_type_display')
+                            ->label('Customer Selected')
+                            ->content(function ($record) {
+                                if (!$record || !$record->simple_service_type) {
+                                    return '-';
+                                }
+                                $type = config("quotation.simple_service_types.{$record->simple_service_type}");
+                                if (!$type) {
+                                    return $record->simple_service_type;
+                                }
+                                return $type['icon'] . ' ' . $type['name'];
+                            })
+                            ->visible(fn ($record) => $record?->simple_service_type)
+                            ->columnSpan(1),
+                        
                         Forms\Components\Select::make('service_type')
+                            ->label('Actual Service Type (Team Selection)')
                             ->options(function () {
                                 $serviceTypes = config('quotation.service_types', []);
                                 $options = [];
@@ -152,7 +168,7 @@ class QuotationRequestResource extends Resource
                             })
                             ->required()
                             ->live()
-                            ->columnSpan(2),
+                            ->columnSpan(fn ($record) => $record?->simple_service_type ? 1 : 2),
                             
                         Forms\Components\TextInput::make('por')
                             ->label('Place of Receipt (POR)')
@@ -786,7 +802,25 @@ class QuotationRequestResource extends Resource
                         'warning' => 'intake',
                     ]),
                     
+                Tables\Columns\TextColumn::make('simple_service_type')
+                    ->label('Customer Choice')
+                    ->badge()
+                    ->formatStateUsing(fn ($state) => 
+                        $state ? (config("quotation.simple_service_types.{$state}.icon", '') . ' ' . config("quotation.simple_service_types.{$state}.name", $state)) : '-'
+                    )
+                    ->color(fn (string $state = null): string => match ($state) {
+                        'SEA_RORO' => 'info',
+                        'SEA_CONTAINER' => 'primary',
+                        'SEA_BREAKBULK' => 'warning',
+                        'AIR' => 'success',
+                        default => 'gray',
+                    })
+                    ->searchable()
+                    ->toggleable()
+                    ->sortable(),
+                
                 Tables\Columns\TextColumn::make('service_type')
+                    ->label('Actual Service')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'RORO_EXPORT' => 'info',

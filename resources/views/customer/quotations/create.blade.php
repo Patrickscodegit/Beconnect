@@ -79,7 +79,51 @@
                     </div>
                 </div>
 
-                <!-- Route Information -->
+                <!-- Service Information - MOVED UP FIRST -->
+                <div class="p-8 border-b">
+                    <h2 class="text-2xl font-bold text-gray-900 mb-6">
+                        <i class="fas fa-ship mr-2"></i>Shipping Method
+                    </h2>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="md:col-span-2">
+                            <label for="service_type" class="block text-sm font-medium text-gray-700 mb-2">
+                                How would you like to ship? <span class="text-red-500">*</span>
+                            </label>
+                            <select id="service_type" name="simple_service_type" required
+                                    class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                <option value="">Select Shipping Method</option>
+                                @foreach(config('quotation.simple_service_types', []) as $key => $type)
+                                    <option value="{{ $key }}" 
+                                            {{ old('simple_service_type', $prefill['simple_service_type'] ?? '') == $key ? 'selected' : '' }}>
+                                        {{ $type['icon'] }} {{ $type['name'] }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <p class="text-xs text-gray-500 mt-1">
+                                <i class="fas fa-info-circle"></i> Our team will determine the exact service type based on your route and requirements
+                            </p>
+                            @error('simple_service_type')
+                                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+                            @enderror
+                        </div>
+                        
+                        <div>
+                            <label for="preferred_departure_date" class="block text-sm font-medium text-gray-700 mb-2">
+                                Preferred Departure Date
+                            </label>
+                            <input type="date" id="preferred_departure_date" name="preferred_departure_date"
+                                   value="{{ old('preferred_departure_date') }}"
+                                   min="{{ date('Y-m-d', strtotime('+1 day')) }}"
+                                   class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                            @error('preferred_departure_date')
+                                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+                            @enderror
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Route Information - NOW SECOND -->
                 <div class="p-8 border-b">
                     <h2 class="text-2xl font-bold text-gray-900 mb-6">
                         <i class="fas fa-route mr-2"></i>Route Information
@@ -146,47 +190,6 @@
                                    class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
                                    placeholder="e.g., Lagos">
                             @error('fdest')
-                                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
-                            @enderror
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Service Information -->
-                <div class="p-8 border-b">
-                    <h2 class="text-2xl font-bold text-gray-900 mb-6">
-                        <i class="fas fa-ship mr-2"></i>Service Information
-                    </h2>
-                    
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label for="preferred_departure_date" class="block text-sm font-medium text-gray-700 mb-2">
-                                Preferred Departure Date
-                            </label>
-                            <input type="date" id="preferred_departure_date" name="preferred_departure_date"
-                                   value="{{ old('preferred_departure_date') }}"
-                                   min="{{ date('Y-m-d', strtotime('+1 day')) }}"
-                                   class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                            @error('preferred_departure_date')
-                                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
-                            @enderror
-                        </div>
-                        
-                        <div>
-                            <label for="service_type" class="block text-sm font-medium text-gray-700 mb-2">
-                                Service Type <span class="text-red-500">*</span>
-                            </label>
-                            <select id="service_type" name="service_type" required
-                                    class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                                <option value="">Select Service</option>
-                                @foreach($serviceTypes as $key => $service)
-                                    <option value="{{ $key }}" 
-                                            {{ old('service_type', $prefill['service_type'] ?? '') == $key ? 'selected' : '' }}>
-                                        {{ is_array($service) ? $service['name'] : $service }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            @error('service_type')
                                 <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
                             @enderror
                         </div>
@@ -627,7 +630,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Function to get current port list based on service type and field type
         function getCurrentPortList(fieldType) {
             const serviceType = serviceTypeSelect.value;
-            const isAirfreight = serviceType === 'AIRFREIGHT_EXPORT' || serviceType === 'AIRFREIGHT_IMPORT';
+            const isAirfreight = serviceType === 'AIR'; // Simplified service type
             
             if (isAirfreight) {
                 return airports;
@@ -729,7 +732,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Update placeholder text when service type changes
         serviceTypeSelect.addEventListener('change', function() {
-            const isAirfreight = this.value === 'AIRFREIGHT_EXPORT' || this.value === 'AIRFREIGHT_IMPORT';
+            const isAirfreight = this.value === 'AIR'; // Simplified service type
             const placeholder = isAirfreight ? 'Search or type any airport...' : 'Search or type any port...';
             polInput.placeholder = placeholder;
             podInput.placeholder = placeholder;
