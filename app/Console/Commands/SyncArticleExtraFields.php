@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\RobawsArticleCache;
 use App\Services\Robaws\RobawsArticleProvider;
+use App\Services\Robaws\ArticleSyncEnhancementService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -14,7 +15,7 @@ class SyncArticleExtraFields extends Command
                           {--delay=2 : Delay in seconds between API calls}
                           {--start-from=0 : Start from this article ID (for resuming)}';
 
-    protected $description = 'Sync extra fields (parent item, shipping line, etc.) from Robaws API for all articles';
+    protected $description = 'Sync extra fields (parent item, shipping line, commodity type, POD code, etc.) from Robaws API for all articles';
 
     public function handle()
     {
@@ -27,6 +28,7 @@ class SyncArticleExtraFields extends Command
         $this->newLine();
 
         $provider = app(RobawsArticleProvider::class);
+        $enhancementService = app(ArticleSyncEnhancementService::class);
         
         $query = RobawsArticleCache::query();
         if ($startFrom > 0) {
@@ -47,6 +49,7 @@ class SyncArticleExtraFields extends Command
 
         $query->orderBy('id')->chunk($batchSize, function ($articles) use (
             $provider,
+            $enhancementService,
             &$processed,
             &$success,
             &$failed,
@@ -113,6 +116,18 @@ class SyncArticleExtraFields extends Command
                         if (isset($extraFields['INFO']['stringValue'])) {
                             $updateData['article_info'] = $extraFields['INFO']['stringValue'];
                         }
+                    }
+                    
+                    // Extract enhanced fields for Smart Article Selection
+                    try {
+                        $updateData['commodity_type'] = $enhancementService->extractCommodityType($details);
+                        $updateData['pod_code'] = $enhancementService->extractPodCode($details['pod'] ?? $details['destination'] ?? '');
+                    } catch (\Exception $e) {
+                        // Non-critical - continue without enhanced fields
+                        Log::debug('Failed to extract enhanced fields for article', [
+                            'article_id' => $article->robaws_article_id,
+                            'error' => $e->getMessage()
+                        ]);
                     }
 
                     // Update article if we have data

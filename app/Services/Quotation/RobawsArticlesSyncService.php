@@ -6,6 +6,7 @@ use App\Models\RobawsArticleCache;
 use App\Services\Export\Clients\RobawsApiClient;
 use App\Services\Robaws\RobawsArticleProvider;
 use App\Services\Robaws\ArticleNameParser;
+use App\Services\Robaws\ArticleSyncEnhancementService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -14,16 +15,19 @@ class RobawsArticlesSyncService
     protected RobawsApiClient $apiClient;
     protected ArticleNameParser $parser;
     protected RobawsArticleProvider $articleProvider;
+    protected ArticleSyncEnhancementService $enhancementService;
 
     public function __construct(
         RobawsApiClient $apiClient, 
         ArticleNameParser $parser,
-        RobawsArticleProvider $articleProvider
+        RobawsArticleProvider $articleProvider,
+        ArticleSyncEnhancementService $enhancementService
     )
     {
         $this->apiClient = $apiClient;
         $this->parser = $parser;
         $this->articleProvider = $articleProvider;
+        $this->enhancementService = $enhancementService;
     }
 
     /**
@@ -279,6 +283,20 @@ class RobawsArticlesSyncService
         if ($data['article_code']) {
             $parsed = $this->parseArticleCode($data['article_code'], $articleName);
             $data = array_merge($data, $parsed);
+        }
+        
+        // Extract enhanced fields for Smart Article Selection
+        try {
+            $data['commodity_type'] = $this->enhancementService->extractCommodityType($article);
+            $data['pod_code'] = $this->enhancementService->extractPodCode($article['pod'] ?? $article['destination'] ?? '');
+        } catch (\Exception $e) {
+            Log::debug('Failed to extract enhanced fields', [
+                'article_id' => $article['id'] ?? 'unknown',
+                'error' => $e->getMessage()
+            ]);
+            // Non-critical - continue without enhanced fields
+            $data['commodity_type'] = null;
+            $data['pod_code'] = null;
         }
         
         // Fetch full article details including extraFields if requested (for incremental sync)
