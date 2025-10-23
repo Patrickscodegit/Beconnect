@@ -218,8 +218,16 @@ class QuotationRequestResource extends Resource
                                 return $results->all();
                             })
                             ->createOptionUsing(function (string $value): string {
-                                // Extract the actual search term from the __custom_ prefixed key
-                                return preg_replace('/^__custom_/', '', $value);
+                                // If it's a custom option with our prefix, extract the clean value
+                                if (str_starts_with($value, '__custom_')) {
+                                    return preg_replace('/^__custom_/', '', $value);
+                                }
+                                // Otherwise return the value as-is
+                                return $value;
+                            })
+                            ->getOptionLabelUsing(function (string $value): string {
+                                // For display, just show the clean value
+                                return $value;
                             })
                             ->required()
                             ->live()
@@ -292,8 +300,16 @@ class QuotationRequestResource extends Resource
                                 return $results->all();
                             })
                             ->createOptionUsing(function (string $value): string {
-                                // Extract the actual search term from the __custom_ prefixed key
-                                return preg_replace('/^__custom_/', '', $value);
+                                // If it's a custom option with our prefix, extract the clean value
+                                if (str_starts_with($value, '__custom_')) {
+                                    return preg_replace('/^__custom_/', '', $value);
+                                }
+                                // Otherwise return the value as-is
+                                return $value;
+                            })
+                            ->getOptionLabelUsing(function (string $value): string {
+                                // For display, just show the clean value
+                                return $value;
                             })
                             ->required()
                             ->live()
