@@ -99,7 +99,7 @@ class Port extends Model
         return $query->whereHas('podSchedules', function($q) {
             $q->where('is_active', true)
               ->whereHas('carrier', function($carrier) {
-                  $carrier->where('name', 'Sallaum');
+                  $carrier->where('name', 'Sallaum Lines');
               });
         })->where('is_active', true);
     }
