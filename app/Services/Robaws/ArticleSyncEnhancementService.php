@@ -127,10 +127,14 @@ class ArticleSyncEnhancementService
             'car' => ['car', ' car ', 'sedan'],
             'suv' => ['suv'],
             'truck' => ['truck'],
+            'truckhead' => ['truckhead', 'truck head', 'tractor unit'],
             'bus' => ['bus'],
             'motorcycle' => ['motorcycle', 'motorbike', 'bike'],
+            'lm cargo' => ['lm cargo', 'lm seafreight', 'lm ', ' lm', 'lane meter'],  // LM = Lane Meter (trucks & machinery)
             'machinery' => ['machinery', 'excavator', 'forklift', 'crane'],
             'boat' => ['boat', 'yacht', 'vessel'],
+            'container' => ['container', '20ft', '40ft', 'fcl'],
+            'break bulk' => ['break bulk', 'breakbulk', 'bb'],
         ];
 
         foreach ($patterns as $type => $keywords) {
@@ -201,6 +205,22 @@ class ArticleSyncEnhancementService
             'boat' => 'Boat',
             'yacht' => 'Boat',
             'vessel' => 'Boat',
+            
+            // LM Cargo (Lane Meter - trucks & machinery)
+            'lm cargo' => 'LM Cargo',
+            'lm' => 'LM Cargo',
+            'lane meter' => 'LM Cargo',
+            'lanemeter' => 'LM Cargo',
+            
+            // Cargo types
+            'container' => 'Container',
+            '20ft' => 'Container',
+            '40ft' => 'Container',
+            'fcl' => 'Container',
+            
+            'break bulk' => 'Break Bulk',
+            'breakbulk' => 'Break Bulk',
+            'bb' => 'Break Bulk',
             
             'general cargo' => 'General Cargo',
             'cargo' => 'General Cargo',

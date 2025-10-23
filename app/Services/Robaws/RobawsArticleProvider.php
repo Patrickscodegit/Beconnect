@@ -5,6 +5,7 @@ namespace App\Services\Robaws;
 use App\Models\RobawsArticleCache;
 use App\Models\RobawsSyncLog;
 use App\Services\Export\Clients\RobawsApiClient;
+use App\Services\Robaws\ArticleSyncEnhancementService;
 use App\Exceptions\RateLimitException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -16,7 +17,8 @@ class RobawsArticleProvider
 
     public function __construct(
         private RobawsApiClient $robawsClient,
-        private ArticleNameParser $parser
+        private ArticleNameParser $parser,
+        private ArticleSyncEnhancementService $enhancementService
     ) {}
 
     /**
@@ -980,6 +982,43 @@ class RobawsArticleProvider
                 }
             }
             
+            // Extract enhanced fields for Smart Article Selection
+            try {
+                // Strategy: Use Robaws fields first, fallback to name parsing
+                
+                // 1. Commodity Type - Check multiple sources
+                if (!empty($metadata['type'])) {
+                    // Direct from Robaws TYPE field - most reliable
+                    $metadata['commodity_type'] = $this->enhancementService->extractCommodityType(['type' => $metadata['type']]);
+                } else {
+                    // Fallback: Extract from article name
+                    $articleData = [
+                        'article_name' => $article->article_name,
+                        'name' => $article->article_name,
+                    ];
+                    $metadata['commodity_type'] = $this->enhancementService->extractCommodityType($articleData);
+                }
+                
+                // 2. POD Code - Check multiple sources
+                if (!empty($metadata['pod'])) {
+                    // Direct from Robaws POD field
+                    $metadata['pod_code'] = $this->enhancementService->extractPodCode($metadata['pod']);
+                } elseif (!empty($metadata['pod_name'])) {
+                    // From pod_name field
+                    $metadata['pod_code'] = $this->enhancementService->extractPodCode($metadata['pod_name']);
+                } else {
+                    // Fallback: Try to extract from article name
+                    $metadata['pod_code'] = null;
+                }
+                
+            } catch (\Exception $e) {
+                Log::debug('Failed to extract enhanced fields during metadata sync', [
+                    'article_id' => $articleId,
+                    'error' => $e->getMessage()
+                ]);
+                // Non-critical - continue without enhanced fields
+            }
+            
             // Update article with metadata
             $article->update($metadata);
 
@@ -1121,6 +1160,17 @@ class RobawsArticleProvider
                     break;
                 case 'PARENT ITEM':
                     $info['is_parent_item'] = (bool) $value;
+                    break;
+                case 'POL':
+                    $info['pol'] = $value;
+                    break;
+                case 'POD':
+                    $info['pod'] = $value;
+                    break;
+                case 'TYPE':
+                case 'COMMODITY TYPE':
+                case 'COMMODITY_TYPE':
+                    $info['type'] = $value;
                     break;
             }
         }
