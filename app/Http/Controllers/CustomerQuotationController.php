@@ -42,10 +42,11 @@ class CustomerQuotationController extends Controller
     {
         $user = auth()->user();
         
-        // Get filter options (unified port system)
-        $polPorts = Port::europeanOrigins()->orderBy('name')->get();
-        // POD: Only ports with active schedules (prevents empty results)
-        $podPorts = Port::withActivePodSchedules()->orderBy('name')->get();
+        // Get filter options (restricted port system)
+        // POL: Only Belgian ports (Antwerp, Flushing, Zeebrugge)
+        $polPorts = Port::belgianOrigins()->orderBy('name')->get();
+        // POD: Only destinations served by Sallaum carrier
+        $podPorts = Port::sallaumDestinations()->orderBy('name')->get();
         $carriers = ShippingCarrier::where('is_active', true)->orderBy('name')->get();
         
         // Get airports for airfreight services

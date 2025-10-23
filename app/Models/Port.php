@@ -94,6 +94,22 @@ class Port extends Model
         })->where('is_active', true);
     }
 
+    public function scopeSallaumDestinations($query)
+    {
+        return $query->whereHas('podSchedules', function($q) {
+            $q->where('is_active', true)
+              ->whereHas('carrier', function($carrier) {
+                  $carrier->where('name', 'Sallaum');
+              });
+        })->where('is_active', true);
+    }
+
+    public function scopeBelgianOrigins($query)
+    {
+        return $query->whereIn('name', ['Antwerp', 'Flushing', 'Zeebrugge'])
+            ->where('is_active', true);
+    }
+
     public function getFullNameAttribute(): string
     {
         return $this->name . ($this->country ? ', ' . $this->country : '');
