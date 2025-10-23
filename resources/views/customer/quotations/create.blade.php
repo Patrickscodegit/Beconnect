@@ -615,7 +615,8 @@ function syncCommodityItems(event) {
 // Initialize searchable port/airport selects with custom input
 document.addEventListener('DOMContentLoaded', function() {
     // Port and airport data from backend
-    const seaports = @json($polPortsFormatted->merge($podPortsFormatted)->unique());
+    const polSeaports = @json($polPortsFormatted);
+    const podSeaports = @json($podPortsFormatted);
     const airports = @json($airportsFormatted);
     const serviceTypeSelect = document.getElementById('service_type');
     const polInput = document.getElementById('pol');
@@ -623,11 +624,16 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize autocomplete for POL and POD
     if (polInput && podInput && serviceTypeSelect) {
-        // Function to get current port list based on service type
-        function getCurrentPortList() {
+        // Function to get current port list based on service type and field type
+        function getCurrentPortList(fieldType) {
             const serviceType = serviceTypeSelect.value;
             const isAirfreight = serviceType === 'AIRFREIGHT_EXPORT' || serviceType === 'AIRFREIGHT_IMPORT';
-            return isAirfreight ? airports : seaports;
+            
+            if (isAirfreight) {
+                return airports;
+            } else {
+                return fieldType === 'pol' ? polSeaports : podSeaports;
+            }
         }
         
         // Setup autocomplete for an input field
@@ -643,7 +649,8 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Function to render dropdown with matches
             function renderDropdown(query = '') {
-                const portList = getCurrentPortList();
+                const fieldType = input.id; // 'pol' or 'pod'
+                const portList = getCurrentPortList(fieldType);
                 const lowerQuery = query.toLowerCase().trim();
                 
                 // Filter matching ports (or show all if no query)
