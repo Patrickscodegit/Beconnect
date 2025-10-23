@@ -1145,8 +1145,13 @@ class RobawsArticleProvider
         $extraFields = $rawData['extraFields'] ?? [];
         
         foreach ($extraFields as $fieldName => $field) {
-            // Handle both stringValue and booleanValue (for checkboxes)
-            $value = $field['stringValue'] ?? $field['booleanValue'] ?? $field['value'] ?? null;
+            // Handle multiple value types from Robaws API
+            // Robaws returns different formats: stringValue, booleanValue, numberValue, or direct value
+            $value = $field['stringValue'] 
+                   ?? $field['booleanValue'] 
+                   ?? $field['numberValue']
+                   ?? $field['value'] 
+                   ?? null;
 
             switch ($fieldName) {
                 case 'SHIPPING LINE':
@@ -1159,7 +1164,8 @@ class RobawsArticleProvider
                     $info['pol_terminal'] = $value;
                     break;
                 case 'PARENT ITEM':
-                    $info['is_parent_item'] = (bool) $value;
+                    // Robaws returns 1/0 for checkbox, convert to boolean
+                    $info['is_parent_item'] = (bool) ((int) $value);
                     break;
                 case 'POL':
                     $info['pol'] = $value;

@@ -74,9 +74,13 @@ class SyncArticleExtraFields extends Command
                     if (isset($details['extraFields'])) {
                         $extraFields = $details['extraFields'];
                         
-                        // Parent Item checkbox
-                        if (isset($extraFields['PARENT ITEM']['booleanValue'])) {
-                            $updateData['is_parent_item'] = (bool) $extraFields['PARENT ITEM']['booleanValue'];
+                        // Parent Item checkbox - Robaws returns 1/0, not boolean
+                        if (isset($extraFields['PARENT ITEM'])) {
+                            $value = $extraFields['PARENT ITEM']['booleanValue'] 
+                                  ?? $extraFields['PARENT ITEM']['numberValue']
+                                  ?? $extraFields['PARENT ITEM']['value']
+                                  ?? null;
+                            $updateData['is_parent_item'] = (bool) ((int) $value);
                         }
                         
                         // Shipping Line
