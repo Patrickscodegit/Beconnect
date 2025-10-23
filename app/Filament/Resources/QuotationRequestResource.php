@@ -98,11 +98,6 @@ class QuotationRequestResource extends Resource
                             ->maxLength(100)
                             ->columnSpan(2),
                             
-                        Forms\Components\Select::make('customer_type')
-                            ->options(config('quotation.customer_types', []))
-                            ->default('GENERAL')
-                            ->columnSpan(1),
-                            
                         Forms\Components\Select::make('customer_role')
                             ->label('Customer Role')
                             ->options(config('quotation.customer_roles', []))
@@ -537,7 +532,7 @@ class QuotationRequestResource extends Resource
                     ->schema([
                         ArticleSelector::make('articles')
                             ->serviceType(fn ($get) => $get('service_type'))
-                            ->customerType(fn ($get) => $get('customer_type'))
+                            ->customerType(fn ($get) => $get('customer_role'))
                             ->carrierCode(fn ($get) => $get('preferred_carrier'))
                             ->columnSpanFull(),
                             
