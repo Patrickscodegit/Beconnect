@@ -96,19 +96,17 @@ class SyncArticleExtraFields extends Command
                         
                         // Update Date
                         if (isset($extraFields['UPDATE DATE']['stringValue'])) {
-                            try {
-                                $updateData['update_date'] = \Carbon\Carbon::parse($extraFields['UPDATE DATE']['stringValue'])->format('Y-m-d');
-                            } catch (\Exception $e) {
-                                // Invalid date, skip
+                            $parsedDate = $this->parseRobawsDate($extraFields['UPDATE DATE']['stringValue']);
+                            if ($parsedDate) {
+                                $updateData['update_date'] = $parsedDate;
                             }
                         }
                         
                         // Validity Date
                         if (isset($extraFields['VALIDITY DATE']['stringValue'])) {
-                            try {
-                                $updateData['validity_date'] = \Carbon\Carbon::parse($extraFields['VALIDITY DATE']['stringValue'])->format('Y-m-d');
-                            } catch (\Exception $e) {
-                                // Invalid date, skip
+                            $parsedDate = $this->parseRobawsDate($extraFields['VALIDITY DATE']['stringValue']);
+                            if ($parsedDate) {
+                                $updateData['validity_date'] = $parsedDate;
                             }
                         }
                         
@@ -186,6 +184,46 @@ class SyncArticleExtraFields extends Command
         $this->info("🎯 Total articles marked as parent items: {$parentCount}");
 
         return Command::SUCCESS;
+    }
+    
+    /**
+     * Parse date string with multiple format attempts
+     * Handles various Robaws date formats like "22/07/25", "23/072025", etc.
+     */
+    protected function parseRobawsDate(string $dateString): ?string
+    {
+        // Common Robaws date formats
+        $formats = [
+            'd/m/y',       // 22/07/25
+            'd/m/Y',       // 22/07/2025
+            'dmY',         // 23072025
+            'd/mY',        // 23/072025
+            'Y-m-d',       // 2025-07-22
+            'd/m/Y H:i:s', // 22/07/2025 10:30:00
+            'Y-m-d H:i:s', // 2025-07-22 10:30:00
+        ];
+        
+        foreach ($formats as $format) {
+            try {
+                $date = \Carbon\Carbon::createFromFormat($format, $dateString);
+                if ($date) {
+                    return $date->format('Y-m-d');
+                }
+            } catch (\Exception $e) {
+                continue;
+            }
+        }
+        
+        // If all formats fail, try Carbon::parse as last resort
+        try {
+            return \Carbon\Carbon::parse($dateString)->format('Y-m-d');
+        } catch (\Exception $e) {
+            Log::debug('Failed to parse Robaws date', [
+                'date_string' => $dateString,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
     }
 }
 
