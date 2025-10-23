@@ -130,6 +130,46 @@ class RobawsArticleResource extends Resource
                     ])
                     ->columns(2),
                     
+                Forms\Components\Section::make('Smart Article Selection Fields')
+                    ->description('Fields used for intelligent article filtering and suggestions')
+                    ->schema([
+                        Forms\Components\TextInput::make('shipping_line')
+                            ->label('Shipping Line')
+                            ->maxLength(100)
+                            ->columnSpan(1),
+                            
+                        Forms\Components\TextInput::make('service_type')
+                            ->label('Service Type')
+                            ->maxLength(100)
+                            ->columnSpan(1),
+                            
+                        Forms\Components\TextInput::make('pol_terminal')
+                            ->label('POL Terminal')
+                            ->maxLength(100)
+                            ->columnSpan(1),
+                            
+                        Forms\Components\TextInput::make('commodity_type')
+                            ->label('Commodity Type')
+                            ->helperText('Big Van, Car, LM Cargo, etc.')
+                            ->maxLength(100)
+                            ->columnSpan(1),
+                            
+                        Forms\Components\TextInput::make('pol_code')
+                            ->label('POL Code')
+                            ->helperText('e.g., ANR, RTM, HAM')
+                            ->maxLength(10)
+                            ->columnSpan(1),
+                            
+                        Forms\Components\TextInput::make('pod_code')
+                            ->label('POD Code')
+                            ->helperText('e.g., DKR, ABJ, CKY')
+                            ->maxLength(10)
+                            ->columnSpan(1),
+                    ])
+                    ->columns(2)
+                    ->collapsible()
+                    ->collapsed(false),
+                    
                 Forms\Components\Section::make('Quantity & Pricing')
                     ->schema([
                         Forms\Components\TextInput::make('min_quantity')
@@ -286,6 +326,20 @@ class RobawsArticleResource extends Resource
                     ->tooltip('Port of Discharge (schedule format)')
                     ->searchable()
                     ->toggleable(),
+                    
+                Tables\Columns\BadgeColumn::make('pod_code')
+                    ->label('POD Code')
+                    ->formatStateUsing(fn ($state) => $state ?: 'N/A')
+                    ->color(fn ($state) => $state ? 'success' : 'gray')
+                    ->tooltip('POD code for Smart Article Selection')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                    
+                Tables\Columns\BadgeColumn::make('commodity_type')
+                    ->label('Commodity Type')
+                    ->formatStateUsing(fn ($state) => $state ?: 'N/A')
+                    ->color(fn ($state) => $state ? 'warning' : 'gray')
+                    ->tooltip('For Smart Article Selection')
+                    ->toggleable(isToggledHiddenByDefault: true),
                     
                 Tables\Columns\IconColumn::make('is_parent_item')
                     ->boolean()
