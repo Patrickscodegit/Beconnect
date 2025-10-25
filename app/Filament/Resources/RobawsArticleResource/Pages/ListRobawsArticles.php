@@ -180,22 +180,25 @@ class ListRobawsArticles extends ListRecords
                 ->modalSubmitActionLabel('Yes, sync extra fields')
                 ->action(function () {
                     try {
-                        // Dispatch the sync command to run in background
-                        \Illuminate\Support\Facades\Artisan::call('robaws:sync-extra-fields', [
-                            '--batch-size' => 50,
-                            '--delay' => 2
-                        ]);
+                        // Dispatch jobs to queue with rate limiting
+                        \App\Jobs\DispatchArticleExtraFieldsSyncJobs::dispatch(
+                            batchSize: 50,
+                            delaySeconds: 2
+                        );
+                        
+                        $articleCount = \App\Models\RobawsArticleCache::count();
+                        $estimatedMinutes = ceil(($articleCount * 2) / 60);
                         
                         Notification::make()
-                            ->title('Extra fields sync started!')
-                            ->body('Syncing parent items, shipping lines, and extra fields. This will take 30-60 minutes. Check the Sync Progress page to monitor.')
+                            ->title('Extra fields sync queued!')
+                            ->body("Queuing {$articleCount} sync jobs with 2-second delays. Estimated time: ~{$estimatedMinutes} minutes. Check the Sync Progress page to monitor.")
                             ->success()
                             ->duration(10000)
                             ->send();
                             
                     } catch (\Exception $e) {
                         Notification::make()
-                            ->title('Failed to start extra fields sync')
+                            ->title('Failed to queue extra fields sync')
                             ->body($e->getMessage())
                             ->danger()
                             ->send();

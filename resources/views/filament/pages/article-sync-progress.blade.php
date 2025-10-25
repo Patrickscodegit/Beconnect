@@ -17,6 +17,9 @@
                     <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
                         @if($this->getSyncStatus() === 'running')
                             Syncing article metadata from Robaws API...
+                            @if($this->getEstimatedTimeRemaining())
+                                <br><strong>Estimated time remaining:</strong> {{ $this->getEstimatedTimeRemaining() }}
+                            @endif
                         @elseif($this->getSyncStatus() === 'complete')
                             All articles have been synced successfully
                         @else

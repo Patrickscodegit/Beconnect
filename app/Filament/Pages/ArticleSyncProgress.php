@@ -89,5 +89,27 @@ class ArticleSyncProgress extends Page
         $fieldStats = $this->getFieldStats();
         return round(($fieldStats['with_commodity'] / $fieldStats['total']) * 100);
     }
+    
+    public function getEstimatedTimeRemaining(): ?string
+    {
+        $stats = $this->getQueueStats();
+        $pendingJobs = $stats['pending_jobs'];
+        
+        if ($pendingJobs === 0) {
+            return null;
+        }
+        
+        // Each job takes ~2 seconds (rate limit delay)
+        $secondsRemaining = $pendingJobs * 2;
+        $minutesRemaining = ceil($secondsRemaining / 60);
+        
+        if ($minutesRemaining < 60) {
+            return "{$minutesRemaining} minutes";
+        }
+        
+        $hours = floor($minutesRemaining / 60);
+        $minutes = $minutesRemaining % 60;
+        return "{$hours}h {$minutes}m";
+    }
 }
 
