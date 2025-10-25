@@ -562,7 +562,12 @@ class RobawsArticlesSyncService
         $extraFields = $fullDetails['extraFields'] ?? [];
         
         foreach ($extraFields as $fieldName => $field) {
-            $value = $field['stringValue'] ?? $field['booleanValue'] ?? $field['value'] ?? null;
+            // Handle multiple value types: stringValue, booleanValue, numberValue, or direct value
+            $value = $field['stringValue'] 
+                   ?? $field['booleanValue'] 
+                   ?? $field['numberValue']
+                   ?? $field['value'] 
+                   ?? null;
             
             switch ($fieldName) {
                 case 'SHIPPING LINE':
@@ -575,7 +580,19 @@ class RobawsArticlesSyncService
                     $metadata['pol_terminal'] = $value;
                     break;
                 case 'PARENT ITEM':
-                    $metadata['is_parent_item'] = (bool) $value;
+                    // Robaws returns 1/0 for checkbox, convert to boolean
+                    $metadata['is_parent_item'] = (bool) ((int) $value);
+                    break;
+                case 'POL':
+                    $metadata['pol'] = $value;
+                    break;
+                case 'POD':
+                    $metadata['pod'] = $value;
+                    break;
+                case 'TYPE':
+                case 'COMMODITY TYPE':
+                case 'COMMODITY_TYPE':
+                    $metadata['type'] = $value;
                     break;
                 case 'ARTICLE_INFO':
                 case 'INFO':
@@ -604,6 +621,25 @@ class RobawsArticlesSyncService
         // Extract shipping line from description if not found in extraFields
         if (empty($metadata['shipping_line'])) {
             $metadata['shipping_line'] = $this->extractShippingLineFromDescription($fullDetails['description'] ?? $articleName);
+        }
+        
+        // Extract enhanced fields for Smart Article Selection using extraFields data
+        try {
+            // Use TYPE from Robaws extraFields if available, otherwise parse from name
+            if (!empty($metadata['type'])) {
+                $metadata['commodity_type'] = $this->enhancementService->extractCommodityType(['type' => $metadata['type']]);
+            } else {
+                $metadata['commodity_type'] = $this->enhancementService->extractCommodityType(['article_name' => $articleName]);
+            }
+            
+            // Use POD from Robaws extraFields if available
+            if (!empty($metadata['pod'])) {
+                $metadata['pod_code'] = $this->enhancementService->extractPodCode($metadata['pod']);
+            }
+        } catch (\Exception $e) {
+            Log::debug('Failed to extract enhanced fields from full details', [
+                'error' => $e->getMessage()
+            ]);
         }
         
         return $metadata;
