@@ -70,17 +70,29 @@ class ArticleSyncProgress extends Page
     {
         $stats = $this->getQueueStats();
         
+        // State 1: Syncing - Jobs in queue
         if ($stats['pending_jobs'] > 0 || $stats['article_jobs'] > 0) {
             return 'running';
         }
         
+        // State 2 & 3: Check field population to distinguish complete vs. idle
         $fieldStats = $this->getFieldStats();
-        $completionRate = ($fieldStats['with_commodity'] / $fieldStats['total']) * 100;
         
-        if ($completionRate > 80 && $fieldStats['parent_items'] > 0) {
+        // Calculate overall population percentage (average of key fields)
+        $keyFieldsPopulated = (
+            ($fieldStats['with_commodity'] > 0 ? 1 : 0) +
+            ($fieldStats['with_pod_code'] > 0 ? 1 : 0) +
+            ($fieldStats['with_shipping_line'] > 0 ? 1 : 0)
+        );
+        
+        $commodityPercentage = ($fieldStats['with_commodity'] / $fieldStats['total']) * 100;
+        
+        // State 2: Sync Complete - At least 2 key fields populated OR commodity > 50%
+        if ($keyFieldsPopulated >= 2 || $commodityPercentage > 50) {
             return 'complete';
         }
         
+        // State 3: No Sync Running - Never synced or minimal data
         return 'idle';
     }
     

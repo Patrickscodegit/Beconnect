@@ -7,7 +7,7 @@
                 <div>
                     <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
                         @if($this->getSyncStatus() === 'running')
-                            🔄 Sync In Progress
+                            🔄 Syncing
                         @elseif($this->getSyncStatus() === 'complete')
                             ✅ Sync Complete
                         @else
@@ -21,9 +21,9 @@
                                 <br><strong>Estimated time remaining:</strong> {{ $this->getEstimatedTimeRemaining() }}
                             @endif
                         @elseif($this->getSyncStatus() === 'complete')
-                            All articles have been synced successfully
+                            All articles have been synced successfully. Field population is complete.
                         @else
-                            Click "Sync Extra Fields" in Articles page to start sync
+                            No sync has been run yet. Click "Sync Extra Fields" in Articles page to start sync.
                         @endif
                     </p>
                 </div>
