@@ -49,8 +49,9 @@ class SyncSingleArticleMetadataJob implements ShouldQueue
                 'article_id' => $this->articleId
             ]);
             
-            // Sync article metadata (shipping_line, service_type, etc.)
-            $provider->syncArticleMetadata($this->articleId);
+            // Sync article metadata with FORCED API call to fetch extra fields
+            // $useApi = true ensures we fetch parent_item, shipping_line, etc. from Robaws API
+            $provider->syncArticleMetadata($this->articleId, $useApi = true);
             
             // Sync composite items (child articles/surcharges)
             $provider->syncCompositeItems($this->articleId);
