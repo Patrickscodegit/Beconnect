@@ -12,8 +12,8 @@ use Illuminate\Support\Facades\Log;
 class SyncArticleExtraFields extends Command
 {
     protected $signature = 'robaws:sync-extra-fields
-                          {--batch-size=100 : Number of articles to process in each batch}
-                          {--delay=0.1 : Delay in seconds between API calls (default 0.1s = 10 req/sec)}
+                          {--batch-size=50 : Number of articles to process in each batch}
+                          {--delay=0.5 : Delay in seconds between API calls (default 0.5s = 2 req/sec, safe for server)}
                           {--start-from=0 : Start from this article ID (for resuming)}';
 
     protected $description = 'Sync extra fields (parent item, shipping line, commodity type, POD code, etc.) from Robaws API for all articles';

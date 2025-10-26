@@ -117,8 +117,8 @@ class ArticleSyncProgress extends Page
             return null;
         }
         
-        // Each job takes ~0.1 seconds (optimized rate limit: 10 req/sec)
-        $secondsRemaining = $pendingJobs * 0.1;
+        // Each job takes ~0.5 seconds (safe rate limit: 2 req/sec)
+        $secondsRemaining = $pendingJobs * 0.5;
         $minutesRemaining = ceil($secondsRemaining / 60);
         
         if ($minutesRemaining < 60) {

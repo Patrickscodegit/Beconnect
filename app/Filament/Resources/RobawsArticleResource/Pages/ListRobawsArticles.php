@@ -86,12 +86,12 @@ class ListRobawsArticles extends ListRecords
                         
                         // 3. Automatically queue extra fields sync
                         \App\Jobs\DispatchArticleExtraFieldsSyncJobs::dispatch(
-                            batchSize: 100,
-                            delaySeconds: 0.1
+                            batchSize: 50,
+                            delaySeconds: 0.5
                         );
                         
                         $articleCount = \App\Models\RobawsArticleCache::count();
-                        $estimatedMinutes = ceil(($articleCount * 0.1) / 60);
+                        $estimatedMinutes = ceil(($articleCount * 0.5) / 60);
                         
                         Notification::make()
                             ->title('Full sync started!')
@@ -118,11 +118,11 @@ class ListRobawsArticles extends ListRecords
                 ->modalHeading('Sync Extra Fields from Robaws API?')
                 ->modalDescription(function () use ($dailyRemaining, $articleCount) {
                     $estimatedCost = $articleCount; // One API call per article
-                    $estimatedTime = ceil($articleCount * 0.1 / 60); // ~0.1 seconds per article (10 req/sec)
+                    $estimatedTime = ceil($articleCount * 0.5 / 60); // ~0.5 seconds per article (2 req/sec)
                     $safeToProcess = $dailyRemaining > ($estimatedCost + 500);
                     $status = $safeToProcess ? '✅ Safe to proceed' : '⚠️ Low quota - proceed with caution';
                     
-                    return "**Estimated API Cost:** ~{$estimatedCost} API calls (1 per article)\n**API Quota Remaining:** " . number_format($dailyRemaining) . "\n**Status:** {$status}\n**Duration:** ~{$estimatedTime} minutes ⚡\n**Rate:** 10 requests/second (safe - Robaws allows 15/sec)\n\n**What this does:**\nFetches extra fields from Robaws API for ALL {$articleCount} articles:\n• Parent Item status (checkbox)\n• Shipping Line\n• Service Type\n• POL Terminal\n• **Commodity Type (for Smart Article Selection)** 🧠\n• **POD Code (for Smart Article Selection)** 🧠\n• Update/Validity dates\n• Article Info\n\n**Use this for:** Syncing custom fields, parent items, extra metadata, and enabling Smart Article Selection\n\n**✨ Optimized for speed!** Runs in background with smart rate limiting.";
+                    return "**Estimated API Cost:** ~{$estimatedCost} API calls (1 per article)\n**API Quota Remaining:** " . number_format($dailyRemaining) . "\n**Status:** {$status}\n**Duration:** ~{$estimatedTime} minutes\n**Rate:** 2 requests/second (safe for server stability)\n\n**What this does:**\nFetches extra fields from Robaws API for ALL {$articleCount} articles:\n• Parent Item status (checkbox)\n• Shipping Line\n• Service Type\n• POL Terminal\n• **Commodity Type (for Smart Article Selection)** 🧠\n• **POD Code (for Smart Article Selection)** 🧠\n• Update/Validity dates\n• Article Info\n\n**Use this for:** Syncing custom fields, parent items, extra metadata, and enabling Smart Article Selection\n\n**✅ Server-friendly rate limiting** - Runs in background without overloading.";
                 })
                 ->modalSubmitActionLabel('Yes, sync extra fields')
                 ->action(function () {
@@ -131,17 +131,17 @@ class ListRobawsArticles extends ListRecords
                     try {
                         \Log::info('DISPATCHING_ARTICLE_SYNC_JOBS');
                         
-                        // Dispatch jobs to queue with optimized rate limiting
-                        // Robaws allows 15 req/sec - we use 10 req/sec (66% capacity, safe buffer)
+                        // Dispatch jobs to queue with conservative rate limiting
+                        // Conservative: 2 req/sec (safe for server stability)
                         \App\Jobs\DispatchArticleExtraFieldsSyncJobs::dispatch(
-                            batchSize: 100,      // Larger batches for efficiency
-                            delaySeconds: 0.1    // 0.1s = 10 req/sec (well below 15/sec limit)
+                            batchSize: 50,       // Smaller batches for stability
+                            delaySeconds: 0.5    // 0.5s = 2 req/sec (safe for server)
                         );
                         
                         \Log::info('ARTICLE_SYNC_JOBS_DISPATCHED_SUCCESS');
                         
                         $articleCount = \App\Models\RobawsArticleCache::count();
-                        $estimatedMinutes = ceil(($articleCount * 0.1) / 60); // 0.1s per article
+                        $estimatedMinutes = ceil(($articleCount * 0.5) / 60); // 0.5s per article
                         
                         \Log::info('SHOWING_SUCCESS_NOTIFICATION', [
                             'article_count' => $articleCount,
@@ -150,7 +150,7 @@ class ListRobawsArticles extends ListRecords
                         
                         Notification::make()
                             ->title('Extra fields sync queued!')
-                            ->body("Queuing {$articleCount} sync jobs with optimized rate limiting (10 req/sec). Estimated time: ~{$estimatedMinutes} minutes. Check the Sync Progress page to monitor.")
+                            ->body("Queuing {$articleCount} sync jobs with safe rate limiting (2 req/sec). Estimated time: ~{$estimatedMinutes} minutes. Check the Sync Progress page to monitor.")
                             ->success()
                             ->duration(10000)
                             ->send();
