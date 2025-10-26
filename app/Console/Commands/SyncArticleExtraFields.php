@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\RobawsArticleCache;
 use App\Services\Robaws\RobawsArticleProvider;
 use App\Services\Robaws\ArticleSyncEnhancementService;
+use App\Services\Robaws\RobawsFieldMapper;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -29,6 +30,7 @@ class SyncArticleExtraFields extends Command
 
         $provider = app(RobawsArticleProvider::class);
         $enhancementService = app(ArticleSyncEnhancementService::class);
+        $fieldMapper = app(RobawsFieldMapper::class);
         
         $query = RobawsArticleCache::query();
         if ($startFrom > 0) {
@@ -74,49 +76,52 @@ class SyncArticleExtraFields extends Command
                     if (isset($details['extraFields'])) {
                         $extraFields = $details['extraFields'];
                         
-                        // Parent Item checkbox - Robaws returns 1/0, not boolean
-                        if (isset($extraFields['PARENT ITEM'])) {
-                            $value = $extraFields['PARENT ITEM']['booleanValue'] 
-                                  ?? $extraFields['PARENT ITEM']['numberValue']
-                                  ?? $extraFields['PARENT ITEM']['value']
-                                  ?? null;
-                            $updateData['is_parent_item'] = (bool) ((int) $value);
+                        // Parent Item checkbox - Use flexible field mapping
+                        $parentItemValue = $fieldMapper->getBooleanValue($extraFields, 'parent_item');
+                        if ($parentItemValue !== null) {
+                            $updateData['is_parent_item'] = $parentItemValue;
                         }
                         
-                        // Shipping Line
-                        if (isset($extraFields['SHIPPING LINE']['stringValue'])) {
-                            $updateData['shipping_line'] = $extraFields['SHIPPING LINE']['stringValue'];
+                        // Shipping Line - Use flexible field mapping
+                        $shippingLineValue = $fieldMapper->getStringValue($extraFields, 'shipping_line');
+                        if ($shippingLineValue !== null) {
+                            $updateData['shipping_line'] = $shippingLineValue;
                         }
                         
-                        // Service Type
-                        if (isset($extraFields['SERVICE TYPE']['stringValue'])) {
-                            $updateData['service_type'] = $extraFields['SERVICE TYPE']['stringValue'];
+                        // Service Type - Use flexible field mapping
+                        $serviceTypeValue = $fieldMapper->getStringValue($extraFields, 'service_type');
+                        if ($serviceTypeValue !== null) {
+                            $updateData['service_type'] = $serviceTypeValue;
                         }
                         
-                        // POL Terminal
-                        if (isset($extraFields['POL TERMINAL']['stringValue'])) {
-                            $updateData['pol_terminal'] = $extraFields['POL TERMINAL']['stringValue'];
+                        // POL Terminal - Use flexible field mapping
+                        $polTerminalValue = $fieldMapper->getStringValue($extraFields, 'pol_terminal');
+                        if ($polTerminalValue !== null) {
+                            $updateData['pol_terminal'] = $polTerminalValue;
                         }
                         
-                        // Update Date
-                        if (isset($extraFields['UPDATE DATE']['stringValue'])) {
-                            $parsedDate = $this->parseRobawsDate($extraFields['UPDATE DATE']['stringValue']);
+                        // Update Date - Use flexible field mapping
+                        $updateDateValue = $fieldMapper->getStringValue($extraFields, 'update_date');
+                        if ($updateDateValue !== null) {
+                            $parsedDate = $this->parseRobawsDate($updateDateValue);
                             if ($parsedDate) {
                                 $updateData['update_date'] = $parsedDate;
                             }
                         }
                         
-                        // Validity Date
-                        if (isset($extraFields['VALIDITY DATE']['stringValue'])) {
-                            $parsedDate = $this->parseRobawsDate($extraFields['VALIDITY DATE']['stringValue']);
+                        // Validity Date - Use flexible field mapping
+                        $validityDateValue = $fieldMapper->getStringValue($extraFields, 'validity_date');
+                        if ($validityDateValue !== null) {
+                            $parsedDate = $this->parseRobawsDate($validityDateValue);
                             if ($parsedDate) {
                                 $updateData['validity_date'] = $parsedDate;
                             }
                         }
                         
-                        // Article Info
-                        if (isset($extraFields['INFO']['stringValue'])) {
-                            $updateData['article_info'] = $extraFields['INFO']['stringValue'];
+                        // Article Info - Use flexible field mapping
+                        $infoValue = $fieldMapper->getStringValue($extraFields, 'info');
+                        if ($infoValue !== null) {
+                            $updateData['article_info'] = $infoValue;
                         }
                     }
                     

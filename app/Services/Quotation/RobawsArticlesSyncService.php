@@ -7,6 +7,7 @@ use App\Services\Export\Clients\RobawsApiClient;
 use App\Services\Robaws\RobawsArticleProvider;
 use App\Services\Robaws\ArticleNameParser;
 use App\Services\Robaws\ArticleSyncEnhancementService;
+use App\Services\Robaws\RobawsFieldMapper;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -16,18 +17,21 @@ class RobawsArticlesSyncService
     protected ArticleNameParser $parser;
     protected RobawsArticleProvider $articleProvider;
     protected ArticleSyncEnhancementService $enhancementService;
+    protected RobawsFieldMapper $fieldMapper;
 
     public function __construct(
         RobawsApiClient $apiClient, 
         ArticleNameParser $parser,
         RobawsArticleProvider $articleProvider,
-        ArticleSyncEnhancementService $enhancementService
+        ArticleSyncEnhancementService $enhancementService,
+        RobawsFieldMapper $fieldMapper
     )
     {
         $this->apiClient = $apiClient;
         $this->parser = $parser;
         $this->articleProvider = $articleProvider;
         $this->enhancementService = $enhancementService;
+        $this->fieldMapper = $fieldMapper;
     }
 
     /**
@@ -570,16 +574,22 @@ class RobawsArticlesSyncService
                    ?? null;
             
             switch ($fieldName) {
+                // These are now handled by RobawsFieldMapper for robust extraction
+                // Keep the switch for other fields not in the mapper
                 case 'SHIPPING LINE':
+                case 'SHIPPING_LINE':
                     $metadata['shipping_line'] = $value;
                     break;
                 case 'SERVICE TYPE':
+                case 'SERVICE_TYPE':
                     $metadata['service_type'] = $value;
                     break;
                 case 'POL TERMINAL':
+                case 'POL_TERMINAL':
                     $metadata['pol_terminal'] = $value;
                     break;
                 case 'PARENT ITEM':
+                case 'PARENT_ITEM':
                     // Robaws returns 1/0 for checkbox, convert to boolean
                     $metadata['is_parent_item'] = (bool) ((int) $value);
                     break;

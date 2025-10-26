@@ -6,6 +6,7 @@ use App\Models\RobawsArticleCache;
 use App\Models\RobawsSyncLog;
 use App\Services\Export\Clients\RobawsApiClient;
 use App\Services\Robaws\ArticleSyncEnhancementService;
+use App\Services\Robaws\RobawsFieldMapper;
 use App\Exceptions\RateLimitException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -18,7 +19,8 @@ class RobawsArticleProvider
     public function __construct(
         private RobawsApiClient $robawsClient,
         private ArticleNameParser $parser,
-        private ArticleSyncEnhancementService $enhancementService
+        private ArticleSyncEnhancementService $enhancementService,
+        private RobawsFieldMapper $fieldMapper
     ) {}
 
     /**
@@ -1140,13 +1142,33 @@ class RobawsArticleProvider
     {
         $info = [];
 
-        // Extract from extraFields if available
-        // Robaws API returns extraFields as an object/dictionary with field names as keys
+        // Extract from extraFields if available using flexible field mapping
         $extraFields = $rawData['extraFields'] ?? [];
         
+        // Use RobawsFieldMapper for robust field extraction
+        $shippingLine = $this->fieldMapper->getStringValue($extraFields, 'shipping_line');
+        if ($shippingLine !== null) {
+            $info['shipping_line'] = $shippingLine;
+        }
+        
+        $serviceType = $this->fieldMapper->getStringValue($extraFields, 'service_type');
+        if ($serviceType !== null) {
+            $info['service_type'] = $serviceType;
+        }
+        
+        $polTerminal = $this->fieldMapper->getStringValue($extraFields, 'pol_terminal');
+        if ($polTerminal !== null) {
+            $info['pol_terminal'] = $polTerminal;
+        }
+        
+        $parentItem = $this->fieldMapper->getBooleanValue($extraFields, 'parent_item');
+        if ($parentItem !== null) {
+            $info['is_parent_item'] = $parentItem;
+        }
+        
+        // Handle other fields that might exist
         foreach ($extraFields as $fieldName => $field) {
             // Handle multiple value types from Robaws API
-            // Robaws returns different formats: stringValue, booleanValue, numberValue, or direct value
             $value = $field['stringValue'] 
                    ?? $field['booleanValue'] 
                    ?? $field['numberValue']
@@ -1154,19 +1176,6 @@ class RobawsArticleProvider
                    ?? null;
 
             switch ($fieldName) {
-                case 'SHIPPING LINE':
-                    $info['shipping_line'] = $value;
-                    break;
-                case 'SERVICE TYPE':
-                    $info['service_type'] = $value;
-                    break;
-                case 'POL TERMINAL':
-                    $info['pol_terminal'] = $value;
-                    break;
-                case 'PARENT ITEM':
-                    // Robaws returns 1/0 for checkbox, convert to boolean
-                    $info['is_parent_item'] = (bool) ((int) $value);
-                    break;
                 case 'POL':
                     $info['pol'] = $value;
                     break;
