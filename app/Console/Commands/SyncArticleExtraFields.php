@@ -18,6 +18,21 @@ class SyncArticleExtraFields extends Command
 
     protected $description = 'Sync extra fields (parent item, shipping line, commodity type, POD code, etc.) from Robaws API for all articles';
 
+    protected RobawsArticleProvider $provider;
+    protected ArticleSyncEnhancementService $enhancementService;
+    protected RobawsFieldMapper $fieldMapper;
+
+    public function __construct(
+        RobawsArticleProvider $provider,
+        ArticleSyncEnhancementService $enhancementService,
+        RobawsFieldMapper $fieldMapper
+    ) {
+        parent::__construct();
+        $this->provider = $provider;
+        $this->enhancementService = $enhancementService;
+        $this->fieldMapper = $fieldMapper;
+    }
+
     public function handle()
     {
         $batchSize = (int) $this->option('batch-size');
@@ -27,10 +42,6 @@ class SyncArticleExtraFields extends Command
         $this->info('🔄 Starting extra fields sync for all articles...');
         $this->info("⚙️  Batch size: {$batchSize} | Delay: {$delay}s | Start from ID: {$startFrom}");
         $this->newLine();
-
-        $provider = app(RobawsArticleProvider::class);
-        $enhancementService = app(ArticleSyncEnhancementService::class);
-        $fieldMapper = app(RobawsFieldMapper::class);
         
         $query = RobawsArticleCache::query();
         if ($startFrom > 0) {
@@ -50,8 +61,6 @@ class SyncArticleExtraFields extends Command
         $progressBar->setFormat('verbose');
 
         $query->orderBy('id')->chunk($batchSize, function ($articles) use (
-            $provider,
-            $enhancementService,
             &$processed,
             &$success,
             &$failed,
@@ -62,7 +71,7 @@ class SyncArticleExtraFields extends Command
             foreach ($articles as $article) {
                 try {
                     // Fetch full article details from Robaws API
-                    $details = $provider->getArticleDetails($article->robaws_article_id);
+                    $details = $this->provider->getArticleDetails($article->robaws_article_id);
                     
                     if (!$details) {
                         $skipped++;
@@ -77,31 +86,31 @@ class SyncArticleExtraFields extends Command
                         $extraFields = $details['extraFields'];
                         
                         // Parent Item checkbox - Use flexible field mapping
-                        $parentItemValue = $fieldMapper->getBooleanValue($extraFields, 'parent_item');
+                        $parentItemValue = $this->fieldMapper->getBooleanValue($extraFields, 'parent_item');
                         if ($parentItemValue !== null) {
                             $updateData['is_parent_item'] = $parentItemValue;
                         }
                         
                         // Shipping Line - Use flexible field mapping
-                        $shippingLineValue = $fieldMapper->getStringValue($extraFields, 'shipping_line');
+                        $shippingLineValue = $this->fieldMapper->getStringValue($extraFields, 'shipping_line');
                         if ($shippingLineValue !== null) {
                             $updateData['shipping_line'] = $shippingLineValue;
                         }
                         
                         // Service Type - Use flexible field mapping
-                        $serviceTypeValue = $fieldMapper->getStringValue($extraFields, 'service_type');
+                        $serviceTypeValue = $this->fieldMapper->getStringValue($extraFields, 'service_type');
                         if ($serviceTypeValue !== null) {
                             $updateData['service_type'] = $serviceTypeValue;
                         }
                         
                         // POL Terminal - Use flexible field mapping
-                        $polTerminalValue = $fieldMapper->getStringValue($extraFields, 'pol_terminal');
+                        $polTerminalValue = $this->fieldMapper->getStringValue($extraFields, 'pol_terminal');
                         if ($polTerminalValue !== null) {
                             $updateData['pol_terminal'] = $polTerminalValue;
                         }
                         
                         // Update Date - Use flexible field mapping
-                        $updateDateValue = $fieldMapper->getStringValue($extraFields, 'update_date');
+                        $updateDateValue = $this->fieldMapper->getStringValue($extraFields, 'update_date');
                         if ($updateDateValue !== null) {
                             $parsedDate = $this->parseRobawsDate($updateDateValue);
                             if ($parsedDate) {
@@ -110,7 +119,7 @@ class SyncArticleExtraFields extends Command
                         }
                         
                         // Validity Date - Use flexible field mapping
-                        $validityDateValue = $fieldMapper->getStringValue($extraFields, 'validity_date');
+                        $validityDateValue = $this->fieldMapper->getStringValue($extraFields, 'validity_date');
                         if ($validityDateValue !== null) {
                             $parsedDate = $this->parseRobawsDate($validityDateValue);
                             if ($parsedDate) {
@@ -119,7 +128,7 @@ class SyncArticleExtraFields extends Command
                         }
                         
                         // Article Info - Use flexible field mapping
-                        $infoValue = $fieldMapper->getStringValue($extraFields, 'info');
+                        $infoValue = $this->fieldMapper->getStringValue($extraFields, 'info');
                         if ($infoValue !== null) {
                             $updateData['article_info'] = $infoValue;
                         }
@@ -127,8 +136,8 @@ class SyncArticleExtraFields extends Command
                     
                     // Extract enhanced fields for Smart Article Selection
                     try {
-                        $updateData['commodity_type'] = $enhancementService->extractCommodityType($details);
-                        $updateData['pod_code'] = $enhancementService->extractPodCode($details['pod'] ?? $details['destination'] ?? '');
+                        $updateData['commodity_type'] = $this->enhancementService->extractCommodityType($details);
+                        $updateData['pod_code'] = $this->enhancementService->extractPodCode($details['pod'] ?? $details['destination'] ?? '');
                     } catch (\Exception $e) {
                         // Non-critical - continue without enhanced fields
                         Log::debug('Failed to extract enhanced fields for article', [
