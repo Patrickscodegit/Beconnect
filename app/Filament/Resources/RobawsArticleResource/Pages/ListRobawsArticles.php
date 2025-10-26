@@ -179,15 +179,26 @@ class ListRobawsArticles extends ListRecords
                 })
                 ->modalSubmitActionLabel('Yes, sync extra fields')
                 ->action(function () {
+                    \Illuminate\Support\Facades\Log::info('🔵 Sync Extra Fields button clicked');
+                    
                     try {
+                        \Illuminate\Support\Facades\Log::info('🔵 About to dispatch DispatchArticleExtraFieldsSyncJobs');
+                        
                         // Dispatch jobs to queue with rate limiting
                         \App\Jobs\DispatchArticleExtraFieldsSyncJobs::dispatch(
                             batchSize: 50,
                             delaySeconds: 2
                         );
                         
+                        \Illuminate\Support\Facades\Log::info('🔵 Successfully dispatched DispatchArticleExtraFieldsSyncJobs');
+                        
                         $articleCount = \App\Models\RobawsArticleCache::count();
                         $estimatedMinutes = ceil(($articleCount * 2) / 60);
+                        
+                        \Illuminate\Support\Facades\Log::info('🔵 About to show success notification', [
+                            'article_count' => $articleCount,
+                            'estimated_minutes' => $estimatedMinutes
+                        ]);
                         
                         Notification::make()
                             ->title('Extra fields sync queued!')
@@ -196,7 +207,14 @@ class ListRobawsArticles extends ListRecords
                             ->duration(10000)
                             ->send();
                             
+                        \Illuminate\Support\Facades\Log::info('🔵 Button action completed successfully');
+                            
                     } catch (\Exception $e) {
+                        \Illuminate\Support\Facades\Log::error('🔴 Button action failed', [
+                            'error' => $e->getMessage(),
+                            'trace' => $e->getTraceAsString()
+                        ]);
+                        
                         Notification::make()
                             ->title('Failed to queue extra fields sync')
                             ->body($e->getMessage())
