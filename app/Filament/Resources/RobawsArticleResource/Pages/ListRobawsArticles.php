@@ -163,6 +163,23 @@ class ListRobawsArticles extends ListRecords
                     }
                 }),
                 
+            // TEST BUTTON - Simple test without modal
+            Actions\Action::make('testButton')
+                ->label('🔧 TEST BUTTON')
+                ->icon('heroicon-o-wrench')
+                ->color('danger')
+                ->action(function () {
+                    \Log::info('TEST_BUTTON_CLICKED_NO_MODAL');
+                    
+                    Notification::make()
+                        ->title('Test button works!')
+                        ->body('This confirms the action method is being called.')
+                        ->success()
+                        ->send();
+                        
+                    \Log::info('TEST_BUTTON_NOTIFICATION_SENT');
+                }),
+                
             Actions\Action::make('syncExtraFields')
                 ->label('Sync Extra Fields')
                 ->icon('heroicon-o-tag')
@@ -179,10 +196,10 @@ class ListRobawsArticles extends ListRecords
                 })
                 ->modalSubmitActionLabel('Yes, sync extra fields')
                 ->action(function () {
-                    \Illuminate\Support\Facades\Log::info('🔵 Sync Extra Fields button clicked');
+                    \Log::info('SYNC_EXTRA_FIELDS_BUTTON_CLICKED');
                     
                     try {
-                        \Illuminate\Support\Facades\Log::info('🔵 About to dispatch DispatchArticleExtraFieldsSyncJobs');
+                        \Log::info('DISPATCHING_ARTICLE_SYNC_JOBS');
                         
                         // Dispatch jobs to queue with rate limiting
                         \App\Jobs\DispatchArticleExtraFieldsSyncJobs::dispatch(
@@ -190,12 +207,12 @@ class ListRobawsArticles extends ListRecords
                             delaySeconds: 2
                         );
                         
-                        \Illuminate\Support\Facades\Log::info('🔵 Successfully dispatched DispatchArticleExtraFieldsSyncJobs');
+                        \Log::info('ARTICLE_SYNC_JOBS_DISPATCHED_SUCCESS');
                         
                         $articleCount = \App\Models\RobawsArticleCache::count();
                         $estimatedMinutes = ceil(($articleCount * 2) / 60);
                         
-                        \Illuminate\Support\Facades\Log::info('🔵 About to show success notification', [
+                        \Log::info('SHOWING_SUCCESS_NOTIFICATION', [
                             'article_count' => $articleCount,
                             'estimated_minutes' => $estimatedMinutes
                         ]);
@@ -207,10 +224,10 @@ class ListRobawsArticles extends ListRecords
                             ->duration(10000)
                             ->send();
                             
-                        \Illuminate\Support\Facades\Log::info('🔵 Button action completed successfully');
+                        \Log::info('SYNC_EXTRA_FIELDS_ACTION_COMPLETED');
                             
                     } catch (\Exception $e) {
-                        \Illuminate\Support\Facades\Log::error('🔴 Button action failed', [
+                        \Log::error('SYNC_EXTRA_FIELDS_ACTION_FAILED', [
                             'error' => $e->getMessage(),
                             'trace' => $e->getTraceAsString()
                         ]);
