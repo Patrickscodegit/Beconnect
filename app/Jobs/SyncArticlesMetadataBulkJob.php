@@ -63,9 +63,8 @@ class SyncArticlesMetadataBulkJob implements ShouldQueue
         
         foreach ($batches as $batchIndex => $batch) {
             foreach ($batch as $articleId) {
-                // Dispatch individual job to queue for parallel processing
-                SyncSingleArticleMetadataJob::dispatch($articleId)
-                    ->onQueue('article-metadata');
+                // Dispatch individual job to default queue (processed by existing worker)
+                SyncSingleArticleMetadataJob::dispatch($articleId);
                 
                 $dispatched++;
             }
@@ -81,8 +80,8 @@ class SyncArticlesMetadataBulkJob implements ShouldQueue
         
         Log::info('Completed dispatching bulk metadata sync jobs', [
             'total_dispatched' => $dispatched,
-            'queue' => 'article-metadata',
-            'message' => "All jobs queued. Start worker with: php artisan queue:work --queue=article-metadata"
+            'queue' => 'default',
+            'message' => "All jobs queued and will be processed by existing queue worker"
         ]);
     }
 }

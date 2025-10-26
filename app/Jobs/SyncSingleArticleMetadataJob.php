@@ -34,7 +34,7 @@ class SyncSingleArticleMetadataJob implements ShouldQueue
     public function __construct(
         public int $articleId
     ) {
-        $this->onQueue('article-metadata');
+        // Use default queue (processed by existing worker)
     }
 
     /**
