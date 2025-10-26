@@ -171,11 +171,11 @@ class ListRobawsArticles extends ListRecords
                 ->modalHeading('Sync Extra Fields from Robaws API?')
                 ->modalDescription(function () use ($dailyRemaining, $articleCount) {
                     $estimatedCost = $articleCount; // One API call per article
-                    $estimatedTime = ceil($articleCount * 2 / 60); // ~2 seconds per article
+                    $estimatedTime = ceil($articleCount * 0.1 / 60); // ~0.1 seconds per article (10 req/sec)
                     $safeToProcess = $dailyRemaining > ($estimatedCost + 500);
                     $status = $safeToProcess ? '✅ Safe to proceed' : '⚠️ Low quota - proceed with caution';
                     
-                    return "**Estimated API Cost:** ~{$estimatedCost} API calls (1 per article)\n**API Quota Remaining:** " . number_format($dailyRemaining) . "\n**Status:** {$status}\n**Duration:** ~{$estimatedTime} minutes\n\n**What this does:**\nFetches extra fields from Robaws API for ALL {$articleCount} articles:\n• Parent Item status (checkbox)\n• Shipping Line\n• Service Type\n• POL Terminal\n• **Commodity Type (for Smart Article Selection)** 🧠\n• **POD Code (for Smart Article Selection)** 🧠\n• Update/Validity dates\n• Article Info\n\n**Use this for:** Syncing custom fields, parent items, extra metadata, and enabling Smart Article Selection\n\n**⚠️ This is a long-running operation!** It will run in the background via queue.";
+                    return "**Estimated API Cost:** ~{$estimatedCost} API calls (1 per article)\n**API Quota Remaining:** " . number_format($dailyRemaining) . "\n**Status:** {$status}\n**Duration:** ~{$estimatedTime} minutes ⚡\n**Rate:** 10 requests/second (safe - Robaws allows 15/sec)\n\n**What this does:**\nFetches extra fields from Robaws API for ALL {$articleCount} articles:\n• Parent Item status (checkbox)\n• Shipping Line\n• Service Type\n• POL Terminal\n• **Commodity Type (for Smart Article Selection)** 🧠\n• **POD Code (for Smart Article Selection)** 🧠\n• Update/Validity dates\n• Article Info\n\n**Use this for:** Syncing custom fields, parent items, extra metadata, and enabling Smart Article Selection\n\n**✨ Optimized for speed!** Runs in background with smart rate limiting.";
                 })
                 ->modalSubmitActionLabel('Yes, sync extra fields')
                 ->action(function () {
@@ -184,16 +184,17 @@ class ListRobawsArticles extends ListRecords
                     try {
                         \Log::info('DISPATCHING_ARTICLE_SYNC_JOBS');
                         
-                        // Dispatch jobs to queue with rate limiting
+                        // Dispatch jobs to queue with optimized rate limiting
+                        // Robaws allows 15 req/sec - we use 10 req/sec (66% capacity, safe buffer)
                         \App\Jobs\DispatchArticleExtraFieldsSyncJobs::dispatch(
-                            batchSize: 50,
-                            delaySeconds: 2
+                            batchSize: 100,      // Larger batches for efficiency
+                            delaySeconds: 0.1    // 0.1s = 10 req/sec (well below 15/sec limit)
                         );
                         
                         \Log::info('ARTICLE_SYNC_JOBS_DISPATCHED_SUCCESS');
                         
                         $articleCount = \App\Models\RobawsArticleCache::count();
-                        $estimatedMinutes = ceil(($articleCount * 2) / 60);
+                        $estimatedMinutes = ceil(($articleCount * 0.1) / 60); // 0.1s per article
                         
                         \Log::info('SHOWING_SUCCESS_NOTIFICATION', [
                             'article_count' => $articleCount,
@@ -202,7 +203,7 @@ class ListRobawsArticles extends ListRecords
                         
                         Notification::make()
                             ->title('Extra fields sync queued!')
-                            ->body("Queuing {$articleCount} sync jobs with 2-second delays. Estimated time: ~{$estimatedMinutes} minutes. Check the Sync Progress page to monitor.")
+                            ->body("Queuing {$articleCount} sync jobs with optimized rate limiting (10 req/sec). Estimated time: ~{$estimatedMinutes} minutes. Check the Sync Progress page to monitor.")
                             ->success()
                             ->duration(10000)
                             ->send();
