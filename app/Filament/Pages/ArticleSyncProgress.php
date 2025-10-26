@@ -30,9 +30,15 @@ class ArticleSyncProgress extends Page
     
     public function getQueueStats(): array
     {
+        // Count jobs by checking payload for SyncSingleArticleMetadataJob class name
+        // Since we moved to default queue, we need to filter by job class instead of queue name
+        $articleJobs = DB::table('jobs')
+            ->where('payload', 'LIKE', '%SyncSingleArticleMetadataJob%')
+            ->count();
+            
         return [
             'pending_jobs' => DB::table('jobs')->count(),
-            'article_jobs' => DB::table('jobs')->where('queue', 'article-metadata')->count(),
+            'article_jobs' => $articleJobs,
             'failed_jobs' => DB::table('failed_jobs')->count(),
         ];
     }
@@ -105,14 +111,14 @@ class ArticleSyncProgress extends Page
     public function getEstimatedTimeRemaining(): ?string
     {
         $stats = $this->getQueueStats();
-        $pendingJobs = $stats['pending_jobs'];
+        $pendingJobs = $stats['article_jobs']; // Use article_jobs count for accuracy
         
         if ($pendingJobs === 0) {
             return null;
         }
         
-        // Each job takes ~2 seconds (rate limit delay)
-        $secondsRemaining = $pendingJobs * 2;
+        // Each job takes ~0.1 seconds (optimized rate limit: 10 req/sec)
+        $secondsRemaining = $pendingJobs * 0.1;
         $minutesRemaining = ceil($secondsRemaining / 60);
         
         if ($minutesRemaining < 60) {

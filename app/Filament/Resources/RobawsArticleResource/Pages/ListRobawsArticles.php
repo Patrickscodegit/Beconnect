@@ -25,16 +25,16 @@ class ListRobawsArticles extends ListRecords
         
         return [
             Actions\Action::make('syncIncremental')
-                ->label('Sync Changed Articles')
-                ->icon('heroicon-o-arrow-path')
+                ->label('Quick Sync')
+                ->icon('heroicon-o-bolt')
                 ->color('success')
                 ->requiresConfirmation()
-                ->modalHeading('Sync Changed Articles from Robaws?')
+                ->modalHeading('⚡ Quick Sync - Changed Articles Only')
                 ->modalDescription(function () use ($dailyRemaining) {
                     $estimatedCost = '~10-50 API calls';
-                    return "**Estimated API Cost:** {$estimatedCost}\n**API Quota Remaining:** " . number_format($dailyRemaining) . "\n\n**What this does:**\nFetches only articles modified since the last sync. This is fast, rate-limit friendly, and recommended for regular updates.\n\n**Best for:** Daily/hourly updates, webhook recovery";
+                    return "**Estimated API Cost:** {$estimatedCost}\n**API Quota Remaining:** " . number_format($dailyRemaining) . "\n**Duration:** 1-2 minutes\n\n**What this does:**\nSyncs only articles modified since last sync - fast and efficient!\n\n**Use for:** Daily updates, regular maintenance\n**✨ Recommended for routine use**";
                 })
-                ->modalSubmitActionLabel('Yes, sync changes')
+                ->modalSubmitActionLabel('Yes, quick sync')
                 ->action(function () {
                     try {
                         $syncService = app(RobawsArticlesSyncService::class);
@@ -58,105 +58,52 @@ class ListRobawsArticles extends ListRecords
                 }),
                 
             Actions\Action::make('syncAll')
-                ->label('Full Sync (All Articles)')
+                ->label('Full Sync')
                 ->icon('heroicon-o-arrow-path')
-                ->color('warning')
+                ->color('primary')
                 ->requiresConfirmation()
-                ->modalHeading('⚠️ Full Sync All Articles from Robaws?')
+                ->modalHeading('🔄 Complete System Sync')
                 ->modalDescription(function () use ($dailyRemaining, $articleCount) {
-                    $estimatedCost = ceil($articleCount / 10) + 50; // Pagination estimate
-                    $safeToProcess = $dailyRemaining > ($estimatedCost + 500);
+                    $articlesApiCost = ceil($articleCount / 10) + 50;
+                    $extraFieldsCost = $articleCount;
+                    $totalCost = $articlesApiCost + $extraFieldsCost;
+                    $safeToProcess = $dailyRemaining > ($totalCost + 500);
                     $status = $safeToProcess ? '✅ Safe to proceed' : '⚠️ Low quota - proceed with caution';
+                    $estimatedTime = ceil($articleCount * 0.1 / 60) + 5; // Extra fields (0.1s) + article fetch (~5 min)
                     
-                    return "**Estimated API Cost:** ~{$estimatedCost} API calls\n**API Quota Remaining:** " . number_format($dailyRemaining) . "\n**Status:** {$status}\n**Duration:** ~3-5 minutes\n\n**What this does:**\nFetches ALL {$articleCount} articles from Robaws API and syncs metadata. This is a heavy operation.\n\n**Use this for:** Initial setup, major updates, data verification\n\n**⚠️ For regular updates, use \"Sync Changed Articles\" instead!**";
+                    return "**Estimated API Cost:** ~{$totalCost} API calls\n**API Quota Remaining:** " . number_format($dailyRemaining) . "\n**Status:** {$status}\n**Duration:** ~{$estimatedTime} minutes\n\n**What this does:**\n✅ Syncs ALL {$articleCount} articles\n✅ Extracts metadata (POL/POD, service types)\n✅ Fetches extra fields (parent items, shipping lines)\n✅ Complete Smart Article Selection data\n\n**Use for:** Initial setup, major updates, troubleshooting\n**💡 For daily updates, use Quick Sync instead**";
                 })
-                ->modalSubmitActionLabel('Yes, sync all')
+                ->modalSubmitActionLabel('Yes, full sync')
                 ->action(function () {
                     try {
                         $syncService = app(RobawsArticlesSyncService::class);
+                        
+                        // 1. Sync all articles
                         $result = $syncService->sync();
                         
-                        // Automatically sync metadata
+                        // 2. Sync metadata from names
                         $metadataResult = $syncService->syncAllMetadata();
                         
+                        // 3. Automatically queue extra fields sync
+                        \App\Jobs\DispatchArticleExtraFieldsSyncJobs::dispatch(
+                            batchSize: 100,
+                            delaySeconds: 0.1
+                        );
+                        
+                        $articleCount = \App\Models\RobawsArticleCache::count();
+                        $estimatedMinutes = ceil(($articleCount * 0.1) / 60);
+                        
                         Notification::make()
-                            ->title('Full sync completed!')
-                            ->body("Synced {$result['synced']} articles. Metadata sync: {$metadataResult['success']}/{$metadataResult['total']} articles.")
+                            ->title('Full sync started!')
+                            ->body("Synced {$result['synced']} articles. Metadata: {$metadataResult['success']}/{$metadataResult['total']}. Extra fields queued (~{$estimatedMinutes} min). Check Sync Progress page.")
                             ->success()
-                            ->duration(10000) // 10 seconds
+                            ->duration(12000)
                             ->send();
                             
                         $this->redirect(static::getUrl());
                     } catch (\Exception $e) {
                         Notification::make()
                             ->title('Sync failed')
-                            ->body($e->getMessage())
-                            ->danger()
-                            ->send();
-                    }
-                }),
-                
-            Actions\Action::make('rebuildCache')
-                ->label('Rebuild Cache')
-                ->icon('heroicon-o-arrow-path-rounded-square')
-                ->color('danger')
-                ->requiresConfirmation()
-                ->modalHeading('🔴 Rebuild Entire Article Cache?')
-                ->modalDescription(function () use ($dailyRemaining, $articleCount) {
-                    $estimatedCost = ceil($articleCount / 10) + 50;
-                    $safeToProcess = $dailyRemaining > ($estimatedCost + 500);
-                    $status = $safeToProcess ? '✅ Safe to proceed' : '⚠️ Low quota - proceed with caution';
-                    
-                    return "**⚠️ DESTRUCTIVE OPERATION**\n\n**Estimated API Cost:** ~{$estimatedCost} API calls\n**API Quota Remaining:** " . number_format($dailyRemaining) . "\n**Status:** {$status}\n**Duration:** ~3-5 minutes\n\n**What this does:**\n1. **DELETES** all {$articleCount} cached articles\n2. Fetches everything from Robaws API\n3. Syncs metadata\n\n**Use this for:** Database corruption, schema migrations, complete system reset\n\n**⚠️ This operation cannot be undone!**\n**💡 Tip:** Try \"Full Sync\" first - it's safer!**";
-                })
-                ->modalSubmitActionLabel('Yes, delete and rebuild')
-                ->action(function () {
-                    try {
-                        $syncService = app(RobawsArticlesSyncService::class);
-                        $result = $syncService->rebuildCache(); // Automatically syncs metadata
-                        
-                        Notification::make()
-                            ->title('Cache rebuilt successfully!')
-                            ->body("Total: {$result['total']}, Synced: {$result['synced']}, Errors: {$result['errors']}. Metadata sync completed automatically.")
-                            ->success()
-                            ->duration(10000) // 10 seconds
-                            ->send();
-                            
-                        $this->redirect(static::getUrl());
-                    } catch (\Exception $e) {
-                        Notification::make()
-                            ->title('Rebuild failed')
-                            ->body($e->getMessage())
-                            ->danger()
-                            ->send();
-                    }
-                }),
-                
-            Actions\Action::make('syncAllMetadata')
-                ->label('Sync All Metadata')
-                ->icon('heroicon-o-sparkles')
-                ->color('success')
-                ->requiresConfirmation()
-                ->modalHeading('Sync Metadata for All Articles?')
-                ->modalDescription(function () use ($dailyRemaining, $articleCount) {
-                    return "**Estimated API Cost:** ~0 API calls (uses name extraction)\n**API Quota Remaining:** " . number_format($dailyRemaining) . "\n**Status:** ✅ Safe, no API calls\n**Duration:** ~10-30 seconds\n\n**What this does:**\nExtracts metadata from {$articleCount} cached article names:\n• Shipping Line (ACL, Grimaldi, etc.)\n• POL/POD (ports of loading/discharge)\n• Service Type (Seafreight, RORO, etc.)\n• Trade Direction (Export/Import)\n\n**Use this for:** After parser updates, fixing missing metadata\n\n**💡 This is fast and safe - no API calls needed!**";
-                })
-                ->modalSubmitActionLabel('Yes, sync metadata')
-                ->action(function () {
-                    try {
-                        $syncService = app(RobawsArticlesSyncService::class);
-                        $result = $syncService->syncAllMetadata();
-                        
-                        Notification::make()
-                            ->title('Metadata sync completed!')
-                            ->body("Processed {$result['total']} articles. Success: {$result['success']}, Failed: {$result['failed']}")
-                            ->success()
-                            ->duration(8000)
-                            ->send();
-                            
-                    } catch (\Exception $e) {
-                        Notification::make()
-                            ->title('Metadata sync failed')
                             ->body($e->getMessage())
                             ->danger()
                             ->send();
