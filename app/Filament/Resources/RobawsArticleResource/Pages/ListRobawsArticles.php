@@ -163,23 +163,6 @@ class ListRobawsArticles extends ListRecords
                     }
                 }),
                 
-            // TEST BUTTON - Simple test without modal
-            Actions\Action::make('testButton')
-                ->label('🔧 TEST BUTTON')
-                ->icon('heroicon-o-wrench')
-                ->color('danger')
-                ->action(function () {
-                    \Log::info('TEST_BUTTON_CLICKED_NO_MODAL');
-                    
-                    Notification::make()
-                        ->title('Test button works!')
-                        ->body('This confirms the action method is being called.')
-                        ->success()
-                        ->send();
-                        
-                    \Log::info('TEST_BUTTON_NOTIFICATION_SENT');
-                }),
-                
             Actions\Action::make('syncExtraFields')
                 ->label('Sync Extra Fields')
                 ->icon('heroicon-o-tag')
