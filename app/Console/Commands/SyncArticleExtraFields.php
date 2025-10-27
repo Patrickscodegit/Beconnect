@@ -95,12 +95,22 @@ class SyncArticleExtraFields extends Command
                         $shippingLineValue = $this->fieldMapper->getStringValue($extraFields, 'shipping_line');
                         if ($shippingLineValue !== null) {
                             $updateData['shipping_line'] = $shippingLineValue;
+                            
+                            // Map shipping line to carrier code for applicable_carriers
+                            $carrierCode = $this->mapShippingLineToCarrierCode($shippingLineValue);
+                            if ($carrierCode) {
+                                $updateData['applicable_carriers'] = [$carrierCode];
+                            }
                         }
                         
                         // Service Type - Use flexible field mapping
                         $serviceTypeValue = $this->fieldMapper->getStringValue($extraFields, 'service_type');
                         if ($serviceTypeValue !== null) {
-                            $updateData['service_type'] = $serviceTypeValue;
+                            // Normalize service type: convert spaces to underscores for consistency
+                            // Robaws returns "RORO EXPORT", we need "RORO_EXPORT"
+                            $normalizedServiceType = str_replace(' ', '_', strtoupper($serviceTypeValue));
+                            $updateData['service_type'] = $normalizedServiceType;
+                            $updateData['applicable_services'] = [$normalizedServiceType];
                         }
                         
                         // POL Terminal - Use flexible field mapping
@@ -204,6 +214,28 @@ class SyncArticleExtraFields extends Command
         return Command::SUCCESS;
     }
     
+    /**
+     * Map shipping line name to carrier code
+     */
+    protected function mapShippingLineToCarrierCode(string $shippingLine): ?string
+    {
+        $normalized = strtoupper(trim($shippingLine));
+        
+        // Map shipping line names to carrier codes
+        $carrierMapping = [
+            'SALLAUM LINES' => 'SLAL',
+            'SALLAUM' => 'SLAL',
+            'MSC' => 'MSC',
+            'MAERSK' => 'MAEU',
+            'GRIMALDI' => 'GRIM',
+            'CMA CGM' => 'CMDU',
+            'HAPAG-LLOYD' => 'HLCU',
+            'EVERGREEN' => 'EGLV',
+        ];
+
+        return $carrierMapping[$normalized] ?? null;
+    }
+
     /**
      * Parse date string with multiple format attempts
      * Handles various Robaws date formats like "22/07/25", "23/072025", etc.
