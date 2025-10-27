@@ -1,3 +1,8 @@
+@php
+    $serviceType = $getServiceType();
+    $carrierCode = $getCarrierCode();
+@endphp
+
 <x-dynamic-component
     :component="$getFieldWrapperView()"
     :field="$field"
@@ -21,8 +26,8 @@
             async loadArticles() {
                 this.loading = true;
                 try {
-                    const carrierCode = @js($getCarrierCode());
-                    const serviceType = @js($getServiceType());
+                    const serviceType = @js($serviceType ?? '');
+                    const carrierCode = @js($carrierCode ?? '');
                     const url = '/admin/api/quotation/articles?service_type=' + serviceType + 
                                 (carrierCode ? '&carrier_code=' + carrierCode : '');
                     
