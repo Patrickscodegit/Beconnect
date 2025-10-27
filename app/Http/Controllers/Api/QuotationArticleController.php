@@ -21,9 +21,7 @@ class QuotationArticleController extends Controller
             $serviceType = $request->service_type;
             $query->where(function ($q) use ($serviceType) {
                 $q->whereJsonContains('applicable_services', $serviceType)
-                  ->orWhereNull('applicable_services')
-                  ->orWhere('applicable_services', '[]')
-                  ->orWhere('applicable_services', '');
+                  ->orWhereNull('applicable_services');
             });
         }
         
@@ -32,9 +30,7 @@ class QuotationArticleController extends Controller
             $carrierCode = $request->carrier_code;
             $query->where(function ($q) use ($carrierCode) {
                 $q->whereJsonContains('applicable_carriers', $carrierCode)
-                  ->orWhereNull('applicable_carriers')
-                  ->orWhere('applicable_carriers', '[]')
-                  ->orWhere('applicable_carriers', '');
+                  ->orWhereNull('applicable_carriers');
             });
         }
         
