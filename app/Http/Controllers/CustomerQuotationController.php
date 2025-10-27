@@ -299,7 +299,8 @@ class CustomerQuotationController extends Controller
             'service_type' => $defaultServiceType, // Auto-mapped, team can override
             'trade_direction' => $this->getDirectionFromServiceType($defaultServiceType),
             'customer_type' => 'GENERAL', // Set by Belgaco team in admin panel
-            'customer_role' => 'CONSIGNEE', // Set by Belgaco team in admin panel
+            'customer_role' => 'CONSIGNEE', // WHO they are (can be overridden by team)
+            'pricing_tier_id' => \App\Models\PricingTier::where('code', 'B')->where('is_active', true)->first()?->id, // WHAT pricing they get (defaults to Tier B - Medium)
             
             // Cargo
             'cargo_description' => $request->cargo_description,

@@ -225,7 +225,31 @@ class RobawsArticleCache extends Model
      */
     
     /**
-     * Get price with profit margin for a specific customer role
+     * Get price for a specific pricing tier (NEW - supports discounts and markups)
+     *
+     * @param \App\Models\PricingTier $tier Pricing tier object with margin percentage
+     * @param array|null $formulaInputs Optional formula inputs for CONSOL pricing
+     * @return float Selling price with tier margin applied
+     */
+    public function getPriceForTier(\App\Models\PricingTier $tier, ?array $formulaInputs = null): float
+    {
+        // Get base price (from Robaws or formula calculation)
+        $basePrice = $this->unit_price ?? 0;
+        
+        // Handle formula-based pricing (CONSOL services)
+        if ($this->pricing_formula && $formulaInputs) {
+            $basePrice = $this->calculateFormulaPrice($formulaInputs);
+        }
+        
+        // Apply tier margin using the tier's calculateSellingPrice method
+        // This supports negative margins (discounts) and positive margins (markups)
+        $sellingPrice = $tier->calculateSellingPrice($basePrice);
+        
+        return round($sellingPrice, 2);
+    }
+    
+    /**
+     * Get price with profit margin for a specific customer role (LEGACY - backward compatibility)
      *
      * @param string $role Customer role (FORWARDER, HOLLANDICO, etc.)
      * @param array|null $formulaInputs Optional formula inputs for CONSOL pricing

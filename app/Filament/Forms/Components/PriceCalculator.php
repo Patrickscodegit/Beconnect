@@ -19,9 +19,17 @@ class PriceCalculator extends Placeholder
         ]);
     }
     
+    protected mixed $pricingTierId = null;
     protected mixed $customerRole = null;
     protected mixed $discountPercentage = 0;
     protected mixed $vatRate = 21;
+    
+    public function pricingTierId($tierId): static
+    {
+        $this->pricingTierId = $tierId;
+        
+        return $this;
+    }
     
     public function customerRole($role): static
     {
@@ -42,6 +50,11 @@ class PriceCalculator extends Placeholder
         $this->vatRate = $rate;
         
         return $this;
+    }
+    
+    public function getPricingTierId(): ?int
+    {
+        return $this->evaluate($this->pricingTierId);
     }
     
     public function getCustomerRole(): ?string

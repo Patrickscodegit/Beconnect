@@ -99,11 +99,35 @@ class QuotationRequestResource extends Resource
                             ->columnSpan(2),
                             
                         Forms\Components\Select::make('customer_role')
-                            ->label('Customer Role')
+                            ->label('Customer Role / Type')
                             ->options(config('quotation.customer_roles', []))
                             ->default('CONSIGNEE')
                             ->required()
                             ->searchable()
+                            ->helperText('WHO is the customer? (for categorization, CRM, and reporting)')
+                            ->columnSpan(1),
+                            
+                        Forms\Components\Select::make('pricing_tier_id')
+                            ->label('Pricing Tier')
+                            ->relationship('pricingTier', 'name')
+                            ->getOptionLabelFromRecordUsing(fn ($record) => 
+                                sprintf(
+                                    '%s Tier %s - %s (%s%s%%)',
+                                    $record->icon ?? '',
+                                    $record->code,
+                                    $record->name,
+                                    $record->margin_percentage > 0 ? '+' : '',
+                                    number_format($record->margin_percentage, 1)
+                                )
+                            )
+                            ->searchable()
+                            ->required()
+                            ->preload()
+                            ->default(function () {
+                                // Default to Tier B (Medium Price)
+                                return \App\Models\PricingTier::where('code', 'B')->where('is_active', true)->first()?->id;
+                            })
+                            ->helperText('WHAT pricing do they get? Margins are editable in Pricing Tiers menu')
                             ->columnSpan(1),
                             
                         // Hidden fields for required database columns
@@ -692,7 +716,8 @@ class QuotationRequestResource extends Resource
                             ->columnSpanFull(),
                             
                         PriceCalculator::make('pricing_summary')
-                            ->customerRole(fn ($get) => $get('customer_role'))
+                            ->pricingTierId(fn ($get) => $get('pricing_tier_id'))
+                            ->customerRole(fn ($get) => $get('customer_role')) // Keep for backward compatibility
                             ->discountPercentage(fn ($get) => $get('discount_percentage') ?? 0)
                             ->vatRate(fn ($get) => $get('vat_rate') ?? 21)
                             ->columnSpanFull(),

@@ -56,7 +56,8 @@ class QuotationRequest extends Model
         'quoted_at',
         'expires_at',
         // Pricing fields
-        'customer_role',
+        'customer_role', // WHO the customer is (FORWARDER, CONSIGNEE, etc.)
+        'pricing_tier_id', // WHAT pricing they get (Tier A/B/C with margins)
         'customer_type',
         'subtotal',
         'discount_amount',
@@ -262,8 +263,58 @@ class QuotationRequest extends Model
         return $this->belongsTo(OfferTemplate::class, 'end_template_id');
     }
 
+    public function pricingTier(): BelongsTo
+    {
+        return $this->belongsTo(PricingTier::class);
+    }
+
     /**
      * Accessors
+     */
+    
+    /**
+     * Get the pricing margin percentage for this quotation
+     * Uses pricing tier if set, otherwise falls back to customer role
+     */
+    public function getPricingMarginPercentageAttribute(): float
+    {
+        // Priority 1: Use pricing_tier if set
+        if ($this->pricingTier) {
+            return $this->pricingTier->margin_percentage;
+        }
+        
+        // Priority 2: Fallback to customer_role (for backward compatibility)
+        if ($this->customer_role) {
+            return config("quotation.customer_role_margins.{$this->customer_role}", 15.00);
+        }
+        
+        // Default: 15% markup
+        return 15.00;
+    }
+    
+    /**
+     * Get the pricing margin multiplier
+     * Example: 15% = 1.15, -5% = 0.95
+     */
+    public function getPricingMarginMultiplierAttribute(): float
+    {
+        return 1 + ($this->pricing_margin_percentage / 100);
+    }
+    
+    /**
+     * Get pricing tier display name
+     */
+    public function getPricingTierDisplayAttribute(): string
+    {
+        if ($this->pricingTier) {
+            return $this->pricingTier->name . ' (' . $this->pricingTier->formatted_margin . ')';
+        }
+        
+        return 'Standard (15% markup)';
+    }
+
+    /**
+     * Accessors (existing)
      */
     public function getRouteDisplayAttribute(): string
     {
@@ -345,8 +396,13 @@ class QuotationRequest extends Model
      */
     public function addArticle(RobawsArticleCache $article, int $quantity = 1, array $formulaInputs = []): QuotationRequestArticle
     {
-        $role = $this->customer_role ?? 'default';
-        $sellingPrice = $article->getPriceForRole($role, $formulaInputs ?: null);
+        // Use pricing tier if available, otherwise fall back to customer role
+        if ($this->pricingTier) {
+            $sellingPrice = $article->getPriceForTier($this->pricingTier, $formulaInputs ?: null);
+        } else {
+            $role = $this->customer_role ?? 'default';
+            $sellingPrice = $article->getPriceForRole($role, $formulaInputs ?: null);
+        }
         
         $itemType = $article->is_parent_article ? 'parent' : 'standalone';
         
