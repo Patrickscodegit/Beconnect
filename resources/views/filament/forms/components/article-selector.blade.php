@@ -21,30 +21,18 @@
             async loadArticles() {
                 this.loading = true;
                 try {
-                    const carrierCode = '{{ $getCarrierCode() }}';
-                    const serviceType = '{{ $getServiceType() }}';
+                    const carrierCode = @js($getCarrierCode());
+                    const serviceType = @js($getServiceType());
                     const url = '/admin/api/quotation/articles?service_type=' + serviceType + 
                                 (carrierCode ? '&carrier_code=' + carrierCode : '');
                     
-                    console.log('🔍 Loading articles with URL:', url);
-                    console.log('📦 Service Type:', serviceType);
-                    console.log('🚢 Carrier Code:', carrierCode);
-                    
                     const response = await fetch(url);
-                    
-                    console.log('📡 Response status:', response.status);
-                    console.log('📡 Response ok:', response.ok);
                     
                     if (response.ok) {
                         const data = await response.json();
-                        console.log('📊 Received data:', data);
-                        console.log('📊 Data.data length:', data.data ? data.data.length : 'no data.data');
                         this.availableArticles = data.data || data || [];
-                        console.log('✅ Available articles set to:', this.availableArticles.length, 'items');
                     } else {
-                        console.error('❌ Response not ok:', response.status, response.statusText);
-                        const errorText = await response.text();
-                        console.error('❌ Error body:', errorText);
+                        this.availableArticles = [];
                     }
                 } catch (error) {
                     console.error('❌ Failed to load articles:', error);
