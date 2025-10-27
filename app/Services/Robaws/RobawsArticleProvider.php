@@ -1353,15 +1353,15 @@ class RobawsArticleProvider
     {
         $desc = strtoupper($description);
         
-        // Check for explicit EXPORT/IMPORT
+        // Check for explicit EXPORT/IMPORT (normalized with underscores)
         if (str_contains($desc, 'RORO') && str_contains($desc, 'EXPORT')) {
-            return 'RORO EXPORT';
+            return 'RORO_EXPORT';
         } elseif (str_contains($desc, 'RORO') && str_contains($desc, 'IMPORT')) {
-            return 'RORO IMPORT';
+            return 'RORO_IMPORT';
         } elseif (str_contains($desc, 'FCL') && str_contains($desc, 'EXPORT')) {
-            return 'FCL EXPORT';
+            return 'FCL_EXPORT';
         } elseif (str_contains($desc, 'FCL') && str_contains($desc, 'IMPORT')) {
-            return 'FCL IMPORT';
+            return 'FCL_IMPORT';
         }
         
         // Check for service types without explicit EXPORT/IMPORT
