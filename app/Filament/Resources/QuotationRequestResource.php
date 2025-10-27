@@ -136,6 +136,22 @@ class QuotationRequestResource extends Resource
                             ->visible(fn () => \Schema::hasTable('pricing_tiers')) // Only show if table exists
                             ->columnSpan(1),
                             
+                        Forms\Components\Select::make('customer_type')
+                            ->label('Customer Type (Article Filtering)')
+                            ->options([
+                                'FORWARDERS' => 'Freight Forwarders (wholesale pricing)',
+                                'GENERAL' => 'General Customers / End Clients (standard pricing)',
+                                'CIB' => 'Car Investment Bree (special pricing)',
+                                'PRIVATE' => 'Private Persons & Commercial Imports',
+                                'HOLLANDICO' => 'Hollandico / Belgaco Intervention (internal pricing)',
+                                'OLDTIMER' => 'Oldtimer via Hollandico (classic car pricing)',
+                            ])
+                            ->default('GENERAL')
+                            ->required()
+                            ->live() // Refresh articles when changed
+                            ->helperText('Which type of articles/services should be available?')
+                            ->columnSpan(1),
+                            
                         // Hidden fields for required database columns
                         Forms\Components\Hidden::make('source')
                             ->default('intake')
@@ -716,7 +732,7 @@ class QuotationRequestResource extends Resource
                     ->schema([
                         ArticleSelector::make('articles')
                             ->serviceType(fn ($get) => $get('service_type'))
-                            ->customerType(fn ($get) => $get('customer_role'))
+                            ->customerType(fn ($get) => $get('customer_type'))
                             ->carrierCode(fn ($get) => $get('preferred_carrier'))
                             ->quotationId(fn ($record) => $record?->id)
                             ->columnSpanFull(),
