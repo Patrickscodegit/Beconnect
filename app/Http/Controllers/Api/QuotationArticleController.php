@@ -27,15 +27,6 @@ class QuotationArticleController extends Controller
             });
         }
         
-        // Filter by customer type if provided
-        if ($request->has('customer_type') && $request->customer_type !== 'null' && $request->customer_type !== '') {
-            $customerType = $request->customer_type;
-            $query->where(function ($q) use ($customerType) {
-                $q->where('customer_type', $customerType)
-                  ->orWhereNull('customer_type');
-            });
-        }
-        
         // Filter by carrier if provided
         if ($request->has('carrier_code') && $request->carrier_code !== 'null' && $request->carrier_code !== '') {
             $carrierCode = $request->carrier_code;

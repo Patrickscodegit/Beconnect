@@ -22,7 +22,7 @@
                 this.loading = true;
                 try {
                     const carrierCode = '{{ $getCarrierCode() }}';
-                    const url = '/admin/api/quotation/articles?service_type={{ $getServiceType() }}&customer_type={{ $getCustomerType() }}' + 
+                    const url = '/admin/api/quotation/articles?service_type={{ $getServiceType() }}' + 
                                 (carrierCode ? '&carrier_code=' + carrierCode : '');
                     const response = await fetch(url);
                     if (response.ok) {

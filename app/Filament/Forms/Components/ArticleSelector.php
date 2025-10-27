@@ -11,20 +11,12 @@ class ArticleSelector extends Field
     protected string $view = 'filament.forms.components.article-selector';
     
     protected mixed $serviceType = null;
-    protected mixed $customerType = null;
     protected mixed $carrierCode = null;
     protected mixed $quotationId = null;
     
     public function serviceType($serviceType): static
     {
         $this->serviceType = $serviceType;
-        
-        return $this;
-    }
-    
-    public function customerType($customerType): static
-    {
-        $this->customerType = $customerType;
         
         return $this;
     }
@@ -46,11 +38,6 @@ class ArticleSelector extends Field
     public function getServiceType(): ?string
     {
         return $this->evaluate($this->serviceType);
-    }
-    
-    public function getCustomerType(): ?string
-    {
-        return $this->evaluate($this->customerType);
     }
     
     public function getCarrierCode(): ?string
