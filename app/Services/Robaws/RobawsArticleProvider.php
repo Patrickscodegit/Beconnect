@@ -1149,11 +1149,20 @@ class RobawsArticleProvider
         $shippingLine = $this->fieldMapper->getStringValue($extraFields, 'shipping_line');
         if ($shippingLine !== null) {
             $info['shipping_line'] = $shippingLine;
+            
+            // Map shipping line to carrier code for applicable_carriers
+            $carrierCode = $this->mapShippingLineToCarrierCode($shippingLine);
+            if ($carrierCode) {
+                $info['applicable_carriers'] = [$carrierCode];
+            }
         }
         
         $serviceType = $this->fieldMapper->getStringValue($extraFields, 'service_type');
         if ($serviceType !== null) {
-            $info['service_type'] = $serviceType;
+            // Normalize service type: convert spaces to underscores for consistency
+            // Robaws returns "RORO EXPORT", we need "RORO_EXPORT"
+            $info['service_type'] = str_replace(' ', '_', strtoupper($serviceType));
+            $info['applicable_services'] = [str_replace(' ', '_', strtoupper($serviceType))];
         }
         
         $polTerminal = $this->fieldMapper->getStringValue($extraFields, 'pol_terminal');
@@ -1286,6 +1295,28 @@ class RobawsArticleProvider
 
         // Find existing article
         return RobawsArticleCache::where('robaws_article_id', $itemData['robaws_article_id'])->first();
+    }
+
+    /**
+     * Map shipping line name to carrier code
+     */
+    private function mapShippingLineToCarrierCode(string $shippingLine): ?string
+    {
+        $normalized = strtoupper(trim($shippingLine));
+        
+        // Map shipping line names to carrier codes
+        $carrierMapping = [
+            'SALLAUM LINES' => 'SLAL',
+            'SALLAUM' => 'SLAL',
+            'MSC' => 'MSC',
+            'MAERSK' => 'MAEU',
+            'GRIMALDI' => 'GRIM',
+            'CMA CGM' => 'CMDU',
+            'HAPAG-LLOYD' => 'HLCU',
+            'EVERGREEN' => 'EGLV',
+        ];
+
+        return $carrierMapping[$normalized] ?? null;
     }
 
     /**
