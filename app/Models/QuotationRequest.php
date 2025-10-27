@@ -265,7 +265,7 @@ class QuotationRequest extends Model
 
     public function pricingTier(): BelongsTo
     {
-        return $this->belongsTo(PricingTier::class);
+        return $this->belongsTo(PricingTier::class, 'pricing_tier_id');
     }
 
     /**
@@ -279,8 +279,15 @@ class QuotationRequest extends Model
     public function getPricingMarginPercentageAttribute(): float
     {
         // Priority 1: Use pricing_tier if set
-        if ($this->pricingTier) {
-            return $this->pricingTier->margin_percentage;
+        try {
+            if ($this->pricing_tier_id && $this->pricingTier) {
+                return $this->pricingTier->margin_percentage;
+            }
+        } catch (\Exception $e) {
+            // Column might not exist yet if migrations haven't run
+            \Log::warning('pricing_tier_id column not found, falling back to customer_role', [
+                'error' => $e->getMessage()
+            ]);
         }
         
         // Priority 2: Fallback to customer_role (for backward compatibility)
@@ -306,8 +313,12 @@ class QuotationRequest extends Model
      */
     public function getPricingTierDisplayAttribute(): string
     {
-        if ($this->pricingTier) {
-            return $this->pricingTier->name . ' (' . $this->pricingTier->formatted_margin . ')';
+        try {
+            if ($this->pricing_tier_id && $this->pricingTier) {
+                return $this->pricingTier->name . ' (' . $this->pricingTier->formatted_margin . ')';
+            }
+        } catch (\Exception $e) {
+            // Column might not exist yet
         }
         
         return 'Standard (15% markup)';
@@ -397,9 +408,17 @@ class QuotationRequest extends Model
     public function addArticle(RobawsArticleCache $article, int $quantity = 1, array $formulaInputs = []): QuotationRequestArticle
     {
         // Use pricing tier if available, otherwise fall back to customer role
-        if ($this->pricingTier) {
-            $sellingPrice = $article->getPriceForTier($this->pricingTier, $formulaInputs ?: null);
-        } else {
+        $sellingPrice = null;
+        
+        try {
+            if ($this->pricing_tier_id && $this->pricingTier) {
+                $sellingPrice = $article->getPriceForTier($this->pricingTier, $formulaInputs ?: null);
+            }
+        } catch (\Exception $e) {
+            // Column might not exist yet, fall back to role
+        }
+        
+        if ($sellingPrice === null) {
             $role = $this->customer_role ?? 'default';
             $sellingPrice = $article->getPriceForRole($role, $formulaInputs ?: null);
         }

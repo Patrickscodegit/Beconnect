@@ -121,13 +121,19 @@ class QuotationRequestResource extends Resource
                                 )
                             )
                             ->searchable()
-                            ->required()
+                            ->required(false) // Optional until migrations run
                             ->preload()
                             ->default(function () {
-                                // Default to Tier B (Medium Price)
-                                return \App\Models\PricingTier::where('code', 'B')->where('is_active', true)->first()?->id;
+                                try {
+                                    // Default to Tier B (Medium Price)
+                                    return \App\Models\PricingTier::where('code', 'B')->where('is_active', true)->first()?->id;
+                                } catch (\Exception $e) {
+                                    // Table might not exist yet if migrations haven't run
+                                    return null;
+                                }
                             })
                             ->helperText('WHAT pricing do they get? Margins are editable in Pricing Tiers menu')
+                            ->visible(fn () => \Schema::hasTable('pricing_tiers')) // Only show if table exists
                             ->columnSpan(1),
                             
                         // Hidden fields for required database columns
