@@ -14,11 +14,19 @@ class QuotationArticleController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        \Log::info('🔍 QuotationArticleController: Fetching articles', [
+            'service_type' => $request->service_type,
+            'carrier_code' => $request->carrier_code,
+            'has_service_type' => $request->has('service_type'),
+            'has_carrier_code' => $request->has('carrier_code'),
+        ]);
+        
         $query = RobawsArticleCache::query();
         
         // Filter by service type if provided
         if ($request->has('service_type') && $request->service_type !== 'null' && $request->service_type !== '') {
             $serviceType = $request->service_type;
+            \Log::info('📦 Filtering by service type', ['service_type' => $serviceType]);
             $query->where(function ($q) use ($serviceType) {
                 $q->whereJsonContains('applicable_services', $serviceType)
                   ->orWhereNull('applicable_services');
@@ -28,6 +36,7 @@ class QuotationArticleController extends Controller
         // Filter by carrier if provided
         if ($request->has('carrier_code') && $request->carrier_code !== 'null' && $request->carrier_code !== '') {
             $carrierCode = $request->carrier_code;
+            \Log::info('🚢 Filtering by carrier', ['carrier_code' => $carrierCode]);
             $query->where(function ($q) use ($carrierCode) {
                 $q->whereJsonContains('applicable_carriers', $carrierCode)
                   ->orWhereNull('applicable_carriers');
@@ -63,6 +72,11 @@ class QuotationArticleController extends Controller
         ])
         ->orderBy('article_name')
         ->get();
+        
+        \Log::info('✅ QuotationArticleController: Returning articles', [
+            'count' => $articles->count(),
+            'first_few' => $articles->take(3)->pluck('description'),
+        ]);
         
         return response()->json(['data' => $articles]);
     }
