@@ -26,10 +26,12 @@
                                 (carrierCode ? '&carrier_code=' + carrierCode : '');
                     const response = await fetch(url);
                     if (response.ok) {
-                        this.availableArticles = await response.json();
+                        const data = await response.json();
+                        this.availableArticles = data.data || data || [];
                     }
                 } catch (error) {
                     console.error('Failed to load articles:', error);
+                    this.availableArticles = [];
                 }
                 this.loading = false;
             },
