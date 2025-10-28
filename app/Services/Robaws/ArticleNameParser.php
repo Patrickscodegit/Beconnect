@@ -60,7 +60,7 @@ class ArticleNameParser
             'code' => $port->code,
             'name' => $port->name,
             'country' => $port->country,
-            'formatted' => $port->name . ', ' . $port->country . ' (' . $port->code . ')',
+            'formatted' => $port->name . ' (' . $port->code . '), ' . $port->country,
             'terminal' => $port->terminal_code ?? null
         ];
     }
@@ -128,7 +128,7 @@ class ArticleNameParser
             'name' => $port->name,
             'country' => $port->country,
             'code' => $port->code,
-            'formatted' => $port->name . ', ' . $port->country . ' (' . $port->code . ')'
+            'formatted' => $port->name . ' (' . $port->code . '), ' . $port->country
         ];
     }
     
