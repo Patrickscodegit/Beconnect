@@ -499,19 +499,19 @@ class RobawsArticleCache extends Model
             }
         }
 
-        // Apply commodity type filter if commodity items exist
+        // Apply commodity type filter if commodity items exist (HYBRID: strict when selected)
         if ($quotation->commodityItems && $quotation->commodityItems->count() > 0) {
             $commodityTypes = $quotation->commodityItems->map(function ($item) {
                 return $this->normalizeCommodityType($item);
             })->filter()->unique()->values()->toArray();
 
             if (!empty($commodityTypes)) {
-                $query->where(function ($q) use ($commodityTypes) {
-                    $q->whereIn('commodity_type', $commodityTypes)
-                      ->orWhereNull('commodity_type'); // Include articles without commodity restriction
-                });
+                // STRICT filtering when commodity is selected - only show matching types
+                // This gives focused results when user explicitly selects commodity
+                $query->whereIn('commodity_type', $commodityTypes);
             }
         }
+        // If no commodity selected, show all articles (existing behavior)
 
         return $query;
     }
