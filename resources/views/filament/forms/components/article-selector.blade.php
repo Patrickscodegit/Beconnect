@@ -10,6 +10,7 @@
             'trace' => $e->getTraceAsString()
         ]);
     }
+    $statePath = $getStatePath();
 @endphp
 
 <x-dynamic-component
@@ -17,139 +18,12 @@
     :field="$field"
 >
     <div
-        x-data="{
-            articles: [],
-            availableArticles: [],
-            smartSuggestions: @json($smartSuggestions),
-            searchQuery: '',
-            loading: true,
-            selectedArticleIds: [],
-            showSmartSuggestions: true,
-            
-            init() {
-                // Initialize articles from Livewire state
-                this.articles = $wire.get('{{ $getStatePath() }}') || [];
-                this.updateSelectedIds();
-                
-                // Watch for changes from Livewire
-                this.$watch('articles', () => {
-                    $wire.set('{{ $getStatePath() }}', this.articles);
-                });
-                
-                this.loadArticles();
-            },
-            
-            async loadArticles() {
-                this.loading = true;
-                try {
-                    const serviceType = @js($serviceType ?? '');
-                    const carrierCode = @js($carrierCode ?? '');
-                    const url = '/admin/api/quotation/articles?service_type=' + serviceType + 
-                                (carrierCode ? '&carrier_code=' + carrierCode : '');
-                    
-                    const response = await fetch(url);
-                    
-                    if (response.ok) {
-                        const data = await response.json();
-                        this.availableArticles = data.data || data || [];
-                    } else {
-                        this.availableArticles = [];
-                    }
-                } catch (error) {
-                    console.error('❌ Failed to load articles:', error);
-                    this.availableArticles = [];
-                }
-                this.loading = false;
-            },
-            
-            get filteredArticles() {
-                if (!this.searchQuery) return this.availableArticles;
-                const query = this.searchQuery.toLowerCase();
-                return this.availableArticles.filter(article => 
-                    article.description.toLowerCase().includes(query) ||
-                    (article.article_code && article.article_code.toLowerCase().includes(query))
-                );
-            },
-            
-            addArticle(article) {
-                // Check if already added
-                if (this.selectedArticleIds.includes(article.id)) {
-                    return;
-                }
-                
-                // Add the main article
-                this.articles.push({
-                    id: article.id,
-                    robaws_id: article.robaws_article_id,
-                    description: article.description,
-                    article_code: article.article_code,
-                    unit_price: article.unit_price,
-                    unit_type: article.unit_type,
-                    quantity: 1,
-                    is_parent: article.is_parent_article || false,
-                    is_child: false,
-                    parent_id: null,
-                });
-                
-                // If it's a parent article, automatically add children
-                if (article.is_parent_article && article.children && article.children.length > 0) {
-                    article.children.forEach(child => {
-                        this.articles.push({
-                            id: child.id,
-                            robaws_id: child.robaws_article_id,
-                            description: child.description,
-                            article_code: child.article_code,
-                            unit_price: child.unit_price,
-                            unit_type: child.unit_type,
-                            quantity: 1,
-                            is_parent: false,
-                            is_child: true,
-                            parent_id: article.id,
-                        });
-                    });
-                }
-                
-                this.updateSelectedIds();
-            },
-            
-            removeArticle(index) {
-                const article = this.articles[index];
-                
-                // If removing a parent, also remove its children
-                if (article.is_parent) {
-                    this.articles = this.articles.filter(a => a.parent_id !== article.id && a !== article);
-                } else {
-                    this.articles.splice(index, 1);
-                }
-                
-                this.updateSelectedIds();
-            },
-            
-            updateSelectedIds() {
-                this.selectedArticleIds = this.articles.map(a => a.id);
-            },
-            
-            updateQuantity(index, quantity) {
-                this.articles[index].quantity = Math.max(1, parseInt(quantity) || 1);
-            },
-            
-            updatePrice(index, price) {
-                this.articles[index].unit_price = parseFloat(price) || 0;
-            },
-            
-            calculateSubtotal() {
-                return this.articles.reduce((sum, article) => {
-                    return sum + (article.unit_price * article.quantity);
-                }, 0);
-            },
-            
-            formatCurrency(amount) {
-                return new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: 'EUR'
-                }).format(amount);
-            }
-        }"
+        x-data="articleSelector(
+            @js($smartSuggestions),
+            @js($statePath),
+            @js($serviceType ?? ''),
+            @js($carrierCode ?? '')
+        )"
         class="space-y-4"
     >
         {{-- Smart Suggestions --}}
@@ -360,3 +234,138 @@
     </div>
 </x-dynamic-component>
 
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('articleSelector', (smartSuggestions, statePath, serviceType, carrierCode) => ({
+        articles: [],
+        availableArticles: [],
+        smartSuggestions: smartSuggestions,
+        searchQuery: '',
+        loading: true,
+        selectedArticleIds: [],
+        showSmartSuggestions: true,
+        
+        init() {
+            // Initialize articles from Livewire state
+            this.articles = this.$wire.get(statePath) || [];
+            this.updateSelectedIds();
+            
+            // Watch for changes from Livewire
+            this.$watch('articles', () => {
+                this.$wire.set(statePath, this.articles);
+            });
+            
+            this.loadArticles();
+        },
+        
+        async loadArticles() {
+            this.loading = true;
+            try {
+                const url = '/admin/api/quotation/articles?service_type=' + serviceType + 
+                            (carrierCode ? '&carrier_code=' + carrierCode : '');
+                
+                const response = await fetch(url);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    this.availableArticles = data.data || data || [];
+                } else {
+                    this.availableArticles = [];
+                }
+            } catch (error) {
+                console.error('Failed to load articles:', error);
+                this.availableArticles = [];
+            }
+            this.loading = false;
+        },
+        
+        get filteredArticles() {
+            if (!this.searchQuery) return this.availableArticles;
+            const query = this.searchQuery.toLowerCase();
+            return this.availableArticles.filter(article => 
+                article.description.toLowerCase().includes(query) ||
+                (article.article_code && article.article_code.toLowerCase().includes(query))
+            );
+        },
+        
+        addArticle(article) {
+            // Check if already added
+            if (this.selectedArticleIds.includes(article.id)) {
+                return;
+            }
+            
+            // Add the main article
+            this.articles.push({
+                id: article.id,
+                robaws_id: article.robaws_article_id,
+                description: article.description,
+                article_code: article.article_code,
+                unit_price: article.unit_price,
+                unit_type: article.unit_type,
+                quantity: 1,
+                is_parent: article.is_parent_article || false,
+                is_child: false,
+                parent_id: null,
+            });
+            
+            // If it's a parent article, automatically add children
+            if (article.is_parent_article && article.children && article.children.length > 0) {
+                article.children.forEach(child => {
+                    this.articles.push({
+                        id: child.id,
+                        robaws_id: child.robaws_article_id,
+                        description: child.description,
+                        article_code: child.article_code,
+                        unit_price: child.unit_price,
+                        unit_type: child.unit_type,
+                        quantity: 1,
+                        is_parent: false,
+                        is_child: true,
+                        parent_id: article.id,
+                    });
+                });
+            }
+            
+            this.updateSelectedIds();
+        },
+        
+        removeArticle(index) {
+            const article = this.articles[index];
+            
+            // If removing a parent, also remove its children
+            if (article.is_parent) {
+                this.articles = this.articles.filter(a => a.parent_id !== article.id && a !== article);
+            } else {
+                this.articles.splice(index, 1);
+            }
+            
+            this.updateSelectedIds();
+        },
+        
+        updateSelectedIds() {
+            this.selectedArticleIds = this.articles.map(a => a.id);
+        },
+        
+        updateQuantity(index, quantity) {
+            this.articles[index].quantity = Math.max(1, parseInt(quantity) || 1);
+        },
+        
+        updatePrice(index, price) {
+            this.articles[index].unit_price = parseFloat(price) || 0;
+        },
+        
+        calculateSubtotal() {
+            return this.articles.reduce((sum, article) => {
+                return sum + (article.unit_price * article.quantity);
+            }, 0);
+        },
+        
+        formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'EUR'
+            }).format(amount);
+        }
+    }));
+});
+</script>
