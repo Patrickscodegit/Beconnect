@@ -144,7 +144,7 @@ class SmartArticleSelectionService
         }
 
         // DEBUG LOGGING
-        Log::debug('Smart Match Score Calculation', [
+        Log::info('Smart Match Score Calculation', [
             'quotation_id' => $quotation->id,
             'article_id' => $article->id,
             'article_description' => $article->description,
