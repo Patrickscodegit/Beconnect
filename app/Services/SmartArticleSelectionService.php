@@ -83,13 +83,13 @@ class SmartArticleSelectionService
             $debugBreakdown['parent_item'] = 10;
         }
 
-        // Extract port codes
+        // Extract port codes (returns 3-letter Robaws codes: ANR, CKY, etc.)
         $polCode = $this->extractPortCode($quotation->pol);
         $podCode = $this->extractPortCode($quotation->pod);
         
-        // Normalize article port codes (they might be in "City, Country (CODE)" format)
+        // Normalize article port codes from "City, Country (ANR)" format to "ANR"
         $articlePolCode = PortCodeMapper::normalizePortCode($article->pol_code);
-        $articlePodCode = PortCodeMapper::normalizePortCode($article->pod_code);
+        $articlePodCode = PortCodeMapper::normalizePortCode($article->pod_name);
 
         // POL + POD exact match: 100 points
         if ($polCode && $podCode && 
@@ -163,7 +163,7 @@ class SmartArticleSelectionService
                 'quotation_selected_schedule_id' => $quotation->selected_schedule_id,
                 'article_pol_code_raw' => $article->pol_code,
                 'article_pol_code_normalized' => $articlePolCode,
-                'article_pod_code_raw' => $article->pod_code,
+                'article_pod_name_raw' => $article->pod_name,
                 'article_pod_code_normalized' => $articlePodCode,
                 'article_shipping_line' => $article->shipping_line,
                 'article_applicable_carriers' => $article->applicable_carriers,
@@ -189,13 +189,13 @@ class SmartArticleSelectionService
     {
         $reasons = [];
 
-        // Extract port codes
+        // Extract port codes (returns 3-letter Robaws codes)
         $polCode = $this->extractPortCode($quotation->pol);
         $podCode = $this->extractPortCode($quotation->pod);
         
-        // Normalize article port codes
+        // Normalize article port codes from "City, Country (ANR)" format
         $articlePolCode = PortCodeMapper::normalizePortCode($article->pol_code);
-        $articlePodCode = PortCodeMapper::normalizePortCode($article->pod_code);
+        $articlePodCode = PortCodeMapper::normalizePortCode($article->pod_name);
 
         // Check POL/POD matches
         if ($polCode && $podCode && 
