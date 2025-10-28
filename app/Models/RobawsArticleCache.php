@@ -17,10 +17,8 @@ class RobawsArticleCache extends Model
         'article_name',
         'description',
         'category',
-        'applicable_carriers',
         'applicable_routes',
         'applicable_services',
-        'customer_type',
         'min_quantity',
         'max_quantity',
         'tier_label',
@@ -44,10 +42,9 @@ class RobawsArticleCache extends Model
         'article_info',
         'update_date',
         'validity_date',
-        // Port information in schedule format
-        'pol_code',
-        'pod_name',
-        'pod_code',
+        // Port information in full Robaws format: "Antwerp, Belgium (ANR)"
+        'pol',
+        'pod',
         'commodity_type',
         // Standard Robaws article fields
         'sales_name',
@@ -70,7 +67,6 @@ class RobawsArticleCache extends Model
     ];
 
     protected $casts = [
-        'applicable_carriers' => 'array',
         'applicable_routes' => 'array',
         'applicable_services' => 'array',
         'pricing_formula' => 'array',
@@ -122,10 +118,9 @@ class RobawsArticleCache extends Model
 
     public function scopeForCarrier(Builder $query, string $carrierCode): Builder
     {
-        return $query->where(function ($q) use ($carrierCode) {
-            $q->whereJsonContains('applicable_carriers', $carrierCode)
-              ->orWhereNull('applicable_carriers');
-        });
+        // Match articles by shipping_line (each article has one shipping line)
+        return $query->where('shipping_line', 'LIKE', '%' . $carrierCode . '%')
+                     ->orWhereNull('shipping_line');
     }
 
     public function scopeForService(Builder $query, string $serviceType): Builder
@@ -146,11 +141,11 @@ class RobawsArticleCache extends Model
      */
     public function isApplicableForCarrier(string $carrierCode): bool
     {
-        if (empty($this->applicable_carriers)) {
+        if (empty($this->shipping_line)) {
             return true; // No restrictions
         }
 
-        return in_array($carrierCode, $this->applicable_carriers);
+        return stripos($this->shipping_line, $carrierCode) !== false;
     }
 
     /**
@@ -335,14 +330,9 @@ class RobawsArticleCache extends Model
      */
     public function scopeForCustomerType(Builder $query, ?string $customerType): Builder
     {
-        if (!$customerType) {
-            return $query;
-        }
-
-        return $query->where(function ($q) use ($customerType) {
-            $q->where('customer_type', $customerType)
-              ->orWhereNull('customer_type'); // General articles
-        });
+        // customer_type removed from articles - it's a quotation property
+        // This scope is now a no-op for backward compatibility
+        return $query;
     }
 
     /**
@@ -457,10 +447,10 @@ class RobawsArticleCache extends Model
     /**
      * Scope for filtering by POL and POD codes (exact match)
      */
-    public function scopeForPolPodMatch(Builder $query, string $polCode, string $podCode): Builder
+    public function scopeForPolPodMatch(Builder $query, string $pol, string $pod): Builder
     {
-        return $query->where('pol_code', $polCode)
-                     ->where('pod_code', $podCode);
+        return $query->where('pol', $pol)
+                     ->where('pod', $pod);
     }
 
     /**
@@ -483,12 +473,12 @@ class RobawsArticleCache extends Model
             $query->where(function ($q) use ($polCode, $podCode) {
                 // Exact match gets priority
                 $q->where(function ($exactMatch) use ($polCode, $podCode) {
-                    $exactMatch->where('pol_code', $polCode)
-                               ->where('pod_code', $podCode);
+                    $exactMatch->where('pol', $polCode)
+                               ->where('pod', $podCode);
                 })
                 // Or partial match (either POL or POD)
-                ->orWhere('pol_code', $polCode)
-                ->orWhere('pod_code', $podCode);
+                ->orWhere('pol', $polCode)
+                ->orWhere('pod', $podCode);
             });
         }
 
