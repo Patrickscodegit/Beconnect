@@ -74,10 +74,12 @@ class SmartArticleSelectionService
     protected function calculateMatchScore(RobawsArticleCache $article, QuotationRequest $quotation): int
     {
         $score = 0;
+        $debugBreakdown = [];
 
         // Base score for being a parent item
         if ($article->is_parent_item) {
             $score += 10;
+            $debugBreakdown['parent_item'] = 10;
         }
 
         // Extract port codes
@@ -89,22 +91,28 @@ class SmartArticleSelectionService
             $article->pol_code === $polCode && 
             $article->pod_code === $podCode) {
             $score += 100;
+            $debugBreakdown['route_exact_match'] = 100;
         } else {
             // Partial match: POL only (40 points) or POD only (40 points)
             if ($polCode && $article->pol_code === $polCode) {
                 $score += 40;
+                $debugBreakdown['pol_match'] = 40;
             }
             if ($podCode && $article->pod_code === $podCode) {
                 $score += 40;
+                $debugBreakdown['pod_match'] = 40;
             }
         }
 
         // Shipping line match: 50 points
+        $carrierMatched = false;
         if ($quotation->selected_schedule_id && $quotation->selectedSchedule) {
             $schedule = $quotation->selectedSchedule;
             if ($schedule->carrier && $article->shipping_line) {
                 if (stripos($article->shipping_line, $schedule->carrier->name) !== false) {
                     $score += 50;
+                    $carrierMatched = true;
+                    $debugBreakdown['carrier_via_schedule'] = 50;
                 }
             }
         }
@@ -113,6 +121,7 @@ class SmartArticleSelectionService
         if ($quotation->service_type && $article->service_type) {
             if (strtoupper($quotation->service_type) === strtoupper($article->service_type)) {
                 $score += 30;
+                $debugBreakdown['service_type'] = 30;
             }
         }
 
@@ -121,6 +130,7 @@ class SmartArticleSelectionService
             $quotationCommodities = $this->extractCommodityTypes($quotation);
             if ($article->commodity_type && in_array($article->commodity_type, $quotationCommodities)) {
                 $score += 20;
+                $debugBreakdown['commodity'] = 20;
             }
         }
 
@@ -129,8 +139,34 @@ class SmartArticleSelectionService
             $daysValid = now()->diffInDays($article->validity_date);
             if ($daysValid > 30) {
                 $score += 5;
+                $debugBreakdown['validity'] = 5;
             }
         }
+
+        // DEBUG LOGGING
+        Log::debug('Smart Match Score Calculation', [
+            'quotation_id' => $quotation->id,
+            'article_id' => $article->id,
+            'article_description' => $article->description,
+            'total_score' => $score,
+            'breakdown' => $debugBreakdown,
+            'context' => [
+                'quotation_pol' => $quotation->pol,
+                'quotation_pod' => $quotation->pod,
+                'quotation_service_type' => $quotation->service_type,
+                'quotation_preferred_carrier' => $quotation->preferred_carrier,
+                'quotation_selected_schedule_id' => $quotation->selected_schedule_id,
+                'article_pol_code' => $article->pol_code,
+                'article_pod_code' => $article->pod_code,
+                'article_shipping_line' => $article->shipping_line,
+                'article_applicable_carriers' => $article->applicable_carriers,
+                'article_service_type' => $article->service_type,
+                'article_commodity_type' => $article->commodity_type,
+                'extracted_pol_code' => $polCode,
+                'extracted_pod_code' => $podCode,
+                'carrier_matched' => $carrierMatched,
+            ]
+        ]);
 
         return $score;
     }
