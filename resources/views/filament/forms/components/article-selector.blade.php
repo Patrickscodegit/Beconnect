@@ -169,7 +169,7 @@
                             <div class="mt-1 flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
                                 <span x-show="suggestion.article_code" x-text="'Code: ' + suggestion.article_code"></span>
                                 <span x-text="formatCurrency(suggestion.unit_price) + ' / ' + suggestion.unit_type"></span>
-                                <span x-show="suggestion.match_reasons && suggestion.match_reasons.length > 0" class="text-primary-600 dark:text-primary-400" x-text="'✓ ' + suggestion.match_reasons.join(', ')""></span>
+                                <span x-show="suggestion.match_reasons && suggestion.match_reasons.length > 0" class="text-primary-600 dark:text-primary-400" x-text="'✓ ' + suggestion.match_reasons.join(', ')"></span>
                             </div>
                         </div>
                         <x-filament::button
