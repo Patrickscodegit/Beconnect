@@ -10,7 +10,8 @@ use Illuminate\Http\JsonResponse;
 class QuotationArticleController extends Controller
 {
     /**
-     * Get articles filtered by service type and customer type
+     * Get articles filtered by service type and carrier
+     * Note: customer_type filter removed - it's a quotation property, not article property
      */
     public function index(Request $request): JsonResponse
     {
@@ -33,13 +34,14 @@ class QuotationArticleController extends Controller
             });
         }
         
-        // Filter by carrier if provided
+        // Filter by carrier if provided (using shipping_line field)
         if ($request->has('carrier_code') && $request->carrier_code !== 'null' && $request->carrier_code !== '') {
             $carrierCode = $request->carrier_code;
             \Log::info('🚢 Filtering by carrier', ['carrier_code' => $carrierCode]);
             $query->where(function ($q) use ($carrierCode) {
-                $q->whereJsonContains('applicable_carriers', $carrierCode)
-                  ->orWhereNull('applicable_carriers');
+                // Match against shipping_line (each article has one shipping line)
+                $q->where('shipping_line', 'LIKE', '%' . $carrierCode . '%')
+                  ->orWhereNull('shipping_line');
             });
         }
         
