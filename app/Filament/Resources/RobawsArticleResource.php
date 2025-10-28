@@ -112,14 +112,9 @@ class RobawsArticleResource extends Resource
                             ->columns(3)
                             ->columnSpanFull(),
                             
-                        Forms\Components\Select::make('customer_type')
-                            ->options(config('quotation.customer_types', []))
-                            ->columnSpan(1),
-                            
-                        Forms\Components\TagsInput::make('carriers')
-                            ->placeholder('Add carrier names')
-                            ->columnSpan(1),
-                            
+                        // customer_type removed - it's a quotation property, not article property
+                        // carriers/applicable_carriers removed - use shipping_line instead
+                        
                         Forms\Components\Toggle::make('is_parent_article')
                             ->label('Is Parent Article')
                             ->columnSpan(1),
@@ -154,16 +149,16 @@ class RobawsArticleResource extends Resource
                             ->maxLength(100)
                             ->columnSpan(1),
                             
-                        Forms\Components\TextInput::make('pol_code')
-                            ->label('POL Code')
-                            ->helperText('e.g., ANR, RTM, HAM')
-                            ->maxLength(10)
+                        Forms\Components\TextInput::make('pol')
+                            ->label('POL')
+                            ->helperText('e.g., Antwerp, Belgium (ANR)')
+                            ->maxLength(255)
                             ->columnSpan(1),
                             
-                        Forms\Components\TextInput::make('pod_code')
-                            ->label('POD Code')
-                            ->helperText('e.g., DKR, ABJ, CKY')
-                            ->maxLength(10)
+                        Forms\Components\TextInput::make('pod')
+                            ->label('POD')
+                            ->helperText('e.g., Conakry, Guinea (CKY)')
+                            ->maxLength(255)
                             ->columnSpan(1),
                     ])
                     ->columns(2)
@@ -302,12 +297,12 @@ class RobawsArticleResource extends Resource
                     ->color(fn ($state) => $state ? 'success' : 'gray')
                     ->toggleable(),
                 
-                // NEW: POL in schedule format
-                Tables\Columns\TextColumn::make('pol_code')
+                // POL in full Robaws format
+                Tables\Columns\TextColumn::make('pol')
                     ->label('POL')
                     ->formatStateUsing(fn ($state) => $state ?: 'N/A')
                     ->color(fn ($state) => $state ? 'success' : 'gray')
-                    ->tooltip('Port of Loading (schedule format)')
+                    ->tooltip('Port of Loading')
                     ->searchable()
                     ->toggleable(),
                     
@@ -318,21 +313,14 @@ class RobawsArticleResource extends Resource
                     ->tooltip(fn ($state) => $state ? null : 'Not available in Robaws')
                     ->toggleable(),
                 
-                // NEW: POD in schedule format
-                Tables\Columns\TextColumn::make('pod_name')
+                // POD in full Robaws format
+                Tables\Columns\TextColumn::make('pod')
                     ->label('POD')
                     ->formatStateUsing(fn ($state) => $state ?: 'N/A')
                     ->color(fn ($state) => $state ? 'info' : 'gray')
-                    ->tooltip('Port of Discharge (schedule format)')
+                    ->tooltip('Port of Discharge')
                     ->searchable()
                     ->toggleable(),
-                    
-                Tables\Columns\BadgeColumn::make('pod_code')
-                    ->label('POD Code')
-                    ->formatStateUsing(fn ($state) => $state ?: 'N/A')
-                    ->color(fn ($state) => $state ? 'success' : 'gray')
-                    ->tooltip('POD code for Smart Article Selection')
-                    ->toggleable(isToggledHiddenByDefault: true),
                     
                 Tables\Columns\BadgeColumn::make('commodity_type')
                     ->label('Commodity Type')
@@ -382,7 +370,7 @@ class RobawsArticleResource extends Resource
                     }
                     
                     // Show direction hint
-                    if ($record->pol_code && $record->pod_name) {
+                    if ($record->pol && $record->pod) {
                         return 'Direction-aware services based on POL/POD routing';
                     }
                     
@@ -397,10 +385,7 @@ class RobawsArticleResource extends Resource
                     ->color('info')
                     ->toggleable(),
                     
-                Tables\Columns\TextColumn::make('customer_type')
-                    ->badge()
-                    ->placeholder('All')
-                    ->toggleable(),
+                // customer_type column removed - it's a quotation property
                     
                 Tables\Columns\TextColumn::make('category')
                     ->badge()
@@ -441,11 +426,11 @@ class RobawsArticleResource extends Resource
                         ->pluck('service_type', 'service_type')
                         ->toArray()),
                         
-                Tables\Filters\SelectFilter::make('pol_code')
+                Tables\Filters\SelectFilter::make('pol')
                     ->label('POL')
                     ->options(fn () => RobawsArticleCache::distinct()
-                        ->whereNotNull('pol_code')
-                        ->pluck('pol_code', 'pol_code')
+                        ->whereNotNull('pol')
+                        ->pluck('pol', 'pol')
                         ->toArray()),
                         
                 Tables\Filters\SelectFilter::make('pol_terminal')
@@ -455,11 +440,11 @@ class RobawsArticleResource extends Resource
                         ->pluck('pol_terminal', 'pol_terminal')
                         ->toArray()),
                         
-                Tables\Filters\SelectFilter::make('pod_name')
+                Tables\Filters\SelectFilter::make('pod')
                     ->label('POD')
                     ->options(fn () => RobawsArticleCache::distinct()
-                        ->whereNotNull('pod_name')
-                        ->pluck('pod_name', 'pod_name')
+                        ->whereNotNull('pod')
+                        ->pluck('pod', 'pod')
                         ->toArray()),
                     
                 Tables\Filters\TernaryFilter::make('is_parent_item')
@@ -503,9 +488,7 @@ class RobawsArticleResource extends Resource
                     ->trueLabel('Only surcharges')
                     ->falseLabel('Exclude surcharges'),
                     
-                Tables\Filters\SelectFilter::make('customer_type')
-                    ->options(config('quotation.customer_types', []))
-                    ->label('Customer Type'),
+                // customer_type filter removed - it's a quotation property
                     
                 Tables\Filters\TernaryFilter::make('requires_manual_review')
                     ->label('Requires Review'),
