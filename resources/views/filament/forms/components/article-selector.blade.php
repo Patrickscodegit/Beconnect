@@ -1,6 +1,15 @@
 @php
     $serviceType = $getServiceType();
     $carrierCode = $getCarrierCode();
+    $smartSuggestions = [];
+    try {
+        $smartSuggestions = $getSmartSuggestions() ?? [];
+    } catch (\Exception $e) {
+        \Log::error('ArticleSelector: Smart suggestions error', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
 @endphp
 
 <x-dynamic-component
@@ -11,7 +20,7 @@
         x-data="{
             articles: @entangle($getStatePath()),
             availableArticles: [],
-            smartSuggestions: @json($getSmartSuggestions()),
+            smartSuggestions: @json($smartSuggestions),
             searchQuery: '',
             loading: true,
             selectedArticleIds: [],
