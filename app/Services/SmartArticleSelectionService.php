@@ -7,6 +7,7 @@ use App\Models\RobawsArticleCache;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use App\Services\PortCodeMapper;
 
 class SmartArticleSelectionService
 {
@@ -85,20 +86,24 @@ class SmartArticleSelectionService
         // Extract port codes
         $polCode = $this->extractPortCode($quotation->pol);
         $podCode = $this->extractPortCode($quotation->pod);
+        
+        // Normalize article port codes (they might be in "City, Country (CODE)" format)
+        $articlePolCode = PortCodeMapper::normalizePortCode($article->pol_code);
+        $articlePodCode = PortCodeMapper::normalizePortCode($article->pod_code);
 
         // POL + POD exact match: 100 points
         if ($polCode && $podCode && 
-            $article->pol_code === $polCode && 
-            $article->pod_code === $podCode) {
+            $articlePolCode === $polCode && 
+            $articlePodCode === $podCode) {
             $score += 100;
             $debugBreakdown['route_exact_match'] = 100;
         } else {
             // Partial match: POL only (40 points) or POD only (40 points)
-            if ($polCode && $article->pol_code === $polCode) {
+            if ($polCode && $articlePolCode === $polCode) {
                 $score += 40;
                 $debugBreakdown['pol_match'] = 40;
             }
-            if ($podCode && $article->pod_code === $podCode) {
+            if ($podCode && $articlePodCode === $podCode) {
                 $score += 40;
                 $debugBreakdown['pod_match'] = 40;
             }
@@ -156,8 +161,10 @@ class SmartArticleSelectionService
                 'quotation_service_type' => $quotation->service_type,
                 'quotation_preferred_carrier' => $quotation->preferred_carrier,
                 'quotation_selected_schedule_id' => $quotation->selected_schedule_id,
-                'article_pol_code' => $article->pol_code,
-                'article_pod_code' => $article->pod_code,
+                'article_pol_code_raw' => $article->pol_code,
+                'article_pol_code_normalized' => $articlePolCode,
+                'article_pod_code_raw' => $article->pod_code,
+                'article_pod_code_normalized' => $articlePodCode,
                 'article_shipping_line' => $article->shipping_line,
                 'article_applicable_carriers' => $article->applicable_carriers,
                 'article_service_type' => $article->service_type,
@@ -185,17 +192,21 @@ class SmartArticleSelectionService
         // Extract port codes
         $polCode = $this->extractPortCode($quotation->pol);
         $podCode = $this->extractPortCode($quotation->pod);
+        
+        // Normalize article port codes
+        $articlePolCode = PortCodeMapper::normalizePortCode($article->pol_code);
+        $articlePodCode = PortCodeMapper::normalizePortCode($article->pod_code);
 
         // Check POL/POD matches
         if ($polCode && $podCode && 
-            $article->pol_code === $polCode && 
-            $article->pod_code === $podCode) {
+            $articlePolCode === $polCode && 
+            $articlePodCode === $podCode) {
             $reasons[] = "Exact route match: {$polCode} → {$podCode}";
         } else {
-            if ($polCode && $article->pol_code === $polCode) {
+            if ($polCode && $articlePolCode === $polCode) {
                 $reasons[] = "POL matches: {$polCode}";
             }
-            if ($podCode && $article->pod_code === $podCode) {
+            if ($podCode && $articlePodCode === $podCode) {
                 $reasons[] = "POD matches: {$podCode}";
             }
         }
@@ -262,17 +273,8 @@ class SmartArticleSelectionService
             return null;
         }
 
-        // Match pattern: "City (CODE), Country"
-        if (preg_match('/\(([A-Z]{3,4})\)/', $portString, $matches)) {
-            return $matches[1];
-        }
-
-        // If it's already a code (3-4 uppercase letters)
-        if (preg_match('/^[A-Z]{3,4}$/', trim($portString))) {
-            return trim($portString);
-        }
-
-        return null;
+        // Use the PortCodeMapper service to handle various formats
+        return PortCodeMapper::getPortCode($portString);
     }
 
     /**
