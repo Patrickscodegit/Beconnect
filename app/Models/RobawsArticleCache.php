@@ -499,17 +499,27 @@ class RobawsArticleCache extends Model
             }
         }
 
-        // Apply commodity type filter if commodity items exist (HYBRID: strict when selected)
+        // Apply commodity type filter (HYBRID: strict when selected, flexible when not)
+        $commodityTypes = [];
+        
+        // Check simple commodity_type field first (used in Filament quotations)
+        if ($quotation->commodity_type) {
+            $commodityTypes[] = $this->mapQuotationCommodityTypeToArticle($quotation->commodity_type);
+        }
+        
+        // Also check detailed commodityItems (used in customer/public quotations)
         if ($quotation->commodityItems && $quotation->commodityItems->count() > 0) {
-            $commodityTypes = $quotation->commodityItems->map(function ($item) {
+            $itemTypes = $quotation->commodityItems->map(function ($item) {
                 return $this->normalizeCommodityType($item);
             })->filter()->unique()->values()->toArray();
-
-            if (!empty($commodityTypes)) {
-                // STRICT filtering when commodity is selected - only show matching types
-                // This gives focused results when user explicitly selects commodity
-                $query->whereIn('commodity_type', $commodityTypes);
-            }
+            
+            $commodityTypes = array_merge($commodityTypes, $itemTypes);
+        }
+        
+        // STRICT filtering when commodity is selected
+        if (!empty($commodityTypes)) {
+            $commodityTypes = array_filter(array_unique($commodityTypes));
+            $query->whereIn('commodity_type', $commodityTypes);
         }
         // If no commodity selected, show all articles (existing behavior)
 
@@ -517,6 +527,30 @@ class RobawsArticleCache extends Model
     }
 
     // extractPortCodeFromString() removed - now using direct LIKE matching in scopeForQuotationContext()
+
+    /**
+     * Map quotation commodity_type field to article commodity_type
+     * Used for simple commodity field in Filament quotations
+     */
+    private function mapQuotationCommodityTypeToArticle(?string $quotationCommodityType): ?string
+    {
+        if (!$quotationCommodityType) {
+            return null;
+        }
+        
+        // Map quotation commodity types to article commodity types
+        $mapping = [
+            'cars' => 'Car',
+            'general_goods' => 'General Cargo',
+            'personal_goods' => 'General Cargo',
+            'motorcycles' => 'Motorcycle',
+            'trucks' => 'Truck',
+            'machinery' => 'Machinery',
+            'breakbulk' => 'Break Bulk',
+        ];
+        
+        return $mapping[$quotationCommodityType] ?? null;
+    }
 
     /**
      * Normalize commodity type from commodity item
