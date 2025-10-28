@@ -18,7 +18,7 @@
 >
     <div
         x-data="{
-            articles: @entangle($getStatePath()),
+            articles: [],
             availableArticles: [],
             smartSuggestions: @json($smartSuggestions),
             searchQuery: '',
@@ -27,9 +27,16 @@
             showSmartSuggestions: true,
             
             init() {
-                this.loadArticles();
-                this.articles = this.articles || [];
+                // Initialize articles from Livewire state
+                this.articles = $wire.get('{{ $getStatePath() }}') || [];
                 this.updateSelectedIds();
+                
+                // Watch for changes from Livewire
+                this.$watch('articles', () => {
+                    $wire.set('{{ $getStatePath() }}', this.articles);
+                });
+                
+                this.loadArticles();
             },
             
             async loadArticles() {
