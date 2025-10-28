@@ -464,21 +464,19 @@ class RobawsArticleCache extends Model
               ->where('is_active', true)
               ->validAsOf(now());
 
-        // Extract port codes from quotation
-        $polCode = $this->extractPortCodeFromString($quotation->pol);
-        $podCode = $this->extractPortCodeFromString($quotation->pod);
-
-        // Apply POL/POD filtering if available
-        if ($polCode && $podCode) {
-            $query->where(function ($q) use ($polCode, $podCode) {
-                // Exact match gets priority
-                $q->where(function ($exactMatch) use ($polCode, $podCode) {
-                    $exactMatch->where('pol', $polCode)
-                               ->where('pod', $podCode);
-                })
-                // Or partial match (either POL or POD)
-                ->orWhere('pol', $polCode)
-                ->orWhere('pod', $podCode);
+        // Apply POL/POD filtering using flexible LIKE matching
+        // Quotation may have "Antwerp" while article has "Antwerp (ANR), Belgium"
+        if ($quotation->pol) {
+            $query->where(function ($q) use ($quotation) {
+                $q->where('pol', 'LIKE', '%' . $quotation->pol . '%')
+                  ->orWhereNull('pol'); // Include articles without POL restriction
+            });
+        }
+        
+        if ($quotation->pod) {
+            $query->where(function ($q) use ($quotation) {
+                $q->where('pod', 'LIKE', '%' . $quotation->pod . '%')
+                  ->orWhereNull('pod'); // Include articles without POD restriction
             });
         }
 
@@ -518,27 +516,7 @@ class RobawsArticleCache extends Model
         return $query;
     }
 
-    /**
-     * Extract port code from string format: "Antwerp (ANR), Belgium" → "ANR"
-     */
-    private function extractPortCodeFromString(?string $portString): ?string
-    {
-        if (empty($portString)) {
-            return null;
-        }
-
-        // Match pattern: "City (CODE), Country" or just "CODE"
-        if (preg_match('/\(([A-Z]{3,4})\)/', $portString, $matches)) {
-            return $matches[1];
-        }
-
-        // If it's already a code (3-4 uppercase letters)
-        if (preg_match('/^[A-Z]{3,4}$/', trim($portString))) {
-            return trim($portString);
-        }
-
-        return null;
-    }
+    // extractPortCodeFromString() removed - now using direct LIKE matching in scopeForQuotationContext()
 
     /**
      * Normalize commodity type from commodity item
