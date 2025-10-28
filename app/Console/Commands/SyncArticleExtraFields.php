@@ -142,9 +142,32 @@ class SyncArticleExtraFields extends Command
                     // Extract enhanced fields for Smart Article Selection
                     try {
                         $updateData['commodity_type'] = $this->enhancementService->extractCommodityType($details);
-                        // POL/POD in full format: "Antwerp, Belgium (ANR)"
-                        $updateData['pol'] = $details['pol'] ?? null;
-                        $updateData['pod'] = $details['pod'] ?? $details['destination'] ?? null;
+                        
+                        // POL/POD: Try extraFields first, then fall back to parsing article name
+                        $polFromApi = $this->fieldMapper->getStringValue($extraFields ?? [], 'pol');
+                        $podFromApi = $this->fieldMapper->getStringValue($extraFields ?? [], 'pod');
+                        
+                        if ($polFromApi) {
+                            $updateData['pol'] = $polFromApi;
+                        } else {
+                            // Parse from article name using ArticleNameParser
+                            $parser = app(\App\Services\Robaws\ArticleNameParser::class);
+                            $polData = $parser->extractPOL($article->article_name);
+                            if ($polData && $polData['formatted']) {
+                                $updateData['pol'] = $polData['formatted'];
+                            }
+                        }
+                        
+                        if ($podFromApi) {
+                            $updateData['pod'] = $podFromApi;
+                        } else {
+                            // Parse from article name using ArticleNameParser
+                            $parser = app(\App\Services\Robaws\ArticleNameParser::class);
+                            $podData = $parser->extractPOD($article->article_name);
+                            if ($podData && $podData['formatted']) {
+                                $updateData['pod'] = $podData['formatted'];
+                            }
+                        }
                     } catch (\Exception $e) {
                         // Non-critical - continue without enhanced fields
                         Log::debug('Failed to extract enhanced fields for article', [
