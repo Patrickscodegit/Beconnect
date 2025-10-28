@@ -118,8 +118,8 @@ class RobawsArticleCache extends Model
 
     public function scopeForCarrier(Builder $query, string $carrierCode): Builder
     {
-        // Match articles by shipping_line (each article has one shipping line)
-        return $query->where('shipping_line', 'LIKE', '%' . $carrierCode . '%')
+        // Match articles by shipping_line (case-insensitive)
+        return $query->where('shipping_line', 'ILIKE', '%' . $carrierCode . '%')
                      ->orWhereNull('shipping_line');
     }
 
@@ -464,18 +464,18 @@ class RobawsArticleCache extends Model
               ->where('is_active', true)
               ->validAsOf(now());
 
-        // Apply POL/POD filtering using flexible LIKE matching
+        // Apply POL/POD filtering using case-insensitive ILIKE matching
         // Quotation may have "Antwerp" while article has "Antwerp (ANR), Belgium"
         if ($quotation->pol) {
             $query->where(function ($q) use ($quotation) {
-                $q->where('pol', 'LIKE', '%' . $quotation->pol . '%')
+                $q->where('pol', 'ILIKE', '%' . $quotation->pol . '%')
                   ->orWhereNull('pol'); // Include articles without POL restriction
             });
         }
         
         if ($quotation->pod) {
             $query->where(function ($q) use ($quotation) {
-                $q->where('pod', 'LIKE', '%' . $quotation->pod . '%')
+                $q->where('pod', 'ILIKE', '%' . $quotation->pod . '%')
                   ->orWhereNull('pod'); // Include articles without POD restriction
             });
         }
@@ -488,12 +488,12 @@ class RobawsArticleCache extends Model
             });
         }
 
-        // Apply shipping line filter if schedule is selected
+        // Apply shipping line filter if schedule is selected (case-insensitive)
         if ($quotation->selected_schedule_id && $quotation->selectedSchedule) {
             $schedule = $quotation->selectedSchedule;
             if ($schedule->carrier) {
                 $query->where(function ($q) use ($schedule) {
-                    $q->where('shipping_line', 'LIKE', '%' . $schedule->carrier->name . '%')
+                    $q->where('shipping_line', 'ILIKE', '%' . $schedule->carrier->name . '%')
                       ->orWhereNull('shipping_line'); // Include articles without carrier restriction
                 });
             }
