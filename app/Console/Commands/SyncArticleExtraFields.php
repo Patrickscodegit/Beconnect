@@ -95,12 +95,7 @@ class SyncArticleExtraFields extends Command
                         $shippingLineValue = $this->fieldMapper->getStringValue($extraFields, 'shipping_line');
                         if ($shippingLineValue !== null) {
                             $updateData['shipping_line'] = $shippingLineValue;
-                            
-                            // Map shipping line to carrier code for applicable_carriers
-                            $carrierCode = $this->mapShippingLineToCarrierCode($shippingLineValue);
-                            if ($carrierCode) {
-                                $updateData['applicable_carriers'] = [$carrierCode];
-                            }
+                            // Note: applicable_carriers removed - each article has one shipping_line
                         }
                         
                         // Service Type - Use flexible field mapping
@@ -147,7 +142,9 @@ class SyncArticleExtraFields extends Command
                     // Extract enhanced fields for Smart Article Selection
                     try {
                         $updateData['commodity_type'] = $this->enhancementService->extractCommodityType($details);
-                        $updateData['pod_code'] = $this->enhancementService->extractPodCode($details['pod'] ?? $details['destination'] ?? '');
+                        // POL/POD in full format: "Antwerp, Belgium (ANR)"
+                        $updateData['pol'] = $details['pol'] ?? null;
+                        $updateData['pod'] = $details['pod'] ?? $details['destination'] ?? null;
                     } catch (\Exception $e) {
                         // Non-critical - continue without enhanced fields
                         Log::debug('Failed to extract enhanced fields for article', [
@@ -214,27 +211,7 @@ class SyncArticleExtraFields extends Command
         return Command::SUCCESS;
     }
     
-    /**
-     * Map shipping line name to carrier code
-     */
-    protected function mapShippingLineToCarrierCode(string $shippingLine): ?string
-    {
-        $normalized = strtoupper(trim($shippingLine));
-        
-        // Map shipping line names to carrier codes
-        $carrierMapping = [
-            'SALLAUM LINES' => 'SLAL',
-            'SALLAUM' => 'SLAL',
-            'MSC' => 'MSC',
-            'MAERSK' => 'MAEU',
-            'GRIMALDI' => 'GRIM',
-            'CMA CGM' => 'CMDU',
-            'HAPAG-LLOYD' => 'HLCU',
-            'EVERGREEN' => 'EGLV',
-        ];
-
-        return $carrierMapping[$normalized] ?? null;
-    }
+    // mapShippingLineToCarrierCode() removed - applicable_carriers field removed from articles
 
     /**
      * Parse date string with multiple format attempts
