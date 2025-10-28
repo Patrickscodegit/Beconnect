@@ -83,29 +83,34 @@ class SmartArticleSelectionService
             $debugBreakdown['parent_item'] = 10;
         }
 
-        // Extract port codes (returns 3-letter Robaws codes: ANR, CKY, etc.)
-        $polCode = $this->extractPortCode($quotation->pol);
-        $podCode = $this->extractPortCode($quotation->pod);
-        
-        // Normalize article port codes from "City, Country (ANR)" format to "ANR"
-        $articlePolCode = PortCodeMapper::normalizePortCode($article->pol_code);
-        $articlePodCode = PortCodeMapper::normalizePortCode($article->pod_name);
+        // Direct comparison of POL/POD (both store full format: "Antwerp, Belgium (ANR)")
+        $quotationPol = $quotation->pol;
+        $quotationPod = $quotation->pod;
+        $articlePol = $article->pol;
+        $articlePod = $article->pod;
 
         // POL + POD exact match: 100 points
-        if ($polCode && $podCode && 
-            $articlePolCode === $polCode && 
-            $articlePodCode === $podCode) {
+        if ($quotationPol && $quotationPod && $articlePol && $articlePod &&
+            $articlePol === $quotationPol && 
+            $articlePod === $quotationPod) {
             $score += 100;
             $debugBreakdown['route_exact_match'] = 100;
         } else {
-            // Partial match: POL only (40 points) or POD only (40 points)
-            if ($polCode && $articlePolCode === $polCode) {
-                $score += 40;
-                $debugBreakdown['pol_match'] = 40;
+            // Flexible matching: exact match OR quotation string is contained in article
+            // This handles cases where quotation has "Antwerp" and article has "Antwerp, Belgium (ANR)"
+            if ($quotationPol && $articlePol) {
+                if ($articlePol === $quotationPol || 
+                    stripos($articlePol, $quotationPol) !== false) {
+                    $score += 40;
+                    $debugBreakdown['pol_match'] = 40;
+                }
             }
-            if ($podCode && $articlePodCode === $podCode) {
-                $score += 40;
-                $debugBreakdown['pod_match'] = 40;
+            if ($quotationPod && $articlePod) {
+                if ($articlePod === $quotationPod || 
+                    stripos($articlePod, $quotationPod) !== false) {
+                    $score += 40;
+                    $debugBreakdown['pod_match'] = 40;
+                }
             }
         }
 
@@ -161,16 +166,11 @@ class SmartArticleSelectionService
                 'quotation_service_type' => $quotation->service_type,
                 'quotation_preferred_carrier' => $quotation->preferred_carrier,
                 'quotation_selected_schedule_id' => $quotation->selected_schedule_id,
-                'article_pol_code_raw' => $article->pol_code,
-                'article_pol_code_normalized' => $articlePolCode,
-                'article_pod_name_raw' => $article->pod_name,
-                'article_pod_code_normalized' => $articlePodCode,
+                'article_pol' => $article->pol,
+                'article_pod' => $article->pod,
                 'article_shipping_line' => $article->shipping_line,
-                'article_applicable_carriers' => $article->applicable_carriers,
                 'article_service_type' => $article->service_type,
                 'article_commodity_type' => $article->commodity_type,
-                'extracted_pol_code' => $polCode,
-                'extracted_pod_code' => $podCode,
                 'carrier_matched' => $carrierMatched,
             ]
         ]);
@@ -189,25 +189,27 @@ class SmartArticleSelectionService
     {
         $reasons = [];
 
-        // Extract port codes (returns 3-letter Robaws codes)
-        $polCode = $this->extractPortCode($quotation->pol);
-        $podCode = $this->extractPortCode($quotation->pod);
-        
-        // Normalize article port codes from "City, Country (ANR)" format
-        $articlePolCode = PortCodeMapper::normalizePortCode($article->pol_code);
-        $articlePodCode = PortCodeMapper::normalizePortCode($article->pod_name);
+        // Direct POL/POD comparison (both use full format)
+        $quotationPol = $quotation->pol;
+        $quotationPod = $quotation->pod;
+        $articlePol = $article->pol;
+        $articlePod = $article->pod;
 
         // Check POL/POD matches
-        if ($polCode && $podCode && 
-            $articlePolCode === $polCode && 
-            $articlePodCode === $podCode) {
-            $reasons[] = "Exact route match: {$polCode} → {$podCode}";
+        if ($quotationPol && $quotationPod && $articlePol && $articlePod &&
+            $articlePol === $quotationPol && 
+            $articlePod === $quotationPod) {
+            $reasons[] = "Exact route: {$quotationPol} → {$quotationPod}";
         } else {
-            if ($polCode && $articlePolCode === $polCode) {
-                $reasons[] = "POL matches: {$polCode}";
+            if ($quotationPol && $articlePol) {
+                if ($articlePol === $quotationPol || stripos($articlePol, $quotationPol) !== false) {
+                    $reasons[] = "POL: {$articlePol}";
+                }
             }
-            if ($podCode && $articlePodCode === $podCode) {
-                $reasons[] = "POD matches: {$podCode}";
+            if ($quotationPod && $articlePod) {
+                if ($articlePod === $quotationPod || stripos($articlePod, $quotationPod) !== false) {
+                    $reasons[] = "POD: {$articlePod}";
+                }
             }
         }
 
@@ -261,21 +263,7 @@ class SmartArticleSelectionService
         }
     }
 
-    /**
-     * Extract port code from string
-     *
-     * @param string|null $portString
-     * @return string|null
-     */
-    protected function extractPortCode(?string $portString): ?string
-    {
-        if (empty($portString)) {
-            return null;
-        }
-
-        // Use the PortCodeMapper service to handle various formats
-        return PortCodeMapper::getPortCode($portString);
-    }
+    // extractPortCode() method removed - no longer needed with direct string comparison
 
     /**
      * Extract commodity types from quotation
