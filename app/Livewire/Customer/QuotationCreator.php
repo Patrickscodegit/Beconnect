@@ -273,13 +273,15 @@ class QuotationCreator extends Component
         
         $serviceTypes = config('quotation.simple_service_types', []);
         
-        // Format ports for autocomplete
+        // Format ports for autocomplete JavaScript
         $polPortsFormatted = $polPorts->mapWithKeys(function ($port) {
-            return [$port->code => $port->name . ', ' . $port->country];
+            $display = $port->name . ', ' . $port->country;
+            return [$display => $display];
         })->toArray();
         
         $podPortsFormatted = $podPorts->mapWithKeys(function ($port) {
-            return [$port->code => $port->name . ', ' . $port->country];
+            $display = $port->name . ', ' . $port->country;
+            return [$display => $display];
         })->toArray();
         
         return view('livewire.customer.quotation-creator', compact(

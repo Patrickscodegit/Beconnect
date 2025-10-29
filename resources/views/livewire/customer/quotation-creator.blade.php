@@ -25,27 +25,35 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             {{-- POL --}}
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
+                <label for="pol" class="block text-sm font-medium text-gray-700 mb-2">
                     Port of Loading (POL) <span class="text-red-500">*</span>
                 </label>
                 <input type="text" 
+                       id="pol"
                        wire:model.debounce.500ms="pol"
                        class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                       placeholder="e.g., Antwerp"
+                       placeholder="Search or type any port..."
                        required>
+                <p class="text-xs text-gray-500 mt-1">
+                    <i class="fas fa-info-circle"></i> Type to search, or enter a custom port name
+                </p>
                 @error('pol') <span class="text-red-500 text-xs mt-1">{{ $message }}</span> @enderror
             </div>
             
             {{-- POD --}}
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
+                <label for="pod" class="block text-sm font-medium text-gray-700 mb-2">
                     Port of Discharge (POD) <span class="text-red-500">*</span>
                 </label>
                 <input type="text" 
+                       id="pod"
                        wire:model.debounce.500ms="pod"
                        class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                       placeholder="e.g., Conakry"
+                       placeholder="Search or type any port..."
                        required>
+                <p class="text-xs text-gray-500 mt-1">
+                    <i class="fas fa-info-circle"></i> Type to search, or enter a custom port name
+                </p>
                 @error('pod') <span class="text-red-500 text-xs mt-1">{{ $message }}</span> @enderror
             </div>
             
@@ -355,3 +363,114 @@
         </div>
     </div>
 </div>
+
+<script>
+// Initialize searchable port selects with custom input
+document.addEventListener('DOMContentLoaded', function() {
+    // Port data from backend
+    const polSeaports = @json($polPortsFormatted);
+    const podSeaports = @json($podPortsFormatted);
+    
+    const polInput = document.getElementById('pol');
+    const podInput = document.getElementById('pod');
+    
+    // Initialize autocomplete for POL and POD
+    if (polInput && podInput) {
+        // Function to get current port list based on field type
+        function getCurrentPortList(fieldType) {
+            return fieldType === 'pol' ? polSeaports : podSeaports;
+        }
+        
+        // Setup autocomplete for an input field
+        function setupAutocomplete(input) {
+            const wrapper = document.createElement('div');
+            wrapper.style.position = 'relative';
+            input.parentNode.insertBefore(wrapper, input);
+            wrapper.appendChild(input);
+            
+            const dropdown = document.createElement('div');
+            dropdown.className = 'absolute z-50 w-full bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto hidden';
+            wrapper.appendChild(dropdown);
+            
+            // Function to render dropdown with matches
+            function renderDropdown(query = '') {
+                const fieldType = input.id; // 'pol' or 'pod'
+                const portList = getCurrentPortList(fieldType);
+                const lowerQuery = query.toLowerCase().trim();
+                
+                // Filter matching ports (or show all if no query)
+                let matches = Object.entries(portList);
+                if (lowerQuery.length > 0) {
+                    matches = matches.filter(([key, value]) => 
+                        key.toLowerCase().includes(lowerQuery) || value.toLowerCase().includes(lowerQuery)
+                    );
+                }
+                matches = matches.slice(0, 10);
+                
+                if (matches.length === 0 && lowerQuery.length > 0) {
+                    dropdown.innerHTML = `
+                        <div class="px-4 py-3 text-sm text-gray-500">
+                            <i class="fas fa-info-circle mr-2"></i>
+                            No matches found. Press Enter to use "${query}" as a custom port.
+                        </div>
+                    `;
+                    dropdown.classList.remove('hidden');
+                } else if (matches.length > 0) {
+                    dropdown.innerHTML = matches.map(([key, value]) => `
+                        <div class="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0" 
+                             data-value="${key}">
+                            <div class="font-medium text-gray-900">${key}</div>
+                        </div>
+                    `).join('');
+                    dropdown.classList.remove('hidden');
+                    
+                    // Add click handlers
+                    dropdown.querySelectorAll('[data-value]').forEach(item => {
+                        item.addEventListener('click', function() {
+                            input.value = this.dataset.value;
+                            dropdown.classList.add('hidden');
+                            // Trigger Livewire update
+                            input.dispatchEvent(new Event('input', { bubbles: true }));
+                        });
+                    });
+                } else {
+                    dropdown.classList.add('hidden');
+                }
+            }
+            
+            // Show dropdown on focus/click
+            input.addEventListener('focus', function() {
+                renderDropdown(this.value);
+            });
+            
+            input.addEventListener('click', function() {
+                renderDropdown(this.value);
+            });
+            
+            // Update dropdown as user types
+            input.addEventListener('input', function() {
+                renderDropdown(this.value);
+            });
+            
+            // Hide dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!wrapper.contains(e.target)) {
+                    dropdown.classList.add('hidden');
+                }
+            });
+            
+            // Allow pressing Enter to use custom value
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && this.value.trim()) {
+                    dropdown.classList.add('hidden');
+                    e.preventDefault();
+                }
+            });
+        }
+        
+        // Setup both inputs
+        setupAutocomplete(polInput);
+        setupAutocomplete(podInput);
+    }
+});
+</script>
