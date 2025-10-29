@@ -584,4 +584,85 @@ return [
         'other' => 'Other Files',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Customer Portal Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Settings for customer-facing quotation portal including article selection,
+    | pricing visibility, and draft management.
+    |
+    */
+
+    'customer_portal' => [
+        'article_selection_enabled' => env('CUSTOMER_ARTICLE_SELECTION', true),
+        'show_match_percentage' => env('CUSTOMER_SHOW_MATCH_PERCENTAGE', true),
+        'allow_custom_articles' => false, // Only suggested articles allowed
+        'max_articles_per_quotation' => env('CUSTOMER_MAX_ARTICLES', 20),
+        'auto_save_enabled' => env('CUSTOMER_AUTO_SAVE', true),
+        'auto_save_debounce_ms' => 500, // Debounce time for auto-save
+        'draft_cleanup_days' => env('DRAFT_CLEANUP_DAYS', 7),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Quotation Status Definitions
+    |--------------------------------------------------------------------------
+    |
+    | Status workflow and permissions for quotation lifecycle.
+    |
+    */
+
+    'quotation_statuses' => [
+        'draft' => [
+            'name' => 'Draft',
+            'color' => 'gray',
+            'description' => 'Customer is filling form',
+            'editable_by_customer' => true,
+            'visible_in_admin' => false, // Don't clutter admin with drafts
+        ],
+        'pending' => [
+            'name' => 'Pending',
+            'color' => 'yellow',
+            'description' => 'Submitted for review',
+            'editable_by_customer' => true,
+            'visible_in_admin' => true,
+        ],
+        'processing' => [
+            'name' => 'Processing',
+            'color' => 'blue',
+            'description' => 'Under team review',
+            'editable_by_customer' => true,
+            'visible_in_admin' => true,
+        ],
+        'quoted' => [
+            'name' => 'Quoted',
+            'color' => 'green',
+            'description' => 'Pricing provided',
+            'editable_by_customer' => false,
+            'visible_in_admin' => true,
+        ],
+        'accepted' => [
+            'name' => 'Accepted',
+            'color' => 'purple',
+            'description' => 'Customer accepted',
+            'editable_by_customer' => false,
+            'visible_in_admin' => true,
+        ],
+        'rejected' => [
+            'name' => 'Rejected',
+            'color' => 'red',
+            'description' => 'Customer declined',
+            'editable_by_customer' => false,
+            'visible_in_admin' => true,
+        ],
+        'expired' => [
+            'name' => 'Expired',
+            'color' => 'gray',
+            'description' => 'Validity period ended',
+            'editable_by_customer' => false,
+            'visible_in_admin' => true,
+        ],
+    ],
+
 ];

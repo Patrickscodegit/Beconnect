@@ -83,3 +83,10 @@ Schedule::command('robaws:sync-customers --push')
 
 // Schedule webhook health check hourly (with alerts)
 Schedule::command('robaws:check-webhook-health --alert')->hourly();
+
+// Schedule draft quotations cleanup weekly (removes drafts older than 7 days)
+Schedule::command('quotations:clean-drafts --days=7')
+    ->weekly()
+    ->sundays()
+    ->at('05:00')
+    ->withoutOverlapping();

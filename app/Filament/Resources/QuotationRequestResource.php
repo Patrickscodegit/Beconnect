@@ -813,6 +813,7 @@ class QuotationRequestResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn ($query) => $query->where('status', '!=', 'draft'))
             ->columns([
                 Tables\Columns\TextColumn::make('request_number')
                     ->label('Request #')
