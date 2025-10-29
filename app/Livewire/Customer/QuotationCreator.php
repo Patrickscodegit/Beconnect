@@ -260,12 +260,15 @@ class QuotationCreator extends Component
         $schedules = ShippingSchedule::where('is_active', true)
             ->when($this->pol && $this->pod, function ($q) {
                 // Filter schedules by route if POL/POD selected
-                $q->whereHas('route', function ($routeQuery) {
-                    $routeQuery->where('pol', 'ILIKE', '%' . $this->pol . '%')
-                              ->where('pod', 'ILIKE', '%' . $this->pod . '%');
+                $q->whereHas('polPort', function ($portQuery) {
+                    $portQuery->where('name', 'ILIKE', '%' . $this->pol . '%');
+                })
+                ->whereHas('podPort', function ($portQuery) {
+                    $portQuery->where('name', 'ILIKE', '%' . $this->pod . '%');
                 });
             })
-            ->orderBy('etd')
+            ->orderBy('next_sailing_date', 'asc')
+            ->orderBy('ets_pol', 'asc')
             ->get();
         
         $serviceTypes = config('quotation.simple_service_types', []);
