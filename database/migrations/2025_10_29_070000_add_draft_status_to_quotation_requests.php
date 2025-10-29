@@ -12,20 +12,17 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // For PostgreSQL, we need to alter the enum type
-        DB::statement("ALTER TYPE quotation_request_status ADD VALUE IF NOT EXISTS 'draft'");
-        
-        // Alternatively, if the above doesn't work, we can recreate the constraint
-        // This is safer and works across all PostgreSQL versions
+        // Drop the existing check constraint
         DB::statement("
             ALTER TABLE quotation_requests 
             DROP CONSTRAINT IF EXISTS quotation_requests_status_check
         ");
         
+        // Recreate the constraint with 'draft' added
         DB::statement("
             ALTER TABLE quotation_requests 
             ADD CONSTRAINT quotation_requests_status_check 
-            CHECK (status IN ('draft', 'pending', 'processing', 'quoted', 'accepted', 'rejected', 'expired'))
+            CHECK (status::text = ANY (ARRAY['draft'::character varying, 'pending'::character varying, 'processing'::character varying, 'quoted'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'expired'::character varying]::text[]))
         ");
     }
 
@@ -43,7 +40,7 @@ return new class extends Migration
         DB::statement("
             ALTER TABLE quotation_requests 
             ADD CONSTRAINT quotation_requests_status_check 
-            CHECK (status IN ('pending', 'processing', 'quoted', 'accepted', 'rejected', 'expired'))
+            CHECK (status::text = ANY (ARRAY['pending'::character varying, 'processing'::character varying, 'quoted'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'expired'::character varying]::text[]))
         ");
     }
 };
