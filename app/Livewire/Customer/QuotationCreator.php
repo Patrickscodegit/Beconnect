@@ -84,6 +84,13 @@ class QuotationCreator extends Component
                 'cargo_description' => 'Draft - being filled by customer', // Default, will be updated
                 'pol' => '', // Will be filled by customer
                 'pod' => '', // Will be filled by customer
+                'routing' => [ // Will be updated as customer fills form
+                    'por' => '',
+                    'pol' => '',
+                    'pod' => '',
+                    'fdest' => '',
+                ],
+                'cargo_details' => [], // Will be populated with commodity items
             ]);
             
             $this->quotationId = $this->quotation->id;
@@ -127,6 +134,12 @@ class QuotationCreator extends Component
                 'pod' => $this->pod,
                 'por' => $this->por,
                 'fdest' => $this->fdest,
+                'routing' => [
+                    'por' => $this->por,
+                    'pol' => $this->pol,
+                    'pod' => $this->pod,
+                    'fdest' => $this->fdest,
+                ],
                 'service_type' => $this->service_type,
                 'simple_service_type' => $this->simple_service_type,
                 'trade_direction' => $this->getDirectionFromServiceType($this->service_type),
