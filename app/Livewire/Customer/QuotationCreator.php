@@ -80,6 +80,7 @@ class QuotationCreator extends Component
                 // Required fields - will be updated when customer fills form
                 'service_type' => 'RORO_EXPORT', // Default, will be updated
                 'simple_service_type' => 'roro', // Default, will be updated
+                'trade_direction' => 'export', // Derived from RORO_EXPORT
                 'cargo_description' => 'Draft - being filled by customer', // Default, will be updated
                 'pol' => '', // Will be filled by customer
                 'pod' => '', // Will be filled by customer
@@ -128,6 +129,7 @@ class QuotationCreator extends Component
                 'fdest' => $this->fdest,
                 'service_type' => $this->service_type,
                 'simple_service_type' => $this->simple_service_type,
+                'trade_direction' => $this->getDirectionFromServiceType($this->service_type),
                 'commodity_type' => $this->commodity_type,
                 'cargo_description' => $this->cargo_description,
                 'special_requirements' => $this->special_requirements,
@@ -218,6 +220,24 @@ class QuotationCreator extends Component
         return redirect()
             ->route('customer.quotations.show', $this->quotation)
             ->with('success', 'Quotation submitted for review! Our team will respond within 24 hours.');
+    }
+    
+    /**
+     * Derive trade direction from service type
+     */
+    protected function getDirectionFromServiceType(string $serviceType): string
+    {
+        if (str_contains($serviceType, '_EXPORT')) {
+            return 'export';
+        }
+        if (str_contains($serviceType, '_IMPORT')) {
+            return 'import';
+        }
+        if ($serviceType === 'CROSSTRADE') {
+            return 'cross_trade';
+        }
+        // For ROAD_TRANSPORT, CUSTOMS, PORT_FORWARDING, OTHER
+        return 'both';
     }
     
     public function render()
