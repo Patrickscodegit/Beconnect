@@ -101,9 +101,16 @@
                                         </p>
                                     @endif
                                     
+                                    @php
+                                        // Always show pricing - default to Tier C if no tier assigned
+                                        $displayPrice = $this->getTierPrice($article);
+                                        $tier = \App\Models\PricingTier::find($this->pricingTierId);
+                                        $tierLabel = $tier ? "Tier {$tier->code}" : 'Standard';
+                                    @endphp
                                     <p class="text-sm text-gray-600 dark:text-gray-400">
                                         <span class="font-medium">Price:</span> 
-                                        {{ number_format($article->unit_price, 2) }} {{ $article->currency }} / {{ $article->unit_type }}
+                                        €{{ number_format($displayPrice, 2) }} {{ $article->currency }} / {{ $article->unit_type }}
+                                        <span class="text-xs text-gray-500">({{ $tierLabel }} pricing)</span>
                                     </p>
                                     
                                     @if($article->shipping_line)
@@ -129,8 +136,8 @@
                                 
                                 {{-- Additional Info --}}
                                 <div class="text-xs text-gray-500 dark:text-gray-400">
-                                    @if($article->pol_code && $article->pod_code)
-                                        <p><span class="font-medium">Route:</span> {{ $article->pol_code }} → {{ $article->pod_code }}</p>
+                                    @if($article->pol && $article->pod)
+                                        <p><span class="font-medium">Route:</span> {{ $article->pol }} → {{ $article->pod }}</p>
                                     @endif
                                     
                                     @if($article->commodity_type)
@@ -141,26 +148,37 @@
                             
                             {{-- Action Button --}}
                             <div class="ml-4">
-                                @if($isSelected)
-                                    <button 
-                                        wire:click="removeArticle({{ $article->id }})"
-                                        class="inline-flex items-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
-                                    >
-                                        <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                        </svg>
-                                        Remove
-                                    </button>
+                                @if($isEditable)
+                                    @if($isSelected)
+                                        <button 
+                                            wire:click="removeArticle({{ $article->id }})"
+                                            class="inline-flex items-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+                                        >
+                                            <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                            </svg>
+                                            Remove
+                                        </button>
+                                    @else
+                                        <button 
+                                            wire:click="selectArticle({{ $article->id }})"
+                                            class="inline-flex items-center rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+                                        >
+                                            <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                            </svg>
+                                            Add Article
+                                        </button>
+                                    @endif
                                 @else
-                                    <button 
-                                        wire:click="selectArticle({{ $article->id }})"
-                                        class="inline-flex items-center rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
-                                    >
-                                        <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                                        </svg>
-                                        Add Article
-                                    </button>
+                                    @if($isSelected)
+                                        <span class="inline-flex items-center rounded-md bg-green-100 px-3 py-2 text-sm font-semibold text-green-800">
+                                            <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                            </svg>
+                                            Selected
+                                        </span>
+                                    @endif
                                 @endif
                             </div>
                         </div>
@@ -169,22 +187,28 @@
             </div>
         @else
             {{-- No Suggestions --}}
-            <div class="rounded-lg border border-gray-200 bg-gray-50 p-8 text-center dark:border-gray-700 dark:bg-gray-800">
-                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
-                </svg>
-                <h3 class="mt-2 text-sm font-semibold text-gray-900 dark:text-white">No Smart Suggestions</h3>
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    No articles match your current quotation criteria with {{ $minMatchPercentage }}% confidence.
+            <div class="rounded-lg border border-yellow-200 bg-yellow-50 p-8 text-center">
+                <i class="fas fa-exclamation-circle text-yellow-600 text-5xl mb-4"></i>
+                <h3 class="text-lg font-semibold text-yellow-900 mb-2">No Matching Articles Found</h3>
+                <p class="text-sm text-yellow-800 mb-4">
+                    We couldn't find pre-configured services matching your exact requirements with {{ $minMatchPercentage }}% confidence.
                 </p>
-                <div class="mt-4">
-                    <button 
-                        wire:click="loadSuggestions" 
-                        class="inline-flex items-center rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
-                    >
-                        Try Lower Threshold
-                    </button>
+                <div class="bg-white border border-yellow-300 rounded-lg p-5 mb-4 max-w-md mx-auto">
+                    <p class="text-sm font-medium text-gray-900 mb-2">
+                        <i class="fas fa-user-tie text-blue-600 text-lg mr-2"></i>
+                        Don't worry - Our Belgaco team will help!
+                    </p>
+                    <p class="text-sm text-gray-700">
+                        Submit your quotation and our team will review it personally to provide accurate pricing within 24 hours.
+                    </p>
                 </div>
+                <button 
+                    wire:click="updateMinMatchPercentage(20)" 
+                    class="inline-flex items-center rounded-md bg-yellow-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-yellow-500"
+                >
+                    <i class="fas fa-adjust mr-2"></i>
+                    Try Lowering Match Threshold to 20%
+                </button>
             </div>
         @endif
     </div>

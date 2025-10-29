@@ -17,14 +17,28 @@ class SmartArticleSelector extends Component
     public int $minMatchPercentage = 30;
     public int $maxArticles = 10;
     
+    // Customer portal specific
+    public bool $showPricing = true;
+    public bool $isEditable = true;
+    public ?int $pricingTierId = null;
+    
     protected $listeners = [
         'quotationUpdated' => 'loadSuggestions',
-        'refreshSuggestions' => 'loadSuggestions'
+        'refreshSuggestions' => 'loadSuggestions',
+        'removeArticle' => 'removeArticle',
     ];
     
-    public function mount(QuotationRequest $quotation)
+    public function mount(QuotationRequest $quotation, bool $showPricing = true, bool $isEditable = true)
     {
         $this->quotation = $quotation;
+        $this->showPricing = $showPricing;
+        $this->isEditable = $isEditable;
+        
+        // Get pricing tier: User tier → Quotation tier → Default to Tier C
+        $this->pricingTierId = auth()->user()?->pricing_tier_id 
+            ?? $quotation->pricing_tier_id 
+            ?? \App\Models\PricingTier::where('code', 'C')->first()?->id;
+        
         $this->suggestedArticles = collect();
         $this->loadSuggestions();
     }
@@ -62,28 +76,80 @@ class SmartArticleSelector extends Component
         $this->loading = false;
     }
     
+    public function getTierPrice($article)
+    {
+        // Always return a price - default to Tier C if no tier
+        $tier = \App\Models\PricingTier::find($this->pricingTierId);
+        
+        if (!$tier) {
+            // Fallback to Tier C if tier not found
+            $tier = \App\Models\PricingTier::where('code', 'C')->first();
+        }
+        
+        if (!$tier) {
+            // Ultimate fallback: base price
+            return $article->unit_price;
+        }
+        
+        return $tier->calculateSellingPrice($article->unit_price);
+    }
+    
     public function selectArticle($articleId)
     {
+        if (!$this->isEditable) {
+            return; // Prevent selection on approved quotations
+        }
+        
         if (!in_array($articleId, $this->selectedArticles)) {
             $this->selectedArticles[] = $articleId;
             
-            // Attach to quotation
-            $this->quotation->articles()->syncWithoutDetaching([$articleId]);
+            $article = \App\Models\RobawsArticleCache::find($articleId);
+            $tierPrice = $this->getTierPrice($article);
             
-            // Emit event for parent component
-            $this->emit('articleSelected', $articleId);
+            // Attach with tier price and metadata
+            $this->quotation->articles()->syncWithoutDetaching([
+                $articleId => [
+                    'quantity' => 1,
+                    'unit_price' => $tierPrice ?? $article->unit_price,
+                    'unit_type' => $article->unit_type,
+                    'currency' => $article->currency,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]
+            ]);
+            
+            // Recalculate quotation totals
+            $this->quotation->calculateTotals();
+            $this->quotation->save();
+            
+            // Refresh quotation
+            $this->quotation = $this->quotation->fresh();
+            
+            // Emit to parent
+            $this->dispatch('articleAdded', articleId: $articleId);
         }
     }
     
     public function removeArticle($articleId)
     {
+        if (!$this->isEditable) {
+            return; // Prevent removal on approved quotations
+        }
+        
         $this->selectedArticles = array_filter($this->selectedArticles, fn($id) => $id !== $articleId);
         
         // Detach from quotation
         $this->quotation->articles()->detach($articleId);
         
-        // Emit event for parent component
-        $this->emit('articleRemoved', $articleId);
+        // Recalculate quotation totals
+        $this->quotation->calculateTotals();
+        $this->quotation->save();
+        
+        // Refresh quotation
+        $this->quotation = $this->quotation->fresh();
+        
+        // Emit to parent
+        $this->dispatch('articleRemoved', articleId: $articleId);
     }
     
     public function updateMinMatchPercentage($percentage)
