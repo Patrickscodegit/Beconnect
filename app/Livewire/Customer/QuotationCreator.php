@@ -77,6 +77,12 @@ class QuotationCreator extends Component
                 'customer_role' => $user->customer_role ?? 'RORO',
                 'vat_rate' => 21.00,
                 'pricing_currency' => 'EUR',
+                // Required fields - will be updated when customer fills form
+                'service_type' => 'RORO_EXPORT', // Default, will be updated
+                'simple_service_type' => 'roro', // Default, will be updated
+                'cargo_description' => 'Draft - being filled by customer', // Default, will be updated
+                'pol' => '', // Will be filled by customer
+                'pod' => '', // Will be filled by customer
             ]);
             
             $this->quotationId = $this->quotation->id;
