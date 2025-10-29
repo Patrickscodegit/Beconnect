@@ -214,8 +214,66 @@ class CustomerQuotationController extends Controller
             $quotationRequest->client_email !== $user->email) {
             abort(403, 'Unauthorized access to this quotation');
         }
+        
+        // Check if editing is allowed
+        $canEdit = in_array($quotationRequest->status, ['draft', 'pending', 'processing']);
 
-        return view('customer.quotations.show', compact('quotationRequest'));
+        return view('customer.quotations.show', compact('quotationRequest', 'canEdit'));
+    }
+    
+    /**
+     * Duplicate an approved quotation
+     */
+    public function duplicate(QuotationRequest $quotationRequest)
+    {
+        $user = auth()->user();
+        
+        // Verify ownership
+        if ($quotationRequest->contact_email !== $user->email && 
+            $quotationRequest->client_email !== $user->email) {
+            abort(403, 'Unauthorized access to this quotation');
+        }
+        
+        $newQuotation = DB::transaction(function () use ($quotationRequest, $user) {
+            // Create new draft quotation
+            $newQuotation = $quotationRequest->replicate([
+                'request_number',
+                'status',
+                'quoted_at',
+                'expires_at',
+                'robaws_offer_id',
+                'robaws_offer_number',
+                'robaws_synced_at',
+            ]);
+            
+            $newQuotation->status = 'draft';
+            $newQuotation->save();
+            
+            // Copy articles with same pricing
+            foreach ($quotationRequest->articles as $article) {
+                $newQuotation->articles()->attach($article->id, [
+                    'quantity' => $article->pivot->quantity ?? 1,
+                    'unit_price' => $article->pivot->unit_price ?? $article->unit_price,
+                    'unit_type' => $article->pivot->unit_type ?? $article->unit_type,
+                    'currency' => $article->pivot->currency ?? $article->currency,
+                ]);
+            }
+            
+            // Copy commodity items if they exist
+            if ($quotationRequest->commodityItems) {
+                foreach ($quotationRequest->commodityItems as $item) {
+                    $newItem = $item->replicate();
+                    $newItem->quotation_request_id = $newQuotation->id;
+                    $newItem->save();
+                }
+            }
+            
+            return $newQuotation;
+        });
+        
+        return redirect()
+            ->route('customer.quotations.show', $newQuotation)
+            ->with('success', 'Quotation duplicated successfully! You can now edit and submit.');
     }
 
     /**

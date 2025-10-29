@@ -39,6 +39,7 @@ Route::middleware(['auth'])->prefix('customer')->name('customer.')->group(functi
         Route::get('/create', [\App\Http\Controllers\CustomerQuotationController::class, 'create'])->name('create');
         Route::post('/store', [\App\Http\Controllers\CustomerQuotationController::class, 'store'])->name('store');
         Route::get('/{quotationRequest}', [\App\Http\Controllers\CustomerQuotationController::class, 'show'])->name('show');
+        Route::post('/{quotationRequest}/duplicate', [\App\Http\Controllers\CustomerQuotationController::class, 'duplicate'])->name('duplicate');
     });
     
     // Schedules (customer view - with pricing)

@@ -31,6 +31,36 @@
         </div>
     </div>
 
+    {{-- Edit/Duplicate Actions Banner --}}
+    @if($canEdit)
+        <div class="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div class="flex items-center">
+                <i class="fas fa-info-circle text-blue-600 mr-2"></i>
+                <p class="text-sm text-blue-800">
+                    You can edit this quotation until it's approved by our team. Simply go back and create a new one or wait for our response.
+                </p>
+            </div>
+        </div>
+    @elseif(in_array($quotationRequest->status, ['quoted', 'accepted', 'approved']))
+        <div class="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <i class="fas fa-check-circle text-green-600 mr-2"></i>
+                    <p class="text-sm text-green-800">
+                        This quotation has been approved. You can duplicate it to create a new quotation with the same details.
+                    </p>
+                </div>
+                <form action="{{ route('customer.quotations.duplicate', $quotationRequest) }}" method="POST" class="inline">
+                    @csrf
+                    <button type="submit" 
+                            class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium">
+                        <i class="fas fa-copy mr-2"></i>Duplicate
+                    </button>
+                </form>
+            </div>
+        </div>
+    @endif
+
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         <!-- Main Content -->
@@ -85,6 +115,12 @@
                     <i class="fas fa-box mr-2"></i>Cargo Information
                 </h2>
                 <dl class="space-y-3">
+                    @if($quotationRequest->commodity_type)
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Commodity Type</dt>
+                            <dd class="mt-1 text-sm text-gray-900 font-semibold">{{ ucfirst($quotationRequest->commodity_type) }}</dd>
+                        </div>
+                    @endif
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Description</dt>
                         <dd class="mt-1 text-sm text-gray-900">{{ $quotationRequest->cargo_description }}</dd>
@@ -97,6 +133,42 @@
                     @endif
                 </dl>
             </div>
+
+            {{-- Selected Articles --}}
+            @if($quotationRequest->articles->count() > 0)
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-semibold text-gray-900 mb-4">
+                        <i class="fas fa-check-square mr-2 text-green-600"></i>Selected Services
+                    </h2>
+                    
+                    <div class="space-y-3">
+                        @foreach($quotationRequest->articles as $article)
+                            <div class="flex items-start justify-between bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                <div class="flex-1">
+                                    <p class="font-medium text-gray-900">{{ $article->description ?: $article->article_name }}</p>
+                                    <p class="text-sm text-gray-600 mt-1">
+                                        Code: {{ $article->article_code }}
+                                    </p>
+                                    @if(auth()->user()->pricing_tier_id || $quotationRequest->pricing_tier_id)
+                                        <p class="text-sm text-gray-700 mt-2">
+                                            Qty: {{ $article->pivot->quantity ?? 1 }} × 
+                                            €{{ number_format($article->pivot->unit_price ?? $article->unit_price, 2) }} = 
+                                            <span class="font-semibold text-blue-600">
+                                                €{{ number_format(($article->pivot->quantity ?? 1) * ($article->pivot->unit_price ?? $article->unit_price), 2) }}
+                                            </span>
+                                        </p>
+                                    @endif
+                                </div>
+                                @if($article->commodity_type)
+                                    <span class="ml-4 px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
+                                        {{ $article->commodity_type }}
+                                    </span>
+                                @endif
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
 
             <!-- Pricing (if quoted) -->
             @if($quotationRequest->status === 'quoted' && $quotationRequest->total_incl_vat)
