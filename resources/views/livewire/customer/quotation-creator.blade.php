@@ -111,9 +111,9 @@
                 @foreach($schedules as $schedule)
                     <option value="{{ $schedule->id }}">
                         {{ $schedule->carrier->name ?? 'Unknown Carrier' }} - 
-                        Departure: {{ $schedule->etd->format('M d, Y') }}
-                        @if($schedule->eta)
-                            - Arrival: {{ $schedule->eta->format('M d, Y') }}
+                        Departure: {{ $schedule->ets_pol ? $schedule->ets_pol->format('M d, Y') : ($schedule->next_sailing_date ? $schedule->next_sailing_date->format('M d, Y') : 'TBA') }}
+                        @if($schedule->eta_pod)
+                            - Arrival: {{ $schedule->eta_pod->format('M d, Y') }}
                         @endif
                     </option>
                 @endforeach
