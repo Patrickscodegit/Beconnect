@@ -375,13 +375,7 @@
 
 <script>
 // Initialize searchable port selects with custom input
-// Wait for both DOM and Livewire to be ready
-let livewireReady = false;
-let domReady = false;
-
-function initAutocomplete() {
-    if (!domReady || !livewireReady) return;
-    
+document.addEventListener('DOMContentLoaded', function() {
     // Port data from backend
     const polSeaports = @json($polPortsFormatted);
     const podSeaports = @json($podPortsFormatted);
@@ -442,139 +436,10 @@ function initAutocomplete() {
                     // Add click handlers
                     dropdown.querySelectorAll('[data-value]').forEach(item => {
                         item.addEventListener('click', function() {
-                            const selectedValue = this.dataset.value;
-                            const fieldType = input.id; // 'pol' or 'pod'
-                            
-                            console.log(`🔵 Autocomplete selected: ${fieldType} = "${selectedValue}"`);
-                            
-                            // Set input value
-                            input.value = selectedValue;
+                            input.value = this.dataset.value;
                             dropdown.classList.add('hidden');
-                            
-                            // Function to update Livewire property
-                            function updateLivewireProperty() {
-                                // Method 1: Try to find component via DOM traversal
-                                let component = null;
-                                let componentId = null;
-                                
-                                // Traverse up from input to find wire:id
-                                let element = input;
-                                while (element && element !== document.body) {
-                                    if (element.hasAttribute && element.hasAttribute('wire:id')) {
-                                        componentId = element.getAttribute('wire:id');
-                                        console.log(`📍 Found component ID via traversal: ${componentId}`);
-                                        break;
-                                    }
-                                    element = element.parentElement;
-                                }
-                                
-                                // Method 2: Try global selector
-                                if (!componentId) {
-                                    const wireElement = document.querySelector('[wire\\:id]');
-                                    if (wireElement) {
-                                        componentId = wireElement.getAttribute('wire:id');
-                                        console.log(`📍 Found component ID via global selector: ${componentId}`);
-                                    }
-                                }
-                                
-                                // Method 3: Try Livewire.all() to get all components
-                                if (!componentId && window.Livewire && typeof window.Livewire.all === 'function') {
-                                    const components = window.Livewire.all();
-                                    if (components.length > 0) {
-                                        component = components[0];
-                                        console.log(`📍 Found component via Livewire.all(): ${component.constructor.name}`);
-                                    }
-                                }
-                                
-                                // Get component instance using componentId
-                                if (!component && window.Livewire && componentId) {
-                                    try {
-                                        component = window.Livewire.find(componentId);
-                                        console.log(`✅ Found Livewire component: ${componentId}`);
-                                    } catch (e) {
-                                        console.error('❌ Error finding component:', e);
-                                    }
-                                }
-                                
-                                // Update the property
-                                if (component) {
-                                    try {
-                                        // Get the property name from wire:model attribute
-                                        const wireModelAttr = input.getAttribute('wire:model');
-                                        if (!wireModelAttr) {
-                                            console.warn('⚠️ Input has no wire:model attribute');
-                                            return false;
-                                        }
-                                        
-                                        // Extract property name (remove .debounce.500ms, .live, etc.)
-                                        const propertyName = wireModelAttr
-                                            .replace(/\.debounce\.\d+ms/, '')
-                                            .replace(/\.debounce/, '')
-                                            .replace(/\.live/, '')
-                                            .replace(/\.lazy/, '')
-                                            .replace(/\.blur/, '')
-                                            .trim();
-                                        
-                                        console.log(`🔄 Setting ${propertyName} to "${selectedValue}"`);
-                                        
-                                        // Update Livewire property
-                                        component.set(propertyName, selectedValue);
-                                        
-                                        console.log(`✅ Livewire property updated: ${propertyName} = "${selectedValue}"`);
-                                        
-                                        // Force Livewire to sync
-                                        if (typeof component.$wire !== 'undefined') {
-                                            component.$wire.set(propertyName, selectedValue);
-                                        }
-                                        
-                                        return true;
-                                    } catch (e) {
-                                        console.error('❌ Error updating Livewire property:', e);
-                                        return false;
-                                    }
-                                } else {
-                                    console.warn('⚠️ Could not find Livewire component');
-                                    return false;
-                                }
-                            }
-                            
-                            // Try to update Livewire
-                            const updated = updateLivewireProperty();
-                            
-                            // Fallback: Dispatch native events (in case Livewire is listening)
-                            try {
-                                // Create and dispatch input event
-                                const inputEvent = new Event('input', { 
-                                    bubbles: true, 
-                                    cancelable: true 
-                                });
-                                input.dispatchEvent(inputEvent);
-                                
-                                // Create and dispatch change event
-                                const changeEvent = new Event('change', { 
-                                    bubbles: true, 
-                                    cancelable: true 
-                                });
-                                input.dispatchEvent(changeEvent);
-                                
-                                // Trigger Livewire's update mechanism
-                                if (window.Livewire) {
-                                    // Dispatch custom Livewire event
-                                    const livewireEvent = new CustomEvent('livewire:update', { 
-                                        bubbles: true,
-                                        detail: { value: selectedValue }
-                                    });
-                                    input.dispatchEvent(livewireEvent);
-                                }
-                                
-                                console.log(`📤 Dispatched input/change events for ${fieldType}`);
-                            } catch (e) {
-                                console.error('❌ Error dispatching events:', e);
-                            }
-                            
-                            if (!updated) {
-                                console.warn('⚠️ Livewire update may have failed. Check console for errors.');
-                            }
+                            // Trigger Livewire update
+                            input.dispatchEvent(new Event('input', { bubbles: true }));
                         });
                     });
                 } else {
@@ -616,51 +481,5 @@ function initAutocomplete() {
         setupAutocomplete(polInput);
         setupAutocomplete(podInput);
     }
-}
-
-// Wait for DOM to be ready
-document.addEventListener('DOMContentLoaded', function() {
-    domReady = true;
-    console.log('✅ DOM ready');
-    initAutocomplete();
 });
-
-// Wait for Livewire to be ready (Livewire 3)
-if (window.Livewire) {
-    // Try multiple Livewire ready events
-    document.addEventListener('livewire:init', function() {
-        livewireReady = true;
-        console.log('✅ Livewire init');
-        initAutocomplete();
-    });
-    
-    document.addEventListener('livewire:load', function() {
-        livewireReady = true;
-        console.log('✅ Livewire load');
-        initAutocomplete();
-    });
-    
-    // Also check if Livewire is already loaded
-    if (window.Livewire && typeof window.Livewire.all === 'function') {
-        livewireReady = true;
-        console.log('✅ Livewire already loaded');
-        if (domReady) {
-            initAutocomplete();
-        }
-    }
-} else {
-    // If Livewire isn't available yet, wait for it
-    window.addEventListener('load', function() {
-        // Give it a moment
-        setTimeout(function() {
-            if (window.Livewire) {
-                livewireReady = true;
-                console.log('✅ Livewire loaded (delayed)');
-                if (domReady) {
-                    initAutocomplete();
-                }
-            }
-        }, 100);
-    });
-}
 </script>
