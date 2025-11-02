@@ -426,43 +426,8 @@ document.addEventListener('DOMContentLoaded', function() {
             dropdown.style.width = input.offsetWidth + 'px';
             parent.appendChild(dropdown);
             
-            // IMPORTANT: Attach event delegation handler ONCE during setup
-            // This handler persists through all renderDropdown calls
-            const handleItemClick = function(e) {
-                const fieldType = input.id; // 'pol' or 'pod'
-                
-                // Log ALL clicks on dropdown to debug
-                console.log(`🔵 Autocomplete: Dropdown click detected for ${fieldType}`, {
-                    target: e.target,
-                    tagName: e.target.tagName,
-                    className: e.target.className,
-                    currentTarget: e.currentTarget,
-                });
-                
-                const item = e.target.closest('.autocomplete-item');
-                if (!item) {
-                    console.log(`🔵 Autocomplete: Click not on item for ${fieldType}`, {
-                        clickedElement: e.target,
-                        parentElement: e.target.parentElement,
-                    });
-                    return;
-                }
-                
-                const selectedValue = item.dataset.value;
-                console.log(`🔵 Autocomplete: Item clicked - ${fieldType} = "${selectedValue}"`);
-                
-                e.preventDefault();
-                e.stopPropagation();
-                
-                input.value = selectedValue;
-                dropdown.classList.add('hidden');
-                
-                // Method 1: Dispatch input event (Livewire should detect this)
-                console.log(`🔵 Autocomplete: Dispatching input event for ${fieldType}`);
-                const inputEvent = new Event('input', { bubbles: true, cancelable: true });
-                input.dispatchEvent(inputEvent);
-                
-                // Method 2: Also update Livewire property directly
+            // Helper function to update Livewire property (used by click handlers)
+            const updateLivewireProperty = function(fieldType, selectedValue) {
                 // Find the Livewire component by traversing up from input
                 let component = null;
                 let element = input;
@@ -474,7 +439,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         if (window.Livewire) {
                             try {
                                 component = window.Livewire.find(componentId);
-                                console.log(`🔵 Autocomplete: Found Livewire component ${componentId}`);
+                                console.log(`🔵 Autocomplete: Found Livewire component ${componentId} for ${fieldType}`);
                             } catch (e) {
                                 console.warn('🔵 Autocomplete: Could not find component:', e);
                             }
@@ -488,14 +453,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (component) {
                     try {
                         console.log(`🔵 Autocomplete: Calling component.set('${fieldType}', '${selectedValue}')`);
-                        console.log(`🔵 Autocomplete: Component methods available:`, Object.getOwnPropertyNames(Object.getPrototypeOf(component)));
-                        
-                        // Try component.set()
                         component.set(fieldType, selectedValue);
                         
                         // Also try $wire.set() if available
                         if (component.$wire && typeof component.$wire.set === 'function') {
-                            console.log(`🔵 Autocomplete: Also trying component.\$wire.set()`);
                             component.$wire.set(fieldType, selectedValue);
                         }
                         
@@ -511,22 +472,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         }, 100);
                     } catch (e) {
                         console.error('🔴 Autocomplete: Error updating Livewire:', e);
-                        console.error('🔴 Autocomplete: Error details:', e.message, e.stack);
                     }
                 } else {
-                    console.warn('⚠️ Autocomplete: Could not find Livewire component to update directly');
-                    console.warn(`⚠️ Autocomplete: ${fieldType} property will not be updated in Livewire`);
+                    console.warn(`⚠️ Autocomplete: Could not find Livewire component for ${fieldType}`);
                 }
             };
-            
-            // Attach event delegation handler ONCE - it persists through all renders
-            dropdown.addEventListener('click', handleItemClick, false); // Explicitly use bubble phase
-            console.log(`✅ Autocomplete: ${input.id} - Event delegation handler attached`);
-            console.log(`🔵 Autocomplete: ${input.id} - Dropdown element:`, {
-                element: dropdown,
-                hasListener: dropdown.onclick !== null || dropdown.addEventListener ? 'yes' : 'no',
-                parentElement: dropdown.parentElement,
-            });
             
             // Function to render dropdown with matches
             function renderDropdown(query = '') {
@@ -560,14 +510,36 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.log(`🔵 Autocomplete: ${fieldType} - Showing "no matches" dropdown`);
                 } else if (matches.length > 0) {
                     dropdown.innerHTML = matches.map(([key, value]) => `
-                        <div class="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 autocomplete-item" 
+                        <div class="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0" 
                              data-value="${key}">
                             <div class="font-medium text-gray-900">${key}</div>
                         </div>
                     `).join('');
                     dropdown.classList.remove('hidden');
                     console.log(`✅ Autocomplete: ${fieldType} - Dropdown shown with ${matches.length} items`);
-                    // Note: Click handlers already attached via event delegation (attached once during setup)
+                    
+                    // Add click handlers DIRECTLY to items (like public form) - more reliable than event delegation
+                    dropdown.querySelectorAll('[data-value]').forEach(item => {
+                        item.addEventListener('click', function() {
+                            const selectedValue = this.dataset.value;
+                            console.log(`🔵 Autocomplete: Item clicked - ${fieldType} = "${selectedValue}"`);
+                            
+                            input.value = selectedValue;
+                            dropdown.classList.add('hidden');
+                            
+                            // Dispatch both 'input' and 'change' events for Livewire compatibility
+                            console.log(`🔵 Autocomplete: Dispatching input event for ${fieldType}`);
+                            input.dispatchEvent(new Event('input', { bubbles: true }));
+                            
+                            console.log(`🔵 Autocomplete: Dispatching change event for ${fieldType}`);
+                            input.dispatchEvent(new Event('change', { bubbles: true }));
+                            
+                            // Update Livewire property directly
+                            updateLivewireProperty(fieldType, selectedValue);
+                        });
+                    });
+                    
+                    console.log(`✅ Autocomplete: ${fieldType} - Click handlers attached to ${matches.length} items`);
                     
                 } else {
                     // No matches and empty query - hide dropdown
@@ -593,40 +565,14 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             
             // Hide dropdown when clicking outside
-            // Use regular phase (NOT capture) to let dropdown click handler run first
-            const handleClickOutside = function(e) {
-                const fieldType = input.id;
-                
-                // Log for debugging
-                console.log(`🔵 Autocomplete: Click-outside check for ${fieldType}`, {
-                    target: e.target,
-                    parentContains: parent.contains(e.target),
-                    dropdownContains: dropdown.contains(e.target),
-                });
-                
-                // Check if click is inside the parent container (which contains both input and dropdown)
-                const clickedOnParent = parent.contains(e.target);
-                const clickedOnDropdown = dropdown.contains(e.target);
-                const clickedOnItem = e.target.closest('.autocomplete-item');
-                
-                // Only hide if click is truly outside parent, dropdown, and not on an item
-                if (!clickedOnParent && !clickedOnDropdown && !clickedOnItem) {
-                    // Use setTimeout to ensure dropdown click handler has processed first
-                    setTimeout(function() {
-                        // Double-check dropdown is still visible before hiding
-                        if (!dropdown.classList.contains('hidden')) {
-                            dropdown.classList.add('hidden');
-                            console.log(`🔵 Autocomplete: ${fieldType} - Dropdown hidden (clicked outside)`);
-                        }
-                    }, 50); // Increased delay to give dropdown handler more time
-                } else {
-                    console.log(`🔵 Autocomplete: ${fieldType} - Click inside parent, not hiding`);
+            // Simplified like public form - use parent container check
+            document.addEventListener('click', function(e) {
+                // Check if click is outside the parent container (which contains both input and dropdown)
+                if (!parent.contains(e.target)) {
+                    dropdown.classList.add('hidden');
+                    console.log(`🔵 Autocomplete: ${input.id} - Dropdown hidden (clicked outside)`);
                 }
-            };
-            
-            // Use regular phase (NOT capture) - this lets dropdown click handler run first
-            // Only attach one handler per input
-            document.addEventListener('click', handleClickOutside, false);
+            });
             
             // Allow pressing Enter to use custom value
             input.addEventListener('keydown', function(e) {
