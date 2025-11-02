@@ -12,18 +12,24 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Drop the existing check constraint
-        DB::statement("
-            ALTER TABLE quotation_requests 
-            DROP CONSTRAINT IF EXISTS quotation_requests_status_check
-        ");
-        
-        // Recreate the constraint with 'draft' added
-        DB::statement("
-            ALTER TABLE quotation_requests 
-            ADD CONSTRAINT quotation_requests_status_check 
-            CHECK (status::text = ANY (ARRAY['draft'::character varying, 'pending'::character varying, 'processing'::character varying, 'quoted'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'expired'::character varying]::text[]))
-        ");
+        // PostgreSQL-specific constraint modification
+        // SQLite doesn't support check constraints in this way - skip for SQLite
+        if (DB::getDriverName() === 'pgsql') {
+            // Drop the existing check constraint
+            DB::statement("
+                ALTER TABLE quotation_requests 
+                DROP CONSTRAINT IF EXISTS quotation_requests_status_check
+            ");
+            
+            // Recreate the constraint with 'draft' added
+            DB::statement("
+                ALTER TABLE quotation_requests 
+                ADD CONSTRAINT quotation_requests_status_check 
+                CHECK (status::text = ANY (ARRAY['draft'::character varying, 'pending'::character varying, 'processing'::character varying, 'quoted'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'expired'::character varying]::text[]))
+            ");
+        }
+        // For SQLite, the status column is just a string - no constraint modification needed
+        // The application code will validate the status values
     }
 
     /**
