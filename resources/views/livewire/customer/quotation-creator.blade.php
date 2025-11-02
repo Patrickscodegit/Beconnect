@@ -553,6 +553,40 @@ document.addEventListener('DOMContentLoaded', function() {
         // Setup both inputs
         setupAutocomplete(polInput);
         setupAutocomplete(podInput);
+        
+        // IMPORTANT: Re-initialize autocomplete after Livewire updates
+        // Livewire re-renders can remove our JavaScript-created dropdowns
+        document.addEventListener('livewire:update', function() {
+            console.log('🔵 Autocomplete: Livewire update detected, re-initializing autocomplete');
+            
+            // Re-find inputs (they might be new elements after Livewire re-render)
+            const polInputNew = document.getElementById('pol');
+            const podInputNew = document.getElementById('pod');
+            
+            if (polInputNew && podInputNew) {
+                // Check if autocomplete is already set up (look for our dropdown)
+                const polParent = polInputNew.parentElement;
+                const podParent = podInputNew.parentElement;
+                
+                // Check if dropdown already exists
+                const polHasDropdown = polParent && Array.from(polParent.children).some(child => 
+                    child.classList.contains('absolute') && child.classList.contains('z-50')
+                );
+                const podHasDropdown = podParent && Array.from(podParent.children).some(child => 
+                    child.classList.contains('absolute') && child.classList.contains('z-50')
+                );
+                
+                if (!polHasDropdown && polParent) {
+                    console.log('🔵 Autocomplete: Re-initializing POL autocomplete');
+                    setupAutocomplete(polInputNew);
+                }
+                
+                if (!podHasDropdown && podParent) {
+                    console.log('🔵 Autocomplete: Re-initializing POD autocomplete');
+                    setupAutocomplete(podInputNew);
+                }
+            }
+        });
     }
 });
 </script>
