@@ -375,7 +375,13 @@
 
 <script>
 // Initialize searchable port selects with custom input
-document.addEventListener('DOMContentLoaded', function() {
+// Wait for both DOM and Livewire to be ready
+let livewireReady = false;
+let domReady = false;
+
+function initAutocomplete() {
+    if (!domReady || !livewireReady) return;
+    
     // Port data from backend
     const polSeaports = @json($polPortsFormatted);
     const podSeaports = @json($podPortsFormatted);
@@ -437,64 +443,137 @@ document.addEventListener('DOMContentLoaded', function() {
                     dropdown.querySelectorAll('[data-value]').forEach(item => {
                         item.addEventListener('click', function() {
                             const selectedValue = this.dataset.value;
+                            const fieldType = input.id; // 'pol' or 'pod'
+                            
+                            console.log(`🔵 Autocomplete selected: ${fieldType} = "${selectedValue}"`);
+                            
+                            // Set input value
                             input.value = selectedValue;
                             dropdown.classList.add('hidden');
                             
-                            // Find Livewire component using multiple methods
-                            let component = null;
-                            let componentId = null;
-                            
-                            // Method 1: Find component by traversing DOM from input
-                            let parent = input;
-                            while (parent && parent !== document.body) {
-                                if (parent.hasAttribute && parent.hasAttribute('wire:id')) {
-                                    componentId = parent.getAttribute('wire:id');
-                                    break;
+                            // Function to update Livewire property
+                            function updateLivewireProperty() {
+                                // Method 1: Try to find component via DOM traversal
+                                let component = null;
+                                let componentId = null;
+                                
+                                // Traverse up from input to find wire:id
+                                let element = input;
+                                while (element && element !== document.body) {
+                                    if (element.hasAttribute && element.hasAttribute('wire:id')) {
+                                        componentId = element.getAttribute('wire:id');
+                                        console.log(`📍 Found component ID via traversal: ${componentId}`);
+                                        break;
+                                    }
+                                    element = element.parentElement;
                                 }
-                                parent = parent.parentElement;
+                                
+                                // Method 2: Try global selector
+                                if (!componentId) {
+                                    const wireElement = document.querySelector('[wire\\:id]');
+                                    if (wireElement) {
+                                        componentId = wireElement.getAttribute('wire:id');
+                                        console.log(`📍 Found component ID via global selector: ${componentId}`);
+                                    }
+                                }
+                                
+                                // Method 3: Try Livewire.all() to get all components
+                                if (!componentId && window.Livewire && typeof window.Livewire.all === 'function') {
+                                    const components = window.Livewire.all();
+                                    if (components.length > 0) {
+                                        component = components[0];
+                                        console.log(`📍 Found component via Livewire.all(): ${component.constructor.name}`);
+                                    }
+                                }
+                                
+                                // Get component instance using componentId
+                                if (!component && window.Livewire && componentId) {
+                                    try {
+                                        component = window.Livewire.find(componentId);
+                                        console.log(`✅ Found Livewire component: ${componentId}`);
+                                    } catch (e) {
+                                        console.error('❌ Error finding component:', e);
+                                    }
+                                }
+                                
+                                // Update the property
+                                if (component) {
+                                    try {
+                                        // Get the property name from wire:model attribute
+                                        const wireModelAttr = input.getAttribute('wire:model');
+                                        if (!wireModelAttr) {
+                                            console.warn('⚠️ Input has no wire:model attribute');
+                                            return false;
+                                        }
+                                        
+                                        // Extract property name (remove .debounce.500ms, .live, etc.)
+                                        const propertyName = wireModelAttr
+                                            .replace(/\.debounce\.\d+ms/, '')
+                                            .replace(/\.debounce/, '')
+                                            .replace(/\.live/, '')
+                                            .replace(/\.lazy/, '')
+                                            .replace(/\.blur/, '')
+                                            .trim();
+                                        
+                                        console.log(`🔄 Setting ${propertyName} to "${selectedValue}"`);
+                                        
+                                        // Update Livewire property
+                                        component.set(propertyName, selectedValue);
+                                        
+                                        console.log(`✅ Livewire property updated: ${propertyName} = "${selectedValue}"`);
+                                        
+                                        // Force Livewire to sync
+                                        if (typeof component.$wire !== 'undefined') {
+                                            component.$wire.set(propertyName, selectedValue);
+                                        }
+                                        
+                                        return true;
+                                    } catch (e) {
+                                        console.error('❌ Error updating Livewire property:', e);
+                                        return false;
+                                    }
+                                } else {
+                                    console.warn('⚠️ Could not find Livewire component');
+                                    return false;
+                                }
                             }
                             
-                            // Method 2: Fallback to global selector
-                            if (!componentId) {
-                                const globalComponent = document.querySelector('[wire\\:id]');
-                                if (globalComponent) {
-                                    componentId = globalComponent.getAttribute('wire:id');
-                                }
-                            }
+                            // Try to update Livewire
+                            const updated = updateLivewireProperty();
                             
-                            // Get Livewire component instance
-                            if (window.Livewire && componentId) {
-                                try {
-                                    component = window.Livewire.find(componentId);
-                                } catch (e) {
-                                    console.warn('Could not find Livewire component:', e);
-                                }
-                            }
-                            
-                            // Update Livewire property directly (most reliable)
-                            if (component && input.hasAttribute('wire:model')) {
-                                try {
-                                    const wireModel = input.getAttribute('wire:model')
-                                        .replace('.debounce.500ms', '')
-                                        .replace('.debounce', '')
-                                        .trim();
-                                    component.set(wireModel, selectedValue);
-                                    console.log(`✅ Livewire updated: ${wireModel} = "${selectedValue}"`);
-                                } catch (e) {
-                                    console.warn('Could not update Livewire property:', e);
-                                }
-                            }
-                            
-                            // Fallback: Dispatch events (for wire:model listeners)
+                            // Fallback: Dispatch native events (in case Livewire is listening)
                             try {
-                                input.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-                                input.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-                                // Also try livewire:update event
+                                // Create and dispatch input event
+                                const inputEvent = new Event('input', { 
+                                    bubbles: true, 
+                                    cancelable: true 
+                                });
+                                input.dispatchEvent(inputEvent);
+                                
+                                // Create and dispatch change event
+                                const changeEvent = new Event('change', { 
+                                    bubbles: true, 
+                                    cancelable: true 
+                                });
+                                input.dispatchEvent(changeEvent);
+                                
+                                // Trigger Livewire's update mechanism
                                 if (window.Livewire) {
-                                    input.dispatchEvent(new CustomEvent('livewire:update', { bubbles: true }));
+                                    // Dispatch custom Livewire event
+                                    const livewireEvent = new CustomEvent('livewire:update', { 
+                                        bubbles: true,
+                                        detail: { value: selectedValue }
+                                    });
+                                    input.dispatchEvent(livewireEvent);
                                 }
+                                
+                                console.log(`📤 Dispatched input/change events for ${fieldType}`);
                             } catch (e) {
-                                console.warn('Could not dispatch events:', e);
+                                console.error('❌ Error dispatching events:', e);
+                            }
+                            
+                            if (!updated) {
+                                console.warn('⚠️ Livewire update may have failed. Check console for errors.');
                             }
                         });
                     });
@@ -537,5 +616,51 @@ document.addEventListener('DOMContentLoaded', function() {
         setupAutocomplete(polInput);
         setupAutocomplete(podInput);
     }
+}
+
+// Wait for DOM to be ready
+document.addEventListener('DOMContentLoaded', function() {
+    domReady = true;
+    console.log('✅ DOM ready');
+    initAutocomplete();
 });
+
+// Wait for Livewire to be ready (Livewire 3)
+if (window.Livewire) {
+    // Try multiple Livewire ready events
+    document.addEventListener('livewire:init', function() {
+        livewireReady = true;
+        console.log('✅ Livewire init');
+        initAutocomplete();
+    });
+    
+    document.addEventListener('livewire:load', function() {
+        livewireReady = true;
+        console.log('✅ Livewire load');
+        initAutocomplete();
+    });
+    
+    // Also check if Livewire is already loaded
+    if (window.Livewire && typeof window.Livewire.all === 'function') {
+        livewireReady = true;
+        console.log('✅ Livewire already loaded');
+        if (domReady) {
+            initAutocomplete();
+        }
+    }
+} else {
+    // If Livewire isn't available yet, wait for it
+    window.addEventListener('load', function() {
+        // Give it a moment
+        setTimeout(function() {
+            if (window.Livewire) {
+                livewireReady = true;
+                console.log('✅ Livewire loaded (delayed)');
+                if (domReady) {
+                    initAutocomplete();
+                }
+            }
+        }, 100);
+    });
+}
 </script>
