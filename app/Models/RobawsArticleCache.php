@@ -516,26 +516,22 @@ class RobawsArticleCache extends Model
             });
         }
 
-        // Apply service type filter if available
+        // Apply service type filter if available - REQUIRE exact match (no NULL fallback)
         if ($quotation->service_type) {
-            $query->where(function ($q) use ($quotation) {
-                $q->where('service_type', $quotation->service_type)
-                  ->orWhereNull('service_type'); // Include articles without service type restriction
-            });
+            $query->where('service_type', $quotation->service_type);
+            // Do NOT include articles with NULL service_type - require a match
         }
 
-        // Apply shipping line filter if schedule is selected (case-insensitive)
+        // Apply shipping line filter if schedule is selected - REQUIRE exact match (no NULL fallback)
         if ($quotation->selected_schedule_id && $quotation->selectedSchedule) {
             $schedule = $quotation->selectedSchedule;
             if ($schedule->carrier) {
-                $query->where(function ($q) use ($schedule, $useIlike) {
-                    if ($useIlike) {
-                        $q->where('shipping_line', 'ILIKE', '%' . $schedule->carrier->name . '%');
-                    } else {
-                        $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%' . strtolower($schedule->carrier->name) . '%']);
-                    }
-                    $q->orWhereNull('shipping_line'); // Include articles without carrier restriction
-                });
+                if ($useIlike) {
+                    $query->where('shipping_line', 'ILIKE', '%' . $schedule->carrier->name . '%');
+                } else {
+                    $query->whereRaw('LOWER(shipping_line) LIKE ?', ['%' . strtolower($schedule->carrier->name) . '%']);
+                }
+                // Do NOT include articles with NULL shipping_line - require a match
             }
         }
 
