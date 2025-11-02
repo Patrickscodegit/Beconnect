@@ -119,8 +119,16 @@ class RobawsArticleCache extends Model
     public function scopeForCarrier(Builder $query, string $carrierCode): Builder
     {
         // Match articles by shipping_line (case-insensitive)
-        return $query->where('shipping_line', 'ILIKE', '%' . $carrierCode . '%')
-                     ->orWhereNull('shipping_line');
+        // Use database-agnostic case-insensitive matching
+        $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
+        
+        if ($useIlike) {
+            return $query->where('shipping_line', 'ILIKE', '%' . $carrierCode . '%')
+                         ->orWhereNull('shipping_line');
+        } else {
+            return $query->whereRaw('LOWER(shipping_line) LIKE ?', ['%' . strtolower($carrierCode) . '%'])
+                         ->orWhereNull('shipping_line');
+        }
     }
 
     public function scopeForService(Builder $query, string $serviceType): Builder
