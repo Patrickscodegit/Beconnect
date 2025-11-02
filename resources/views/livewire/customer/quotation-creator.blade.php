@@ -490,35 +490,32 @@ document.addEventListener('DOMContentLoaded', function() {
                                 element = element.parentElement;
                             }
                             
-                            // Update Livewire property manually
+                            // Update Livewire property manually using public method setPort()
+                            // This method triggers updated() automatically, ensuring showArticles is updated
                             if (component) {
                                 try {
                                     console.log(`🔵 Autocomplete: Syncing ${fieldType} = "${selectedValue}" to Livewire`);
                                     
-                                    // Set the property - this won't trigger updated() because of wire:ignore
-                                    // So we need to manually trigger an update
-                                    component.set(fieldType, selectedValue);
-                                    
-                                    // Manually call $wire.update() to trigger updated() method
-                                    // This ensures showArticles flag is updated
-                                    if (component.$wire && typeof component.$wire.call === 'function') {
-                                        console.log(`🔵 Autocomplete: Calling $wire.call('__sync') to trigger updated()`);
-                                        // Use __sync which triggers updated() for all dirty properties
-                                        component.$wire.__sync();
-                                    } else if (component.$refresh) {
-                                        // Fallback: try $refresh
-                                        console.log(`🔵 Autocomplete: Calling component.$refresh()`);
-                                        component.$refresh();
+                                    // Call public method setPort() which updates property and triggers updated()
+                                    if (component.call && typeof component.call === 'function') {
+                                        console.log(`🔵 Autocomplete: Calling component.call('setPort', '${fieldType}', '${selectedValue}')`);
+                                        component.call('setPort', fieldType, selectedValue);
+                                    } else if (component.$wire && typeof component.$wire.call === 'function') {
+                                        console.log(`🔵 Autocomplete: Calling component.$wire.call('setPort', '${fieldType}', '${selectedValue}')`);
+                                        component.$wire.call('setPort', fieldType, selectedValue);
                                     } else {
-                                        // Last resort: dispatch input event on a hidden wire:model input
-                                        console.log(`🔵 Autocomplete: Dispatching input event to trigger Livewire update`);
-                                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                                        // Fallback: try component.set() and manually refresh
+                                        console.log(`🔵 Autocomplete: Fallback - using component.set()`);
+                                        component.set(fieldType, selectedValue);
+                                        if (component.$refresh) {
+                                            component.$refresh();
+                                        }
                                     }
                                     
                                     console.log(`✅ Autocomplete: ${fieldType} synced to Livewire`);
                                 } catch (e) {
                                     console.error('🔴 Autocomplete: Error syncing to Livewire:', e);
+                                    console.error('🔴 Autocomplete: Error details:', e.message, e.stack);
                                 }
                             } else {
                                 console.warn('⚠️ Autocomplete: Could not find Livewire component to sync');
