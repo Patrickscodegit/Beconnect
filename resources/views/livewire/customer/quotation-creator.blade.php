@@ -494,13 +494,29 @@ document.addEventListener('DOMContentLoaded', function() {
                             if (component) {
                                 try {
                                     console.log(`🔵 Autocomplete: Syncing ${fieldType} = "${selectedValue}" to Livewire`);
+                                    
+                                    // Set the property - this won't trigger updated() because of wire:ignore
+                                    // So we need to manually trigger an update
                                     component.set(fieldType, selectedValue);
                                     
-                                    // Force component to re-render to update showArticles flag
-                                    // This ensures the smart article selector appears when conditions are met
-                                    component.$refresh();
+                                    // Manually call $wire.update() to trigger updated() method
+                                    // This ensures showArticles flag is updated
+                                    if (component.$wire && typeof component.$wire.call === 'function') {
+                                        console.log(`🔵 Autocomplete: Calling $wire.call('__sync') to trigger updated()`);
+                                        // Use __sync which triggers updated() for all dirty properties
+                                        component.$wire.__sync();
+                                    } else if (component.$refresh) {
+                                        // Fallback: try $refresh
+                                        console.log(`🔵 Autocomplete: Calling component.$refresh()`);
+                                        component.$refresh();
+                                    } else {
+                                        // Last resort: dispatch input event on a hidden wire:model input
+                                        console.log(`🔵 Autocomplete: Dispatching input event to trigger Livewire update`);
+                                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                                    }
                                     
-                                    console.log(`✅ Autocomplete: ${fieldType} synced to Livewire and component refreshed`);
+                                    console.log(`✅ Autocomplete: ${fieldType} synced to Livewire`);
                                 } catch (e) {
                                     console.error('🔴 Autocomplete: Error syncing to Livewire:', e);
                                 }

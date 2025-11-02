@@ -47,6 +47,19 @@ class QuotationCreator extends Component
         'articleRemoved' => 'handleArticleRemoved',
     ];
     
+    // Public method to set POL/POD from JavaScript (used with wire:ignore)
+    public function setPort($field, $value)
+    {
+        if (!in_array($field, ['pol', 'pod'])) {
+            return;
+        }
+        
+        $this->$field = $value;
+        
+        // Manually trigger updated() logic since wire:ignore prevents automatic updates
+        $this->updated($field);
+    }
+    
     public function mount($intakeId = null)
     {
         // Create draft quotation immediately
