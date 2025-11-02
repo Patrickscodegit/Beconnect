@@ -398,14 +398,23 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Setup autocomplete for an input field
         function setupAutocomplete(input) {
-            const wrapper = document.createElement('div');
-            wrapper.style.position = 'relative';
-            input.parentNode.insertBefore(wrapper, input);
-            wrapper.appendChild(input);
+            // IMPORTANT: Don't wrap or move the input! This breaks Livewire's event listeners.
+            // Instead, make the parent relative and position dropdown absolutely
+            const parent = input.parentElement;
+            if (!parent) {
+                console.error('🔴 Autocomplete: Input has no parent element');
+                return;
+            }
+            
+            // Make parent relative if not already
+            if (getComputedStyle(parent).position === 'static') {
+                parent.style.position = 'relative';
+            }
             
             const dropdown = document.createElement('div');
             dropdown.className = 'absolute z-50 w-full bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto hidden';
-            wrapper.appendChild(dropdown);
+            dropdown.style.width = input.offsetWidth + 'px';
+            parent.appendChild(dropdown);
             
             // Function to render dropdown with matches
             function renderDropdown(query = '') {
@@ -479,7 +488,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Hide dropdown when clicking outside
             document.addEventListener('click', function(e) {
-                if (!wrapper.contains(e.target)) {
+                if (!parent.contains(e.target)) {
                     dropdown.classList.add('hidden');
                 }
             });
