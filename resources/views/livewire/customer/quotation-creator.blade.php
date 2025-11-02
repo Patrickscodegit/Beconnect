@@ -436,10 +436,23 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Add click handlers
                     dropdown.querySelectorAll('[data-value]').forEach(item => {
                         item.addEventListener('click', function() {
-                            input.value = this.dataset.value;
+                            const selectedValue = this.dataset.value;
+                            input.value = selectedValue;
                             dropdown.classList.add('hidden');
-                            // Trigger Livewire update
+                            
+                            // Trigger Livewire update - use multiple methods to ensure it works
+                            // Method 1: Dispatch input event (for wire:model)
                             input.dispatchEvent(new Event('input', { bubbles: true }));
+                            input.dispatchEvent(new Event('change', { bubbles: true }));
+                            
+                            // Method 2: Use Livewire's @this if available (direct property update)
+                            if (window.Livewire && input.hasAttribute('wire:model')) {
+                                const wireModel = input.getAttribute('wire:model').replace('.debounce.500ms', '').replace('.debounce', '');
+                                const component = window.Livewire.find(document.querySelector('[wire\\:id]')?.getAttribute('wire:id'));
+                                if (component) {
+                                    component.set(wireModel, selectedValue);
+                                }
+                            }
                         });
                     });
                 } else {
