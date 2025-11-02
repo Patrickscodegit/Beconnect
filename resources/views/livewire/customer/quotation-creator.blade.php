@@ -470,9 +470,38 @@ document.addEventListener('DOMContentLoaded', function() {
                             input.value = selectedValue;
                             dropdown.classList.add('hidden');
                             
-                            // Trigger blur to sync with Livewire (wire:model.blur handles it)
-                            input.blur();
-                            input.dispatchEvent(new Event('change', { bubbles: true }));
+                            // Manually sync to Livewire (wire:ignore prevents automatic sync)
+                            // Find Livewire component
+                            let component = null;
+                            let element = input;
+                            while (element && element !== document.body) {
+                                if (element.hasAttribute && element.hasAttribute('wire:id')) {
+                                    const componentId = element.getAttribute('wire:id');
+                                    if (window.Livewire) {
+                                        try {
+                                            component = window.Livewire.find(componentId);
+                                            break;
+                                        } catch (e) {
+                                            console.warn('Could not find Livewire component:', e);
+                                        }
+                                    }
+                                    break;
+                                }
+                                element = element.parentElement;
+                            }
+                            
+                            // Update Livewire property manually
+                            if (component) {
+                                try {
+                                    console.log(`🔵 Autocomplete: Syncing ${fieldType} = "${selectedValue}" to Livewire`);
+                                    component.set(fieldType, selectedValue);
+                                    console.log(`✅ Autocomplete: ${fieldType} synced to Livewire`);
+                                } catch (e) {
+                                    console.error('🔴 Autocomplete: Error syncing to Livewire:', e);
+                                }
+                            } else {
+                                console.warn('⚠️ Autocomplete: Could not find Livewire component to sync');
+                            }
                         });
                     });
                     
