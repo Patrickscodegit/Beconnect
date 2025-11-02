@@ -495,7 +495,12 @@ document.addEventListener('DOMContentLoaded', function() {
                                 try {
                                     console.log(`🔵 Autocomplete: Syncing ${fieldType} = "${selectedValue}" to Livewire`);
                                     component.set(fieldType, selectedValue);
-                                    console.log(`✅ Autocomplete: ${fieldType} synced to Livewire`);
+                                    
+                                    // Force component to re-render to update showArticles flag
+                                    // This ensures the smart article selector appears when conditions are met
+                                    component.$refresh();
+                                    
+                                    console.log(`✅ Autocomplete: ${fieldType} synced to Livewire and component refreshed`);
                                 } catch (e) {
                                     console.error('🔴 Autocomplete: Error syncing to Livewire:', e);
                                 }
