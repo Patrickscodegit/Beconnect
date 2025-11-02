@@ -430,11 +430,21 @@ document.addEventListener('DOMContentLoaded', function() {
             // This handler persists through all renderDropdown calls
             const handleItemClick = function(e) {
                 const fieldType = input.id; // 'pol' or 'pod'
-                console.log(`🔵 Autocomplete: Dropdown click detected for ${fieldType}`, e.target);
+                
+                // Log ALL clicks on dropdown to debug
+                console.log(`🔵 Autocomplete: Dropdown click detected for ${fieldType}`, {
+                    target: e.target,
+                    tagName: e.target.tagName,
+                    className: e.target.className,
+                    currentTarget: e.currentTarget,
+                });
                 
                 const item = e.target.closest('.autocomplete-item');
                 if (!item) {
-                    console.log(`🔵 Autocomplete: Click not on item for ${fieldType}`);
+                    console.log(`🔵 Autocomplete: Click not on item for ${fieldType}`, {
+                        clickedElement: e.target,
+                        parentElement: e.target.parentElement,
+                    });
                     return;
                 }
                 
@@ -578,21 +588,30 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             
             // Hide dropdown when clicking outside
-            // Use regular phase (not capture) so dropdown click handler runs first
+            // IMPORTANT: Use capture phase BUT check if click is inside parent first
+            // This way we catch clicks early but only hide if truly outside
             const handleClickOutside = function(e) {
-                // Only hide if click is truly outside both input and dropdown
-                // Don't hide if clicking on dropdown items
+                // Check if click is inside the parent container (which contains both input and dropdown)
                 const clickedOnParent = parent.contains(e.target);
+                const clickedOnDropdown = dropdown.contains(e.target);
                 const clickedOnItem = e.target.closest('.autocomplete-item');
                 
-                if (!clickedOnParent && !clickedOnItem) {
-                    dropdown.classList.add('hidden');
-                    console.log(`🔵 Autocomplete: ${input.id} - Dropdown hidden (clicked outside)`);
+                // Only hide if click is truly outside parent, dropdown, and not on an item
+                if (!clickedOnParent && !clickedOnDropdown && !clickedOnItem) {
+                    // Use setTimeout to ensure dropdown click handler has processed first
+                    setTimeout(function() {
+                        // Double-check dropdown is still visible before hiding
+                        if (!dropdown.classList.contains('hidden')) {
+                            dropdown.classList.add('hidden');
+                            console.log(`🔵 Autocomplete: ${input.id} - Dropdown hidden (clicked outside)`);
+                        }
+                    }, 10);
                 }
             };
             
-            // Use regular phase (not capture) - let dropdown click handler process first
-            document.addEventListener('click', handleClickOutside);
+            // Use capture phase but check parent.contains FIRST - this ensures we don't interfere
+            // with clicks inside the parent container (input or dropdown)
+            document.addEventListener('click', handleClickOutside, true);
             
             // Allow pressing Enter to use custom value
             input.addEventListener('keydown', function(e) {
