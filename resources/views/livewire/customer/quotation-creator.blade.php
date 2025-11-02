@@ -469,11 +469,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     // IMPORTANT: Add click handlers IMMEDIATELY after setting innerHTML
                     // Use event delegation on the dropdown itself to avoid losing handlers on re-render
                     const handleItemClick = function(e) {
+                        console.log(`🔵 Autocomplete: Dropdown click detected for ${fieldType}`, e.target);
+                        
                         const item = e.target.closest('.autocomplete-item');
-                        if (!item) return;
+                        if (!item) {
+                            console.log(`🔵 Autocomplete: Click not on item for ${fieldType}`);
+                            return;
+                        }
                         
                         const selectedValue = item.dataset.value;
                         console.log(`🔵 Autocomplete: Item clicked - ${fieldType} = "${selectedValue}"`);
+                        
+                        e.preventDefault(); // Prevent default behavior
+                        e.stopPropagation(); // Stop bubbling immediately
                         
                         input.value = selectedValue;
                         dropdown.classList.add('hidden');
@@ -555,15 +563,21 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Hide dropdown when clicking outside
             // Use a more specific handler that checks if click is outside both input and dropdown
+            // IMPORTANT: Use regular phase (not capture) so dropdown click handler runs first
             document.addEventListener('click', function(e) {
-                const clickedOnInput = input.contains(e.target);
-                const clickedOnDropdown = dropdown.contains(e.target);
-                
-                if (!clickedOnInput && !clickedOnDropdown) {
-                    dropdown.classList.add('hidden');
-                    console.log(`🔵 Autocomplete: ${input.id} - Dropdown hidden (clicked outside)`);
-                }
-            }, true); // Use capture phase to catch events early
+                // Give dropdown click handler a chance to process first
+                setTimeout(function() {
+                    const clickedOnInput = input.contains(e.target) || input === e.target;
+                    const clickedOnDropdown = dropdown.contains(e.target) || dropdown === e.target;
+                    const clickedOnItem = e.target.closest('.autocomplete-item');
+                    
+                    // Only hide if click is truly outside both input and dropdown
+                    if (!clickedOnInput && !clickedOnDropdown && !clickedOnItem) {
+                        dropdown.classList.add('hidden');
+                        console.log(`🔵 Autocomplete: ${input.id} - Dropdown hidden (clicked outside)`);
+                    }
+                }, 0);
+            });
             
             // Allow pressing Enter to use custom value
             input.addEventListener('keydown', function(e) {
