@@ -335,7 +335,6 @@
         <button type="button" 
                 wire:click="submit"
                 wire:loading.attr="disabled"
-                :disabled="submitting"
                 class="w-full sm:w-auto px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
             <span wire:loading.remove wire:target="submit">
                 <i class="fas fa-paper-plane mr-2"></i>Submit for Review
@@ -376,15 +375,22 @@
 <script>
 // Initialize searchable port selects with custom input
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🔵 Autocomplete: DOMContentLoaded - initializing autocomplete');
+    
     // Port data from backend
     const polSeaports = @json($polPortsFormatted);
     const podSeaports = @json($podPortsFormatted);
     
+    console.log('🔵 Autocomplete: Port data loaded', { polCount: Object.keys(polSeaports).length, podCount: Object.keys(podSeaports).length });
+    
     const polInput = document.getElementById('pol');
     const podInput = document.getElementById('pod');
     
+    console.log('🔵 Autocomplete: Inputs found', { polInput: !!polInput, podInput: !!podInput });
+    
     // Initialize autocomplete for POL and POD
     if (polInput && podInput) {
+        console.log('🔵 Autocomplete: Setting up autocomplete for POL and POD');
         // Function to get current port list based on field type
         function getCurrentPortList(fieldType) {
             return fieldType === 'pol' ? polSeaports : podSeaports;
@@ -436,10 +442,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Add click handlers
                     dropdown.querySelectorAll('[data-value]').forEach(item => {
                         item.addEventListener('click', function() {
-                            input.value = this.dataset.value;
+                            const selectedValue = this.dataset.value;
+                            const fieldType = input.id; // 'pol' or 'pod'
+                            
+                            console.log(`🔵 Autocomplete: Item clicked - ${fieldType} = "${selectedValue}"`);
+                            
+                            input.value = selectedValue;
                             dropdown.classList.add('hidden');
+                            
                             // Trigger Livewire update
-                            input.dispatchEvent(new Event('input', { bubbles: true }));
+                            console.log(`🔵 Autocomplete: Dispatching input event for ${fieldType}`);
+                            const inputEvent = new Event('input', { bubbles: true });
+                            input.dispatchEvent(inputEvent);
+                            
+                            console.log(`✅ Autocomplete: Input event dispatched for ${fieldType}`);
                         });
                     });
                 } else {
