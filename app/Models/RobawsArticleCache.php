@@ -476,27 +476,43 @@ class RobawsArticleCache extends Model
         // PostgreSQL supports ILIKE, SQLite/MySQL use LOWER() with LIKE
         $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
 
-        // Apply POL/POD filtering using case-insensitive matching
-        // Quotation may have "Antwerp" while article has "Antwerp (ANR), Belgium"
-        if ($quotation->pol) {
+        // Apply POL/POD filtering - STRICT MATCHING ONLY (100% match required)
+        // Both POL and POD must match exactly or as substring match
+        // No articles without POL/POD restrictions are included
+        if ($quotation->pol && $quotation->pod) {
+            // Require both POL and POD to match
+            $query->where(function ($q) use ($quotation, $useIlike) {
+                // POL must match (as substring - handles format differences)
+                if ($useIlike) {
+                    $q->where('pol', 'ILIKE', '%' . $quotation->pol . '%');
+                } else {
+                    $q->whereRaw('LOWER(pol) LIKE ?', ['%' . strtolower($quotation->pol) . '%']);
+                }
+            })->where(function ($q) use ($quotation, $useIlike) {
+                // POD must match (as substring - handles format differences)
+                if ($useIlike) {
+                    $q->where('pod', 'ILIKE', '%' . $quotation->pod . '%');
+                } else {
+                    $q->whereRaw('LOWER(pod) LIKE ?', ['%' . strtolower($quotation->pod) . '%']);
+                }
+            });
+        } elseif ($quotation->pol) {
+            // Only POL specified - require POL match
             $query->where(function ($q) use ($quotation, $useIlike) {
                 if ($useIlike) {
                     $q->where('pol', 'ILIKE', '%' . $quotation->pol . '%');
                 } else {
                     $q->whereRaw('LOWER(pol) LIKE ?', ['%' . strtolower($quotation->pol) . '%']);
                 }
-                $q->orWhereNull('pol'); // Include articles without POL restriction
             });
-        }
-        
-        if ($quotation->pod) {
+        } elseif ($quotation->pod) {
+            // Only POD specified - require POD match
             $query->where(function ($q) use ($quotation, $useIlike) {
                 if ($useIlike) {
                     $q->where('pod', 'ILIKE', '%' . $quotation->pod . '%');
                 } else {
                     $q->whereRaw('LOWER(pod) LIKE ?', ['%' . strtolower($quotation->pod) . '%']);
                 }
-                $q->orWhereNull('pod'); // Include articles without POD restriction
             });
         }
 

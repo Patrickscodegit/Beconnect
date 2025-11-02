@@ -35,22 +35,22 @@ class SmartArticleSelectionService
      */
     protected function calculateSuggestions(QuotationRequest $quotation): Collection
     {
-        // Get base query using the model scope
+        // Get base query using the model scope (now requires POL/POD match)
         $articles = RobawsArticleCache::forQuotationContext($quotation)->get();
 
-        // If no articles found with filters, fall back to all parent items
+        // NO FALLBACK - only return articles that match POL/POD exactly
+        // If no articles match, return empty collection (100% match required)
         if ($articles->isEmpty()) {
-            Log::info('No articles matched quotation context, returning all parent items', [
-                'quotation_id' => $quotation->id
+            Log::info('No articles matched quotation POL/POD exactly, returning empty results', [
+                'quotation_id' => $quotation->id,
+                'pol' => $quotation->pol,
+                'pod' => $quotation->pod
             ]);
             
-            $articles = RobawsArticleCache::active()
-                ->parentItems()
-                ->validAsOf(now())
-                ->get();
+            return collect([]);
         }
 
-        // Calculate match score for each article
+        // Calculate match score for each article (should all be 100% matches now)
         return $articles->map(function ($article) use ($quotation) {
             $score = $this->calculateMatchScore($article, $quotation);
             $reasons = $this->getMatchReasons($article, $quotation);
@@ -58,9 +58,9 @@ class SmartArticleSelectionService
             return [
                 'article' => $article,
                 'match_score' => $score,
-                'match_percentage' => min(100, $score), // Cap at 100%
+                'match_percentage' => 100, // Always 100% since we filter for exact matches
                 'match_reasons' => $reasons,
-                'confidence' => $this->getConfidenceLevel($score),
+                'confidence' => 'high', // Always high since matches are required
             ];
         })->sortByDesc('match_score')->values();
     }
@@ -98,62 +98,19 @@ class SmartArticleSelectionService
         } else {
             // Flexible matching: exact match OR quotation string is contained in article
             // This handles cases where quotation has "Antwerp" and article has "Antwerp, Belgium (ANR)"
-            $polMatched = false;
-            $podMatched = false;
-            
             if ($quotationPol && $articlePol) {
                 if ($articlePol === $quotationPol || 
                     stripos($articlePol, $quotationPol) !== false) {
                     $score += 40;
-                    $polMatched = true;
                     $debugBreakdown['pol_match'] = 40;
                 }
             }
-            
             if ($quotationPod && $articlePod) {
-                // Try multiple matching strategies for POD
-                $podMatchFound = false;
-                
-                // 1. Exact match
-                if ($articlePod === $quotationPod) {
-                    $podMatchFound = true;
-                }
-                // 2. POD contains quotation POD (handles format differences)
-                elseif (stripos($articlePod, $quotationPod) !== false) {
-                    $podMatchFound = true;
-                }
-                // 3. Extract city/code from both and compare
-                else {
-                    // Extract city from "Dakar (DKR), Senegal" -> "Dakar"
-                    $quotationPodCity = preg_match('/^([^(,]+)/', $quotationPod, $qMatch) ? trim($qMatch[1]) : null;
-                    $articlePodCity = preg_match('/^([^(,]+)/', $articlePod, $aMatch) ? trim($aMatch[1]) : null;
-                    
-                    if ($quotationPodCity && $articlePodCity && 
-                        strcasecmp($quotationPodCity, $articlePodCity) === 0) {
-                        $podMatchFound = true;
-                    }
-                    // Also check if article POD contains the city name
-                    elseif ($quotationPodCity && stripos($articlePod, $quotationPodCity) !== false) {
-                        $podMatchFound = true;
-                    }
-                }
-                
-                if ($podMatchFound) {
+                if ($articlePod === $quotationPod || 
+                    stripos($articlePod, $quotationPod) !== false) {
                     $score += 40;
-                    $podMatched = true;
                     $debugBreakdown['pod_match'] = 40;
-                } else {
-                    // POD mismatch - significant penalty
-                    // If POL matched but POD doesn't, this is a bad match
-                    $score -= 80; // Heavy penalty for POD mismatch
-                    $debugBreakdown['pod_mismatch_penalty'] = -80;
                 }
-            }
-            
-            // Bonus if both POL and POD matched (but not exact route match)
-            if ($polMatched && $podMatched) {
-                $score += 20; // Bonus for both ports matching
-                $debugBreakdown['both_ports_match_bonus'] = 20;
             }
         }
 
