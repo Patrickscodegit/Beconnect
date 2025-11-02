@@ -323,25 +323,51 @@ class QuotationCreator extends Component
             $podCode = $podParts['code'];
         }
         
+        // Use database-agnostic case-insensitive matching
+        // PostgreSQL supports ILIKE, SQLite/MySQL use LOWER() with LIKE
+        $useIlike = DB::getDriverName() === 'pgsql';
+        
         $schedules = ShippingSchedule::where('is_active', true)
-            ->when($polName && $podName, function ($q) use ($polName, $polCode, $podName, $podCode) {
+            ->when($polName && $podName, function ($q) use ($polName, $polCode, $podName, $podCode, $useIlike) {
                 // Filter schedules by route if POL/POD selected
                 // Match on port name OR code (handles "City (CODE), Country" format)
-                $q->whereHas('polPort', function ($portQuery) use ($polName, $polCode) {
-                    $portQuery->where(function($q) use ($polName, $polCode) {
-                        $q->where('name', 'ILIKE', '%' . $polName . '%');
-                        if ($polCode) {
-                            $q->orWhere('code', 'ILIKE', '%' . $polCode . '%');
-                        }
-                    });
+                $q->whereHas('polPort', function ($portQuery) use ($polName, $polCode, $useIlike) {
+                    if ($useIlike) {
+                        // PostgreSQL: Use ILIKE
+                        $portQuery->where(function($q) use ($polName, $polCode) {
+                            $q->where('name', 'ILIKE', '%' . $polName . '%');
+                            if ($polCode) {
+                                $q->orWhere('code', 'ILIKE', '%' . $polCode . '%');
+                            }
+                        });
+                    } else {
+                        // SQLite/MySQL: Use LOWER() with LIKE
+                        $portQuery->where(function($q) use ($polName, $polCode) {
+                            $q->whereRaw('LOWER(name) LIKE ?', ['%' . strtolower($polName) . '%']);
+                            if ($polCode) {
+                                $q->orWhereRaw('LOWER(code) LIKE ?', ['%' . strtolower($polCode) . '%']);
+                            }
+                        });
+                    }
                 })
-                ->whereHas('podPort', function ($portQuery) use ($podName, $podCode) {
-                    $portQuery->where(function($q) use ($podName, $podCode) {
-                        $q->where('name', 'ILIKE', '%' . $podName . '%');
-                        if ($podCode) {
-                            $q->orWhere('code', 'ILIKE', '%' . $podCode . '%');
-                        }
-                    });
+                ->whereHas('podPort', function ($portQuery) use ($podName, $podCode, $useIlike) {
+                    if ($useIlike) {
+                        // PostgreSQL: Use ILIKE
+                        $portQuery->where(function($q) use ($podName, $podCode) {
+                            $q->where('name', 'ILIKE', '%' . $podName . '%');
+                            if ($podCode) {
+                                $q->orWhere('code', 'ILIKE', '%' . $podCode . '%');
+                            }
+                        });
+                    } else {
+                        // SQLite/MySQL: Use LOWER() with LIKE
+                        $portQuery->where(function($q) use ($podName, $podCode) {
+                            $q->whereRaw('LOWER(name) LIKE ?', ['%' . strtolower($podName) . '%']);
+                            if ($podCode) {
+                                $q->orWhereRaw('LOWER(code) LIKE ?', ['%' . strtolower($podCode) . '%']);
+                            }
+                        });
+                    }
                 });
             })
             ->orderBy('next_sailing_date', 'asc')
