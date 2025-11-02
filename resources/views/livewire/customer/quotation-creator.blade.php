@@ -477,13 +477,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Update Livewire property directly
                 if (component) {
                     try {
+                        console.log(`🔵 Autocomplete: Calling component.set('${fieldType}', '${selectedValue}')`);
                         component.set(fieldType, selectedValue);
+                        
+                        // Verify the update
+                        const currentValue = component.get(fieldType);
                         console.log(`✅ Autocomplete: Updated Livewire ${fieldType} = "${selectedValue}"`);
+                        console.log(`🔵 Autocomplete: Verified ${fieldType} value is now: "${currentValue}"`);
                     } catch (e) {
                         console.error('🔴 Autocomplete: Error updating Livewire:', e);
+                        console.error('🔴 Autocomplete: Error details:', e.message, e.stack);
                     }
                 } else {
                     console.warn('⚠️ Autocomplete: Could not find Livewire component to update directly');
+                    console.warn(`⚠️ Autocomplete: ${fieldType} property will not be updated in Livewire`);
                 }
             };
             
