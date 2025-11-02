@@ -171,21 +171,23 @@ class SmartArticleSelector extends Component
     
     public function getConfidenceColor($confidence): string
     {
-        return match (true) {
-            $confidence >= 80 => 'text-green-600',
-            $confidence >= 60 => 'text-yellow-600',
-            $confidence >= 40 => 'text-orange-600',
-            default => 'text-red-600'
+        // Since we always return 100% matches, confidence is always 'high'
+        return match ($confidence) {
+            'high' => 'text-green-600',
+            'medium' => 'text-yellow-600',
+            'low' => 'text-orange-600',
+            default => 'text-green-600' // Default to green for high confidence
         };
     }
     
     public function getConfidenceLabel($confidence): string
     {
-        return match (true) {
-            $confidence >= 80 => 'Excellent',
-            $confidence >= 60 => 'Good',
-            $confidence >= 40 => 'Fair',
-            default => 'Poor'
+        // Since we always return 100% matches, confidence is always 'high'
+        return match ($confidence) {
+            'high' => 'Excellent',
+            'medium' => 'Good',
+            'low' => 'Fair',
+            default => 'Excellent' // Default to Excellent for high confidence
         };
     }
     

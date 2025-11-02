@@ -357,19 +357,20 @@ class SmartArticleSelectionService
 
     /**
      * Get top N suggestions above a minimum score threshold
+     * Note: Since we now filter for exact matches, all results are 100% matches
      *
      * @param QuotationRequest $quotation
      * @param int $limit Number of suggestions to return
-     * @param int $minScore Minimum score threshold
+     * @param int $minScore Minimum score threshold (ignored now - all matches are 100%)
      * @return Collection
      */
     public function getTopSuggestions(QuotationRequest $quotation, int $limit = 5, int $minScore = 50): Collection
     {
         $suggestions = $this->suggestParentArticles($quotation);
         
-        return $suggestions->filter(function ($suggestion) use ($minScore) {
-            return $suggestion['match_score'] >= $minScore;
-        })->take($limit);
+        // Since we filter for exact POL/POD/type/carrier matches, all results are 100% matches
+        // No need to filter by score - just return top N
+        return $suggestions->take($limit);
     }
 }
 
