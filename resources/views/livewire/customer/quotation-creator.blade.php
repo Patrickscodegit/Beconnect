@@ -24,13 +24,12 @@
         
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             {{-- POL --}}
-            <div>
+            <div wire:ignore>
                 <label for="pol" class="block text-sm font-medium text-gray-700 mb-2">
                     Port of Loading (POL) <span class="text-red-500">*</span>
                 </label>
                 <input type="text" 
                        id="pol"
-                       wire:model.blur="pol"
                        class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
                        placeholder="Search or type any port..."
                        required>
@@ -41,13 +40,12 @@
             </div>
             
             {{-- POD --}}
-            <div>
+            <div wire:ignore>
                 <label for="pod" class="block text-sm font-medium text-gray-700 mb-2">
                     Port of Discharge (POD) <span class="text-red-500">*</span>
                 </label>
                 <input type="text" 
                        id="pod"
-                       wire:model.blur="pod"
                        class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
                        placeholder="Search or type any port..."
                        required>
