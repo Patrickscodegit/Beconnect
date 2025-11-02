@@ -464,19 +464,31 @@ class RobawsArticleCache extends Model
               ->where('is_active', true)
               ->validAsOf(now());
 
-        // Apply POL/POD filtering using case-insensitive ILIKE matching
+        // Use database-agnostic case-insensitive matching
+        // PostgreSQL supports ILIKE, SQLite/MySQL use LOWER() with LIKE
+        $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
+
+        // Apply POL/POD filtering using case-insensitive matching
         // Quotation may have "Antwerp" while article has "Antwerp (ANR), Belgium"
         if ($quotation->pol) {
-            $query->where(function ($q) use ($quotation) {
-                $q->where('pol', 'ILIKE', '%' . $quotation->pol . '%')
-                  ->orWhereNull('pol'); // Include articles without POL restriction
+            $query->where(function ($q) use ($quotation, $useIlike) {
+                if ($useIlike) {
+                    $q->where('pol', 'ILIKE', '%' . $quotation->pol . '%');
+                } else {
+                    $q->whereRaw('LOWER(pol) LIKE ?', ['%' . strtolower($quotation->pol) . '%']);
+                }
+                $q->orWhereNull('pol'); // Include articles without POL restriction
             });
         }
         
         if ($quotation->pod) {
-            $query->where(function ($q) use ($quotation) {
-                $q->where('pod', 'ILIKE', '%' . $quotation->pod . '%')
-                  ->orWhereNull('pod'); // Include articles without POD restriction
+            $query->where(function ($q) use ($quotation, $useIlike) {
+                if ($useIlike) {
+                    $q->where('pod', 'ILIKE', '%' . $quotation->pod . '%');
+                } else {
+                    $q->whereRaw('LOWER(pod) LIKE ?', ['%' . strtolower($quotation->pod) . '%']);
+                }
+                $q->orWhereNull('pod'); // Include articles without POD restriction
             });
         }
 
@@ -492,9 +504,13 @@ class RobawsArticleCache extends Model
         if ($quotation->selected_schedule_id && $quotation->selectedSchedule) {
             $schedule = $quotation->selectedSchedule;
             if ($schedule->carrier) {
-                $query->where(function ($q) use ($schedule) {
-                    $q->where('shipping_line', 'ILIKE', '%' . $schedule->carrier->name . '%')
-                      ->orWhereNull('shipping_line'); // Include articles without carrier restriction
+                $query->where(function ($q) use ($schedule, $useIlike) {
+                    if ($useIlike) {
+                        $q->where('shipping_line', 'ILIKE', '%' . $schedule->carrier->name . '%');
+                    } else {
+                        $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%' . strtolower($schedule->carrier->name) . '%']);
+                    }
+                    $q->orWhereNull('shipping_line'); // Include articles without carrier restriction
                 });
             }
         }
