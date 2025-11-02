@@ -406,13 +406,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
+            // Check if autocomplete already set up for this input
+            const existingDropdown = parent.querySelector('.autocomplete-dropdown');
+            if (existingDropdown) {
+                console.log(`🔵 Autocomplete: ${input.id} already has dropdown, skipping setup`);
+                return;
+            }
+            
+            // Mark input as having autocomplete set up
+            input.dataset.autocompleteSetup = 'true';
+            
             // Make parent relative if not already
             if (getComputedStyle(parent).position === 'static') {
                 parent.style.position = 'relative';
             }
             
             const dropdown = document.createElement('div');
-            dropdown.className = 'absolute z-50 w-full bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto hidden';
+            dropdown.className = 'autocomplete-dropdown absolute z-50 w-full bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto hidden';
             dropdown.style.width = input.offsetWidth + 'px';
             parent.appendChild(dropdown);
             
@@ -556,36 +566,40 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // IMPORTANT: Re-initialize autocomplete after Livewire updates
         // Livewire re-renders can remove our JavaScript-created dropdowns
+        // Use a small delay to ensure DOM is ready after Livewire update
+        let livewireUpdateTimeout = null;
         document.addEventListener('livewire:update', function() {
-            console.log('🔵 Autocomplete: Livewire update detected, re-initializing autocomplete');
+            console.log('🔵 Autocomplete: Livewire update detected');
             
-            // Re-find inputs (they might be new elements after Livewire re-render)
-            const polInputNew = document.getElementById('pol');
-            const podInputNew = document.getElementById('pod');
-            
-            if (polInputNew && podInputNew) {
-                // Check if autocomplete is already set up (look for our dropdown)
-                const polParent = polInputNew.parentElement;
-                const podParent = podInputNew.parentElement;
-                
-                // Check if dropdown already exists
-                const polHasDropdown = polParent && Array.from(polParent.children).some(child => 
-                    child.classList.contains('absolute') && child.classList.contains('z-50')
-                );
-                const podHasDropdown = podParent && Array.from(podParent.children).some(child => 
-                    child.classList.contains('absolute') && child.classList.contains('z-50')
-                );
-                
-                if (!polHasDropdown && polParent) {
-                    console.log('🔵 Autocomplete: Re-initializing POL autocomplete');
-                    setupAutocomplete(polInputNew);
-                }
-                
-                if (!podHasDropdown && podParent) {
-                    console.log('🔵 Autocomplete: Re-initializing POD autocomplete');
-                    setupAutocomplete(podInputNew);
-                }
+            // Clear any pending timeout
+            if (livewireUpdateTimeout) {
+                clearTimeout(livewireUpdateTimeout);
             }
+            
+            // Wait a moment for Livewire to finish updating DOM
+            livewireUpdateTimeout = setTimeout(function() {
+                console.log('🔵 Autocomplete: Checking for missing dropdowns after Livewire update');
+                
+                // Re-find inputs (they might be new elements after Livewire re-render)
+                const polInputNew = document.getElementById('pol');
+                const podInputNew = document.getElementById('pod');
+                
+                if (polInputNew && podInputNew) {
+                    // Check if autocomplete is already set up
+                    const polNeedsSetup = !polInputNew.dataset.autocompleteSetup;
+                    const podNeedsSetup = !podInputNew.dataset.autocompleteSetup;
+                    
+                    if (polNeedsSetup) {
+                        console.log('🔵 Autocomplete: Re-initializing POL autocomplete');
+                        setupAutocomplete(polInputNew);
+                    }
+                    
+                    if (podNeedsSetup) {
+                        console.log('🔵 Autocomplete: Re-initializing POD autocomplete');
+                        setupAutocomplete(podInputNew);
+                    }
+                }
+            }, 50); // Small delay to ensure DOM is ready
         });
     }
 });
