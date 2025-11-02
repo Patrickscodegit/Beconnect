@@ -455,19 +455,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     `).join('');
                     dropdown.classList.remove('hidden');
                     console.log(`✅ Autocomplete: ${fieldType} - Dropdown shown with ${matches.length} items`);
-                } else {
-                    // Empty query - show all matches
-                    dropdown.innerHTML = matches.map(([key, value]) => `
-                        <div class="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0" 
-                             data-value="${key}">
-                            <div class="font-medium text-gray-900">${key}</div>
-                        </div>
-                    `).join('');
-                    dropdown.classList.remove('hidden');
-                    console.log(`✅ Autocomplete: ${fieldType} - Dropdown shown with all ${matches.length} items (empty query)`);
-                }
                     
-                    // Add click handlers
+                    // Add click handlers for items
                     dropdown.querySelectorAll('[data-value]').forEach(item => {
                         item.addEventListener('click', function() {
                             const selectedValue = this.dataset.value;
@@ -520,6 +509,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         });
                     });
                 } else {
+                    // No matches and empty query - hide dropdown
                     dropdown.classList.add('hidden');
                     console.log(`🔵 Autocomplete: ${fieldType} - Dropdown hidden (no matches and no query)`);
                 }
