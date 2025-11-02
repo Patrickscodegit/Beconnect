@@ -527,10 +527,12 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Show dropdown on focus/click
             input.addEventListener('focus', function() {
+                console.log(`🔵 Autocomplete: ${input.id} focus event`);
                 renderDropdown(this.value);
             });
             
             input.addEventListener('click', function() {
+                console.log(`🔵 Autocomplete: ${input.id} click event`);
                 renderDropdown(this.value);
             });
             
@@ -586,18 +588,29 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 if (polInputNew && podInputNew) {
                     // Check if autocomplete is already set up
-                    const polNeedsSetup = !polInputNew.dataset.autocompleteSetup;
-                    const podNeedsSetup = !podInputNew.dataset.autocompleteSetup;
+                    const polHasDropdown = polInputNew.parentElement?.querySelector('.autocomplete-dropdown');
+                    const podHasDropdown = podInputNew.parentElement?.querySelector('.autocomplete-dropdown');
+                    const polNeedsSetup = !polHasDropdown && !polInputNew.dataset.autocompleteSetup;
+                    const podNeedsSetup = !podHasDropdown && !podInputNew.dataset.autocompleteSetup;
+                    
+                    console.log(`🔵 Autocomplete: After Livewire update - POL: dropdown=${!!polHasDropdown}, flag=${!!polInputNew.dataset.autocompleteSetup}, needs=${polNeedsSetup}`);
+                    console.log(`🔵 Autocomplete: After Livewire update - POD: dropdown=${!!podHasDropdown}, flag=${!!podInputNew.dataset.autocompleteSetup}, needs=${podNeedsSetup}`);
                     
                     if (polNeedsSetup) {
                         console.log('🔵 Autocomplete: Re-initializing POL autocomplete');
+                        // Clear flag in case it was set on old element
+                        delete polInputNew.dataset.autocompleteSetup;
                         setupAutocomplete(polInputNew);
                     }
                     
                     if (podNeedsSetup) {
                         console.log('🔵 Autocomplete: Re-initializing POD autocomplete');
+                        // Clear flag in case it was set on old element
+                        delete podInputNew.dataset.autocompleteSetup;
                         setupAutocomplete(podInputNew);
                     }
+                } else {
+                    console.warn(`🔴 Autocomplete: After Livewire update - POL=${!!polInputNew}, POD=${!!podInputNew}`);
                 }
             }, 50); // Small delay to ensure DOM is ready
         });
