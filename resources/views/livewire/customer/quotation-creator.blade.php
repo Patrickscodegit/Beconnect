@@ -478,12 +478,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (component) {
                     try {
                         console.log(`🔵 Autocomplete: Calling component.set('${fieldType}', '${selectedValue}')`);
+                        console.log(`🔵 Autocomplete: Component methods available:`, Object.getOwnPropertyNames(Object.getPrototypeOf(component)));
+                        
+                        // Try component.set()
                         component.set(fieldType, selectedValue);
                         
-                        // Verify the update
-                        const currentValue = component.get(fieldType);
-                        console.log(`✅ Autocomplete: Updated Livewire ${fieldType} = "${selectedValue}"`);
-                        console.log(`🔵 Autocomplete: Verified ${fieldType} value is now: "${currentValue}"`);
+                        // Also try $wire.set() if available
+                        if (component.$wire && typeof component.$wire.set === 'function') {
+                            console.log(`🔵 Autocomplete: Also trying component.\$wire.set()`);
+                            component.$wire.set(fieldType, selectedValue);
+                        }
+                        
+                        // Verify the update - wait a moment for Livewire to process
+                        setTimeout(function() {
+                            const currentValue = component.get(fieldType);
+                            console.log(`✅ Autocomplete: Updated Livewire ${fieldType} = "${selectedValue}"`);
+                            console.log(`🔵 Autocomplete: Verified ${fieldType} value is now: "${currentValue}"`);
+                            
+                            if (currentValue !== selectedValue) {
+                                console.warn(`⚠️ Autocomplete: Value mismatch! Expected: "${selectedValue}", Got: "${currentValue}"`);
+                            }
+                        }, 100);
                     } catch (e) {
                         console.error('🔴 Autocomplete: Error updating Livewire:', e);
                         console.error('🔴 Autocomplete: Error details:', e.message, e.stack);
