@@ -20,7 +20,7 @@ class ArticleNameParser
      * Returns array with port details if found, null otherwise.
      * 
      * @param string $articleName The full article name from Robaws
-     * @return array|null ['code' => 'ANR', 'name' => 'Antwerp', 'country' => 'Belgium', 'formatted' => 'Antwerp, Belgium (ANR)', 'terminal' => 'T1234']
+     * @return array|null ['code' => 'ANR', 'name' => 'Antwerp', 'country' => 'Belgium', 'formatted' => 'Antwerp (ANR), Belgium', 'terminal' => 'T1234']
      */
     public function extractPOL(string $articleName): ?array
     {

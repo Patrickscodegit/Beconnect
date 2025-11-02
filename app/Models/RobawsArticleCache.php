@@ -42,7 +42,7 @@ class RobawsArticleCache extends Model
         'article_info',
         'update_date',
         'validity_date',
-        // Port information in full Robaws format: "Antwerp, Belgium (ANR)"
+        // Port information in full Robaws format: "Antwerp (ANR), Belgium"
         'pol',
         'pod',
         'commodity_type',

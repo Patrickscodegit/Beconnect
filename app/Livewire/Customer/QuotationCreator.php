@@ -350,14 +350,14 @@ class QuotationCreator extends Component
         
         $serviceTypes = config('quotation.simple_service_types', []);
         
-        // Format ports for autocomplete JavaScript
+        // Format ports for autocomplete JavaScript (standard format: "City (CODE), Country")
         $polPortsFormatted = $polPorts->mapWithKeys(function ($port) {
-            $display = $port->name . ', ' . $port->country;
+            $display = $port->formatFull();
             return [$display => $display];
         })->toArray();
         
         $podPortsFormatted = $podPorts->mapWithKeys(function ($port) {
-            $display = $port->name . ', ' . $port->country;
+            $display = $port->formatFull();
             return [$display => $display];
         })->toArray();
         

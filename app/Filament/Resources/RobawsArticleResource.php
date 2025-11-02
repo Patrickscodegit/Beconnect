@@ -151,7 +151,7 @@ class RobawsArticleResource extends Resource
                             
                         Forms\Components\TextInput::make('pol')
                             ->label('POL')
-                            ->helperText('e.g., Antwerp, Belgium (ANR)')
+                            ->helperText('e.g., Antwerp (ANR), Belgium')
                             ->maxLength(255)
                             ->columnSpan(1),
                             

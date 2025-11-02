@@ -83,7 +83,7 @@ class SmartArticleSelectionService
             $debugBreakdown['parent_item'] = 10;
         }
 
-        // Direct comparison of POL/POD (both store full format: "Antwerp, Belgium (ANR)")
+        // Direct comparison of POL/POD (both store full format: "Antwerp (ANR), Belgium")
         $quotationPol = $quotation->pol;
         $quotationPod = $quotation->pod;
         $articlePol = $article->pol;

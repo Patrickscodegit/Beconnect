@@ -93,12 +93,12 @@ class ProspectQuotationController extends Controller
                 'contact_phone' => $intakeData['contact_phone'] ?? null,
             ];
 
-            // Format ports for display with country
+            // Format ports for display with country (standard format: "City (CODE), Country")
             $polPortsFormatted = $polPorts->mapWithKeys(function ($port) {
-                return [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country];
+                return [$port->name => $port->formatFull()];
             });
             $podPortsFormatted = $podPorts->mapWithKeys(function ($port) {
-                return [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country];
+                return [$port->name => $port->formatFull()];
             });
             
             // Format airports for display

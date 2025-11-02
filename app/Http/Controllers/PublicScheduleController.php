@@ -95,12 +95,12 @@ class PublicScheduleController extends Controller
         $carriers = ShippingCarrier::where('is_active', true)->orderBy('name')->get();
         $serviceTypes = $this->getServiceTypes();
 
-        // Format ports for display with country
+        // Format ports for display with country (standard format: "City (CODE), Country")
         $polPortsFormatted = $polPorts->mapWithKeys(function ($port) {
-            return [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country];
+            return [$port->name => $port->formatFull()];
         });
         $podPortsFormatted = $podPorts->mapWithKeys(function ($port) {
-            return [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country];
+            return [$port->name => $port->formatFull()];
         });
 
         return [

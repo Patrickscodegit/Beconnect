@@ -114,4 +114,15 @@ class Port extends Model
     {
         return $this->name . ($this->country ? ', ' . $this->country : '');
     }
+
+    /**
+     * Format port in standard format: "City (CODE), Country"
+     * Example: "Antwerp (ANR), Belgium"
+     * 
+     * @return string
+     */
+    public function formatFull(): string
+    {
+        return $this->name . ' (' . $this->code . '), ' . $this->country;
+    }
 }
