@@ -274,14 +274,26 @@ class QuotationCreator extends Component
     {
         $polPorts = Port::europeanOrigins()->orderBy('name')->get();
         $podPorts = Port::withActivePodSchedules()->orderBy('name')->get();
+        
+        // Extract port name from "City, Country" format (take part before comma)
+        $polSearch = $this->pol ? trim(explode(',', $this->pol)[0]) : '';
+        $podSearch = $this->pod ? trim(explode(',', $this->pod)[0]) : '';
+        
         $schedules = ShippingSchedule::where('is_active', true)
-            ->when($this->pol && $this->pod, function ($q) {
+            ->when($polSearch && $podSearch, function ($q) use ($polSearch, $podSearch) {
                 // Filter schedules by route if POL/POD selected
-                $q->whereHas('polPort', function ($portQuery) {
-                    $portQuery->where('name', 'ILIKE', '%' . $this->pol . '%');
+                // Search both name and code fields to handle various input formats
+                $q->whereHas('polPort', function ($portQuery) use ($polSearch) {
+                    $portQuery->where(function($q) use ($polSearch) {
+                        $q->where('name', 'ILIKE', '%' . $polSearch . '%')
+                          ->orWhere('code', 'ILIKE', '%' . $polSearch . '%');
+                    });
                 })
-                ->whereHas('podPort', function ($portQuery) {
-                    $portQuery->where('name', 'ILIKE', '%' . $this->pod . '%');
+                ->whereHas('podPort', function ($portQuery) use ($podSearch) {
+                    $portQuery->where(function($q) use ($podSearch) {
+                        $q->where('name', 'ILIKE', '%' . $podSearch . '%')
+                          ->orWhere('code', 'ILIKE', '%' . $podSearch . '%');
+                    });
                 });
             })
             ->orderBy('next_sailing_date', 'asc')
