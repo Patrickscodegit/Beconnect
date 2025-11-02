@@ -125,6 +125,11 @@
                     No scheduled sailings found for this route. You can still submit your request.
                 </p>
             @endif
+            
+            {{-- Debug info (temporary) --}}
+            <div class="mt-4 text-xs text-gray-400 bg-gray-50 p-2 rounded border border-gray-200">
+                <strong>Debug:</strong> POL: "{{ $pol }}" | POD: "{{ $pod }}" | Schedule ID: {{ $selected_schedule_id ?? 'null' }} | Show Articles: {{ $showArticles ? 'YES' : 'NO' }}
+            </div>
         @else
             <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
                 <i class="fas fa-arrow-up text-gray-400 text-3xl mb-2"></i>
@@ -204,8 +209,12 @@
                 Based on your route ({{ $pol }} → {{ $pod }}) and selected schedule, we suggest these services:
             </p>
             
+            @php
+                // Ensure quotation is fresh with relationships
+                $freshQuotation = $quotation->fresh(['selectedSchedule.carrier']);
+            @endphp
             @livewire('smart-article-selector', [
-                'quotation' => $quotation,
+                'quotation' => $freshQuotation,
                 'showPricing' => true,
                 'isEditable' => true
             ], key('article-selector-' . $quotation->id))

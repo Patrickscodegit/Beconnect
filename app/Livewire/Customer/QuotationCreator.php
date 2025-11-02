@@ -127,6 +127,11 @@ class QuotationCreator extends Component
             $this->service_type = config("quotation.simple_service_types.{$this->simple_service_type}.default_service_type");
         }
         
+        // Cast selected_schedule_id to int if it's not null/empty (handle string "0" or empty string)
+        if ($propertyName === 'selected_schedule_id') {
+            $this->selected_schedule_id = $this->selected_schedule_id ? (int) $this->selected_schedule_id : null;
+        }
+        
         // Save to draft quotation
         if ($this->quotation) {
             $this->quotation->update([
@@ -150,19 +155,31 @@ class QuotationCreator extends Component
                 'customer_reference' => $this->customer_reference,
             ]);
             
-            // Check if we should show articles
-            $this->showArticles = !empty($this->pol) && 
-                                 !empty($this->pod) && 
-                                 !empty($this->selected_schedule_id);
+            // Refresh quotation to ensure relationships are loaded
+            $this->quotation = $this->quotation->fresh(['selectedSchedule.carrier']);
+            
+            // Check if we should show articles (use trim to handle whitespace-only strings)
+            $polFilled = !empty(trim($this->pol));
+            $podFilled = !empty(trim($this->pod));
+            $scheduleSelected = $this->selected_schedule_id !== null && $this->selected_schedule_id > 0;
+            
+            $this->showArticles = $polFilled && $podFilled && $scheduleSelected;
             
             // Emit event to SmartArticleSelector to reload
             if ($this->showArticles) {
                 $this->dispatch('quotationUpdated');
             }
             
-            Log::debug('Draft quotation auto-saved', [
+            // INFO-level logging for production debugging
+            Log::info('QuotationCreator state updated', [
                 'quotation_id' => $this->quotationId,
                 'field' => $propertyName,
+                'pol' => $this->pol,
+                'pod' => $this->pod,
+                'selected_schedule_id' => $this->selected_schedule_id,
+                'pol_filled' => $polFilled,
+                'pod_filled' => $podFilled,
+                'schedule_selected' => $scheduleSelected,
                 'show_articles' => $this->showArticles,
             ]);
         }
@@ -283,6 +300,11 @@ class QuotationCreator extends Component
             $display = $port->name . ', ' . $port->country;
             return [$display => $display];
         })->toArray();
+        
+        // Ensure quotation is fresh with relationships for child components
+        if ($this->quotation) {
+            $this->quotation = $this->quotation->fresh(['selectedSchedule.carrier']);
+        }
         
         return view('livewire.customer.quotation-creator', compact(
             'polPorts',
