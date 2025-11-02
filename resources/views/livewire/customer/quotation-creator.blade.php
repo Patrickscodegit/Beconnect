@@ -104,6 +104,11 @@
             <span class="text-sm font-normal text-gray-500">(Required for pricing & article suggestions)</span>
         </h2>
         
+        {{-- Debug info (temporary) - Always visible to diagnose issues --}}
+        <div class="mb-4 text-xs text-gray-400 bg-gray-50 p-2 rounded border border-gray-200">
+            <strong>Debug:</strong> POL: "{{ $pol }}" | POD: "{{ $pod }}" | POL filled: {{ !empty(trim($pol)) ? 'YES' : 'NO' }} | POD filled: {{ !empty(trim($pod)) ? 'YES' : 'NO' }} | Schedule ID: {{ $selected_schedule_id ?? 'null' }} | Show Articles: {{ $showArticles ? 'YES' : 'NO' }} | Schedules found: {{ $schedules->count() ?? 0 }}
+        </div>
+        
         @if($pol && $pod)
             <select wire:model="selected_schedule_id" 
                     class="form-select w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
@@ -125,11 +130,6 @@
                     No scheduled sailings found for this route. You can still submit your request.
                 </p>
             @endif
-            
-            {{-- Debug info (temporary) --}}
-            <div class="mt-4 text-xs text-gray-400 bg-gray-50 p-2 rounded border border-gray-200">
-                <strong>Debug:</strong> POL: "{{ $pol }}" | POD: "{{ $pod }}" | Schedule ID: {{ $selected_schedule_id ?? 'null' }} | Show Articles: {{ $showArticles ? 'YES' : 'NO' }}
-            </div>
         @else
             <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
                 <i class="fas fa-arrow-up text-gray-400 text-3xl mb-2"></i>
