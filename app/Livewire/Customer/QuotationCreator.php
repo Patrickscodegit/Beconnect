@@ -392,6 +392,13 @@ class QuotationCreator extends Component
             $this->quotation = $this->quotation->fresh(['selectedSchedule.carrier']);
         }
         
+        // Update showArticles flag based on current state (check in render to ensure it's always up-to-date)
+        // This is especially important when using wire:ignore for POL/POD inputs
+        $polFilled = !empty(trim($this->pol));
+        $podFilled = !empty(trim($this->pod));
+        $scheduleSelected = $this->selected_schedule_id !== null && $this->selected_schedule_id > 0;
+        $this->showArticles = $polFilled && $podFilled && $scheduleSelected;
+        
         return view('livewire.customer.quotation-creator', compact(
             'polPorts',
             'podPorts',
