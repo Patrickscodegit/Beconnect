@@ -41,11 +41,20 @@ class QuotationCreator extends Component
     public bool $loading = false;
     public bool $submitting = false;
     
-    // Listen for article selection events
+    // Listen for article selection events and port updates
     protected $listeners = [
         'articleAdded' => 'handleArticleAdded',
         'articleRemoved' => 'handleArticleRemoved',
+        'port-updated' => 'handlePortUpdated',
     ];
+    
+    // Handle port-updated event from JavaScript (fallback method)
+    public function handlePortUpdated($data)
+    {
+        if (isset($data['field']) && isset($data['value'])) {
+            $this->setPort($data['field'], $data['value']);
+        }
+    }
     
     // Public method to set POL/POD from JavaScript (used with wire:ignore)
     public function setPort($field, $value)
