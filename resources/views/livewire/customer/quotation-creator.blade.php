@@ -459,12 +459,45 @@ document.addEventListener('DOMContentLoaded', function() {
                             input.value = selectedValue;
                             dropdown.classList.add('hidden');
                             
-                            // Trigger Livewire update
+                            // Method 1: Dispatch input event (Livewire should detect this)
                             console.log(`🔵 Autocomplete: Dispatching input event for ${fieldType}`);
-                            const inputEvent = new Event('input', { bubbles: true });
+                            const inputEvent = new Event('input', { bubbles: true, cancelable: true });
                             input.dispatchEvent(inputEvent);
                             
-                            console.log(`✅ Autocomplete: Input event dispatched for ${fieldType}`);
+                            // Method 2: Also try Livewire's $wire API directly
+                            // Find the Livewire component by traversing up from input
+                            let component = null;
+                            let element = input;
+                            
+                            // Traverse up to find wire:id
+                            while (element && element !== document.body) {
+                                if (element.hasAttribute && element.hasAttribute('wire:id')) {
+                                    const componentId = element.getAttribute('wire:id');
+                                    if (window.Livewire) {
+                                        try {
+                                            component = window.Livewire.find(componentId);
+                                            console.log(`🔵 Autocomplete: Found Livewire component ${componentId}`);
+                                        } catch (e) {
+                                            console.warn('🔵 Autocomplete: Could not find component:', e);
+                                        }
+                                    }
+                                    break;
+                                }
+                                element = element.parentElement;
+                            }
+                            
+                            // Update Livewire property directly
+                            if (component) {
+                                try {
+                                    // Property name is the fieldType (pol or pod)
+                                    component.set(fieldType, selectedValue);
+                                    console.log(`✅ Autocomplete: Updated Livewire ${fieldType} = "${selectedValue}"`);
+                                } catch (e) {
+                                    console.error('🔴 Autocomplete: Error updating Livewire:', e);
+                                }
+                            } else {
+                                console.warn('⚠️ Autocomplete: Could not find Livewire component to update directly');
+                            }
                         });
                     });
                 } else {
