@@ -396,6 +396,29 @@ document.addEventListener('DOMContentLoaded', function() {
             return fieldType === 'pol' ? polSeaports : podSeaports;
         }
         
+        // Track autocomplete instances to clean up old ones
+        const autocompleteInstances = new WeakMap();
+        
+        // Clean up old autocomplete for an input (remove dropdown, listeners, etc.)
+        function cleanupAutocomplete(input) {
+            if (!input || !input.parentElement) return;
+            
+            const parent = input.parentElement;
+            const oldDropdown = parent.querySelector('.autocomplete-dropdown');
+            if (oldDropdown) {
+                console.log(`🔵 Autocomplete: Cleaning up old dropdown for ${input.id}`);
+                oldDropdown.remove();
+            }
+            
+            // Remove flag so we can re-initialize
+            delete input.dataset.autocompleteSetup;
+            
+            // Clear any stored instance data
+            if (autocompleteInstances.has(input)) {
+                autocompleteInstances.delete(input);
+            }
+        }
+        
         // Setup autocomplete for an input field
         function setupAutocomplete(input) {
             // IMPORTANT: Don't wrap or move the input! This breaks Livewire's event listeners.
@@ -406,15 +429,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            // Check if autocomplete already set up for this input
-            const existingDropdown = parent.querySelector('.autocomplete-dropdown');
-            if (existingDropdown) {
-                console.log(`🔵 Autocomplete: ${input.id} already has dropdown, skipping setup`);
-                return;
-            }
+            // Clean up any existing autocomplete first (important after Livewire updates)
+            cleanupAutocomplete(input);
             
             // Mark input as having autocomplete set up
             input.dataset.autocompleteSetup = 'true';
+            
+            // Store instance data for cleanup
+            const instanceData = {
+                dropdown: null,
+                clickOutsideHandler: null,
+            };
+            autocompleteInstances.set(input, instanceData);
             
             // Make parent relative if not already
             if (getComputedStyle(parent).position === 'static') {
@@ -425,6 +451,9 @@ document.addEventListener('DOMContentLoaded', function() {
             dropdown.className = 'autocomplete-dropdown absolute z-50 w-full bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto hidden';
             dropdown.style.width = input.offsetWidth + 'px';
             parent.appendChild(dropdown);
+            
+            // Store dropdown reference in instance data
+            instanceData.dropdown = dropdown;
             
             // Helper function to update Livewire property (used by click handlers)
             const updateLivewireProperty = function(fieldType, selectedValue) {
@@ -565,14 +594,16 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             
             // Hide dropdown when clicking outside
-            // Simplified like public form - use parent container check
-            document.addEventListener('click', function(e) {
+            // Store handler reference so we can remove it later
+            const clickOutsideHandler = function(e) {
                 // Check if click is outside the parent container (which contains both input and dropdown)
                 if (!parent.contains(e.target)) {
                     dropdown.classList.add('hidden');
                     console.log(`🔵 Autocomplete: ${input.id} - Dropdown hidden (clicked outside)`);
                 }
-            });
+            };
+            document.addEventListener('click', clickOutsideHandler);
+            instanceData.clickOutsideHandler = clickOutsideHandler;
             
             // Allow pressing Enter to use custom value
             input.addEventListener('keydown', function(e) {
@@ -588,8 +619,8 @@ document.addEventListener('DOMContentLoaded', function() {
         setupAutocomplete(podInput);
         
         // IMPORTANT: Re-initialize autocomplete after Livewire updates
-        // Livewire re-renders can remove our JavaScript-created dropdowns
-        // Use a small delay to ensure DOM is ready after Livewire update
+        // Livewire re-renders can remove our JavaScript-created dropdowns or recreate inputs
+        // Always re-initialize both to ensure they work after any Livewire update
         let livewireUpdateTimeout = null;
         document.addEventListener('livewire:update', function() {
             console.log('🔵 Autocomplete: Livewire update detected');
@@ -601,39 +632,24 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Wait a moment for Livewire to finish updating DOM
             livewireUpdateTimeout = setTimeout(function() {
-                console.log('🔵 Autocomplete: Checking for missing dropdowns after Livewire update');
+                console.log('🔵 Autocomplete: Re-initializing both autocomplete instances after Livewire update');
                 
                 // Re-find inputs (they might be new elements after Livewire re-render)
                 const polInputNew = document.getElementById('pol');
                 const podInputNew = document.getElementById('pod');
                 
                 if (polInputNew && podInputNew) {
-                    // Check if autocomplete is already set up
-                    const polHasDropdown = polInputNew.parentElement?.querySelector('.autocomplete-dropdown');
-                    const podHasDropdown = podInputNew.parentElement?.querySelector('.autocomplete-dropdown');
-                    const polNeedsSetup = !polHasDropdown && !polInputNew.dataset.autocompleteSetup;
-                    const podNeedsSetup = !podHasDropdown && !podInputNew.dataset.autocompleteSetup;
+                    // Always re-initialize both (cleanup happens inside setupAutocomplete)
+                    // This ensures they work even if Livewire recreated the inputs
+                    console.log('🔵 Autocomplete: Re-initializing POL autocomplete');
+                    setupAutocomplete(polInputNew);
                     
-                    console.log(`🔵 Autocomplete: After Livewire update - POL: dropdown=${!!polHasDropdown}, flag=${!!polInputNew.dataset.autocompleteSetup}, needs=${polNeedsSetup}`);
-                    console.log(`🔵 Autocomplete: After Livewire update - POD: dropdown=${!!podHasDropdown}, flag=${!!podInputNew.dataset.autocompleteSetup}, needs=${podNeedsSetup}`);
-                    
-                    if (polNeedsSetup) {
-                        console.log('🔵 Autocomplete: Re-initializing POL autocomplete');
-                        // Clear flag in case it was set on old element
-                        delete polInputNew.dataset.autocompleteSetup;
-                        setupAutocomplete(polInputNew);
-                    }
-                    
-                    if (podNeedsSetup) {
-                        console.log('🔵 Autocomplete: Re-initializing POD autocomplete');
-                        // Clear flag in case it was set on old element
-                        delete podInputNew.dataset.autocompleteSetup;
-                        setupAutocomplete(podInputNew);
-                    }
+                    console.log('🔵 Autocomplete: Re-initializing POD autocomplete');
+                    setupAutocomplete(podInputNew);
                 } else {
                     console.warn(`🔴 Autocomplete: After Livewire update - POL=${!!polInputNew}, POD=${!!podInputNew}`);
                 }
-            }, 50); // Small delay to ensure DOM is ready
+            }, 100); // Increased delay to ensure DOM is fully ready
         });
     }
 });
