@@ -440,18 +440,61 @@ document.addEventListener('DOMContentLoaded', function() {
                             input.value = selectedValue;
                             dropdown.classList.add('hidden');
                             
-                            // Trigger Livewire update - use multiple methods to ensure it works
-                            // Method 1: Dispatch input event (for wire:model)
-                            input.dispatchEvent(new Event('input', { bubbles: true }));
-                            input.dispatchEvent(new Event('change', { bubbles: true }));
+                            // Find Livewire component using multiple methods
+                            let component = null;
+                            let componentId = null;
                             
-                            // Method 2: Use Livewire's @this if available (direct property update)
-                            if (window.Livewire && input.hasAttribute('wire:model')) {
-                                const wireModel = input.getAttribute('wire:model').replace('.debounce.500ms', '').replace('.debounce', '');
-                                const component = window.Livewire.find(document.querySelector('[wire\\:id]')?.getAttribute('wire:id'));
-                                if (component) {
-                                    component.set(wireModel, selectedValue);
+                            // Method 1: Find component by traversing DOM from input
+                            let parent = input;
+                            while (parent && parent !== document.body) {
+                                if (parent.hasAttribute && parent.hasAttribute('wire:id')) {
+                                    componentId = parent.getAttribute('wire:id');
+                                    break;
                                 }
+                                parent = parent.parentElement;
+                            }
+                            
+                            // Method 2: Fallback to global selector
+                            if (!componentId) {
+                                const globalComponent = document.querySelector('[wire\\:id]');
+                                if (globalComponent) {
+                                    componentId = globalComponent.getAttribute('wire:id');
+                                }
+                            }
+                            
+                            // Get Livewire component instance
+                            if (window.Livewire && componentId) {
+                                try {
+                                    component = window.Livewire.find(componentId);
+                                } catch (e) {
+                                    console.warn('Could not find Livewire component:', e);
+                                }
+                            }
+                            
+                            // Update Livewire property directly (most reliable)
+                            if (component && input.hasAttribute('wire:model')) {
+                                try {
+                                    const wireModel = input.getAttribute('wire:model')
+                                        .replace('.debounce.500ms', '')
+                                        .replace('.debounce', '')
+                                        .trim();
+                                    component.set(wireModel, selectedValue);
+                                    console.log(`✅ Livewire updated: ${wireModel} = "${selectedValue}"`);
+                                } catch (e) {
+                                    console.warn('Could not update Livewire property:', e);
+                                }
+                            }
+                            
+                            // Fallback: Dispatch events (for wire:model listeners)
+                            try {
+                                input.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                                input.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+                                // Also try livewire:update event
+                                if (window.Livewire) {
+                                    input.dispatchEvent(new CustomEvent('livewire:update', { bubbles: true }));
+                                }
+                            } catch (e) {
+                                console.warn('Could not dispatch events:', e);
                             }
                         });
                     });
