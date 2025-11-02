@@ -458,7 +458,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.log(`🔵 Autocomplete: ${fieldType} - Showing "no matches" dropdown`);
                 } else if (matches.length > 0) {
                     dropdown.innerHTML = matches.map(([key, value]) => `
-                        <div class="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0" 
+                        <div class="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 autocomplete-item" 
                              data-value="${key}">
                             <div class="font-medium text-gray-900">${key}</div>
                         </div>
@@ -466,58 +466,70 @@ document.addEventListener('DOMContentLoaded', function() {
                     dropdown.classList.remove('hidden');
                     console.log(`✅ Autocomplete: ${fieldType} - Dropdown shown with ${matches.length} items`);
                     
-                    // Add click handlers for items
-                    dropdown.querySelectorAll('[data-value]').forEach(item => {
-                        item.addEventListener('click', function() {
-                            const selectedValue = this.dataset.value;
-                            const fieldType = input.id; // 'pol' or 'pod'
-                            
-                            console.log(`🔵 Autocomplete: Item clicked - ${fieldType} = "${selectedValue}"`);
-                            
-                            input.value = selectedValue;
-                            dropdown.classList.add('hidden');
-                            
-                            // Method 1: Dispatch input event (Livewire should detect this)
-                            console.log(`🔵 Autocomplete: Dispatching input event for ${fieldType}`);
-                            const inputEvent = new Event('input', { bubbles: true, cancelable: true });
-                            input.dispatchEvent(inputEvent);
-                            
-                            // Method 2: Also try Livewire's $wire API directly
-                            // Find the Livewire component by traversing up from input
-                            let component = null;
-                            let element = input;
-                            
-                            // Traverse up to find wire:id
-                            while (element && element !== document.body) {
-                                if (element.hasAttribute && element.hasAttribute('wire:id')) {
-                                    const componentId = element.getAttribute('wire:id');
-                                    if (window.Livewire) {
-                                        try {
-                                            component = window.Livewire.find(componentId);
-                                            console.log(`🔵 Autocomplete: Found Livewire component ${componentId}`);
-                                        } catch (e) {
-                                            console.warn('🔵 Autocomplete: Could not find component:', e);
-                                        }
+                    // IMPORTANT: Add click handlers IMMEDIATELY after setting innerHTML
+                    // Use event delegation on the dropdown itself to avoid losing handlers on re-render
+                    const handleItemClick = function(e) {
+                        const item = e.target.closest('.autocomplete-item');
+                        if (!item) return;
+                        
+                        const selectedValue = item.dataset.value;
+                        console.log(`🔵 Autocomplete: Item clicked - ${fieldType} = "${selectedValue}"`);
+                        
+                        input.value = selectedValue;
+                        dropdown.classList.add('hidden');
+                        
+                        // Method 1: Dispatch input event (Livewire should detect this)
+                        console.log(`🔵 Autocomplete: Dispatching input event for ${fieldType}`);
+                        const inputEvent = new Event('input', { bubbles: true, cancelable: true });
+                        input.dispatchEvent(inputEvent);
+                        
+                        // Method 2: Also try Livewire's $wire API directly
+                        // Find the Livewire component by traversing up from input
+                        let component = null;
+                        let element = input;
+                        
+                        // Traverse up to find wire:id
+                        while (element && element !== document.body) {
+                            if (element.hasAttribute && element.hasAttribute('wire:id')) {
+                                const componentId = element.getAttribute('wire:id');
+                                if (window.Livewire) {
+                                    try {
+                                        component = window.Livewire.find(componentId);
+                                        console.log(`🔵 Autocomplete: Found Livewire component ${componentId}`);
+                                    } catch (e) {
+                                        console.warn('🔵 Autocomplete: Could not find component:', e);
                                     }
-                                    break;
                                 }
-                                element = element.parentElement;
+                                break;
                             }
-                            
-                            // Update Livewire property directly
-                            if (component) {
-                                try {
-                                    // Property name is the fieldType (pol or pod)
-                                    component.set(fieldType, selectedValue);
-                                    console.log(`✅ Autocomplete: Updated Livewire ${fieldType} = "${selectedValue}"`);
-                                } catch (e) {
-                                    console.error('🔴 Autocomplete: Error updating Livewire:', e);
-                                }
-                            } else {
-                                console.warn('⚠️ Autocomplete: Could not find Livewire component to update directly');
+                            element = element.parentElement;
+                        }
+                        
+                        // Update Livewire property directly
+                        if (component) {
+                            try {
+                                // Property name is the fieldType (pol or pod)
+                                component.set(fieldType, selectedValue);
+                                console.log(`✅ Autocomplete: Updated Livewire ${fieldType} = "${selectedValue}"`);
+                            } catch (e) {
+                                console.error('🔴 Autocomplete: Error updating Livewire:', e);
                             }
-                        });
-                    });
+                        } else {
+                            console.warn('⚠️ Autocomplete: Could not find Livewire component to update directly');
+                        }
+                        
+                        e.stopPropagation(); // Prevent bubbling
+                    };
+                    
+                    // Remove any existing click listener to avoid duplicates
+                    dropdown.removeEventListener('click', dropdown._autocompleteClickHandler);
+                    // Store handler reference for cleanup
+                    dropdown._autocompleteClickHandler = handleItemClick;
+                    // Use event delegation - attach to dropdown, not individual items
+                    dropdown.addEventListener('click', handleItemClick);
+                    
+                    console.log(`✅ Autocomplete: ${fieldType} - Click handlers attached to ${matches.length} items`);
+                    
                 } else {
                     // No matches and empty query - hide dropdown
                     dropdown.classList.add('hidden');
