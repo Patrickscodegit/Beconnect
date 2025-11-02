@@ -496,26 +496,18 @@ document.addEventListener('DOMContentLoaded', function() {
                                 try {
                                     console.log(`🔵 Autocomplete: Syncing ${fieldType} = "${selectedValue}" to Livewire`);
                                     
-                                    // Try multiple ways to call setPort() method (Livewire v3 API varies)
-                                    let called = false;
-                                    
-                                    // Method 1: component.$wire.call() (most common in Livewire v3)
-                                    if (component.$wire && typeof component.$wire.call === 'function') {
-                                        console.log(`🔵 Autocomplete: Using component.$wire.call('setPort', '${fieldType}', '${selectedValue}')`);
-                                        component.$wire.call('setPort', fieldType, selectedValue);
-                                        called = true;
-                                    }
-                                    // Method 2: component.call() (alternative API)
-                                    else if (component.call && typeof component.call === 'function') {
-                                        console.log(`🔵 Autocomplete: Using component.call('setPort', '${fieldType}', '${selectedValue}')`);
+                                    // In Livewire v3, use component.call() directly (NOT component.$wire.call)
+                                    // The $wire property is only available in Alpine.js context, not in JS
+                                    if (component.call && typeof component.call === 'function') {
+                                        console.log(`🔵 Autocomplete: Calling component.call('setPort', '${fieldType}', '${selectedValue}')`);
                                         component.call('setPort', fieldType, selectedValue);
-                                        called = true;
-                                    }
-                                    // Method 3: Use Livewire.dispatch() or component.set() + $refresh()
-                                    else {
-                                        console.log(`🔵 Autocomplete: Fallback - using component.set() + $refresh()`);
-                                        // Set the property and manually trigger refresh
+                                        console.log(`✅ Autocomplete: ${fieldType} synced to Livewire via setPort()`);
+                                    } else {
+                                        // Fallback: Use component.set() + dispatch event + refresh
+                                        console.log(`🔵 Autocomplete: Fallback - using component.set() + dispatch event`);
+                                        // Set the property
                                         component.set(fieldType, selectedValue);
+                                        
                                         // Dispatch a custom event that the component can listen to
                                         if (window.Livewire && window.Livewire.dispatch) {
                                             window.Livewire.dispatch('port-updated', {
@@ -523,23 +515,31 @@ document.addEventListener('DOMContentLoaded', function() {
                                                 value: selectedValue
                                             });
                                         }
+                                        
                                         // Force refresh to trigger updated()
                                         setTimeout(() => {
                                             if (component.$refresh) {
                                                 component.$refresh();
                                             }
                                         }, 100);
-                                        called = true;
-                                    }
-                                    
-                                    if (called) {
-                                        console.log(`✅ Autocomplete: ${fieldType} synced to Livewire`);
-                                    } else {
-                                        console.warn(`⚠️ Autocomplete: Could not call setPort() - no compatible API found`);
+                                        console.log(`✅ Autocomplete: ${fieldType} synced to Livewire via fallback method`);
                                     }
                                 } catch (e) {
                                     console.error('🔴 Autocomplete: Error syncing to Livewire:', e);
                                     console.error('🔴 Autocomplete: Error details:', e.message, e.stack);
+                                    
+                                    // Last resort: try to dispatch event only
+                                    try {
+                                        if (window.Livewire && window.Livewire.dispatch) {
+                                            window.Livewire.dispatch('port-updated', {
+                                                field: fieldType,
+                                                value: selectedValue
+                                            });
+                                            console.log(`🔵 Autocomplete: Dispatched port-updated event as last resort`);
+                                        }
+                                    } catch (err) {
+                                        console.error('🔴 Autocomplete: All sync methods failed:', err);
+                                    }
                                 }
                             } else {
                                 console.warn('⚠️ Autocomplete: Could not find Livewire component to sync');
