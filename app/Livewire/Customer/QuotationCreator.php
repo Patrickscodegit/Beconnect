@@ -253,6 +253,35 @@ class QuotationCreator extends Component
     }
     
     /**
+     * Extract port name and code from various formats:
+     * - "Dakar (DKR), Senegal" → name: "Dakar", code: "DKR"
+     * - "Antwerp (ANR), Belgium" → name: "Antwerp", code: "ANR"
+     * - "Dakar, Senegal" → name: "Dakar", code: ""
+     * - "Dakar" → name: "Dakar", code: ""
+     */
+    protected function extractPortInfo(string $portInput): array
+    {
+        $portInput = trim($portInput);
+        $name = '';
+        $code = '';
+        
+        // Extract code from parentheses if present: "City (CODE), Country"
+        if (preg_match('/^(.+?)\s*\(([^)]+)\)/', $portInput, $matches)) {
+            $name = trim($matches[1]); // "Dakar"
+            $code = trim($matches[2]); // "DKR"
+        } else {
+            // No parentheses, extract name (everything before comma)
+            $parts = explode(',', $portInput);
+            $name = trim($parts[0]);
+        }
+        
+        return [
+            'name' => $name,
+            'code' => $code,
+        ];
+    }
+    
+    /**
      * Derive trade direction from service type
      */
     protected function getDirectionFromServiceType(string $serviceType): string
@@ -275,24 +304,43 @@ class QuotationCreator extends Component
         $polPorts = Port::europeanOrigins()->orderBy('name')->get();
         $podPorts = Port::withActivePodSchedules()->orderBy('name')->get();
         
-        // Extract port name from "City, Country" format (take part before comma)
-        $polSearch = $this->pol ? trim(explode(',', $this->pol)[0]) : '';
-        $podSearch = $this->pod ? trim(explode(',', $this->pod)[0]) : '';
+        // Extract port name and code from formats like:
+        // "Dakar (DKR), Senegal" or "Antwerp (ANR), Belgium"
+        // "Dakar, Senegal" or just "Dakar"
+        $polName = '';
+        $polCode = '';
+        if ($this->pol) {
+            $polParts = $this->extractPortInfo($this->pol);
+            $polName = $polParts['name'];
+            $polCode = $polParts['code'];
+        }
+        
+        $podName = '';
+        $podCode = '';
+        if ($this->pod) {
+            $podParts = $this->extractPortInfo($this->pod);
+            $podName = $podParts['name'];
+            $podCode = $podParts['code'];
+        }
         
         $schedules = ShippingSchedule::where('is_active', true)
-            ->when($polSearch && $podSearch, function ($q) use ($polSearch, $podSearch) {
+            ->when($polName && $podName, function ($q) use ($polName, $polCode, $podName, $podCode) {
                 // Filter schedules by route if POL/POD selected
-                // Search both name and code fields to handle various input formats
-                $q->whereHas('polPort', function ($portQuery) use ($polSearch) {
-                    $portQuery->where(function($q) use ($polSearch) {
-                        $q->where('name', 'ILIKE', '%' . $polSearch . '%')
-                          ->orWhere('code', 'ILIKE', '%' . $polSearch . '%');
+                // Match on port name OR code (handles "City (CODE), Country" format)
+                $q->whereHas('polPort', function ($portQuery) use ($polName, $polCode) {
+                    $portQuery->where(function($q) use ($polName, $polCode) {
+                        $q->where('name', 'ILIKE', '%' . $polName . '%');
+                        if ($polCode) {
+                            $q->orWhere('code', 'ILIKE', '%' . $polCode . '%');
+                        }
                     });
                 })
-                ->whereHas('podPort', function ($portQuery) use ($podSearch) {
-                    $portQuery->where(function($q) use ($podSearch) {
-                        $q->where('name', 'ILIKE', '%' . $podSearch . '%')
-                          ->orWhere('code', 'ILIKE', '%' . $podSearch . '%');
+                ->whereHas('podPort', function ($portQuery) use ($podName, $podCode) {
+                    $portQuery->where(function($q) use ($podName, $podCode) {
+                        $q->where('name', 'ILIKE', '%' . $podName . '%');
+                        if ($podCode) {
+                            $q->orWhere('code', 'ILIKE', '%' . $podCode . '%');
+                        }
                     });
                 });
             })
