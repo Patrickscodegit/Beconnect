@@ -419,8 +419,12 @@ document.addEventListener('DOMContentLoaded', function() {
             // Function to render dropdown with matches
             function renderDropdown(query = '') {
                 const fieldType = input.id; // 'pol' or 'pod'
+                console.log(`🔵 Autocomplete: renderDropdown called for ${fieldType} with query: "${query}"`);
+                
                 const portList = getCurrentPortList(fieldType);
                 const lowerQuery = query.toLowerCase().trim();
+                
+                console.log(`🔵 Autocomplete: Port list size for ${fieldType}: ${Object.keys(portList).length}`);
                 
                 // Filter matching ports (or show all if no query)
                 let matches = Object.entries(portList);
@@ -431,6 +435,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 matches = matches.slice(0, 10);
                 
+                console.log(`🔵 Autocomplete: ${fieldType} - Found ${matches.length} matches`);
+                
                 if (matches.length === 0 && lowerQuery.length > 0) {
                     dropdown.innerHTML = `
                         <div class="px-4 py-3 text-sm text-gray-500">
@@ -439,6 +445,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                     `;
                     dropdown.classList.remove('hidden');
+                    console.log(`🔵 Autocomplete: ${fieldType} - Showing "no matches" dropdown`);
                 } else if (matches.length > 0) {
                     dropdown.innerHTML = matches.map(([key, value]) => `
                         <div class="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0" 
@@ -447,6 +454,18 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                     `).join('');
                     dropdown.classList.remove('hidden');
+                    console.log(`✅ Autocomplete: ${fieldType} - Dropdown shown with ${matches.length} items`);
+                } else {
+                    // Empty query - show all matches
+                    dropdown.innerHTML = matches.map(([key, value]) => `
+                        <div class="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0" 
+                             data-value="${key}">
+                            <div class="font-medium text-gray-900">${key}</div>
+                        </div>
+                    `).join('');
+                    dropdown.classList.remove('hidden');
+                    console.log(`✅ Autocomplete: ${fieldType} - Dropdown shown with all ${matches.length} items (empty query)`);
+                }
                     
                     // Add click handlers
                     dropdown.querySelectorAll('[data-value]').forEach(item => {
@@ -502,6 +521,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                 } else {
                     dropdown.classList.add('hidden');
+                    console.log(`🔵 Autocomplete: ${fieldType} - Dropdown hidden (no matches and no query)`);
                 }
             }
             
@@ -520,11 +540,16 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             
             // Hide dropdown when clicking outside
+            // Use a more specific handler that checks if click is outside both input and dropdown
             document.addEventListener('click', function(e) {
-                if (!parent.contains(e.target)) {
+                const clickedOnInput = input.contains(e.target);
+                const clickedOnDropdown = dropdown.contains(e.target);
+                
+                if (!clickedOnInput && !clickedOnDropdown) {
                     dropdown.classList.add('hidden');
+                    console.log(`🔵 Autocomplete: ${input.id} - Dropdown hidden (clicked outside)`);
                 }
-            });
+            }, true); // Use capture phase to catch events early
             
             // Allow pressing Enter to use custom value
             input.addEventListener('keydown', function(e) {
