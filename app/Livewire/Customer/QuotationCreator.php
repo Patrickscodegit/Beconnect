@@ -403,7 +403,22 @@ class QuotationCreator extends Component
         // PostgreSQL supports ILIKE, SQLite/MySQL use LOWER() with LIKE
         $useIlike = DB::getDriverName() === 'pgsql';
         
+        $today = now()->startOfDay();
+        
         $schedules = ShippingSchedule::where('is_active', true)
+            // Filter to only show schedules starting from today
+            // Check either ets_pol or next_sailing_date - show if either is >= today
+            ->where(function ($q) use ($today) {
+                $q->where(function ($query) use ($today) {
+                    // Schedule is valid if ets_pol exists and is >= today
+                    $query->whereNotNull('ets_pol')
+                          ->where('ets_pol', '>=', $today);
+                })->orWhere(function ($query) use ($today) {
+                    // OR if next_sailing_date exists and is >= today
+                    $query->whereNotNull('next_sailing_date')
+                          ->where('next_sailing_date', '>=', $today);
+                });
+            })
             ->when($polName && $podName, function ($q) use ($polName, $polCode, $podName, $podCode, $useIlike) {
                 // Filter schedules by route if POL/POD selected
                 // Match on port name OR code (handles "City (CODE), Country" format)
