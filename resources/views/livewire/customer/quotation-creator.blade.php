@@ -328,7 +328,7 @@
                 'existingItems' => $existingItems,
                 'serviceType' => $serviceTypeForRepeater,
                 'unitSystem' => 'metric'
-            ], key('commodity-repeater-' . ($quotation->id ?? 'new') . '-' . now()->timestamp))
+            ], key('commodity-repeater-' . ($quotation->id ?? 'new')))
         </div>
     </div>
     
