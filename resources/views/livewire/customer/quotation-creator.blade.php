@@ -104,7 +104,7 @@
         
         {{-- Debug info (temporary) - Always visible to diagnose issues --}}
         <div class="mb-4 text-xs text-gray-400 bg-gray-50 p-2 rounded border border-gray-200">
-            <strong>Debug:</strong> POL: "{{ $pol }}" | POD: "{{ $pod }}" | POL filled: {{ !empty(trim($pol)) ? 'YES' : 'NO' }} | POD filled: {{ !empty(trim($pod)) ? 'YES' : 'NO' }} | Schedule ID: {{ $selected_schedule_id ?? 'null' }} | Show Articles: {{ $showArticles ? 'YES' : 'NO' }} | Schedules found: {{ $schedules->count() ?? 0 }}
+            <strong>Debug:</strong> POL: "{{ $pol }}" | POD: "{{ $pod }}" | POL filled: {{ !empty(trim($pol)) ? 'YES' : 'NO' }} | POD filled: {{ !empty(trim($pod)) ? 'YES' : 'NO' }} | Schedule ID: {{ $selected_schedule_id ?? 'null' }} | Commodity Type: "{{ $commodity_type ?? 'NULL' }}" | Show Articles: {{ $showArticles ? 'YES' : 'NO' }} | Schedules found: {{ $schedules->count() ?? 0 }}
         </div>
         
         @if($pol && $pod)
@@ -150,6 +150,7 @@
                     Commodity Type <span class="text-red-500">*</span>
                 </label>
                 <select wire:model="commodity_type" 
+                        wire:change="$refresh"
                         class="form-select w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
                         required>
                     <option value="">-- Select Commodity Type --</option>
