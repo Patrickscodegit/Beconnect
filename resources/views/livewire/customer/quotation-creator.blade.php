@@ -287,19 +287,48 @@
         
         {{-- Detailed Quote Form (Multi-Commodity Items) --}}
         <div x-show="quotationMode === 'detailed'" x-cloak>
-            @if($quotation)
-                @livewire('commodity-items-repeater', [
-                    'existingItems' => $quotation->commodityItems ?? [],
-                    'serviceType' => $service_type,
-                    'unitSystem' => 'metric'
-                ], key('commodity-repeater-' . $quotation->id))
-            @else
-                @livewire('commodity-items-repeater', [
-                    'existingItems' => [],
-                    'serviceType' => $service_type,
-                    'unitSystem' => 'metric'
-                ], key('commodity-repeater-new'))
-            @endif
+            @php
+                // Ensure quotation has commodityItems relationship loaded
+                $existingItems = [];
+                $serviceTypeForRepeater = '';
+                
+                if ($quotation) {
+                    try {
+                        // Load relationship safely
+                        $quotation = $quotation->fresh(['commodityItems']);
+                        
+                        // Convert collection to array format expected by component
+                        if ($quotation->commodityItems && $quotation->commodityItems->isNotEmpty()) {
+                            $existingItems = $quotation->commodityItems->map(function ($item) {
+                                // Convert model to array, removing timestamps and relations
+                                $array = $item->toArray();
+                                // Remove timestamps and relationship keys
+                                unset($array['created_at'], $array['updated_at'], $array['quotation_request_id']);
+                                return $array;
+                            })->toArray();
+                        }
+                        
+                        // Ensure serviceType is set, default to service_type or empty string
+                        $serviceTypeForRepeater = $service_type ?: ($quotation->service_type ?? '');
+                    } catch (\Exception $e) {
+                        // If there's an error loading, start with empty array
+                        \Log::error('Error loading commodity items for quotation', [
+                            'quotation_id' => $quotation->id ?? null,
+                            'error' => $e->getMessage()
+                        ]);
+                        $existingItems = [];
+                        $serviceTypeForRepeater = $service_type ?: '';
+                    }
+                } else {
+                    // No quotation yet, use empty array
+                    $serviceTypeForRepeater = $service_type ?: '';
+                }
+            @endphp
+            @livewire('commodity-items-repeater', [
+                'existingItems' => $existingItems,
+                'serviceType' => $serviceTypeForRepeater,
+                'unitSystem' => 'metric'
+            ], key('commodity-repeater-' . ($quotation->id ?? 'new') . '-' . now()->timestamp))
         </div>
     </div>
     
