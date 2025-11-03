@@ -214,7 +214,7 @@ class CustomerQuotationController extends Controller
             $quotationRequest->client_email !== $user->email) {
             abort(403, 'Unauthorized access to this quotation');
         }
-        
+
         // Check if editing is allowed
         $canEdit = in_array($quotationRequest->status, ['draft', 'pending', 'processing']);
 

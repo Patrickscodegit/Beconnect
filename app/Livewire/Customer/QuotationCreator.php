@@ -180,17 +180,8 @@ class QuotationCreator extends Component
             // Refresh quotation to ensure relationships are loaded
             $this->quotation = $this->quotation->fresh(['selectedSchedule.carrier']);
             
-            // Check if we should show articles (use trim to handle whitespace-only strings)
-            $polFilled = !empty(trim($this->pol));
-            $podFilled = !empty(trim($this->pod));
-            $scheduleSelected = $this->selected_schedule_id !== null && $this->selected_schedule_id > 0;
-            
-            $this->showArticles = $polFilled && $podFilled && $scheduleSelected;
-            
-            // Emit event to SmartArticleSelector to reload
-            if ($this->showArticles) {
-                $this->dispatch('quotationUpdated');
-            }
+            // Update showArticles flag using shared method
+            $this->updateShowArticles();
             
             // INFO-level logging for production debugging
             Log::info('QuotationCreator state updated', [
@@ -199,11 +190,43 @@ class QuotationCreator extends Component
                 'pol' => $this->pol,
                 'pod' => $this->pod,
                 'selected_schedule_id' => $this->selected_schedule_id,
-                'pol_filled' => $polFilled,
-                'pod_filled' => $podFilled,
-                'schedule_selected' => $scheduleSelected,
+                'pol_filled' => !empty(trim($this->pol)),
+                'pod_filled' => !empty(trim($this->pod)),
+                'schedule_selected' => $this->selected_schedule_id !== null && $this->selected_schedule_id > 0,
                 'show_articles' => $this->showArticles,
             ]);
+        }
+    }
+    
+    /**
+     * Explicit handler for schedule selection to ensure immediate update
+     */
+    public function updatedSelectedScheduleId($value)
+    {
+        // Ensure value is cast to int
+        $this->selected_schedule_id = $value ? (int) $value : null;
+        
+        // Immediately update showArticles (don't wait for general updated())
+        $this->updateShowArticles();
+        
+        // Call parent updated() for database save and logging
+        $this->updated('selected_schedule_id');
+    }
+    
+    /**
+     * Shared method to update showArticles flag based on current state
+     */
+    protected function updateShowArticles()
+    {
+        $polFilled = !empty(trim($this->pol));
+        $podFilled = !empty(trim($this->pod));
+        $scheduleSelected = $this->selected_schedule_id !== null && $this->selected_schedule_id > 0;
+        
+        $this->showArticles = $polFilled && $podFilled && $scheduleSelected;
+        
+        // Emit event to SmartArticleSelector to reload
+        if ($this->showArticles) {
+            $this->dispatch('quotationUpdated');
         }
     }
     
@@ -416,10 +439,7 @@ class QuotationCreator extends Component
         
         // Update showArticles flag based on current state (check in render to ensure it's always up-to-date)
         // This is especially important when using wire:ignore for POL/POD inputs
-        $polFilled = !empty(trim($this->pol));
-        $podFilled = !empty(trim($this->pod));
-        $scheduleSelected = $this->selected_schedule_id !== null && $this->selected_schedule_id > 0;
-        $this->showArticles = $polFilled && $podFilled && $scheduleSelected;
+        $this->updateShowArticles();
         
         return view('livewire.customer.quotation-creator', compact(
             'polPorts',

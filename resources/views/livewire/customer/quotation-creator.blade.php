@@ -109,10 +109,12 @@
         
         @if($pol && $pod)
             <select wire:model="selected_schedule_id" 
+                    wire:change="$refresh"
+                    wire:key="schedule-select-{{ md5($pol) }}-{{ md5($pod) }}"
                     class="form-select w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
                 <option value="">-- Select a Sailing --</option>
                 @foreach($schedules as $schedule)
-                    <option value="{{ $schedule->id }}">
+                    <option value="{{ $schedule->id }}" {{ $selected_schedule_id == $schedule->id ? 'selected' : '' }}>
                         {{ $schedule->carrier->name ?? 'Unknown Carrier' }} - 
                         Departure: {{ $schedule->ets_pol ? $schedule->ets_pol->format('M d, Y') : ($schedule->next_sailing_date ? $schedule->next_sailing_date->format('M d, Y') : 'TBA') }}
                         @if($schedule->eta_pod)
