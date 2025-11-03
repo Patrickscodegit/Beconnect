@@ -2304,6 +2304,37 @@ $articles = Cache::remember('robaws_articles', 3600, function () {
 
 ### Recent Changes
 
+#### November 3, 2025 - Schedule Selection Fix & POL/POD Format Standardization
+**Changes**:
+- Fixed Livewire schedule selection syncing issue where `selected_schedule_id` wasn't updating on first selection
+- Added explicit `updatedSelectedScheduleId()` hook for immediate `showArticles` update
+- Extracted shared `updateShowArticles()` method for consistency across `updated()` and `render()` methods
+- Added `wire:key` and `wire:change` to schedule dropdown for reliable syncing
+- Added explicit `selected` attribute to option elements for browser compatibility
+- Created migration to normalize existing article POL/POD to standardized "City (CODE), Country" format
+- Verified `ArticleNameParser` outputs standard format for all new articles
+
+**Impact**:
+- Smart article selector now appears immediately when schedule is first selected
+- Consistent POL/POD format across all articles and quotations enables 100% matching
+- Improved reliability of schedule selection in customer portal
+- Better user experience with instant feedback
+
+**Files Changed**:
+- `app/Livewire/Customer/QuotationCreator.php` - Added `updatedSelectedScheduleId()` and `updateShowArticles()` methods
+- `resources/views/livewire/customer/quotation-creator.blade.php` - Added `wire:key`, `wire:change`, and `selected` attribute
+- `database/migrations/2025_11_02_184403_normalize_article_pol_pod_format.php` - New migration for format normalization
+
+**Technical Details**:
+- Multiple safeguards ensure schedule selection works: explicit hook, shared method, DOM stability via `wire:key`, and backup `wire:change`
+- Format standardization ensures article matching works correctly (POL/POD must match exactly for 100% match)
+- Migration normalizes existing data while new data uses standard format from `ArticleNameParser`
+
+**Deployment**:
+- ✅ Committed to main (commit b83cb62)
+- ✅ Pushed to production
+- ⏳ Migration to be run on production
+
 #### January 23, 2025 - West African Ports Addition
 **Changes**:
 - Added **Nouakchott, Mauritania** (Code: NKC)
@@ -2385,6 +2416,11 @@ $articles = Cache::remember('robaws_articles', 3600, function () {
 - Customer portal mobile app
 
 ### Changelog
+
+**v2.5 (November 2025)**
+- ✅ Schedule selection syncing fixed
+- ✅ POL/POD format standardized
+- ✅ Smart article selector instant display
 
 **v2.1 (January 2025)**
 - ✅ West African ports added
@@ -3954,8 +3990,8 @@ The Article Sync System successfully evolved from an initial implementation thro
 
 ### Production Status
 - **Uptime**: 99.9%
-- **Last Deployment**: January 27, 2025
-- **Version**: 2.4
+- **Last Deployment**: November 3, 2025
+- **Version**: 2.5
 - **Status**: ✅ Operational
 
 ### Component Status
@@ -3967,9 +4003,10 @@ The Article Sync System successfully evolved from an initial implementation thro
 - **Database**: ✅ Healthy
 - **File Storage**: ✅ Operational
 - **Email Service**: ✅ Operational
-- **Smart Article Selection**: ✅ Operational
+- **Smart Article Selection**: ✅ Operational (Schedule selection fixed)
 - **Article Sync Operations**: ✅ Fixed and Operational
-- **Server Stability**: ✅ Stable (0.5s rate limiting) (NEW)
+- **Server Stability**: ✅ Stable (0.5s rate limiting)
+- **POL/POD Format**: ✅ Standardized ("City (CODE), Country")
 
 ### Recent Performance
 - **Avg Response Time**: 1.2s
@@ -3979,8 +4016,8 @@ The Article Sync System successfully evolved from an initial implementation thro
 
 ---
 
-*This master summary document serves as the comprehensive technical reference for the Bconnect system. Last updated based on analysis of 150+ documentation files, live system inspection, Smart Article Selection System implementation, Article Enhancement Integration, Article Sync Operations fix, and Article Sync System Evolution (server stability crisis resolution).*
+*This master summary document serves as the comprehensive technical reference for the Bconnect system. Last updated based on analysis of 150+ documentation files, live system inspection, Smart Article Selection System implementation, Article Enhancement Integration, Article Sync Operations fix, Article Sync System Evolution (server stability crisis resolution), Schedule Selection Fix, and POL/POD Format Standardization.*
 
-**Document Version**: 2.4  
-**Last Updated**: January 27, 2025  
+**Document Version**: 2.5  
+**Last Updated**: November 3, 2025  
 **Maintained By**: Bconnect Development Team
