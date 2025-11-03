@@ -31,12 +31,17 @@ class CommodityItemsRepeater extends Component
         'items.*.quantity' => 'quantity',
     ];
 
+    public $existingItems = []; // Store original existingItems to prevent prop sync from resetting
+    
     public function mount($existingItems = [], $serviceType = '', $unitSystem = 'metric')
     {
         $this->serviceType = $serviceType;
         $this->unitSystem = $unitSystem;
         $this->commodityTypes = config('quotation.commodity_types');
         $this->unitSystems = config('quotation.unit_systems');
+        
+        // Store original existingItems
+        $this->existingItems = $existingItems;
         
         // Only initialize items if they haven't been set yet (mount is only called once)
         // If existingItems is provided, use them; otherwise start with empty array
@@ -46,6 +51,20 @@ class CommodityItemsRepeater extends Component
             // Only set to empty array if items is not already set
             $this->items = [];
         }
+    }
+    
+    /**
+     * Prevent Livewire from syncing existingItems prop if items array has been modified
+     * This prevents the parent component from resetting items when it re-renders
+     */
+    public function updatedExistingItems($value)
+    {
+        // Only update items if they're currently empty and new value is provided
+        // This prevents parent re-renders from overwriting items that were added
+        if (empty($this->items) && !empty($value)) {
+            $this->items = $value;
+        }
+        // Otherwise, ignore the prop update to preserve user-added items
     }
 
     public function addItem()
