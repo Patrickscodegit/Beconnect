@@ -221,10 +221,41 @@ class QuotationCreator extends Component
         $polFilled = !empty(trim($this->pol));
         $podFilled = !empty(trim($this->pod));
         $scheduleSelected = $this->selected_schedule_id !== null && $this->selected_schedule_id > 0;
+        $commoditySelected = !empty($this->commodity_type);
         
-        $this->showArticles = $polFilled && $podFilled && $scheduleSelected;
+        // Only show articles when ALL required fields are filled (POL, POD, Schedule, Commodity)
+        // Requiring commodity ensures articles are properly filtered from the start
+        $this->showArticles = $polFilled && $podFilled && $scheduleSelected && $commoditySelected;
         
         // Emit event to SmartArticleSelector to reload
+        if ($this->showArticles) {
+            $this->dispatch('quotationUpdated');
+        }
+    }
+    
+    /**
+     * Explicit handler for commodity_type changes to ensure proper filtering
+     */
+    public function updatedCommodityType($value)
+    {
+        // Save commodity_type to quotation (this updates updated_at timestamp)
+        $this->updated('commodity_type');
+        
+        // Refresh quotation to ensure we have the latest updated_at timestamp
+        $this->quotation = $this->quotation->fresh();
+        
+        // Clear cache for article suggestions when commodity changes
+        // Note: Cache key includes updated_at timestamp, so old cache is automatically invalidated
+        // We clear explicitly to ensure no stale cache remains
+        if ($this->quotation) {
+            $service = app(\App\Services\SmartArticleSelectionService::class);
+            $service->clearCache($this->quotation);
+        }
+        
+        // Update showArticles flag (commodity is now selected)
+        $this->updateShowArticles();
+        
+        // Reload suggestions if articles are showing
         if ($this->showArticles) {
             $this->dispatch('quotationUpdated');
         }

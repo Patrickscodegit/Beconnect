@@ -198,7 +198,7 @@
         </div>
     </div>
     
-    {{-- SMART ARTICLE SELECTOR - Shows when POL+POD+Schedule selected --}}
+    {{-- SMART ARTICLE SELECTOR - Shows when POL+POD+Schedule+Commodity selected --}}
     @if($showArticles && $quotation)
         <div class="bg-white rounded-lg shadow p-8 mb-6">
             <h2 class="text-2xl font-bold text-gray-900 mb-6">
@@ -218,6 +218,22 @@
                 'showPricing' => true,
                 'isEditable' => true
             ], key('article-selector-' . $quotation->id))
+        </div>
+    @elseif($pol && $pod && $selected_schedule_id && !$commodity_type)
+        {{-- Prompt to select commodity type --}}
+        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-6">
+            <div class="flex items-start">
+                <i class="fas fa-info-circle text-yellow-600 text-3xl mr-4"></i>
+                <div>
+                    <h3 class="text-lg font-semibold text-yellow-900 mb-2">Select Commodity Type</h3>
+                    <p class="text-sm text-yellow-800">
+                        To see suggested services and get instant pricing, please select a commodity type from the section above.
+                    </p>
+                    <p class="text-sm text-yellow-700 mt-2">
+                        💡 <strong>Tip:</strong> Selecting your commodity type helps us show the most relevant articles and accurate pricing for your shipment.
+                    </p>
+                </div>
+            </div>
         </div>
     @elseif($pol && $pod && !$selected_schedule_id)
         {{-- Prompt to select schedule --}}
