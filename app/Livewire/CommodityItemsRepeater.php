@@ -83,8 +83,13 @@ class CommodityItemsRepeater extends Component
                 'input_unit_system' => $this->unitSystem,
             ];
             
+            // Force Livewire to re-render by reassigning the array
+            // This ensures Livewire detects the change
+            $this->items = array_values($this->items);
+            
             \Log::info('CommodityItemsRepeater::addItem() completed', [
-                'new_items_count' => count($this->items)
+                'new_items_count' => count($this->items),
+                'last_item_id' => end($this->items)['id'] ?? null
             ]);
         } catch (\Exception $e) {
             \Log::error('CommodityItemsRepeater::addItem() failed', [
