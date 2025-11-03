@@ -33,6 +33,14 @@ class QuotationCreator extends Component
     public $selected_schedule_id = null;
     public $customer_reference = '';
     
+    // Quotation mode: 'quick' or 'detailed'
+    public $quotationMode = 'detailed';
+    
+    // Quick Quote fields
+    public $cargo_weight = '';
+    public $cargo_volume = '';
+    public $cargo_dimensions = '';
+    
     // File uploads
     public $supporting_files = [];
     
@@ -156,7 +164,7 @@ class QuotationCreator extends Component
         
         // Save to draft quotation
         if ($this->quotation) {
-            $this->quotation->update([
+            $updateData = [
                 'pol' => $this->pol,
                 'pod' => $this->pod,
                 'por' => $this->por,
@@ -175,7 +183,16 @@ class QuotationCreator extends Component
                 'special_requirements' => $this->special_requirements,
                 'selected_schedule_id' => $this->selected_schedule_id,
                 'customer_reference' => $this->customer_reference,
-            ]);
+            ];
+            
+            // Add Quick Quote fields if in quick mode
+            if ($this->quotationMode === 'quick') {
+                $updateData['cargo_weight'] = $this->cargo_weight ?: null;
+                $updateData['cargo_volume'] = $this->cargo_volume ?: null;
+                $updateData['cargo_dimensions'] = $this->cargo_dimensions ?: null;
+            }
+            
+            $this->quotation->update($updateData);
             
             // Refresh quotation to ensure relationships are loaded
             $this->quotation = $this->quotation->fresh(['selectedSchedule.carrier']);

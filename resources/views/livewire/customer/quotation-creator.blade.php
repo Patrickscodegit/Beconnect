@@ -139,63 +139,167 @@
     </div>
     
     {{-- Cargo Information --}}
-    <div class="bg-white rounded-lg shadow p-8 mb-6">
+    <div class="bg-white rounded-lg shadow p-8 mb-6"
+         x-data="{ quotationMode: @entangle('quotationMode') }">
         <h2 class="text-2xl font-bold text-gray-900 mb-6">
             <i class="fas fa-box mr-2"></i>Cargo Information
         </h2>
         
-        <div class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Commodity Type <span class="text-red-500">*</span>
-                </label>
-                <select wire:model="commodity_type" 
-                        wire:change="$refresh"
-                        class="form-select w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                        required>
-                    <option value="">-- Select Commodity Type --</option>
-                    <option value="cars">Cars</option>
-                    <option value="trucks">Trucks</option>
-                    <option value="machinery">Machinery</option>
-                    <option value="general_goods">General Goods</option>
-                    <option value="personal_goods">Personal Goods</option>
-                    <option value="motorcycles">Motorcycles</option>
-                    <option value="breakbulk">Break Bulk</option>
-                </select>
-                @error('commodity_type') <span class="text-red-500 text-xs mt-1">{{ $message }}</span> @enderror
-            </div>
+        {{-- Toggle Between Quick Quote and Detailed Quote --}}
+        <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg border-2 border-blue-200 mb-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-exchange-alt mr-2 text-blue-600"></i>Choose Your Input Method
+            </h3>
             
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Cargo Description <span class="text-red-500">*</span>
+            <div class="space-y-3">
+                {{-- Quick Quote Option --}}
+                <label class="flex items-start p-4 border-2 rounded-lg cursor-pointer transition-all"
+                       :class="quotationMode === 'quick' ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-white hover:border-blue-300'"
+                       wire:ignore>
+                    <input type="radio" 
+                           x-model="quotationMode" 
+                           value="quick" 
+                           class="mt-1 mr-3 w-5 h-5 text-blue-600"
+                           @change="$wire.set('quotationMode', 'quick')">
+                    <div class="flex-1">
+                        <div class="font-semibold text-gray-900">
+                            <i class="fas fa-bolt text-yellow-500 mr-2"></i>Quick Quote
+                        </div>
+                        <p class="text-sm text-gray-600 mt-1">Fast entry for simple shipments with basic cargo details</p>
+                    </div>
                 </label>
-                <textarea wire:model.debounce.500ms="cargo_description"
-                          rows="4"
-                          class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                          placeholder="Describe your cargo in detail (e.g., 1x Toyota Corolla 2020, white, running condition)"
-                          required></textarea>
-                @error('cargo_description') <span class="text-red-500 text-xs mt-1">{{ $message }}</span> @enderror
-            </div>
-            
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Special Requirements <span class="text-gray-400 text-xs">(Optional)</span>
+                
+                {{-- Detailed Quote Option --}}
+                <label class="flex items-start p-4 border-2 rounded-lg cursor-pointer transition-all"
+                       :class="quotationMode === 'detailed' ? 'border-green-500 bg-green-50' : 'border-gray-300 bg-white hover:border-green-300'"
+                       wire:ignore>
+                    <input type="radio" 
+                           x-model="quotationMode" 
+                           value="detailed" 
+                           class="mt-1 mr-3 w-5 h-5 text-green-600"
+                           @change="$wire.set('quotationMode', 'detailed')">
+                    <div class="flex-1">
+                        <div class="font-semibold text-gray-900">
+                            <i class="fas fa-cubes text-green-600 mr-2"></i>Detailed Quote
+                            <span class="ml-2 bg-green-500 text-white px-2 py-0.5 rounded-full text-xs font-semibold">RECOMMENDED</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-1">Multi-commodity breakdown for most accurate pricing and faster processing</p>
+                    </div>
                 </label>
-                <textarea wire:model.debounce.500ms="special_requirements"
-                          rows="3"
-                          class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                          placeholder="Any special handling, insurance, or documentation requirements..."></textarea>
             </div>
-            
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Customer Reference <span class="text-gray-400 text-xs">(Optional)</span>
-                </label>
-                <input type="text" 
-                       wire:model.debounce.500ms="customer_reference"
-                       class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                       placeholder="Your internal reference number">
+        </div>
+        
+        {{-- Quick Quote Form --}}
+        <div x-show="quotationMode === 'quick'" x-cloak>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Commodity Type <span class="text-red-500">*</span>
+                    </label>
+                    <select wire:model="commodity_type" 
+                            wire:change="$refresh"
+                            class="form-select w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                            required>
+                        <option value="">-- Select Commodity Type --</option>
+                        <option value="cars">Cars</option>
+                        <option value="trucks">Trucks</option>
+                        <option value="machinery">Machinery</option>
+                        <option value="general_goods">General Goods</option>
+                        <option value="personal_goods">Personal Goods</option>
+                        <option value="motorcycles">Motorcycles</option>
+                        <option value="breakbulk">Break Bulk</option>
+                    </select>
+                    @error('commodity_type') <span class="text-red-500 text-xs mt-1">{{ $message }}</span> @enderror
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Cargo Description <span class="text-red-500">*</span>
+                    </label>
+                    <textarea wire:model.debounce.500ms="cargo_description"
+                              rows="4"
+                              class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                              placeholder="Describe your cargo in detail (e.g., 1x Toyota Corolla 2020, white, running condition)"
+                              required></textarea>
+                    @error('cargo_description') <span class="text-red-500 text-xs mt-1">{{ $message }}</span> @enderror
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Weight (kg) <span class="text-gray-400 text-xs">(Optional)</span>
+                        </label>
+                        <input type="number" 
+                               wire:model.debounce.500ms="cargo_weight"
+                               step="0.01" 
+                               min="0"
+                               class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                               placeholder="e.g., 1500">
+                        @error('cargo_weight') <span class="text-red-500 text-xs mt-1">{{ $message }}</span> @enderror
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Volume (m³) <span class="text-gray-400 text-xs">(Optional)</span>
+                        </label>
+                        <input type="number" 
+                               wire:model.debounce.500ms="cargo_volume"
+                               step="0.01" 
+                               min="0"
+                               class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                               placeholder="e.g., 25.5">
+                        @error('cargo_volume') <span class="text-red-500 text-xs mt-1">{{ $message }}</span> @enderror
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Dimensions <span class="text-gray-400 text-xs">(Optional)</span>
+                        </label>
+                        <input type="text" 
+                               wire:model.debounce.500ms="cargo_dimensions"
+                               class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                               placeholder="L x W x H (cm)">
+                        @error('cargo_dimensions') <span class="text-red-500 text-xs mt-1">{{ $message }}</span> @enderror
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Special Requirements <span class="text-gray-400 text-xs">(Optional)</span>
+                    </label>
+                    <textarea wire:model.debounce.500ms="special_requirements"
+                              rows="3"
+                              class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                              placeholder="Any special handling, insurance, or documentation requirements..."></textarea>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Customer Reference <span class="text-gray-400 text-xs">(Optional)</span>
+                    </label>
+                    <input type="text" 
+                           wire:model.debounce.500ms="customer_reference"
+                           class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                           placeholder="Your internal reference number">
+                </div>
             </div>
+        </div>
+        
+        {{-- Detailed Quote Form (Multi-Commodity Items) --}}
+        <div x-show="quotationMode === 'detailed'" x-cloak>
+            @if($quotation)
+                @livewire('commodity-items-repeater', [
+                    'existingItems' => $quotation->commodityItems ?? [],
+                    'serviceType' => $service_type,
+                    'unitSystem' => 'metric'
+                ], key('commodity-repeater-' . $quotation->id))
+            @else
+                @livewire('commodity-items-repeater', [
+                    'existingItems' => [],
+                    'serviceType' => $service_type,
+                    'unitSystem' => 'metric'
+                ], key('commodity-repeater-new'))
+            @endif
         </div>
     </div>
     
