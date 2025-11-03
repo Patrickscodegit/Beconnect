@@ -38,9 +38,13 @@ class CommodityItemsRepeater extends Component
         $this->commodityTypes = config('quotation.commodity_types');
         $this->unitSystems = config('quotation.unit_systems');
         
-        // Initialize with existing items or start with empty array
+        // Only initialize items if they haven't been set yet (mount is only called once)
+        // If existingItems is provided, use them; otherwise start with empty array
         if (!empty($existingItems)) {
             $this->items = $existingItems;
+        } elseif (empty($this->items)) {
+            // Only set to empty array if items is not already set
+            $this->items = [];
         }
     }
 
