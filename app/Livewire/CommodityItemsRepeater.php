@@ -46,37 +46,53 @@ class CommodityItemsRepeater extends Component
 
     public function addItem()
     {
-        $this->items[] = [
-            'id' => uniqid(),
-            'commodity_type' => '',  // This will be used for form display
-            'category' => '',
-            'make' => '',
-            'type_model' => '',
-            'condition' => '',
-            'year' => '',
-            'fuel_type' => '',
-            'length_cm' => '',
-            'width_cm' => '',
-            'height_cm' => '',
-            'cbm' => '',
-            'weight_kg' => '',
-            'bruto_weight_kg' => '',
-            'netto_weight_kg' => '',
-            'wheelbase_cm' => '',
-            'quantity' => 1,
-            'has_parts' => false,
-            'parts_description' => '',
-            'has_trailer' => false,
-            'has_wooden_cradle' => false,
-            'has_iron_cradle' => false,
-            'is_forkliftable' => false,
-            'is_hazardous' => false,
-            'is_unpacked' => false,
-            'is_ispm15' => false,
-            'extra_info' => '',
-            'attachments' => [],
-            'input_unit_system' => $this->unitSystem,
-        ];
+        try {
+            \Log::info('CommodityItemsRepeater::addItem() called', [
+                'current_items_count' => count($this->items)
+            ]);
+            
+            $this->items[] = [
+                'id' => uniqid(),
+                'commodity_type' => '',  // This will be used for form display
+                'category' => '',
+                'make' => '',
+                'type_model' => '',
+                'condition' => '',
+                'year' => '',
+                'fuel_type' => '',
+                'length_cm' => '',
+                'width_cm' => '',
+                'height_cm' => '',
+                'cbm' => '',
+                'weight_kg' => '',
+                'bruto_weight_kg' => '',
+                'netto_weight_kg' => '',
+                'wheelbase_cm' => '',
+                'quantity' => 1,
+                'has_parts' => false,
+                'parts_description' => '',
+                'has_trailer' => false,
+                'has_wooden_cradle' => false,
+                'has_iron_cradle' => false,
+                'is_forkliftable' => false,
+                'is_hazardous' => false,
+                'is_unpacked' => false,
+                'is_ispm15' => false,
+                'extra_info' => '',
+                'attachments' => [],
+                'input_unit_system' => $this->unitSystem,
+            ];
+            
+            \Log::info('CommodityItemsRepeater::addItem() completed', [
+                'new_items_count' => count($this->items)
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('CommodityItemsRepeater::addItem() failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            throw $e;
+        }
     }
 
     public function removeItem($index)
