@@ -615,7 +615,7 @@ class RobawsArticleCache extends Model
      */
     private function getVehicleCategoryMapping($commodityItem): ?string
     {
-        $category = $commodityItem->vehicle_category ?? null;
+        $category = $commodityItem->category ?? null;
 
         // Map vehicle categories to Robaws types
         $vehicleMapping = [

@@ -48,14 +48,13 @@ class QuotationCreator extends Component
     public bool $showArticles = false;
     public bool $loading = false;
     public bool $submitting = false;
-    public bool $hasCommodityItemType = false; // Track if any commodity item has type selected (for detailed quote mode)
     
     // Listen for article selection events and port updates
     protected $listeners = [
         'articleAdded' => 'handleArticleAdded',
         'articleRemoved' => 'handleArticleRemoved',
         'port-updated' => 'handlePortUpdated',
-        'commodity-item-type-changed' => 'commodityItemTypeChanged',
+        'commodity-item-saved' => 'handleCommodityItemSaved',
     ];
     
     // Handle port-updated event from JavaScript (fallback method)
@@ -64,6 +63,28 @@ class QuotationCreator extends Component
         if (isset($data['field']) && isset($data['value'])) {
             $this->setPort($data['field'], $data['value']);
         }
+    }
+    
+    /**
+     * Handle commodity item saved event from nested CommodityItemsRepeater component
+     * Refresh quotation and update showArticles flag
+     */
+    public function handleCommodityItemSaved($data)
+    {
+        // Refresh quotation to load latest commodityItems
+        if ($this->quotation) {
+            $this->quotation = $this->quotation->fresh(['commodityItems', 'selectedSchedule.carrier']);
+        }
+        
+        // Update showArticles flag (commodity item might now have commodity_type set)
+        $this->updateShowArticles();
+        
+        // Log for debugging
+        Log::info('QuotationCreator::handleCommodityItemSaved() called', [
+            'quotation_id' => $this->quotationId,
+            'commodity_items_count' => $this->quotation?->commodityItems?->count() ?? 0,
+            'show_articles' => $this->showArticles
+        ]);
     }
     
     // Public method to set POL/POD from JavaScript (used with wire:ignore)
@@ -250,9 +271,8 @@ class QuotationCreator extends Component
         }
         
         // Detailed Quote mode: check if quotation has commodity items with commodity_type set
-        // Check both database (saved items) and Livewire component state (unsaved items)
+        // Items are now auto-saved to database, so we only need to check the database
         if (!$commoditySelected && $this->quotationMode === 'detailed') {
-            // Check database (for saved items)
             if ($this->quotation) {
                 $quotation = $this->quotation->fresh(['commodityItems']);
                 if ($quotation->commodityItems && $quotation->commodityItems->count() > 0) {
@@ -264,12 +284,6 @@ class QuotationCreator extends Component
                         }
                     }
                 }
-            }
-            
-            // Also check Livewire component state (for unsaved items in nested component)
-            // This is tracked via the $hasCommodityItemType property which is updated via events
-            if (!$commoditySelected && $this->hasCommodityItemType) {
-                $commoditySelected = true;
             }
         }
         
@@ -284,15 +298,34 @@ class QuotationCreator extends Component
     }
     
     /**
-     * Handle commodity item type change event from nested CommodityItemsRepeater component
+     * Get effective commodity type for display (checks both simple field and commodity items)
      */
-    public function commodityItemTypeChanged($data)
+    public function getEffectiveCommodityType(): string
     {
-        // Update state based on event data
-        $this->hasCommodityItemType = $data['has_commodity_type'] ?? false;
+        // Quick Quote mode: return simple commodity_type field
+        if ($this->quotationMode === 'quick' && !empty($this->commodity_type)) {
+            return $this->commodity_type;
+        }
         
-        // Update showArticles when commodity_type is selected in detailed quote mode
-        $this->updateShowArticles();
+        // Detailed Quote mode: check commodityItems relationship
+        if ($this->quotationMode === 'detailed' && $this->quotation) {
+            $quotation = $this->quotation->fresh(['commodityItems']);
+            if ($quotation->commodityItems && $quotation->commodityItems->count() > 0) {
+                // Get first item with commodity_type set
+                foreach ($quotation->commodityItems as $item) {
+                    if (!empty($item->commodity_type)) {
+                        $type = $item->commodity_type;
+                        // If it's a vehicle, include the category
+                        if ($type === 'vehicles' && !empty($item->category)) {
+                            return $type . ' (' . $item->category . ')';
+                        }
+                        return $type;
+                    }
+                }
+            }
+        }
+        
+        return '';
     }
     
     /**
@@ -541,8 +574,9 @@ class QuotationCreator extends Component
         })->toArray();
         
         // Ensure quotation is fresh with relationships for child components
+        // Load both selectedSchedule.carrier and commodityItems for proper detection
         if ($this->quotation) {
-            $this->quotation = $this->quotation->fresh(['selectedSchedule.carrier']);
+            $this->quotation = $this->quotation->fresh(['selectedSchedule.carrier', 'commodityItems']);
         }
         
         // Update showArticles flag based on current state (check in render to ensure it's always up-to-date)

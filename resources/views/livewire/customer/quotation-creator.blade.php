@@ -104,7 +104,7 @@
         
         {{-- Debug info (temporary) - Always visible to diagnose issues --}}
         <div class="mb-4 text-xs text-gray-400 bg-gray-50 p-2 rounded border border-gray-200">
-            <strong>Debug:</strong> POL: "{{ $pol }}" | POD: "{{ $pod }}" | POL filled: {{ !empty(trim($pol)) ? 'YES' : 'NO' }} | POD filled: {{ !empty(trim($pod)) ? 'YES' : 'NO' }} | Schedule ID: {{ $selected_schedule_id ?? 'null' }} | Commodity Type: "{{ $commodity_type ?? 'NULL' }}" | Show Articles: {{ $showArticles ? 'YES' : 'NO' }} | Schedules found: {{ $schedules->count() ?? 0 }}
+            <strong>Debug:</strong> POL: "{{ $pol }}" | POD: "{{ $pod }}" | POL filled: {{ !empty(trim($pol)) ? 'YES' : 'NO' }} | POD filled: {{ !empty(trim($pod)) ? 'YES' : 'NO' }} | Schedule ID: {{ $selected_schedule_id ?? 'null' }} | Commodity Type: "{{ $this->getEffectiveCommodityType() ?: 'NONE' }}" | Mode: {{ $quotationMode }} | Show Articles: {{ $showArticles ? 'YES' : 'NO' }} | Schedules found: {{ $schedules->count() ?? 0 }}
         </div>
         
         @if($pol && $pod)
@@ -325,6 +325,7 @@
                 }
             @endphp
             @livewire('commodity-items-repeater', [
+                'quotationId' => $quotation->id ?? null,
                 'existingItems' => $existingItems,
                 'serviceType' => $serviceTypeForRepeater,
                 'unitSystem' => 'metric'

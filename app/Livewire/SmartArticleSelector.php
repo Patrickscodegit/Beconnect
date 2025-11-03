@@ -47,9 +47,10 @@ class SmartArticleSelector extends Component
     {
         $this->loading = true;
         
-        // Always refresh quotation to ensure latest data (including commodity_type)
+        // Always refresh quotation to ensure latest data (including commodity_type and commodityItems)
         // This is especially important when schedule is selected before commodity_type
-        $this->quotation = $this->quotation->fresh(['selectedSchedule.carrier']);
+        // and when commodity items are auto-saved in detailed quote mode
+        $this->quotation = $this->quotation->fresh(['selectedSchedule.carrier', 'commodityItems']);
         
         try {
             $service = app(SmartArticleSelectionService::class);

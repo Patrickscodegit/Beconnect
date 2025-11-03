@@ -14,6 +14,7 @@ class CommodityItemsRepeater extends Component
     public $serviceType = '';
     public $commodityTypes;
     public $unitSystems;
+    public $quotationId; // ID of the quotation to save items to
     
     protected $listeners = ['serviceTypeUpdated' => 'updateServiceType'];
     
@@ -33,10 +34,11 @@ class CommodityItemsRepeater extends Component
 
     public $existingItems = []; // Store original existingItems to prevent prop sync from resetting
     
-    public function mount($existingItems = [], $serviceType = '', $unitSystem = 'metric')
+    public function mount($existingItems = [], $serviceType = '', $unitSystem = 'metric', $quotationId = null)
     {
         $this->serviceType = $serviceType;
         $this->unitSystem = $unitSystem;
+        $this->quotationId = $quotationId;
         $this->commodityTypes = config('quotation.commodity_types');
         $this->unitSystems = config('quotation.unit_systems');
         
@@ -71,11 +73,16 @@ class CommodityItemsRepeater extends Component
     {
         try {
             \Log::info('CommodityItemsRepeater::addItem() called', [
-                'current_items_count' => count($this->items)
+                'current_items_count' => count($this->items),
+                'quotation_id' => $this->quotationId
             ]);
             
+            // Don't create database record yet - commodity_type is required (NOT NULL)
+            // We'll create it when the user selects a commodity_type
+            $tempId = uniqid('temp_');
+            
             $this->items[] = [
-                'id' => uniqid(),
+                'id' => $tempId, // Temporary ID until commodity_type is selected
                 'commodity_type' => '',  // This will be used for form display
                 'category' => '',
                 'make' => '',
@@ -125,8 +132,59 @@ class CommodityItemsRepeater extends Component
 
     public function removeItem($index)
     {
-        unset($this->items[$index]);
-        $this->items = array_values($this->items); // Re-index
+        if (isset($this->items[$index])) {
+            $item = $this->items[$index];
+            
+            // Delete from database if it has a database ID (not a temporary ID)
+            if (isset($item['id']) && is_numeric($item['id']) && $this->quotationId) {
+                try {
+                    \App\Models\QuotationCommodityItem::where('id', $item['id'])
+                        ->where('quotation_request_id', $this->quotationId)
+                        ->delete();
+                    
+                    \Log::info('CommodityItemsRepeater::removeItem() deleted from database', [
+                        'item_id' => $item['id'],
+                        'quotation_id' => $this->quotationId
+                    ]);
+                } catch (\Exception $e) {
+                    \Log::error('CommodityItemsRepeater::removeItem() failed to delete from database', [
+                        'item_id' => $item['id'],
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+            
+            unset($this->items[$index]);
+            $this->items = array_values($this->items); // Re-index
+            
+            // Update line numbers for remaining items
+            $this->updateLineNumbers();
+        }
+    }
+    
+    /**
+     * Update line numbers for all items in database
+     */
+    protected function updateLineNumbers()
+    {
+        if (!$this->quotationId) {
+            return;
+        }
+        
+        foreach ($this->items as $index => $item) {
+            if (isset($item['id']) && is_numeric($item['id'])) {
+                try {
+                    \App\Models\QuotationCommodityItem::where('id', $item['id'])
+                        ->where('quotation_request_id', $this->quotationId)
+                        ->update(['line_number' => $index + 1]);
+                } catch (\Exception $e) {
+                    \Log::error('CommodityItemsRepeater::updateLineNumbers() failed', [
+                        'item_id' => $item['id'],
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+        }
     }
 
     public function calculateCbm($index)
@@ -284,20 +342,163 @@ class CommodityItemsRepeater extends Component
             }
         }
         
-        // Check if commodity_type was updated for any item and dispatch event
-        if (preg_match('/^items\.(\d+)\.commodity_type$/', $propertyName, $matches)) {
-            // Check if ANY item has a commodity_type set (not just the one that changed)
-            $hasCommodityType = false;
-            foreach ($this->items as $item) {
-                if (!empty($item['commodity_type'])) {
-                    $hasCommodityType = true;
-                    break;
+        // Auto-save item to database when any field is updated
+        if ($itemIndex !== null && isset($this->items[$itemIndex]) && $this->quotationId) {
+            $item = $this->items[$itemIndex];
+            
+            // Check if this is a commodity_type change and item doesn't have a database ID yet
+            if (strpos($propertyName, '.commodity_type') !== false && !empty($item['commodity_type'])) {
+                // If item has a temporary ID and commodity_type is now set, create database record
+                if (isset($item['id']) && strpos($item['id'], 'temp_') === 0) {
+                    $this->createItemInDatabase($itemIndex, $item);
+                    return; // Don't continue to saveItemToDatabase - we just created it
                 }
             }
             
-            // Dispatch event to parent component (QuotationCreator) to update showArticles
-            $this->dispatch('commodity-item-type-changed', [
-                'has_commodity_type' => $hasCommodityType
+            // Only save if item has a database ID (not a temporary ID)
+            if (isset($item['id']) && is_numeric($item['id'])) {
+                $this->saveItemToDatabase($itemIndex, $item);
+            }
+        }
+    }
+    
+    /**
+     * Create item in database when commodity_type is first selected
+     */
+    protected function createItemInDatabase($index, $item)
+    {
+        if (!$this->quotationId || empty($item['commodity_type'])) {
+            return;
+        }
+        
+        try {
+            // Prepare data for database creation
+            $data = [
+                'quotation_request_id' => $this->quotationId,
+                'line_number' => $index + 1,
+                'commodity_type' => $item['commodity_type'],
+                'category' => $item['category'] ?? null,
+                'make' => $item['make'] ?? null,
+                'type_model' => $item['type_model'] ?? null,
+                'fuel_type' => $item['fuel_type'] ?? null,
+                'condition' => $item['condition'] ?? null,
+                'year' => !empty($item['year']) ? (int) $item['year'] : null,
+                'wheelbase_cm' => !empty($item['wheelbase_cm']) ? (float) $item['wheelbase_cm'] : null,
+                'quantity' => !empty($item['quantity']) ? (int) $item['quantity'] : 1,
+                'length_cm' => !empty($item['length_cm']) ? (float) $item['length_cm'] : null,
+                'width_cm' => !empty($item['width_cm']) ? (float) $item['width_cm'] : null,
+                'height_cm' => !empty($item['height_cm']) ? (float) $item['height_cm'] : null,
+                'cbm' => !empty($item['cbm']) ? (float) $item['cbm'] : null,
+                'weight_kg' => !empty($item['weight_kg']) ? (float) $item['weight_kg'] : null,
+                'bruto_weight_kg' => !empty($item['bruto_weight_kg']) ? (float) $item['bruto_weight_kg'] : null,
+                'netto_weight_kg' => !empty($item['netto_weight_kg']) ? (float) $item['netto_weight_kg'] : null,
+                'has_parts' => $item['has_parts'] ?? false,
+                'parts_description' => $item['parts_description'] ?? null,
+                'has_trailer' => $item['has_trailer'] ?? false,
+                'has_wooden_cradle' => $item['has_wooden_cradle'] ?? false,
+                'has_iron_cradle' => $item['has_iron_cradle'] ?? false,
+                'is_forkliftable' => $item['is_forkliftable'] ?? false,
+                'is_hazardous' => $item['is_hazardous'] ?? false,
+                'is_unpacked' => $item['is_unpacked'] ?? false,
+                'is_ispm15' => $item['is_ispm15'] ?? false,
+                'extra_info' => $item['extra_info'] ?? null,
+                'attachments' => $item['attachments'] ?? [],
+                'input_unit_system' => $item['input_unit_system'] ?? $this->unitSystem,
+            ];
+            
+            // Create item in database
+            $dbItem = \App\Models\QuotationCommodityItem::create($data);
+            
+            // Update the item's ID from temporary to database ID
+            $this->items[$index]['id'] = $dbItem->id;
+            
+            \Log::info('CommodityItemsRepeater::createItemInDatabase() created item', [
+                'item_id' => $dbItem->id,
+                'quotation_id' => $this->quotationId,
+                'commodity_type' => $item['commodity_type'],
+                'temp_id' => $item['id']
+            ]);
+            
+            // Dispatch event to parent component when commodity_type is saved
+            $this->dispatch('commodity-item-saved', [
+                'quotation_id' => $this->quotationId
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('CommodityItemsRepeater::createItemInDatabase() failed', [
+                'quotation_id' => $this->quotationId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+        }
+    }
+    
+    /**
+     * Save item to database (auto-save on field update)
+     */
+    protected function saveItemToDatabase($index, $item)
+    {
+        if (!$this->quotationId || !isset($item['id']) || !is_numeric($item['id'])) {
+            return;
+        }
+        
+        try {
+            // Prepare data for database save
+            $data = [
+                'line_number' => $index + 1,
+                'commodity_type' => $item['commodity_type'] ?? null,
+                'category' => $item['category'] ?? null,
+                'make' => $item['make'] ?? null,
+                'type_model' => $item['type_model'] ?? null,
+                'fuel_type' => $item['fuel_type'] ?? null,
+                'condition' => $item['condition'] ?? null,
+                'year' => !empty($item['year']) ? (int) $item['year'] : null,
+                'wheelbase_cm' => !empty($item['wheelbase_cm']) ? (float) $item['wheelbase_cm'] : null,
+                'quantity' => !empty($item['quantity']) ? (int) $item['quantity'] : 1,
+                'length_cm' => !empty($item['length_cm']) ? (float) $item['length_cm'] : null,
+                'width_cm' => !empty($item['width_cm']) ? (float) $item['width_cm'] : null,
+                'height_cm' => !empty($item['height_cm']) ? (float) $item['height_cm'] : null,
+                'cbm' => !empty($item['cbm']) ? (float) $item['cbm'] : null,
+                'weight_kg' => !empty($item['weight_kg']) ? (float) $item['weight_kg'] : null,
+                'bruto_weight_kg' => !empty($item['bruto_weight_kg']) ? (float) $item['bruto_weight_kg'] : null,
+                'netto_weight_kg' => !empty($item['netto_weight_kg']) ? (float) $item['netto_weight_kg'] : null,
+                'has_parts' => $item['has_parts'] ?? false,
+                'parts_description' => $item['parts_description'] ?? null,
+                'has_trailer' => $item['has_trailer'] ?? false,
+                'has_wooden_cradle' => $item['has_wooden_cradle'] ?? false,
+                'has_iron_cradle' => $item['has_iron_cradle'] ?? false,
+                'is_forkliftable' => $item['is_forkliftable'] ?? false,
+                'is_hazardous' => $item['is_hazardous'] ?? false,
+                'is_unpacked' => $item['is_unpacked'] ?? false,
+                'is_ispm15' => $item['is_ispm15'] ?? false,
+                'extra_info' => $item['extra_info'] ?? null,
+                'attachments' => $item['attachments'] ?? [],
+                'input_unit_system' => $item['input_unit_system'] ?? $this->unitSystem,
+            ];
+            
+            // Update item in database
+            \App\Models\QuotationCommodityItem::where('id', $item['id'])
+                ->where('quotation_request_id', $this->quotationId)
+                ->update($data);
+            
+            \Log::info('CommodityItemsRepeater::saveItemToDatabase() saved item', [
+                'item_id' => $item['id'],
+                'quotation_id' => $this->quotationId,
+                'commodity_type' => $item['commodity_type'] ?? null
+            ]);
+            
+            // Dispatch event to parent component when commodity_type is saved
+            // This triggers refresh of SmartArticleSelector
+            if (!empty($item['commodity_type'])) {
+                $this->dispatch('commodity-item-saved', [
+                    'quotation_id' => $this->quotationId
+                ]);
+            }
+        } catch (\Exception $e) {
+            \Log::error('CommodityItemsRepeater::saveItemToDatabase() failed', [
+                'item_id' => $item['id'] ?? null,
+                'quotation_id' => $this->quotationId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
         }
     }
