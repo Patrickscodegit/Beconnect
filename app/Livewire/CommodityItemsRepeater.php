@@ -214,8 +214,31 @@ class CommodityItemsRepeater extends Component
 
     public function updated($propertyName)
     {
-        // Real-time validation when fields are updated
-        $this->validateOnly($propertyName, $this->getValidationRules());
+        // Skip validation for items array changes (when adding/removing items)
+        // Only validate when specific item fields are updated
+        if (!preg_match('/^items\.(\d+)\./', $propertyName)) {
+            return;
+        }
+        
+        // Extract item index from property name
+        preg_match('/^items\.(\d+)\./', $propertyName, $matches);
+        $itemIndex = $matches[1] ?? null;
+        
+        // Only validate if the item has a commodity_type set (don't validate empty items)
+        if ($itemIndex !== null && isset($this->items[$itemIndex])) {
+            $item = $this->items[$itemIndex];
+            
+            // Skip validation for items without commodity_type (newly added items)
+            if (empty($item['commodity_type'])) {
+                // Only validate if commodity_type is being set
+                if (strpos($propertyName, '.commodity_type') !== false) {
+                    $this->validateOnly($propertyName, $this->getValidationRules());
+                }
+            } else {
+                // Item has commodity_type, validate the field
+                $this->validateOnly($propertyName, $this->getValidationRules());
+            }
+        }
         
         // Check if commodity_type was updated for any item and dispatch event
         if (preg_match('/^items\.(\d+)\.commodity_type$/', $propertyName, $matches)) {
