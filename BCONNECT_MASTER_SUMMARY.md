@@ -1,8 +1,8 @@
 # BCONNECT MASTER SUMMARY - COMPREHENSIVE TECHNICAL REFERENCE
 
 > **Complete System Documentation**  
-> Last Updated: January 27, 2025  
-> Version: 2.4 (Production)  
+> Last Updated: November 3, 2025  
+> Version: 2.6 (Production)  
 > Based on: 150+ documentation files analyzed
 
 ---
@@ -2304,6 +2304,42 @@ $articles = Cache::remember('robaws_articles', 3600, function () {
 
 ### Recent Changes
 
+#### November 3, 2025 - Commodity Type Detection & Submission Validation Fix
+**Changes**:
+- Fixed field name bug in `RobawsArticleCache::getVehicleCategoryMapping()` (vehicle_category → category)
+- Implemented auto-save for commodity items (create DB record when commodity_type selected)
+- Fixed NOT NULL constraint violation by deferring DB creation until commodity_type is set
+- Fixed render() method to load commodityItems relationship for proper detection
+- Added `getEffectiveCommodityType()` method for debug output in detailed quote mode
+- Fixed submission validation to support both quick and detailed quote modes
+- Updated debug output to show commodity type from detailed quote items
+- Added validation error display for commodity items
+
+**Impact**:
+- Smart article selector now correctly filters by commodity type from detailed quote items
+- Debug output correctly shows commodity type in detailed quote mode
+- Submission now works in detailed quote mode (no longer requires cargo_description)
+- Proper validation based on quotation mode (quick vs detailed)
+- Clear error messages when validation fails
+
+**Files Changed**:
+- `app/Models/RobawsArticleCache.php` - Fixed field name bug (vehicle_category → category)
+- `app/Livewire/CommodityItemsRepeater.php` - Implemented auto-save, deferred DB creation, added createItemInDatabase()
+- `app/Livewire/Customer/QuotationCreator.php` - Fixed render() to load commodityItems, added getEffectiveCommodityType(), fixed submit() validation
+- `app/Livewire/SmartArticleSelector.php` - Updated to load commodityItems relationship
+- `resources/views/livewire/customer/quotation-creator.blade.php` - Updated debug output, added validation error display, pass quotationId to nested component
+
+**Technical Details**:
+- Auto-save creates database record when commodity_type is selected (fixes NOT NULL constraint)
+- Items use temporary IDs until commodity_type is set, then database record is created
+- Submission validation checks quotation mode and validates accordingly
+- Debug output checks both simple field (quick mode) and commodityItems relationship (detailed mode)
+- All commodity items are auto-saved to database for proper filtering
+
+**Deployment**:
+- ✅ Committed to main (commit ecd48ce, 4a28cff)
+- ✅ Pushed to production
+
 #### November 3, 2025 - Schedule Selection Fix & POL/POD Format Standardization
 **Changes**:
 - Fixed Livewire schedule selection syncing issue where `selected_schedule_id` wasn't updating on first selection
@@ -3991,7 +4027,7 @@ The Article Sync System successfully evolved from an initial implementation thro
 ### Production Status
 - **Uptime**: 99.9%
 - **Last Deployment**: November 3, 2025
-- **Version**: 2.5
+- **Version**: 2.6
 - **Status**: ✅ Operational
 
 ### Component Status
@@ -4003,7 +4039,7 @@ The Article Sync System successfully evolved from an initial implementation thro
 - **Database**: ✅ Healthy
 - **File Storage**: ✅ Operational
 - **Email Service**: ✅ Operational
-- **Smart Article Selection**: ✅ Operational (Schedule selection fixed)
+- **Smart Article Selection**: ✅ Operational (Commodity type detection fixed, submission validation fixed)
 - **Article Sync Operations**: ✅ Fixed and Operational
 - **Server Stability**: ✅ Stable (0.5s rate limiting)
 - **POL/POD Format**: ✅ Standardized ("City (CODE), Country")
@@ -4018,6 +4054,6 @@ The Article Sync System successfully evolved from an initial implementation thro
 
 *This master summary document serves as the comprehensive technical reference for the Bconnect system. Last updated based on analysis of 150+ documentation files, live system inspection, Smart Article Selection System implementation, Article Enhancement Integration, Article Sync Operations fix, Article Sync System Evolution (server stability crisis resolution), Schedule Selection Fix, and POL/POD Format Standardization.*
 
-**Document Version**: 2.5  
+**Document Version**: 2.6  
 **Last Updated**: November 3, 2025  
 **Maintained By**: Bconnect Development Team

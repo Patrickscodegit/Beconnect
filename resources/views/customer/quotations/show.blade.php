@@ -114,24 +114,136 @@
                 <h2 class="text-xl font-semibold text-gray-900 mb-4">
                     <i class="fas fa-box mr-2"></i>Cargo Information
                 </h2>
-                <dl class="space-y-3">
-                    @if($quotationRequest->commodity_type)
-                        <div>
-                            <dt class="text-sm font-medium text-gray-500">Commodity Type</dt>
-                            <dd class="mt-1 text-sm text-gray-900 font-semibold">{{ ucfirst($quotationRequest->commodity_type) }}</dd>
-                        </div>
-                    @endif
-                    <div>
-                        <dt class="text-sm font-medium text-gray-500">Description</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ $quotationRequest->cargo_description }}</dd>
+                
+                @if($quotationRequest->commodityItems && $quotationRequest->commodityItems->count() > 0)
+                    {{-- Detailed Quote Mode: Show Commodity Items --}}
+                    <div class="space-y-4">
+                        @foreach($quotationRequest->commodityItems as $item)
+                            <div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                <div class="flex items-center justify-between mb-3">
+                                    <h3 class="text-sm font-semibold text-gray-900">
+                                        Item #{{ $item->line_number }}
+                                        @if($item->commodity_type)
+                                            <span class="ml-2 text-xs font-normal text-gray-600">({{ ucwords(str_replace('_', ' ', $item->commodity_type)) }})</span>
+                                        @endif
+                                    </h3>
+                                    @if($item->quantity > 1)
+                                        <span class="text-xs text-gray-500">Qty: {{ $item->quantity }}</span>
+                                    @endif
+                                </div>
+                                
+                                <dl class="grid grid-cols-2 gap-3 text-sm">
+                                    @if($item->category)
+                                        <div>
+                                            <dt class="text-xs font-medium text-gray-500">Category</dt>
+                                            <dd class="mt-1 text-gray-900">{{ ucwords(str_replace('_', ' ', $item->category)) }}</dd>
+                                        </div>
+                                    @endif
+                                    @if($item->make)
+                                        <div>
+                                            <dt class="text-xs font-medium text-gray-500">Make</dt>
+                                            <dd class="mt-1 text-gray-900">{{ $item->make }}</dd>
+                                        </div>
+                                    @endif
+                                    @if($item->type_model)
+                                        <div>
+                                            <dt class="text-xs font-medium text-gray-500">Type/Model</dt>
+                                            <dd class="mt-1 text-gray-900">{{ $item->type_model }}</dd>
+                                        </div>
+                                    @endif
+                                    @if($item->year)
+                                        <div>
+                                            <dt class="text-xs font-medium text-gray-500">Year</dt>
+                                            <dd class="mt-1 text-gray-900">{{ $item->year }}</dd>
+                                        </div>
+                                    @endif
+                                    @if($item->condition)
+                                        <div>
+                                            <dt class="text-xs font-medium text-gray-500">Condition</dt>
+                                            <dd class="mt-1 text-gray-900">{{ ucfirst($item->condition) }}</dd>
+                                        </div>
+                                    @endif
+                                    @if($item->length_cm || $item->width_cm || $item->height_cm)
+                                        <div>
+                                            <dt class="text-xs font-medium text-gray-500">Dimensions</dt>
+                                            <dd class="mt-1 text-gray-900">
+                                                @if($item->length_cm && $item->width_cm && $item->height_cm)
+                                                    {{ number_format($item->length_cm, 0) }} × {{ number_format($item->width_cm, 0) }} × {{ number_format($item->height_cm, 0) }} cm
+                                                @else
+                                                    {{ $item->length_cm ? number_format($item->length_cm, 0) . ' cm' : '' }}
+                                                    {{ $item->width_cm ? number_format($item->width_cm, 0) . ' cm' : '' }}
+                                                    {{ $item->height_cm ? number_format($item->height_cm, 0) . ' cm' : '' }}
+                                                @endif
+                                            </dd>
+                                        </div>
+                                    @endif
+                                    @if($item->weight_kg)
+                                        <div>
+                                            <dt class="text-xs font-medium text-gray-500">Weight</dt>
+                                            <dd class="mt-1 text-gray-900">{{ number_format($item->weight_kg, 2) }} kg</dd>
+                                        </div>
+                                    @endif
+                                    @if($item->cbm)
+                                        <div>
+                                            <dt class="text-xs font-medium text-gray-500">CBM</dt>
+                                            <dd class="mt-1 text-gray-900">{{ number_format($item->cbm, 4) }} m³</dd>
+                                        </div>
+                                    @endif
+                                </dl>
+                                
+                                @if($item->extra_info)
+                                    <div class="mt-3 pt-3 border-t border-gray-200">
+                                        <dt class="text-xs font-medium text-gray-500 mb-1">Additional Info</dt>
+                                        <dd class="text-sm text-gray-900">{{ $item->extra_info }}</dd>
+                                    </div>
+                                @endif
+                            </div>
+                        @endforeach
                     </div>
-                    @if($quotationRequest->special_requirements)
+                @else
+                    {{-- Quick Quote Mode: Show Simple Description --}}
+                    <dl class="space-y-3">
+                        @if($quotationRequest->commodity_type)
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Commodity Type</dt>
+                                <dd class="mt-1 text-sm text-gray-900 font-semibold">{{ ucfirst(str_replace('_', ' ', $quotationRequest->commodity_type)) }}</dd>
+                            </div>
+                        @endif
                         <div>
-                            <dt class="text-sm font-medium text-gray-500">Special Requirements</dt>
-                            <dd class="mt-1 text-sm text-gray-900">{{ $quotationRequest->special_requirements }}</dd>
+                            <dt class="text-sm font-medium text-gray-500">Description</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ $quotationRequest->cargo_description ?: 'No description provided' }}</dd>
                         </div>
-                    @endif
-                </dl>
+                        @if($quotationRequest->cargo_weight || $quotationRequest->cargo_volume || $quotationRequest->cargo_dimensions)
+                            <div class="grid grid-cols-3 gap-3 pt-3 border-t border-gray-200">
+                                @if($quotationRequest->cargo_weight)
+                                    <div>
+                                        <dt class="text-xs font-medium text-gray-500">Weight</dt>
+                                        <dd class="mt-1 text-sm text-gray-900">{{ number_format($quotationRequest->cargo_weight, 2) }} kg</dd>
+                                    </div>
+                                @endif
+                                @if($quotationRequest->cargo_volume)
+                                    <div>
+                                        <dt class="text-xs font-medium text-gray-500">Volume</dt>
+                                        <dd class="mt-1 text-sm text-gray-900">{{ number_format($quotationRequest->cargo_volume, 2) }} m³</dd>
+                                    </div>
+                                @endif
+                                @if($quotationRequest->cargo_dimensions)
+                                    <div>
+                                        <dt class="text-xs font-medium text-gray-500">Dimensions</dt>
+                                        <dd class="mt-1 text-sm text-gray-900">{{ $quotationRequest->cargo_dimensions }}</dd>
+                                    </div>
+                                @endif
+                            </div>
+                        @endif
+                    </dl>
+                @endif
+                
+                @if($quotationRequest->special_requirements)
+                    <div class="mt-4 pt-4 border-t border-gray-200">
+                        <dt class="text-sm font-medium text-gray-500 mb-2">Special Requirements</dt>
+                        <dd class="text-sm text-gray-900">{{ $quotationRequest->special_requirements }}</dd>
+                    </div>
+                @endif
             </div>
 
             {{-- Selected Articles --}}
