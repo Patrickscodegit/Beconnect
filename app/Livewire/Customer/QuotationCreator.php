@@ -48,12 +48,14 @@ class QuotationCreator extends Component
     public bool $showArticles = false;
     public bool $loading = false;
     public bool $submitting = false;
+    public bool $hasCommodityItemType = false; // Track if any commodity item has type selected (for detailed quote mode)
     
     // Listen for article selection events and port updates
     protected $listeners = [
         'articleAdded' => 'handleArticleAdded',
         'articleRemoved' => 'handleArticleRemoved',
         'port-updated' => 'handlePortUpdated',
+        'commodity-item-type-changed' => 'commodityItemTypeChanged',
     ];
     
     // Handle port-updated event from JavaScript (fallback method)
@@ -238,7 +240,38 @@ class QuotationCreator extends Component
         $polFilled = !empty(trim($this->pol));
         $podFilled = !empty(trim($this->pod));
         $scheduleSelected = $this->selected_schedule_id !== null && $this->selected_schedule_id > 0;
-        $commoditySelected = !empty($this->commodity_type);
+        
+        // Check if commodity is selected - either via simple field (Quick Quote) or commodity items (Detailed Quote)
+        $commoditySelected = false;
+        
+        // Quick Quote mode: check simple commodity_type field
+        if (!empty($this->commodity_type)) {
+            $commoditySelected = true;
+        }
+        
+        // Detailed Quote mode: check if quotation has commodity items with commodity_type set
+        // Check both database (saved items) and Livewire component state (unsaved items)
+        if (!$commoditySelected && $this->quotationMode === 'detailed') {
+            // Check database (for saved items)
+            if ($this->quotation) {
+                $quotation = $this->quotation->fresh(['commodityItems']);
+                if ($quotation->commodityItems && $quotation->commodityItems->count() > 0) {
+                    // Check if at least one item has a commodity_type set
+                    foreach ($quotation->commodityItems as $item) {
+                        if (!empty($item->commodity_type)) {
+                            $commoditySelected = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // Also check Livewire component state (for unsaved items in nested component)
+            // This is tracked via the $hasCommodityItemType property which is updated via events
+            if (!$commoditySelected && $this->hasCommodityItemType) {
+                $commoditySelected = true;
+            }
+        }
         
         // Only show articles when ALL required fields are filled (POL, POD, Schedule, Commodity)
         // Requiring commodity ensures articles are properly filtered from the start
@@ -248,6 +281,18 @@ class QuotationCreator extends Component
         if ($this->showArticles) {
             $this->dispatch('quotationUpdated');
         }
+    }
+    
+    /**
+     * Handle commodity item type change event from nested CommodityItemsRepeater component
+     */
+    public function commodityItemTypeChanged($data)
+    {
+        // Update state based on event data
+        $this->hasCommodityItemType = $data['has_commodity_type'] ?? false;
+        
+        // Update showArticles when commodity_type is selected in detailed quote mode
+        $this->updateShowArticles();
     }
     
     /**

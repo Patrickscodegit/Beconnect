@@ -283,6 +283,23 @@ class CommodityItemsRepeater extends Component
         $this->validate($this->getValidationRules(), $this->messages);
         return true;
     }
+    
+    /**
+     * Handle updates to items array - dispatch event when commodity_type changes
+     */
+    public function updated($propertyName)
+    {
+        // Check if commodity_type was updated for any item
+        if (preg_match('/^items\.(\d+)\.commodity_type$/', $propertyName, $matches)) {
+            $index = $matches[1];
+            $commodityType = $this->items[$index]['commodity_type'] ?? null;
+            
+            // Dispatch event to parent component (QuotationCreator) to update showArticles
+            $this->dispatch('commodity-item-type-changed', [
+                'has_commodity_type' => !empty($commodityType)
+            ]);
+        }
+    }
 
     public function render()
     {
