@@ -63,6 +63,22 @@
             </select>
         </div>
 
+        {{-- Year --}}
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+                Year <span class="text-red-500">*</span>
+            </label>
+            <input type="number" 
+                wire:model.blur="items.{{ $index }}.year"
+                min="1900"
+                max="2100"
+                class="w-full px-4 py-3 rounded-lg border @error('items.'.$index.'.year') border-red-500 @else border-gray-300 @enderror focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
+                placeholder="e.g., 2020">
+            @error("items.{$index}.year")
+                <p class="text-red-600 text-sm mt-1"><i class="fas fa-exclamation-circle mr-1"></i>{{ $message }}</p>
+            @enderror
+        </div>
+
         {{-- Fuel Type --}}
         <div class="lg:col-span-2">
             <label class="block text-sm font-medium text-gray-700 mb-2">Fuel Type</label>

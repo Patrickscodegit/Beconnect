@@ -23,6 +23,7 @@ class CommodityItemsRepeater extends Component
         'items.*.make' => 'make',
         'items.*.type_model' => 'type/model',
         'items.*.condition' => 'condition',
+        'items.*.year' => 'year',
         'items.*.fuel_type' => 'fuel type',
         'items.*.length_cm' => 'length',
         'items.*.width_cm' => 'width',
@@ -52,6 +53,7 @@ class CommodityItemsRepeater extends Component
             'make' => '',
             'type_model' => '',
             'condition' => '',
+            'year' => '',
             'fuel_type' => '',
             'length_cm' => '',
             'width_cm' => '',
@@ -232,6 +234,7 @@ class CommodityItemsRepeater extends Component
                 $rules["items.{$index}.make"] = 'required';
                 $rules["items.{$index}.type_model"] = 'required';
                 $rules["items.{$index}.condition"] = 'required';
+                $rules["items.{$index}.year"] = 'required|integer|min:1900|max:2100';
                 $rules["items.{$index}.length_cm"] = 'required|numeric|min:1';
                 $rules["items.{$index}.width_cm"] = 'required|numeric|min:1';
                 $rules["items.{$index}.height_cm"] = 'required|numeric|min:1';
@@ -261,6 +264,10 @@ class CommodityItemsRepeater extends Component
     protected $messages = [
         'items.*.make.required' => 'Make is required',
         'items.*.type_model.required' => 'Type/Model is required',
+        'items.*.year.required' => 'Year is required',
+        'items.*.year.integer' => 'Year must be a number',
+        'items.*.year.min' => 'Year must be at least 1900',
+        'items.*.year.max' => 'Year must be at most 2100',
         'items.*.length_cm.required' => 'Length is required',
         'items.*.width_cm.required' => 'Width is required',
         'items.*.height_cm.required' => 'Height is required',

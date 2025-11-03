@@ -19,6 +19,7 @@ class QuotationCommodityItem extends Model
         'type_model',
         'fuel_type',
         'condition',
+        'year',
         'wheelbase_cm',
         'quantity',
         'length_cm',
@@ -47,6 +48,7 @@ class QuotationCommodityItem extends Model
     protected $casts = [
         'quantity' => 'integer',
         'line_number' => 'integer',
+        'year' => 'integer',
         'wheelbase_cm' => 'decimal:2',
         'length_cm' => 'decimal:2',
         'width_cm' => 'decimal:2',
