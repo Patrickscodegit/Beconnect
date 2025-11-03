@@ -216,6 +216,23 @@ class CommodityItemsRepeater extends Component
     {
         // Real-time validation when fields are updated
         $this->validateOnly($propertyName, $this->getValidationRules());
+        
+        // Check if commodity_type was updated for any item and dispatch event
+        if (preg_match('/^items\.(\d+)\.commodity_type$/', $propertyName, $matches)) {
+            // Check if ANY item has a commodity_type set (not just the one that changed)
+            $hasCommodityType = false;
+            foreach ($this->items as $item) {
+                if (!empty($item['commodity_type'])) {
+                    $hasCommodityType = true;
+                    break;
+                }
+            }
+            
+            // Dispatch event to parent component (QuotationCreator) to update showArticles
+            $this->dispatch('commodity-item-type-changed', [
+                'has_commodity_type' => $hasCommodityType
+            ]);
+        }
     }
     
     protected function getValidationRules()
@@ -282,29 +299,6 @@ class CommodityItemsRepeater extends Component
     {
         $this->validate($this->getValidationRules(), $this->messages);
         return true;
-    }
-    
-    /**
-     * Handle updates to items array - dispatch event when commodity_type changes
-     */
-    public function updated($propertyName)
-    {
-        // Check if commodity_type was updated for any item
-        if (preg_match('/^items\.(\d+)\.commodity_type$/', $propertyName, $matches)) {
-            // Check if ANY item has a commodity_type set (not just the one that changed)
-            $hasCommodityType = false;
-            foreach ($this->items as $item) {
-                if (!empty($item['commodity_type'])) {
-                    $hasCommodityType = true;
-                    break;
-                }
-            }
-            
-            // Dispatch event to parent component (QuotationCreator) to update showArticles
-            $this->dispatch('commodity-item-type-changed', [
-                'has_commodity_type' => $hasCommodityType
-            ]);
-        }
     }
 
     public function render()
