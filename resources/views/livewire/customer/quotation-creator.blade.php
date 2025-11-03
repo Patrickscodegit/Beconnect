@@ -475,6 +475,19 @@
         </div>
     </div>
     
+    {{-- Validation Errors --}}
+    @error('commodity_items')
+        <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <div class="flex items-start">
+                <i class="fas fa-exclamation-circle text-red-600 mr-3 mt-1"></i>
+                <div>
+                    <h3 class="text-lg font-semibold text-red-900 mb-1">Validation Error</h3>
+                    <p class="text-sm text-red-800">{{ $message }}</p>
+                </div>
+            </div>
+        </div>
+    @enderror
+    
     {{-- Action Buttons --}}
     <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-8">
         <button type="button" 

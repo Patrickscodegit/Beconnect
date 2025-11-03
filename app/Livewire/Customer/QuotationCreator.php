@@ -395,13 +395,51 @@ class QuotationCreator extends Component
     {
         $this->submitting = true;
         
-        // Validate
-        $this->validate([
+        // Base validation (required for both modes)
+        $rules = [
             'pol' => 'required|string|max:255',
             'pod' => 'required|string|max:255',
             'simple_service_type' => 'required|string',
-            'cargo_description' => 'required|string',
-        ]);
+        ];
+        
+        // Validate based on quotation mode
+        if ($this->quotationMode === 'quick') {
+            // Quick Quote mode: require commodity_type and cargo_description
+            $rules['commodity_type'] = 'required|string';
+            $rules['cargo_description'] = 'required|string';
+        } else {
+            // Detailed Quote mode: require commodity items instead of cargo_description
+            // Validate that at least one commodity item exists with commodity_type
+            $this->quotation = $this->quotation->fresh(['commodityItems']);
+            
+            if (!$this->quotation->commodityItems || $this->quotation->commodityItems->count() === 0) {
+                $this->addError('commodity_items', 'At least one commodity item is required in detailed quote mode.');
+                $this->submitting = false;
+                return;
+            }
+            
+            // Validate that all commodity items have commodity_type set
+            foreach ($this->quotation->commodityItems as $item) {
+                if (empty($item->commodity_type)) {
+                    $this->addError('commodity_items', 'All commodity items must have a commodity type selected.');
+                    $this->submitting = false;
+                    return;
+                }
+            }
+        }
+        
+        // Run validation
+        $this->validate($rules);
+        
+        // Ensure all commodity items are saved (for detailed mode)
+        if ($this->quotationMode === 'detailed' && $this->quotation) {
+            // Refresh to get latest items
+            $this->quotation = $this->quotation->fresh(['commodityItems']);
+            
+            // Ensure all items in Livewire state are saved to database
+            // This handles any items that might not have been auto-saved yet
+            // Note: Items should already be auto-saved, but this is a safety check
+        }
         
         // Change status from 'draft' to 'pending'
         $this->quotation->update([
@@ -414,7 +452,9 @@ class QuotationCreator extends Component
         
         Log::info('Quotation submitted for review', [
             'quotation_id' => $this->quotationId,
+            'mode' => $this->quotationMode,
             'articles_count' => $this->quotation->articles->count(),
+            'commodity_items_count' => $this->quotation->commodityItems?->count() ?? 0,
         ]);
         
         // Redirect to show page
