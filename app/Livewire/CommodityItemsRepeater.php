@@ -291,12 +291,18 @@ class CommodityItemsRepeater extends Component
     {
         // Check if commodity_type was updated for any item
         if (preg_match('/^items\.(\d+)\.commodity_type$/', $propertyName, $matches)) {
-            $index = $matches[1];
-            $commodityType = $this->items[$index]['commodity_type'] ?? null;
+            // Check if ANY item has a commodity_type set (not just the one that changed)
+            $hasCommodityType = false;
+            foreach ($this->items as $item) {
+                if (!empty($item['commodity_type'])) {
+                    $hasCommodityType = true;
+                    break;
+                }
+            }
             
             // Dispatch event to parent component (QuotationCreator) to update showArticles
             $this->dispatch('commodity-item-type-changed', [
-                'has_commodity_type' => !empty($commodityType)
+                'has_commodity_type' => $hasCommodityType
             ]);
         }
     }
