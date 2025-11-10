@@ -2304,6 +2304,21 @@ $articles = Cache::remember('robaws_articles', 3600, function () {
 
 ### Recent Changes
 
+#### November 10, 2025 - Robaws Article Metadata Restoration
+**Changes**:
+- Recreated missing migrations (`2025_11_07_*`, `2025_11_09_120000`) to guarantee `transport_mode`, `article_type`, `cost_side`, and additional services schema.
+- Re-introduced console commands `robaws:normalize-article-meta` and `robaws:normalize-cost-side` with batching, dry-run, and throttling options.
+- Restored `app/Console/Kernel.php` so new commands autoload correctly.
+
+**Impact**:
+- Local `robaws_articles_cache` now has consistent `article_type` and `cost_side` data (1,064 sides updated across 1,576 records).
+- Additional services table/migrations are available again for smart surcharge selection.
+- Normalization commands can be scheduled post-sync to keep metadata aligned.
+
+**Commands**:
+- `php artisan robaws:normalize-article-meta`
+- `php artisan robaws:normalize-cost-side`
+
 #### November 3, 2025 - Commodity Type Detection & Submission Validation Fix
 **Changes**:
 - Fixed field name bug in `RobawsArticleCache::getVehicleCategoryMapping()` (vehicle_category → category)
