@@ -5,12 +5,20 @@ namespace Tests\Feature;
 use Tests\TestCase;
 use App\Models\Intake;
 use App\Models\Document;
+use App\Models\IntakeFile;
 use App\Services\IntakeAggregationService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\Pipeline\PipelineTestHelper;
 
+/** @group pipeline */
 class MultiDocumentIntakeTest extends TestCase
 {
-    use RefreshDatabase;
+    protected function setUp(): void
+    {
+        PipelineTestHelper::prepare();
+        parent::setUp();
+
+        PipelineTestHelper::boot($this);
+    }
 
     /**
      * Test multi-document intake aggregation
@@ -31,10 +39,11 @@ class MultiDocumentIntakeTest extends TestCase
         // Create 3 documents with different extraction data
         
         // Document 1: Email (highest priority)
+        $doc1Path = 'documents/enquiry.eml';
         $doc1 = Document::create([
             'intake_id' => $intake->id,
             'filename' => 'enquiry.eml',
-            'file_path' => 'documents/enquiry.eml',
+            'file_path' => $doc1Path,
             'mime_type' => 'message/rfc822',
             'file_size' => 1024,
             'storage_disk' => 'local',
@@ -50,15 +59,27 @@ class MultiDocumentIntakeTest extends TestCase
                     'pol' => 'BEANR',
                     'pod' => 'NGLOS',
                 ],
+                'pol' => 'BEANR',
+                'pod' => 'NGLOS',
             ],
             'extraction_status' => 'completed',
         ]);
 
+        IntakeFile::create([
+            'intake_id' => $intake->id,
+            'filename' => 'enquiry.eml',
+            'storage_path' => $doc1Path,
+            'storage_disk' => 'local',
+            'mime_type' => 'message/rfc822',
+            'file_size' => 1024,
+        ]);
+
         // Document 2: PDF (medium priority)
+        $doc2Path = 'documents/registration.pdf';
         $doc2 = Document::create([
             'intake_id' => $intake->id,
             'filename' => 'registration.pdf',
-            'file_path' => 'documents/registration.pdf',
+            'file_path' => $doc2Path,
             'mime_type' => 'application/pdf',
             'file_size' => 2048,
             'storage_disk' => 'local',
@@ -78,11 +99,21 @@ class MultiDocumentIntakeTest extends TestCase
             'extraction_status' => 'completed',
         ]);
 
+        IntakeFile::create([
+            'intake_id' => $intake->id,
+            'filename' => 'registration.pdf',
+            'storage_path' => $doc2Path,
+            'storage_disk' => 'local',
+            'mime_type' => 'application/pdf',
+            'file_size' => 2048,
+        ]);
+
         // Document 3: Image (lowest priority)
+        $doc3Path = 'documents/car_photo.jpg';
         $doc3 = Document::create([
             'intake_id' => $intake->id,
             'filename' => 'car_photo.jpg',
-            'file_path' => 'documents/car_photo.jpg',
+            'file_path' => $doc3Path,
             'mime_type' => 'image/jpeg',
             'file_size' => 512,
             'storage_disk' => 'local',
@@ -93,6 +124,15 @@ class MultiDocumentIntakeTest extends TestCase
                 ],
             ],
             'extraction_status' => 'completed',
+        ]);
+
+        IntakeFile::create([
+            'intake_id' => $intake->id,
+            'filename' => 'car_photo.jpg',
+            'storage_path' => $doc3Path,
+            'storage_disk' => 'local',
+            'mime_type' => 'image/jpeg',
+            'file_size' => 512,
         ]);
 
         // Test aggregation
@@ -148,10 +188,11 @@ class MultiDocumentIntakeTest extends TestCase
         ]);
 
         // Both have 'name', but email should win
+        $emailPath = 'documents/email.eml';
         $email = Document::create([
             'intake_id' => $intake->id,
             'filename' => 'email.eml',
-            'file_path' => 'documents/email.eml',
+            'file_path' => $emailPath,
             'mime_type' => 'message/rfc822',
             'file_size' => 1024,
             'storage_disk' => 'local',
@@ -160,16 +201,35 @@ class MultiDocumentIntakeTest extends TestCase
             ],
         ]);
 
+        IntakeFile::create([
+            'intake_id' => $intake->id,
+            'filename' => 'email.eml',
+            'storage_path' => $emailPath,
+            'storage_disk' => 'local',
+            'mime_type' => 'message/rfc822',
+            'file_size' => 1024,
+        ]);
+
+        $imagePath = 'documents/image.jpg';
         $image = Document::create([
             'intake_id' => $intake->id,
             'filename' => 'image.jpg',
-            'file_path' => 'documents/image.jpg',
+            'file_path' => $imagePath,
             'mime_type' => 'image/jpeg',
             'file_size' => 512,
             'storage_disk' => 'local',
             'extraction_data' => [
                 'contact' => ['name' => 'From Image'],
             ],
+        ]);
+
+        IntakeFile::create([
+            'intake_id' => $intake->id,
+            'filename' => 'image.jpg',
+            'storage_path' => $imagePath,
+            'storage_disk' => 'local',
+            'mime_type' => 'image/jpeg',
+            'file_size' => 512,
         ]);
 
         $service = app(IntakeAggregationService::class);

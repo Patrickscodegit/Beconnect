@@ -248,7 +248,7 @@ class QuotationRequest extends Model
     public function articles(): BelongsToMany
     {
         return $this->belongsToMany(RobawsArticleCache::class, 'quotation_request_articles', 'quotation_request_id', 'article_cache_id')
-            ->withPivot(['parent_article_id', 'item_type', 'quantity', 'unit_price', 'selling_price', 'subtotal', 'currency', 'formula_inputs', 'calculated_price', 'notes'])
+            ->withPivot(['parent_article_id', 'item_type', 'quantity', 'unit_price', 'unit_type', 'selling_price', 'subtotal', 'currency', 'formula_inputs', 'calculated_price', 'notes'])
             ->withTimestamps()
             ->orderBy('quotation_request_articles.id'); // Preserve insertion order
     }
@@ -377,7 +377,7 @@ class QuotationRequest extends Model
         // Sum all article subtotals
         $articleSubtotals = QuotationRequestArticle::where('quotation_request_id', $this->id)
             ->sum('subtotal');
-        
+
         $this->subtotal = $articleSubtotals;
         
         // Apply discount
@@ -430,6 +430,7 @@ class QuotationRequest extends Model
             'article_cache_id' => $article->id,
             'item_type' => $itemType,
             'quantity' => $quantity,
+            'unit_type' => $article->unit_type ?? 'unit',
             'unit_price' => $article->unit_price,
             'selling_price' => $sellingPrice,
             'currency' => $article->currency,

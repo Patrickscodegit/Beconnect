@@ -1,135 +1,144 @@
 <?php
 
-use App\Services\DocumentService;
-use App\Services\LlmExtractor;
+namespace Tests\Feature;
+
 use App\Models\Document;
 use App\Models\Intake;
+use App\Services\DocumentService;
+use App\Services\LlmExtractor;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
+use ReflectionClass;
+use Tests\Support\Pipeline\PipelineTestHelper;
+use Tests\TestCase;
 
-uses(RefreshDatabase::class);
+/** @group pipeline */
+class ProductionPipelineTest extends TestCase
+{
+    protected function setUp(): void
+    {
+        PipelineTestHelper::prepare();
+        parent::setUp();
 
-beforeEach(function () {
-    // Use fakes for all storage disks that might be used
-    Storage::fake('s3');
-    Storage::fake('documents');
-    Storage::fake('local');  // DocumentService uses config('filesystems.default')
-});
+        PipelineTestHelper::boot($this);
 
-describe('Production Pipeline Integration', function () {
-    it('can handle complete document processing workflow', function () {
-        // Test the complete workflow with minimal external dependencies
-        
-        // 1. File Upload
+        Storage::fake('s3');
+        Storage::fake('documents');
+        Storage::fake('local');
+    }
+
+    public function test_it_can_handle_complete_document_processing_workflow(): void
+    {
+        Queue::fake();
+
         $file = UploadedFile::fake()->create('test-invoice.pdf', 1024, 'application/pdf');
         $documentService = app(DocumentService::class);
-        
+
         $document = $documentService->processUpload($file, 'invoice', 'email');
-        
-        expect($document)
-            ->toBeInstanceOf(Document::class)
-            ->and($document->filename)->toBe('test-invoice.pdf')
-            ->and($document->mime_type)->toBe('application/pdf');
-        
-        // 2. Document Classification (keyword-based fallback)
+
+        $this->assertInstanceOf(Document::class, $document);
+        $this->assertSame('test-invoice.pdf', $document->filename);
+        $this->assertSame('application/pdf', $document->mime_type);
+
         $sampleText = 'Invoice Number: 12345 Amount Due: $1000 Total Payment Required';
         $classification = $documentService->classifyDocument($document, $sampleText);
-        
-        expect($classification)->toBe('financial_document');
-        
-        // 3. Pattern-based extraction (fallback method)
+
+        $this->assertSame('financial_document', $classification);
+
         $vehicleText = 'Vehicle Year: 2023 Make: Toyota Model: Camry VIN: JT2BG22K1X0123456';
-        
-        // Use reflection to test private method directly
+
         $reflection = new ReflectionClass($documentService);
         $method = $reflection->getMethod('patternBasedExtraction');
         $method->setAccessible(true);
         $extractedData = $method->invoke($documentService, $vehicleText);
-        
-        expect($extractedData)
-            ->toBeArray()
-            ->and(count($extractedData))->toBeGreaterThan(0);
-        
-        // 4. Storage verification (DocumentService uses default disk which is 'local')
-        Storage::disk('local')->assertExists($document->file_path);
-    });
 
-    it('handles file validation correctly', function () {
+        $this->assertIsArray($extractedData);
+        $this->assertGreaterThan(0, count($extractedData));
+
+        $disk = Storage::disk('documents');
+        $this->assertTrue(
+            $disk->exists($document->file_path) ||
+            $disk->exists('documents/' . $document->file_path),
+            'Stored document file not found on documents disk.'
+        );
+    }
+
+    public function test_it_handles_file_validation_correctly(): void
+    {
         $documentService = app(DocumentService::class);
-        
-        // Test file type validation
+
         $invalidFile = UploadedFile::fake()->create('test.txt', 100, 'text/plain');
-        expect(fn() => $documentService->processUpload($invalidFile, 'invoice', 'email'))
-            ->toThrow(Exception::class, 'File type not supported');
-        
-        // Test file size validation
+        try {
+            $documentService->processUpload($invalidFile, 'invoice', 'email');
+            $this->fail('Expected unsupported file type exception.');
+        } catch (\Exception $e) {
+            $this->assertStringContainsString('File type not supported', $e->getMessage());
+        }
+
         config(['app.max_file_size_mb' => 1]);
         $largeFile = UploadedFile::fake()->create('large.pdf', 2048, 'application/pdf');
-        expect(fn() => $documentService->processUpload($largeFile, 'invoice', 'email'))
-            ->toThrow(Exception::class, 'File size exceeds maximum');
-    });
+        try {
+            $documentService->processUpload($largeFile, 'invoice', 'email');
+            $this->fail('Expected max file size exception.');
+        } catch (\Exception $e) {
+            $this->assertStringContainsString('File size exceeds maximum', $e->getMessage());
+        }
+    }
 
-    it('demonstrates production-ready error handling', function () {
+    public function test_it_demonstrates_production_ready_error_handling(): void
+    {
         $document = Document::factory()->create([
             'mime_type' => 'application/pdf',
-            'file_path' => 'nonexistent/file.pdf'
+            'file_path' => 'nonexistent/file.pdf',
         ]);
-        
+
         $documentService = app(DocumentService::class);
-        
-        // Should handle missing file gracefully
+
         try {
             $result = $documentService->extractText($document);
-            // If it doesn't throw, that's also acceptable (cached empty result)
-            expect($result)->toBeString();
-        } catch (Exception $e) {
-            // Expected behavior - graceful error handling
-            expect($e->getMessage())->toBeString();
+            $this->assertIsString($result);
+        } catch (\Exception $e) {
+            $this->assertIsString($e->getMessage());
         }
-    });
+    }
 
-    it('verifies service dependencies are properly configured', function () {
-        // Verify all our production services can be instantiated
+    public function test_it_verifies_service_dependencies_are_configured(): void
+    {
         $documentService = app(DocumentService::class);
         $llmExtractor = app(LlmExtractor::class);
         $ocrService = app(\App\Services\OcrService::class);
         $pdfService = app(\App\Services\PdfService::class);
-        
-        expect($documentService)->toBeInstanceOf(DocumentService::class)
-            ->and($llmExtractor)->toBeInstanceOf(LlmExtractor::class)
-            ->and($ocrService)->toBeInstanceOf(\App\Services\OcrService::class)
-            ->and($pdfService)->toBeInstanceOf(\App\Services\PdfService::class);
-    });
 
-    it('demonstrates comprehensive database operations', function () {
-        // Create intake with multiple documents
+        $this->assertInstanceOf(DocumentService::class, $documentService);
+        $this->assertInstanceOf(LlmExtractor::class, $llmExtractor);
+        $this->assertInstanceOf(\App\Services\OcrService::class, $ocrService);
+        $this->assertInstanceOf(\App\Services\PdfService::class, $pdfService);
+    }
+
+    public function test_it_demonstrates_comprehensive_database_operations(): void
+    {
         $intake = Intake::factory()->create(['status' => 'uploaded']);
-        
+
         $documents = Document::factory()->count(3)->create([
             'intake_id' => $intake->id,
             'document_type' => 'invoice',
-            'storage_disk' => 's3',  // PdfService uses s3 disk
-            'file_path' => function () {
-                return 'documents/' . fake()->uuid() . '.pdf';
-            }
+            'storage_disk' => 's3',
+            'file_path' => fn () => 'documents/' . fake()->uuid() . '.pdf',
         ]);
-        
-        // Create mock files in storage for classification
+
         $documents->each(function ($document) {
             Storage::disk('s3')->put($document->file_path, 'Sample PDF content for testing classification');
         });
-        
-        expect($intake->documents)->toHaveCount(3)
-            ->and($documents->first()->intake->id)->toBe($intake->id);
-        
-        // Test document classification
+
+        $this->assertCount(3, $intake->documents);
+        $this->assertSame($intake->id, $documents->first()->intake->id);
+
         $pdfService = app(\App\Services\PdfService::class);
         $pdfService->classifyDocuments($documents);
-        
-        // All documents should have been processed (though classification may be 'unknown' due to simple test content)
+
         $documents->each(function ($document) {
-            expect($document->fresh()->document_type)->toBeString();
+            $this->assertIsString($document->fresh()->document_type);
         });
-    });
-});
+    }
+}

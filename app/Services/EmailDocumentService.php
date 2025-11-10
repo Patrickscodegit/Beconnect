@@ -48,12 +48,12 @@ class EmailDocumentService
             $filename = $originalFilename ?: basename($path);
             $fileSize = Storage::disk($disk)->size($path);
             
-            // Check for existing document by (intake_id, source_content_sha) to avoid unique constraint
+            // Check for existing document by (intake_id, source_content_sha)
             $existingBySha = Document::query()
                 ->where('intake_id', $intakeId)
                 ->where('source_content_sha', $fingerprint['content_sha'])
                 ->first();
-                
+
             if ($existingBySha) {
                 return [
                     'status' => 'duplicate',
@@ -61,6 +61,21 @@ class EmailDocumentService
                     'message' => 'Email already processed in this intake (by content hash)',
                     'document_id' => $existingBySha->id,
                     'original_extraction' => $existingBySha->extraction_data,
+                ];
+            }
+
+            // Global duplicate guard to avoid unique constraint exceptions (when emails are intake-agnostic)
+            $existingGlobalSha = Document::query()
+                ->where('source_content_sha', $fingerprint['content_sha'])
+                ->first();
+
+            if ($existingGlobalSha) {
+                return [
+                    'status' => 'duplicate',
+                    'skipped_as_duplicate' => true,
+                    'message' => 'Email already processed in another intake (by content hash)',
+                    'document_id' => $existingGlobalSha->id,
+                    'original_extraction' => $existingGlobalSha->extraction_data,
                 ];
             }
             

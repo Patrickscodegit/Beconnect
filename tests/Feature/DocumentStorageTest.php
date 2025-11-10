@@ -23,7 +23,7 @@ it('uses local disk in local environment', function () {
         'mime_type' => 'message/rfc822',
         'file_size' => 1024,
         'file_hash' => md5('test'),
-        'upload_status' => 'completed',
+        'upload_status' => 'uploaded',
     ]);
 
     expect($doc->storage_disk)->toBe('local');
@@ -42,7 +42,7 @@ it('uses configured disk in production environment', function () {
         'mime_type' => 'message/rfc822',
         'file_size' => 1024,
         'file_hash' => md5('test'),
-        'upload_status' => 'completed',
+        'upload_status' => 'uploaded',
     ]);
 
     expect($doc->storage_disk)->toBe('spaces');
@@ -61,7 +61,7 @@ it('preserves explicitly set storage disk', function () {
         'mime_type' => 'message/rfc822',
         'file_size' => 1024,
         'file_hash' => md5('test'),
-        'upload_status' => 'completed',
+        'upload_status' => 'uploaded',
     ]);
 
     expect($doc->storage_disk)->toBe('custom');
@@ -93,7 +93,7 @@ it('handles document upload with correct storage', function () {
         'file_size' => $file->getSize(),
         'mime_type' => 'message/rfc822',
         'file_hash' => md5_file($file->getRealPath()),
-        'upload_status' => 'completed',
+        'upload_status' => 'uploaded',
     ]);
     
     expect($doc->storage_disk)->toBe('local');

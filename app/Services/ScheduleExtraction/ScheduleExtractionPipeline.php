@@ -107,23 +107,25 @@ class ScheduleExtractionPipeline
     ): void {
         // New unique constraint includes ETS (sailing date) to allow multiple voyages
         // Same vessel can now have multiple schedules for same route with different sailing dates
+        $normalized = $this->normalizeScheduleTimestamps($scheduleData);
+
         $schedule = ShippingSchedule::updateOrCreate(
             [
                 'carrier_id' => $carrier->id,
                 'pol_id' => $polPort->id,
                 'pod_id' => $podPort->id,
-                'service_name' => $scheduleData['service_name'] ?? null,
-                'vessel_name' => $scheduleData['vessel_name'] ?? null,
-                'ets_pol' => $scheduleData['ets_pol'] ?? null, // Added to unique key for multiple voyages
+                'service_name' => $normalized['service_name'] ?? null,
+                'vessel_name' => $normalized['vessel_name'] ?? null,
+                'ets_pol' => $normalized['ets_pol'] ?? null, // Added to unique key for multiple voyages
             ],
             [
-                'frequency_per_week' => $scheduleData['frequency_per_week'] ?? null,
-                'frequency_per_month' => $scheduleData['frequency_per_month'] ?? null,
-                'transit_days' => $scheduleData['transit_days'] ?? null,
-                'voyage_number' => $scheduleData['voyage_number'] ?? null,
-                'vessel_class' => $scheduleData['vessel_class'] ?? null,
-                'eta_pod' => $scheduleData['eta_pod'] ?? null,
-                'next_sailing_date' => $scheduleData['next_sailing_date'] ?? null,
+                'frequency_per_week' => $normalized['frequency_per_week'] ?? null,
+                'frequency_per_month' => $normalized['frequency_per_month'] ?? null,
+                'transit_days' => $normalized['transit_days'] ?? null,
+                'voyage_number' => $normalized['voyage_number'] ?? null,
+                'vessel_class' => $normalized['vessel_class'] ?? null,
+                'eta_pod' => $normalized['eta_pod'] ?? null,
+                'next_sailing_date' => $normalized['next_sailing_date'] ?? null,
                 'last_updated' => now(),
                 'is_active' => true,
             ]
@@ -133,11 +135,40 @@ class ScheduleExtractionPipeline
             'carrier' => $carrier->code,
             'pol' => $polPort->code,
             'pod' => $podPort->code,
-            'service' => $scheduleData['service_name'] ?? 'N/A',
-            'vessel' => $scheduleData['vessel_name'] ?? 'N/A',
-            'voyage' => $scheduleData['voyage_number'] ?? 'N/A',
+            'service' => $normalized['service_name'] ?? 'N/A',
+            'vessel' => $normalized['vessel_name'] ?? 'N/A',
+            'voyage' => $normalized['voyage_number'] ?? 'N/A',
             'schedule_id' => $schedule->id
         ]);
+    }
+
+    /**
+     * Ensure date values use consistent timestamp formats to avoid duplicate constraint collisions.
+     */
+    private function normalizeScheduleTimestamps(array $scheduleData): array
+    {
+        foreach (['ets_pol', 'eta_pod', 'next_sailing_date'] as $timestampKey) {
+            if (!empty($scheduleData[$timestampKey])) {
+                $scheduleData[$timestampKey] = $this->normalizeTimestamp($scheduleData[$timestampKey]);
+            }
+        }
+
+        return $scheduleData;
+    }
+
+    private function normalizeTimestamp(string $value): ?string
+    {
+        try {
+            $date = new \DateTime($value);
+            return $date->format('Y-m-d H:i:s');
+        } catch (\Exception $e) {
+            Log::warning('Failed to normalize schedule timestamp', [
+                'value' => $value,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
     }
 }
 

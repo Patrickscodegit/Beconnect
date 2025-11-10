@@ -11,7 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('quotation_requests')) {
+            return;
+        }
+
         Schema::table('quotation_requests', function (Blueprint $table) {
+            if (!Schema::hasColumn('quotation_requests', 'pricing_tier_id')) {
             // Add pricing_tier_id foreign key
             $table->foreignId('pricing_tier_id')
                   ->nullable()
@@ -22,6 +27,7 @@ return new class extends Migration
             
             // Add index for performance
             $table->index('pricing_tier_id');
+            }
         });
     }
 
@@ -30,6 +36,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (!Schema::hasTable('quotation_requests') || !Schema::hasColumn('quotation_requests', 'pricing_tier_id')) {
+            return;
+        }
+
         Schema::table('quotation_requests', function (Blueprint $table) {
             $table->dropForeign(['pricing_tier_id']);
             $table->dropIndex(['pricing_tier_id']);

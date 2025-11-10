@@ -57,7 +57,7 @@ class ArticleNameParserTest extends TestCase
         $this->assertEquals('ANR', $pol['code']);
         $this->assertEquals('Antwerp', $pol['name']);
         $this->assertEquals('Belgium', $pol['country']);
-        $this->assertEquals('Antwerp, Belgium (ANR)', $pol['formatted']);
+        $this->assertEquals('Antwerp (ANR), Belgium', $pol['formatted']);
     }
 
     /** @test */
@@ -68,7 +68,7 @@ class ArticleNameParserTest extends TestCase
         
         $this->assertNotNull($pol);
         $this->assertEquals('ANR', $pol['code']);
-        $this->assertEquals('Antwerp, Belgium (ANR)', $pol['formatted']);
+        $this->assertEquals('Antwerp (ANR), Belgium', $pol['formatted']);
     }
 
     /** @test */
@@ -79,7 +79,7 @@ class ArticleNameParserTest extends TestCase
         
         $this->assertNotNull($pol);
         $this->assertEquals('ANR', $pol['code']);
-        $this->assertEquals('Antwerp, Belgium (ANR)', $pol['formatted']);
+        $this->assertEquals('Antwerp (ANR), Belgium', $pol['formatted']);
     }
 
     /** @test */
@@ -92,7 +92,7 @@ class ArticleNameParserTest extends TestCase
         $this->assertEquals('Conakry', $pod['name']);
         $this->assertEquals('Guinea', $pod['country']);
         $this->assertEquals('CKY', $pod['code']);
-        $this->assertEquals('Conakry, Guinea (CKY)', $pod['formatted']);
+        $this->assertEquals('Conakry (CKY), Guinea', $pod['formatted']);
     }
 
     /** @test */
@@ -105,7 +105,7 @@ class ArticleNameParserTest extends TestCase
         $this->assertEquals('Abidjan', $pod['name']);
         $this->assertEquals('Ivory Coast', $pod['country']);
         $this->assertEquals('ABJ', $pod['code']);
-        $this->assertEquals('Abidjan, Ivory Coast (ABJ)', $pod['formatted']);
+        $this->assertEquals('Abidjan (ABJ), Ivory Coast', $pod['formatted']);
     }
 
     /** @test */

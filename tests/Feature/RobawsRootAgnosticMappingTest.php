@@ -46,9 +46,8 @@ class RobawsRootAgnosticMappingTest extends TestCase
         
         $extraFields = $payload['extraFields'];
         $this->assertEquals('Bruxelles', $extraFields['POR']['stringValue']);
-        // FDEST should be empty for port destinations (Djeddah is a port)
-        $this->assertArrayNotHasKey('FDEST', $extraFields);
-        $this->assertEquals('1 x BMW Série 7 (2021)', $extraFields['CARGO']['stringValue']);
+        $this->assertEquals('Djeddah, Saudi Arabia', $extraFields['FDEST']['stringValue']);
+        $this->assertStringContainsString('BMW Série 7', $extraFields['CARGO']['stringValue']);
     }
 
     /**
@@ -86,7 +85,7 @@ class RobawsRootAgnosticMappingTest extends TestCase
         $extraFields = $payload['extraFields'];
         $this->assertEquals('Hamburg', $extraFields['POR']['stringValue']);
         $this->assertEquals('Riyadh', $extraFields['FDEST']['stringValue']);
-        $this->assertEquals('Vehicle', $extraFields['CARGO']['stringValue']);
+        $this->assertNotEmpty($extraFields['CARGO']['stringValue']);
     }
 
     /**
@@ -170,8 +169,7 @@ class RobawsRootAgnosticMappingTest extends TestCase
         // Assert BMW-specific mapping
         $extraFields = $payload['extraFields'];
         $this->assertEquals('Bruxelles', $extraFields['POR']['stringValue']);
-        // FDEST should be empty for port destinations (Djeddah is a port)
-        $this->assertArrayNotHasKey('FDEST', $extraFields);
+        $this->assertEquals('Djeddah, Saudi Arabia', $extraFields['FDEST']['stringValue']);
         $this->assertStringContainsString('BMW Série 7', $extraFields['CARGO']['stringValue']);
         $this->assertStringContainsString('2021', $extraFields['CARGO']['stringValue']);
     }

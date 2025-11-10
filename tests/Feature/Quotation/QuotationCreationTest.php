@@ -27,10 +27,10 @@ class QuotationCreationTest extends TestCase
         return array_merge([
             'source' => 'intake',
             'requester_type' => 'admin',
-            'requester_email' => 'admin@belgaco.com',
-            'requester_name' => 'Test Customer',
-            'requester_company' => 'Test Company',
-            'requester_phone' => '+1234567890',
+            'contact_email' => 'admin@belgaco.com',
+            'contact_name' => 'Test Customer',
+            'contact_company' => 'Test Company',
+            'contact_phone' => '+1234567890',
             'trade_direction' => 'export',
             'robaws_sync_status' => 'pending',
             'pricing_currency' => 'EUR',
@@ -42,6 +42,7 @@ class QuotationCreationTest extends TestCase
             'routing' => ['por' => null, 'pol' => 'Antwerp', 'pod' => 'Lagos', 'fdest' => null],
             'cargo_details' => [],
             'cargo_description' => 'Test cargo',
+            'commodity_type' => 'car',
             'status' => 'pending',
         ], $overrides);
     }
@@ -55,7 +56,7 @@ class QuotationCreationTest extends TestCase
 
         $this->assertNotNull($quotation->request_number);
         $this->assertMatchesRegularExpression('/^QR-\d{4}-\d{4}$/', $quotation->request_number);
-        $this->assertEquals('Test Customer', $quotation->requester_name);
+        $this->assertEquals('Test Customer', $quotation->contact_name);
         $this->assertDatabaseHas('quotation_requests', [
             'id' => $quotation->id,
             'request_number' => $quotation->request_number,
@@ -68,18 +69,10 @@ class QuotationCreationTest extends TestCase
         $quotations = [];
         
         for ($i = 0; $i < 3; $i++) {
-            $quotations[] = QuotationRequest::create([
-                'customer_name' => "Customer $i",
-                'customer_email' => "customer$i@example.com",
-                'customer_phone' => '+1234567890',
-                'customer_type' => 'GENERAL',
-                'customer_role' => 'CONSIGNEE',
-                'service_type' => 'RORO_EXPORT',
-                'pol' => 'Antwerp',
-                'pod' => 'Lagos',
-                'cargo_description' => 'Test cargo',
-                'commodity_type' => 'car',
-            ]);
+            $quotations[] = QuotationRequest::create($this->getBaseQuotationData([
+                'contact_name' => "Customer $i",
+                'contact_email' => "customer$i@example.com",
+            ]));
         }
 
         $requestNumbers = collect($quotations)->pluck('request_number')->toArray();
@@ -92,35 +85,19 @@ class QuotationCreationTest extends TestCase
     public function it_handles_soft_deleted_records_correctly()
     {
         // Create and soft delete a quotation
-        $first = QuotationRequest::create([
-            'customer_name' => 'First Customer',
-            'customer_email' => 'first@example.com',
-            'customer_phone' => '+1234567890',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
-            'pol' => 'Antwerp',
-            'pod' => 'Lagos',
-            'cargo_description' => 'Test cargo',
-            'commodity_type' => 'car',
-        ]);
+        $first = QuotationRequest::create($this->getBaseQuotationData([
+            'contact_name' => 'First Customer',
+            'contact_email' => 'first@example.com',
+        ]));
         
         $firstNumber = $first->request_number;
         $first->delete(); // Soft delete
 
         // Create new quotation
-        $second = QuotationRequest::create([
-            'customer_name' => 'Second Customer',
-            'customer_email' => 'second@example.com',
-            'customer_phone' => '+1234567890',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
-            'pol' => 'Antwerp',
-            'pod' => 'Lagos',
-            'cargo_description' => 'Test cargo',
-            'commodity_type' => 'car',
-        ]);
+        $second = QuotationRequest::create($this->getBaseQuotationData([
+            'contact_name' => 'Second Customer',
+            'contact_email' => 'second@example.com',
+        ]));
 
         $this->assertNotEquals($firstNumber, $second->request_number, 'New quotation should not reuse soft-deleted request number');
     }
@@ -130,35 +107,20 @@ class QuotationCreationTest extends TestCase
     {
         $this->expectException(\Illuminate\Database\QueryException::class);
 
-        QuotationRequest::create([
-            'customer_name' => 'Test Customer',
-            'customer_email' => 'customer@example.com',
-            'customer_phone' => '+1234567890',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
-            // Missing POL and POD
-            'cargo_description' => 'Test cargo',
-            'commodity_type' => 'car',
-        ]);
+        QuotationRequest::create($this->getBaseQuotationData([
+            'pol' => null,
+            'pod' => null,
+        ]));
     }
 
     /** @test */
     public function it_allows_optional_por_and_fdest_fields()
     {
-        $quotation = QuotationRequest::create([
-            'customer_name' => 'Test Customer',
-            'customer_email' => 'customer@example.com',
-            'customer_phone' => '+1234567890',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
-            'pol' => 'Antwerp',
-            'pod' => 'Lagos',
-            // POR and FDEST intentionally omitted
-            'cargo_description' => 'Test cargo',
-            'commodity_type' => 'car',
-        ]);
+        $quotation = QuotationRequest::create($this->getBaseQuotationData([
+            'por' => null,
+            'fdest' => null,
+            'routing' => ['por' => null, 'pol' => 'Antwerp', 'pod' => 'Lagos', 'fdest' => null],
+        ]));
 
         $this->assertNull($quotation->por);
         $this->assertNull($quotation->fdest);
@@ -171,36 +133,15 @@ class QuotationCreationTest extends TestCase
     {
         $this->expectException(\Illuminate\Database\QueryException::class);
 
-        QuotationRequest::create([
-            'customer_name' => 'Test Customer',
-            'customer_email' => 'customer@example.com',
-            'customer_phone' => '+1234567890',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
-            'pol' => 'Antwerp',
-            'pod' => 'Lagos',
-            'cargo_description' => 'Test cargo',
-            'commodity_type' => 'car',
+        QuotationRequest::create($this->getBaseQuotationData([
             'status' => 'invalid_status', // Invalid enum value
-        ]);
+        ]));
     }
 
     /** @test */
     public function it_initializes_cargo_details_as_json_array()
     {
-        $quotation = QuotationRequest::create([
-            'customer_name' => 'Test Customer',
-            'customer_email' => 'customer@example.com',
-            'customer_phone' => '+1234567890',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
-            'pol' => 'Antwerp',
-            'pod' => 'Lagos',
-            'cargo_description' => 'Test cargo',
-            'commodity_type' => 'car',
-        ]);
+        $quotation = QuotationRequest::create($this->getBaseQuotationData());
 
         $this->assertIsArray($quotation->cargo_details);
         $this->assertEmpty($quotation->cargo_details);
@@ -209,19 +150,9 @@ class QuotationCreationTest extends TestCase
     /** @test */
     public function it_saves_customer_reference_field()
     {
-        $quotation = QuotationRequest::create([
-            'customer_name' => 'Test Customer',
-            'customer_email' => 'customer@example.com',
-            'customer_phone' => '+1234567890',
+        $quotation = QuotationRequest::create($this->getBaseQuotationData([
             'customer_reference' => 'REF-12345',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
-            'pol' => 'Antwerp',
-            'pod' => 'Lagos',
-            'cargo_description' => 'Test cargo',
-            'commodity_type' => 'car',
-        ]);
+        ]));
 
         $this->assertEquals('REF-12345', $quotation->customer_reference);
     }
@@ -229,20 +160,11 @@ class QuotationCreationTest extends TestCase
     /** @test */
     public function it_builds_routing_string_from_route_fields()
     {
-        $quotation = QuotationRequest::create([
-            'customer_name' => 'Test Customer',
-            'customer_email' => 'customer@example.com',
-            'customer_phone' => '+1234567890',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
+        $quotation = QuotationRequest::create($this->getBaseQuotationData([
             'por' => 'Brussels',
-            'pol' => 'Antwerp',
-            'pod' => 'Lagos',
             'fdest' => 'Abuja',
-            'cargo_description' => 'Test cargo',
-            'commodity_type' => 'car',
-        ]);
+            'routing' => ['por' => 'Brussels', 'pol' => 'Antwerp', 'pod' => 'Lagos', 'fdest' => 'Abuja'],
+        ]));
 
         // The routing string should be built from the route fields
         // This might be done in a mutator or observer
@@ -256,18 +178,7 @@ class QuotationCreationTest extends TestCase
     /** @test */
     public function it_sets_default_values_for_pricing_fields()
     {
-        $quotation = QuotationRequest::create([
-            'customer_name' => 'Test Customer',
-            'customer_email' => 'customer@example.com',
-            'customer_phone' => '+1234567890',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
-            'pol' => 'Antwerp',
-            'pod' => 'Lagos',
-            'cargo_description' => 'Test cargo',
-            'commodity_type' => 'car',
-        ]);
+        $quotation = QuotationRequest::create($this->getBaseQuotationData());
 
         $this->assertEquals(0, $quotation->subtotal);
         $this->assertEquals(0, $quotation->discount_amount);

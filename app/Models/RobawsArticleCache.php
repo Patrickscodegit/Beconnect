@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 class RobawsArticleCache extends Model
 {
@@ -36,8 +37,13 @@ class RobawsArticleCache extends Model
         // Article metadata from Robaws ARTICLE INFO
         'shipping_line',
         'service_type',
+        'transport_mode',
         'pol_terminal',
         'is_parent_item',
+        'article_type',
+        'cost_side',
+        'pol_code',
+        'pod_code',
         // Article metadata from Robaws IMPORTANT INFO
         'article_info',
         'update_date',
@@ -46,6 +52,9 @@ class RobawsArticleCache extends Model
         'pol',
         'pod',
         'commodity_type',
+        'is_mandatory',
+        'mandatory_condition',
+        'notes',
         // Standard Robaws article fields
         'sales_name',
         'brand',
@@ -82,6 +91,7 @@ class RobawsArticleCache extends Model
         'last_modified_at' => 'datetime',
         // New metadata fields
         'is_parent_item' => 'boolean',
+        'is_mandatory' => 'boolean',
         'update_date' => 'date',
         'validity_date' => 'date',
         // Standard Robaws field casts
@@ -133,8 +143,13 @@ class RobawsArticleCache extends Model
 
     public function scopeForService(Builder $query, string $serviceType): Builder
     {
+        if ($transportMode = $this->mapQuotationServiceTypeToTransportMode($serviceType)) {
+            $query->where('transport_mode', $transportMode);
+        }
+
         return $query->where(function ($q) use ($serviceType) {
             $q->whereJsonContains('applicable_services', $serviceType)
+              ->orWhere('service_type', $serviceType)
               ->orWhereNull('applicable_services');
         });
     }
@@ -219,7 +234,7 @@ class RobawsArticleCache extends Model
     public function quotationRequests(): BelongsToMany
     {
         return $this->belongsToMany(QuotationRequest::class, 'quotation_request_articles', 'article_cache_id', 'quotation_request_id')
-            ->withPivot(['parent_article_id', 'item_type', 'quantity', 'unit_price', 'selling_price', 'subtotal', 'currency', 'formula_inputs', 'calculated_price', 'notes'])
+            ->withPivot(['parent_article_id', 'item_type', 'quantity', 'unit_price', 'unit_type', 'selling_price', 'subtotal', 'currency', 'formula_inputs', 'calculated_price', 'notes'])
             ->withTimestamps();
     }
 
@@ -393,7 +408,14 @@ class RobawsArticleCache extends Model
      */
     public function scopeForServiceType(Builder $query, string $serviceType): Builder
     {
-        return $query->where('service_type', $serviceType);
+        if ($transportMode = $this->mapQuotationServiceTypeToTransportMode($serviceType)) {
+            $query->where('transport_mode', $transportMode);
+        }
+
+        return $query->where(function ($q) use ($serviceType) {
+            $q->whereJsonContains('applicable_services', $serviceType)
+              ->orWhereNull('applicable_services');
+        });
     }
 
     /**
@@ -467,9 +489,17 @@ class RobawsArticleCache extends Model
      */
     public function scopeForQuotationContext(Builder $query, \App\Models\QuotationRequest $quotation): Builder
     {
-        // Only show parent items that are active and valid
-        $query->where('is_parent_item', true)
-              ->where('is_active', true)
+        // Only show parent items when dataset contains them; otherwise fall back to all active articles.
+        $hasParentItems = static::query()
+            ->where('is_parent_item', true)
+            ->limit(1)
+            ->exists();
+
+        if ($hasParentItems) {
+            $query->where('is_parent_item', true);
+        }
+
+        $query->where('is_active', true)
               ->validAsOf(now());
 
         // Use database-agnostic case-insensitive matching
@@ -516,10 +546,19 @@ class RobawsArticleCache extends Model
             });
         }
 
-        // Apply service type filter if available - REQUIRE exact match (no NULL fallback)
+        // Apply transport mode filter derived from quotation service type
         if ($quotation->service_type) {
-            $query->where('service_type', $quotation->service_type);
-            // Do NOT include articles with NULL service_type - require a match
+            $transportMode = $this->mapQuotationServiceTypeToTransportMode($quotation->service_type);
+            $serviceTypeValue = Str::upper(str_replace(' ', '_', $quotation->service_type));
+
+            $query->where(function ($q) use ($transportMode, $serviceTypeValue) {
+                if ($transportMode) {
+                    $q->where('transport_mode', $transportMode);
+                    $q->orWhere('service_type', $serviceTypeValue);
+                } else {
+                    $q->where('service_type', $serviceTypeValue);
+                }
+            });
         }
 
         // Apply shipping line filter if schedule is selected - REQUIRE exact match (no NULL fallback)
@@ -554,8 +593,30 @@ class RobawsArticleCache extends Model
         
         // STRICT filtering when commodity is selected
         if (!empty($commodityTypes)) {
-            $commodityTypes = array_filter(array_unique($commodityTypes));
-            $query->whereIn('commodity_type', $commodityTypes);
+            $commodityTypes = collect($commodityTypes)
+                ->map(fn ($type) => Str::upper(trim($type)))
+                ->flatMap(function ($type) {
+                    return match ($type) {
+                        'TRUCK' => ['TRUCK', 'HH', 'LM CARGO'],
+                        'TRUCKHEAD' => ['TRUCKHEAD', 'HH', 'LM CARGO'],
+                        'BUS' => ['BUS', 'HH', 'LM CARGO'],
+                        default => [$type],
+                    };
+                })
+                ->unique()
+                ->values()
+                ->toArray();
+
+            \Log::debug('SmartArticleSelection commodity filter', [
+                'quotation_id' => $quotation->id ?? null,
+                'types' => $commodityTypes,
+            ]);
+
+            $placeholders = implode(', ', array_fill(0, count($commodityTypes), '?'));
+            $query->where(function ($q) use ($commodityTypes, $placeholders) {
+                $q->whereRaw("UPPER(commodity_type) IN ($placeholders)", $commodityTypes)
+                  ->orWhereNull('commodity_type');
+            });
         }
         // If no commodity selected, show all articles (existing behavior)
 
@@ -586,6 +647,52 @@ class RobawsArticleCache extends Model
         ];
         
         return $mapping[$quotationCommodityType] ?? null;
+    }
+
+    /**
+     * Map quotation service type (e.g., RORO_EXPORT) to article transport mode (e.g., RORO)
+     */
+    private function mapQuotationServiceTypeToTransportMode(?string $serviceType): ?string
+    {
+        if (!$serviceType) {
+            return null;
+        }
+
+        $upper = strtoupper($serviceType);
+
+        if (str_contains($upper, 'RORO')) {
+            return 'RORO';
+        }
+
+        if (str_contains($upper, 'FCL') && str_contains($upper, 'CONSOL')) {
+            return 'FCL CONSOL';
+        }
+
+        if (str_contains($upper, 'FCL')) {
+            return 'FCL';
+        }
+
+        if (str_contains($upper, 'LCL')) {
+            return 'LCL';
+        }
+
+        if (str_contains($upper, 'AIR')) {
+            return 'AIRFREIGHT';
+        }
+
+        if (str_contains($upper, 'BB')) {
+            return 'BB';
+        }
+
+        if (str_contains($upper, 'ROAD')) {
+            return 'ROAD TRANSPORT';
+        }
+
+        if (str_contains($upper, 'CUSTOMS')) {
+            return 'CUSTOMS';
+        }
+
+        return null;
     }
 
     /**

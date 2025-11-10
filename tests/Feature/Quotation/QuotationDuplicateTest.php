@@ -7,7 +7,6 @@ use App\Models\RobawsArticle;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
-
 class QuotationDuplicateTest extends TestCase
 {
     use RefreshDatabase;
@@ -20,23 +19,38 @@ class QuotationDuplicateTest extends TestCase
         $this->user = User::factory()->create();
     }
 
-    /** @test */
-    public function it_duplicates_quotation_with_new_unique_request_number()
+    protected function baseQuotationData(array $overrides = []): array
     {
-        $original = QuotationRequest::create([
-            'customer_name' => 'Test Customer',
-            'customer_email' => 'customer@example.com',
-            'customer_phone' => '+1234567890',
-            'customer_reference' => 'REF-ORIGINAL',
+        return array_merge([
+            'source' => 'intake',
+            'requester_type' => 'admin',
+            'contact_name' => 'Test Customer',
+            'contact_email' => 'customer@example.com',
+            'contact_phone' => '+1234567890',
+            'contact_company' => 'Test Company',
+            'trade_direction' => 'export',
+            'robaws_sync_status' => 'pending',
+            'pricing_currency' => 'EUR',
             'customer_type' => 'GENERAL',
             'customer_role' => 'CONSIGNEE',
             'service_type' => 'RORO_EXPORT',
             'pol' => 'Antwerp',
             'pod' => 'Lagos',
+            'routing' => ['por' => null, 'pol' => 'Antwerp', 'pod' => 'Lagos', 'fdest' => null],
+            'cargo_details' => [],
             'cargo_description' => 'Test cargo',
             'commodity_type' => 'car',
+            'status' => 'pending',
+        ], $overrides);
+    }
+
+    /** @test */
+    public function it_duplicates_quotation_with_new_unique_request_number()
+    {
+        $original = QuotationRequest::create($this->baseQuotationData([
+            'customer_reference' => 'REF-ORIGINAL',
             'status' => 'quoted',
-        ]);
+        ]));
 
         $originalNumber = $original->request_number;
 
@@ -69,21 +83,8 @@ class QuotationDuplicateTest extends TestCase
     /** @test */
     public function it_copies_articles_from_original_quotation()
     {
-        // Create original quotation
-        $original = QuotationRequest::create([
-            'customer_name' => 'Test Customer',
-            'customer_email' => 'customer@example.com',
-            'customer_phone' => '+1234567890',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
-            'pol' => 'Antwerp',
-            'pod' => 'Lagos',
-            'cargo_description' => 'Test cargo',
-            'commodity_type' => 'car',
-        ]);
+        $original = QuotationRequest::create($this->baseQuotationData());
 
-        // Create and attach articles
         $article1 = RobawsArticle::create([
             'robaws_article_id' => 'ART-001',
             'article_name' => 'Test Article 1',
@@ -114,13 +115,11 @@ class QuotationDuplicateTest extends TestCase
             'subtotal' => 200.00,
         ]);
 
-        // Duplicate quotation
         $duplicate = $original->replicate();
         $duplicate->status = 'pending';
         $duplicate->request_number = null;
         $duplicate->save();
 
-        // Copy articles
         foreach ($original->articles as $article) {
             $duplicate->articles()->attach($article->id, [
                 'quantity' => $article->pivot->quantity ?? 1,
@@ -137,26 +136,15 @@ class QuotationDuplicateTest extends TestCase
     /** @test */
     public function it_resets_pricing_fields_in_duplicate()
     {
-        $original = QuotationRequest::create([
-            'customer_name' => 'Test Customer',
-            'customer_email' => 'customer@example.com',
-            'customer_phone' => '+1234567890',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
-            'pol' => 'Antwerp',
-            'pod' => 'Lagos',
-            'cargo_description' => 'Test cargo',
-            'commodity_type' => 'car',
+        $original = QuotationRequest::create($this->baseQuotationData([
             'subtotal' => 1000.00,
             'discount_amount' => 100.00,
             'discount_percentage' => 10,
             'total_excl_vat' => 900.00,
             'vat_amount' => 189.00,
             'total_incl_vat' => 1089.00,
-        ]);
+        ]));
 
-        // Duplicate and reset pricing
         $duplicate = $original->replicate();
         $duplicate->request_number = null;
         $duplicate->status = 'pending';
@@ -178,30 +166,23 @@ class QuotationDuplicateTest extends TestCase
     /** @test */
     public function it_preserves_customer_and_route_information()
     {
-        $original = QuotationRequest::create([
-            'customer_name' => 'Test Customer',
-            'customer_email' => 'customer@example.com',
-            'customer_phone' => '+1234567890',
-            'customer_company' => 'Test Company',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
+        $original = QuotationRequest::create($this->baseQuotationData([
+            'contact_name' => 'Test Customer',
+            'contact_email' => 'customer@example.com',
+            'contact_company' => 'Test Company',
             'por' => 'Brussels',
-            'pol' => 'Antwerp',
-            'pod' => 'Lagos',
             'fdest' => 'Abuja',
-            'cargo_description' => 'Test cargo',
-            'commodity_type' => 'car',
-        ]);
+            'routing' => ['por' => 'Brussels', 'pol' => 'Antwerp', 'pod' => 'Lagos', 'fdest' => 'Abuja'],
+        ]));
 
         $duplicate = $original->replicate();
         $duplicate->request_number = null;
         $duplicate->status = 'pending';
         $duplicate->save();
 
-        $this->assertEquals('Test Customer', $duplicate->customer_name);
-        $this->assertEquals('customer@example.com', $duplicate->customer_email);
-        $this->assertEquals('Test Company', $duplicate->customer_company);
+        $this->assertEquals('Test Customer', $duplicate->contact_name);
+        $this->assertEquals('customer@example.com', $duplicate->contact_email);
+        $this->assertEquals('Test Company', $duplicate->contact_company);
         $this->assertEquals('Brussels', $duplicate->por);
         $this->assertEquals('Antwerp', $duplicate->pol);
         $this->assertEquals('Lagos', $duplicate->pod);
@@ -211,22 +192,12 @@ class QuotationDuplicateTest extends TestCase
     /** @test */
     public function it_clears_robaws_sync_information()
     {
-        $original = QuotationRequest::create([
-            'customer_name' => 'Test Customer',
-            'customer_email' => 'customer@example.com',
-            'customer_phone' => '+1234567890',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
-            'pol' => 'Antwerp',
-            'pod' => 'Lagos',
-            'cargo_description' => 'Test cargo',
-            'commodity_type' => 'car',
+        $original = QuotationRequest::create($this->baseQuotationData([
             'robaws_offer_id' => '12345',
             'robaws_offer_number' => 'OFF-001',
             'robaws_sync_status' => 'synced',
             'robaws_synced_at' => now(),
-        ]);
+        ]));
 
         $duplicate = $original->replicate();
         $duplicate->request_number = null;

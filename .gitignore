@@ -23,6 +23,10 @@ yarn-error.log
 # Database files (local development)
 /database/database.sqlite
 /database/database.sqlite-journal
+/database/testing.sqlite
+/database/testing.sqlite-journal
+/database/pipeline-testing.sqlite
+/database/pipeline-testing.sqlite-journal
 
 # Temporary files
 *.tmp

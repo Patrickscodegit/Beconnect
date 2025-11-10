@@ -8,8 +8,10 @@ use App\Services\Robaws\RobawsArticleProvider;
 use App\Services\Robaws\ArticleNameParser;
 use App\Services\Robaws\ArticleSyncEnhancementService;
 use App\Services\Robaws\RobawsFieldMapper;
+use App\Services\Robaws\ArticleTransportModeResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class RobawsArticlesSyncService
 {
@@ -18,13 +20,15 @@ class RobawsArticlesSyncService
     protected RobawsArticleProvider $articleProvider;
     protected ArticleSyncEnhancementService $enhancementService;
     protected RobawsFieldMapper $fieldMapper;
+    protected ArticleTransportModeResolver $transportModeResolver;
 
     public function __construct(
         RobawsApiClient $apiClient, 
         ArticleNameParser $parser,
         RobawsArticleProvider $articleProvider,
         ArticleSyncEnhancementService $enhancementService,
-        RobawsFieldMapper $fieldMapper
+        RobawsFieldMapper $fieldMapper,
+        ArticleTransportModeResolver $transportModeResolver
     )
     {
         $this->apiClient = $apiClient;
@@ -32,6 +36,7 @@ class RobawsArticlesSyncService
         $this->articleProvider = $articleProvider;
         $this->enhancementService = $enhancementService;
         $this->fieldMapper = $fieldMapper;
+        $this->transportModeResolver = $transportModeResolver;
     }
 
     /**
@@ -235,6 +240,8 @@ class RobawsArticlesSyncService
         // Map Robaws API article fields to our cache structure
         $articleName = $article['name'] ?? $article['description'] ?? 'Unnamed Article';
         
+        $isParent = $this->extractParentItemFromArticle($article);
+        
         $data = [
             'robaws_article_id' => $article['id'],
             'article_code' => $article['code'] ?? $article['articleNumber'] ?? $article['id'],
@@ -245,7 +252,9 @@ class RobawsArticlesSyncService
             'currency' => $article['currency'] ?? 'EUR',
             'unit_type' => $article['unit'] ?? $article['unitType'] ?? 'piece',
             'is_active' => $article['active'] ?? true,
-            'is_parent_article' => $this->extractParentItemFromArticle($article),
+            'is_parent_article' => $isParent,
+            'is_parent_item' => $isParent,
+            'service_type' => null,
             
             // Standard Robaws fields - Sales & Display
             'sales_name' => $article['saleName'] ?? null,
@@ -289,10 +298,25 @@ class RobawsArticlesSyncService
             $data = array_merge($data, $parsed);
         }
         
+        // Populate POL/POD strings from primary fields when present
+        $data['pol'] = $article['pol'] ?? $article['origin'] ?? $data['pol'] ?? null;
+        $data['pod'] = $article['pod'] ?? $article['destination'] ?? $data['pod'] ?? null;
+        $data['pol_code'] = $article['pol_code'] ?? $article['originCode'] ?? $data['pol_code'] ?? null;
+        $data['pod_code'] = $article['pod_code'] ?? $article['destinationCode'] ?? $data['pod_code'] ?? null;
+        
+        if (!empty($data['pol'])) {
+            $data['pol'] = trim($data['pol']);
+        }
+        
+        if (!empty($data['pod'])) {
+            $data['pod'] = trim($data['pod']);
+        }
+        
         // Extract enhanced fields for Smart Article Selection
         try {
             $data['commodity_type'] = $this->enhancementService->extractCommodityType($article);
             $data['pod_code'] = $this->enhancementService->extractPodCode($article['pod'] ?? $article['destination'] ?? '');
+            $data['pol_code'] = $this->enhancementService->extractPolCode($article['pol'] ?? $article['origin'] ?? '');
         } catch (\Exception $e) {
             Log::debug('Failed to extract enhanced fields', [
                 'article_id' => $article['id'] ?? 'unknown',
@@ -301,9 +325,19 @@ class RobawsArticlesSyncService
             // Non-critical - continue without enhanced fields
             $data['commodity_type'] = null;
             $data['pod_code'] = null;
+            $data['pol_code'] = null;
+        }
+        
+        // Supplement POL/POD metadata using parser if still missing
+        $namePorts = $this->extractPolPodFromArticleName($articleName);
+        foreach (['pol', 'pod', 'pol_code', 'pod_code', 'pol_terminal'] as $key) {
+            if (empty($data[$key]) && !empty($namePorts[$key])) {
+                $data[$key] = $namePorts[$key];
+            }
         }
         
         // Fetch full article details including extraFields if requested (for incremental sync)
+        $metadata = [];
         if ($fetchFullDetails) {
             try {
                 $fullDetails = $this->fetchFullArticleDetails($data['robaws_article_id']);
@@ -319,6 +353,59 @@ class RobawsArticlesSyncService
                 ]);
                 // Continue with basic data only
             }
+        }
+
+        $resolvedTransportMode = $this->transportModeResolver->resolve($articleName, [
+            'transport_mode' => $data['transport_mode'] ?? $metadata['transport_mode'] ?? null,
+            'shipping_line' => $data['shipping_line'] ?? $metadata['shipping_line'] ?? $article['shippingLine'] ?? null,
+            'commodity_type' => $data['commodity_type'] ?? $metadata['commodity_type'] ?? ($article['commodity_type'] ?? null),
+            'category' => $data['category'] ?? null,
+            'description' => $data['description'] ?? $article['description'] ?? null,
+            'article_code' => $data['article_code'] ?? null,
+        ]);
+
+        if ($resolvedTransportMode) {
+            $data['transport_mode'] = $resolvedTransportMode;
+        }
+
+        if (empty($data['service_type']) && !empty($data['transport_mode'])) {
+            $data['service_type'] = $this->normalizeServiceTypeFromMode($data['transport_mode']);
+        }
+
+        if (!empty($data['applicable_services'])) {
+            $data['service_type'] = $data['service_type'] ?? $this->selectPrimaryService($data['applicable_services']);
+        }
+
+        if (!empty($data['article_type'])) {
+            $data['article_type'] = Str::upper(trim($data['article_type']));
+        }
+
+        if (isset($data['is_mandatory'])) {
+            $data['is_mandatory'] = (bool) $data['is_mandatory'];
+        }
+
+        if (!empty($data['mandatory_condition'])) {
+            $data['mandatory_condition'] = trim((string) $data['mandatory_condition']);
+        }
+
+        if (!empty($data['cost_side'])) {
+            $data['cost_side'] = Str::upper(trim($data['cost_side']));
+        } elseif (!empty($data['article_type'])) {
+            $data['cost_side'] = $this->guessCostSide($data['article_type']);
+        }
+
+        if (!empty($data['pol_code'])) {
+            if (preg_match('/\(/', $data['pol_code']) || strlen($data['pol_code']) > 4) {
+                $data['pol_code'] = $this->enhancementService->extractPolCode($data['pol_code']) ?? $data['pol_code'];
+            }
+            $data['pol_code'] = Str::upper(trim($data['pol_code']));
+        }
+
+        if (!empty($data['pod_code'])) {
+            if (preg_match('/\(/', $data['pod_code']) || strlen($data['pod_code']) > 4) {
+                $data['pod_code'] = $this->enhancementService->extractPodCode($data['pod_code']) ?? $data['pod_code'];
+            }
+            $data['pod_code'] = Str::upper(trim($data['pod_code']));
         }
         
         // Upsert the article with all metadata
@@ -349,6 +436,7 @@ class RobawsArticlesSyncService
     protected function parseArticleCode(string $code, string $description = ''): array
     {
         $result = [
+            'transport_mode' => null,
             'service_type' => null,
             'customer_type' => null,
             'applicable_services' => [],
@@ -377,60 +465,108 @@ class RobawsArticlesSyncService
             }
         }
         
-        // Detect service type
+        // Detect transport mode / service type
         if (str_contains($code, 'RORO') || str_contains($description, 'RORO')) {
+            $result['transport_mode'] = 'RORO';
             if (str_contains($code, 'IMP') || str_contains($description, 'IMPORT')) {
-                $result['service_type'] = 'RORO_IMPORT';
                 $result['applicable_services'] = ['RORO_IMPORT'];
             } elseif (str_contains($code, 'EXP') || str_contains($description, 'EXPORT')) {
-                $result['service_type'] = 'RORO_EXPORT';
                 $result['applicable_services'] = ['RORO_EXPORT'];
             } else {
                 $result['applicable_services'] = ['RORO_IMPORT', 'RORO_EXPORT'];
             }
         } elseif (str_contains($code, 'FCL') || str_contains($description, 'FCL')) {
+            $result['transport_mode'] = str_contains($code . $description, 'CONSOL') ? 'FCL CONSOL' : 'FCL';
             if (str_contains($code, 'IMP') || str_contains($description, 'IMPORT')) {
-                $result['service_type'] = 'FCL_IMPORT';
                 $result['applicable_services'] = ['FCL_IMPORT', 'FCL_IMPORT_CONSOL'];
             } elseif (str_contains($code, 'EXP') || str_contains($description, 'EXPORT')) {
-                $result['service_type'] = 'FCL_EXPORT';
                 $result['applicable_services'] = ['FCL_EXPORT', 'FCL_EXPORT_CONSOL'];
             } else {
                 $result['applicable_services'] = ['FCL_IMPORT', 'FCL_EXPORT', 'FCL_IMPORT_CONSOL', 'FCL_EXPORT_CONSOL'];
             }
         } elseif (str_contains($code, 'LCL') || str_contains($description, 'LCL')) {
+            $result['transport_mode'] = 'LCL';
             if (str_contains($code, 'IMP') || str_contains($description, 'IMPORT')) {
-                $result['service_type'] = 'LCL_IMPORT';
                 $result['applicable_services'] = ['LCL_IMPORT'];
             } elseif (str_contains($code, 'EXP') || str_contains($description, 'EXPORT')) {
-                $result['service_type'] = 'LCL_EXPORT';
                 $result['applicable_services'] = ['LCL_EXPORT'];
             } else {
                 $result['applicable_services'] = ['LCL_IMPORT', 'LCL_EXPORT'];
             }
-        } elseif (str_contains($code, 'BB') || str_contains($description, 'BREAK BULK')) {
+        } elseif (str_contains($code, 'BB') || str_contains($description, 'BREAK BULK') || str_contains($description, 'BREAKBULK')) {
+            $result['transport_mode'] = 'BB';
             if (str_contains($code, 'IMP') || str_contains($description, 'IMPORT')) {
-                $result['service_type'] = 'BB_IMPORT';
                 $result['applicable_services'] = ['BB_IMPORT'];
             } elseif (str_contains($code, 'EXP') || str_contains($description, 'EXPORT')) {
-                $result['service_type'] = 'BB_EXPORT';
                 $result['applicable_services'] = ['BB_EXPORT'];
             } else {
                 $result['applicable_services'] = ['BB_IMPORT', 'BB_EXPORT'];
             }
-        } elseif (str_contains($code, 'AIR') || str_contains($description, 'AIR')) {
+        } elseif (str_contains($code, 'AIR') || str_contains($description, 'AIRFREIGHT') || str_contains($description, 'AIR FREIGHT')) {
+            $result['transport_mode'] = 'AIRFREIGHT';
             if (str_contains($code, 'IMP') || str_contains($description, 'IMPORT')) {
-                $result['service_type'] = 'AIR_IMPORT';
                 $result['applicable_services'] = ['AIR_IMPORT'];
             } elseif (str_contains($code, 'EXP') || str_contains($description, 'EXPORT')) {
-                $result['service_type'] = 'AIR_EXPORT';
                 $result['applicable_services'] = ['AIR_EXPORT'];
             } else {
                 $result['applicable_services'] = ['AIR_IMPORT', 'AIR_EXPORT'];
             }
+        } elseif (str_contains($code, 'ROAD') || str_contains($description, 'ROAD') || str_contains($description, 'TRUCK')) {
+            $result['transport_mode'] = 'ROAD TRANSPORT';
+        } elseif (str_contains($code, 'CUSTOMS') || str_contains($description, 'CUSTOMS')) {
+            $result['transport_mode'] = 'CUSTOMS';
+        } elseif (str_contains($code, 'PORT') && str_contains($description, 'FORWARDING')) {
+            $result['transport_mode'] = 'PORT FORWARDING';
+        } elseif (str_contains($code, 'HOMOLOGATION') || str_contains($description, 'HOMOLOGATION')) {
+            $result['transport_mode'] = 'HOMOLOGATION';
+        } elseif (str_contains($code, 'VEHICLE') && str_contains($description, 'PURCHASE')) {
+            $result['transport_mode'] = 'VEHICLE PURCHASE';
+        } elseif (str_contains($code, 'WAREHOUSE') || str_contains($description, 'WAREHOUSE')) {
+            $result['transport_mode'] = 'WAREHOUSE';
+        }
+
+        if (!$result['transport_mode']) {
+            if (str_contains($description, 'RORO')) {
+                $result['transport_mode'] = 'RORO';
+            } elseif (str_contains($description, 'FCL CONSOL')) {
+                $result['transport_mode'] = 'FCL CONSOL';
+            } elseif (str_contains($description, 'FCL')) {
+                $result['transport_mode'] = 'FCL';
+            } elseif (str_contains($description, 'LCL')) {
+                $result['transport_mode'] = 'LCL';
+            } elseif (str_contains($description, 'BREAKBULK') || str_contains($description, 'BREAK BULK') || str_contains($description, 'BB')) {
+                $result['transport_mode'] = 'BB';
+            } elseif (str_contains($description, 'AIR')) {
+                $result['transport_mode'] = 'AIRFREIGHT';
+            }
         }
         
+        if (!empty($result['applicable_services'])) {
+            $result['service_type'] = $this->selectPrimaryService($result['applicable_services']);
+        }
+
+        if (!$result['service_type'] && $result['transport_mode']) {
+            $result['service_type'] = $this->normalizeServiceTypeFromMode($result['transport_mode']);
+        }
+
         return $result;
+    }
+
+    /**
+     * Choose first applicable service from list.
+     */
+    protected function selectPrimaryService(array $services): ?string
+    {
+        $service = reset($services);
+        return $service ? strtoupper($service) : null;
+    }
+
+    /**
+     * Normalize legacy service_type value from transport mode.
+     */
+    protected function normalizeServiceTypeFromMode(string $transportMode): string
+    {
+        return strtoupper(str_replace(' ', '_', $transportMode));
     }
 
     /**
@@ -580,13 +716,23 @@ class RobawsArticlesSyncService
                 case 'SHIPPING_LINE':
                     $metadata['shipping_line'] = $value;
                     break;
-                case 'SERVICE TYPE':
+                case 'TRANSPORT MODE':
+                case 'TRANSPORT_MODE':
+                case 'SERVICE TYPE': // Backwards compatibility
                 case 'SERVICE_TYPE':
-                    $metadata['service_type'] = $value;
+                    $metadata['transport_mode'] = $value;
                     break;
                 case 'POL TERMINAL':
                 case 'POL_TERMINAL':
                     $metadata['pol_terminal'] = $value;
+                    break;
+                case 'POL CODE':
+                case 'POL_CODE':
+                    $metadata['pol_code'] = $value;
+                    break;
+                case 'POD CODE':
+                case 'POD_CODE':
+                    $metadata['pod_code'] = $value;
                     break;
                 case 'PARENT ITEM':
                 case 'PARENT_ITEM':
@@ -598,6 +744,26 @@ class RobawsArticlesSyncService
                     break;
                 case 'POD':
                     $metadata['pod'] = $value;
+                    break;
+                case 'ARTICLE TYPE':
+                case 'ARTICLE_TYPE':
+                    $metadata['article_type'] = $value;
+                    break;
+                case 'COST SIDE':
+                case 'COST_SIDE':
+                    $metadata['cost_side'] = $value;
+                    break;
+                case 'IS MANDATORY':
+                case 'IS_MANDATORY':
+                    $metadata['is_mandatory'] = (bool) ((int) $value);
+                    break;
+                case 'MANDATORY CONDITION':
+                case 'MANDATORY_CONDITION':
+                    $metadata['mandatory_condition'] = $value;
+                    break;
+                case 'NOTES':
+                case 'NOTE':
+                    $metadata['notes'] = $value;
                     break;
                 case 'TYPE':
                 case 'COMMODITY TYPE':
@@ -623,9 +789,9 @@ class RobawsArticlesSyncService
         $polPodData = $this->extractPolPodFromArticleName($articleName);
         $metadata = array_merge($metadata, $polPodData);
         
-        // Extract service type from description if not found in extraFields
-        if (empty($metadata['service_type'])) {
-            $metadata['service_type'] = $this->extractServiceTypeFromDescription($fullDetails['description'] ?? $articleName);
+        // Extract transport mode from description if not found in extraFields
+        if (empty($metadata['transport_mode'])) {
+            $metadata['transport_mode'] = $this->extractTransportModeFromDescription($fullDetails['description'] ?? $articleName);
         }
         
         // Extract shipping line from description if not found in extraFields
@@ -645,11 +811,27 @@ class RobawsArticlesSyncService
             // Use POD from Robaws extraFields if available
             if (!empty($metadata['pod'])) {
                 $metadata['pod_code'] = $this->enhancementService->extractPodCode($metadata['pod']);
+            } elseif (!empty($metadata['pod_name'])) {
+                $metadata['pod_code'] = $this->enhancementService->extractPodCode($metadata['pod_name']);
+            }
+            
+            if (!empty($metadata['pol'])) {
+                $metadata['pol_code'] = $this->enhancementService->extractPolCode($metadata['pol']);
+            } elseif (!empty($metadata['origin'])) {
+                $metadata['pol_code'] = $this->enhancementService->extractPolCode($metadata['origin']);
             }
         } catch (\Exception $e) {
             Log::debug('Failed to extract enhanced fields from full details', [
                 'error' => $e->getMessage()
             ]);
+        }
+        
+        // Supplement missing metadata with name parsing
+        $namePorts = $this->extractPolPodFromArticleName($articleName);
+        foreach (['pol', 'pod', 'pol_code', 'pod_code', 'pol_terminal'] as $key) {
+            if (empty($metadata[$key]) && !empty($namePorts[$key])) {
+                $metadata[$key] = $namePorts[$key];
+            }
         }
         
         return $metadata;
@@ -665,7 +847,14 @@ class RobawsArticlesSyncService
         // Use centralized parser for POL
         $polData = $this->parser->extractPOL($articleName);
         if ($polData) {
-            $data['pol_code'] = $polData['formatted'];
+            if (!empty($polData['code'])) {
+                $data['pol_code'] = $polData['code'];
+            }
+
+            if (!empty($polData['formatted'])) {
+                $data['pol'] = $polData['formatted'];
+            }
+
             if ($polData['terminal']) {
                 $data['pol_terminal'] = $polData['terminal'];
             }
@@ -674,36 +863,105 @@ class RobawsArticlesSyncService
         // Use centralized parser for POD
         $podData = $this->parser->extractPOD($articleName);
         if ($podData) {
-            $data['pod_name'] = $podData['formatted'];
+            if (!empty($podData['code'])) {
+                $data['pod_code'] = $podData['code'];
+            }
+
+            if (!empty($podData['formatted'])) {
+                $data['pod'] = $podData['formatted'];
+            }
         }
         
         return $data;
     }
-    
+
     /**
-     * Extract service type from description
+     * Guess cost side based on article type when not explicitly provided
      */
-    protected function extractServiceTypeFromDescription(string $description): ?string
+    protected function guessCostSide(?string $articleType): ?string
     {
-        $desc = strtoupper($description);
-        
-        if (str_contains($desc, 'EXPORT')) {
-            return str_contains($desc, 'FCL') ? 'FCL EXPORT' : 'EXPORT';
-        } elseif (str_contains($desc, 'IMPORT')) {
-            return str_contains($desc, 'FCL') ? 'FCL IMPORT' : 'IMPORT';
-        } elseif (str_contains($desc, 'RORO')) {
-            return 'RORO';
-        } elseif (str_contains($desc, 'FCL')) {
-            return 'FCL';
-        } elseif (str_contains($desc, 'STATIC')) {
-            return 'STATIC CARGO';
-        } elseif (str_contains($desc, 'SEAFREIGHT')) {
-            return 'SEAFREIGHT';
+        if (!$articleType) {
+            return null;
         }
-        
-        return null;
+
+        $type = Str::upper(trim($articleType));
+
+        return match (true) {
+            str_contains($type, 'LOCAL CHARGES POL') => 'POL',
+            str_contains($type, 'LOCAL CHARGES POD') => 'POD',
+            str_contains($type, 'SEAFREIGHT SURCHARGES') => 'SEA',
+            str_contains($type, 'SEAFREIGHT') => 'SEA',
+            str_contains($type, 'AIRFREIGHT') => 'AIR',
+            str_contains($type, 'ROAD TRANSPORT') => 'INLAND',
+            str_contains($type, 'INSPECTION SURCHARGES') => 'POL',
+            str_contains($type, 'ADMINISTRATIVE') || str_contains($type, 'MISC') => 'ADMIN',
+            str_contains($type, 'WAREHOUSE') => 'WAREHOUSE',
+            default => null,
+        };
     }
     
+    /**
+     * Extract transport mode from description
+     */
+    protected function extractTransportModeFromDescription(string $description): ?string
+    {
+        $desc = strtoupper($description);
+
+        if (str_contains($desc, 'RORO')) {
+            return 'RORO';
+        }
+
+        if (str_contains($desc, 'FCL CONSOL')) {
+            return 'FCL CONSOL';
+        }
+
+        if (str_contains($desc, 'FCL')) {
+            return 'FCL';
+        }
+
+        if (str_contains($desc, 'LCL')) {
+            return 'LCL';
+        }
+
+        if (str_contains($desc, 'BREAK BULK') || str_contains($desc, 'BREAKBULK') || str_contains($desc, 'BB')) {
+            return 'BB';
+        }
+
+        if (str_contains($desc, 'AIR')) {
+            return 'AIRFREIGHT';
+        }
+
+        if (str_contains($desc, 'ROAD')) {
+            return 'ROAD TRANSPORT';
+        }
+
+        if (str_contains($desc, 'CUSTOMS')) {
+            return 'CUSTOMS';
+        }
+
+        if (str_contains($desc, 'PORT FORWARDING')) {
+            return 'PORT FORWARDING';
+        }
+
+        if (str_contains($desc, 'HOMOLOGATION')) {
+            return 'HOMOLOGATION';
+        }
+
+        if (str_contains($desc, 'VEHICLE PURCHASE')) {
+            return 'VEHICLE PURCHASE';
+        }
+
+        if (str_contains($desc, 'WAREHOUSE')) {
+            return 'WAREHOUSE';
+        }
+
+        if (str_contains($desc, 'SEAFREIGHT')) {
+            return 'SEAFREIGHT';
+        }
+
+        return null;
+    }
+
     /**
      * Extract shipping line from description
      */

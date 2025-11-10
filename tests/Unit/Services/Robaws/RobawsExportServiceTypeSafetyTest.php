@@ -18,23 +18,24 @@ class RobawsExportServiceTypeSafetyTest extends TestCase
 
     private RobawsExportService $service;
     private RobawsMapper $mapper;
+    private \Mockery\MockInterface $apiClient;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        // Mock dependencies (avoiding final RobawsApiClient)
+        // Mock dependencies
         $this->mapper = Mockery::mock(RobawsMapper::class);
-        
-        // Create a real RobawsApiClient for testing - we'll test the methods directly
+
+        // Create a partial mock around a real RobawsApiClient instance (final class)
         $config = [
             'api_url' => 'https://test.api.com',
             'api_username' => 'test',
             'api_password' => 'test',
         ];
-        $apiClient = new RobawsApiClient($config);
-        
-        $this->service = new RobawsExportService($this->mapper, $apiClient);
+        $this->apiClient = Mockery::mock(new RobawsApiClient($config))->makePartial();
+
+        $this->service = new RobawsExportService($this->mapper, $this->apiClient);
     }
 
     public function test_validates_positive_integer_client_ids()
@@ -96,7 +97,10 @@ class RobawsExportServiceTypeSafetyTest extends TestCase
                 'some' => 'data',
             ]);
 
-        $payload = $this->callBuildTypeSeafePayload($intake, $extractionData, $mapped, 'test-export-1');
+        $this->apiClient->shouldReceive('createOrFindClient')->andReturn(['id' => 4046]);
+        $this->apiClient->shouldReceive('findClientId')->andReturn(4046);
+
+        $payload = $this->callBuildTypeSafePayload($intake, $extractionData, $mapped, 'test-export-1');
 
         $this->assertArrayHasKey('clientId', $payload);
         $this->assertEquals(4046, $payload['clientId']);
@@ -146,7 +150,10 @@ class RobawsExportServiceTypeSafetyTest extends TestCase
             ->with($mapped) // No client_id or contact_email injected
             ->andReturn(['some' => 'data']);
 
-        $payload = $this->callBuildTypeSeafePayload($intake, $extractionData, $mapped, 'test-export-2');
+        $this->apiClient->shouldReceive('createOrFindClient')->andReturn(['id' => null]);
+        $this->apiClient->shouldReceive('findClientId')->andReturn(null);
+
+        $payload = $this->callBuildTypeSafePayload($intake, $extractionData, $mapped, 'test-export-2');
 
         $this->assertArrayNotHasKey('clientId', $payload);
 
@@ -186,7 +193,10 @@ class RobawsExportServiceTypeSafetyTest extends TestCase
                 'some' => 'data',
             ]);
 
-        $payload = $this->callBuildTypeSeafePayload($intake, $extractionData, $mapped, 'test-export-3');
+        $this->apiClient->shouldReceive('createOrFindClient')->andReturn(['id' => 123]);
+        $this->apiClient->shouldReceive('findClientId')->andReturn(123);
+
+        $payload = $this->callBuildTypeSafePayload($intake, $extractionData, $mapped, 'test-export-3');
 
         $this->assertEquals('sales@truck-time.com', $payload['contactEmail']);
 
@@ -262,10 +272,10 @@ class RobawsExportServiceTypeSafetyTest extends TestCase
     /**
      * Helper method to call private buildTypeSeafePayload method
      */
-    private function callBuildTypeSeafePayload($intake, $extractionData, $mapped, $exportId): array
+    private function callBuildTypeSafePayload($intake, $extractionData, $mapped, $exportId): array
     {
         $reflection = new ReflectionClass($this->service);
-        $method = $reflection->getMethod('buildTypeSeafePayload');
+        $method = $reflection->getMethod('buildTypeSafePayload');
         $method->setAccessible(true);
 
         return $method->invoke($this->service, $intake, $extractionData, $mapped, $exportId);

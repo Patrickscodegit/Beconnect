@@ -4,6 +4,7 @@ namespace App\Services\Robaws;
 
 use App\Models\Port;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * Service for parsing Robaws article names to extract metadata
@@ -159,41 +160,100 @@ class ArticleNameParser
     }
     
     /**
-     * Extract service type from article name
+     * Extract transport mode from article name
      * 
-     * Looks for keywords like: Seafreight, Export, Import, RORO, FCL, Static Cargo
-     * 
-     * @param string $articleName The full article name from Robaws
-     * @return string|null The service type, or null if not found
+     * Maps raw article text to canonical transport mode values used in Robaws cache.
+     * Examples: RORO, FCL, FCL CONSOL, LCL, BB, AIRFREIGHT, ROAD TRANSPORT.
+     */
+    public function extractTransportMode(string $articleName): ?string
+    {
+        $upper = Str::upper($articleName);
+
+        if (Str::contains($upper, 'RORO') || Str::contains($upper, 'ROLL ON ROLL OFF')) {
+            return 'RORO';
+        }
+
+        if (Str::contains($upper, 'FCL CONSOL')) {
+            return 'FCL CONSOL';
+        }
+
+        if (Str::contains($upper, 'FCL')) {
+            return 'FCL';
+        }
+
+        if (Str::contains($upper, 'LCL')) {
+            return 'LCL';
+        }
+
+        if (Str::contains($upper, 'BREAK BULK') || Str::contains($upper, 'BREAKBULK') || Str::contains($upper, 'BB')) {
+            return 'BB';
+        }
+
+        if (Str::contains($upper, 'AIR')) {
+            return 'AIRFREIGHT';
+        }
+
+        if (Str::contains($upper, 'ROAD') || Str::contains($upper, 'TRUCK')) {
+            return 'ROAD TRANSPORT';
+        }
+
+        if (Str::contains($upper, 'CUSTOMS')) {
+            return 'CUSTOMS';
+        }
+
+        if (Str::contains($upper, 'PORT FORWARDING')) {
+            return 'PORT FORWARDING';
+        }
+
+        if (Str::contains($upper, 'HOMOLOGATION')) {
+            return 'HOMOLOGATION';
+        }
+
+        if (Str::contains($upper, 'VEHICLE PURCHASE')) {
+            return 'VEHICLE PURCHASE';
+        }
+
+        if (Str::contains($upper, 'WAREHOUSE') || Str::contains($upper, 'STORAGE')) {
+            return 'WAREHOUSE';
+        }
+
+        if (Str::contains($upper, 'SEAFREIGHT')) {
+            return 'SEAFREIGHT';
+        }
+
+        return null;
+    }
+
+    /**
+     * Legacy service type extractor (EXPORT / IMPORT / general labels).
+     * Kept for backwards compatibility while consumers migrate to transport mode.
      */
     public function extractServiceType(string $articleName): ?string
     {
-        // Try to find explicit EXPORT or IMPORT first
         if (preg_match('/\bEXPORT\b/i', $articleName)) {
             return 'EXPORT';
         }
-        
+
         if (preg_match('/\bIMPORT\b/i', $articleName)) {
             return 'IMPORT';
         }
-        
-        // Check for other service types
+
         if (preg_match('/\bRORO\b/i', $articleName)) {
             return 'RORO';
         }
-        
+
         if (preg_match('/\bFCL\b/i', $articleName)) {
             return 'FCL';
         }
-        
+
         if (preg_match('/\bSTATIC\s+CARGO\b/i', $articleName)) {
             return 'STATIC CARGO';
         }
-        
+
         if (preg_match('/\bSeafreight\b/i', $articleName)) {
             return 'SEAFREIGHT';
         }
-        
+
         return null;
     }
     
@@ -211,6 +271,7 @@ class ArticleNameParser
             'pol' => $this->extractPOL($articleName),
             'pod' => $this->extractPOD($articleName),
             'shipping_line' => $this->extractShippingLine($articleName),
+            'transport_mode' => $this->extractTransportMode($articleName),
             'service_type' => $this->extractServiceType($articleName),
         ];
     }

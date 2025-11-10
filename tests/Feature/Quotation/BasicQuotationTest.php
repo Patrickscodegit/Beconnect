@@ -19,15 +19,18 @@ class BasicQuotationTest extends TestCase
         $this->user = User::factory()->create();
     }
 
-    public function test_quotation_creation_works()
+    /**
+     * Build a valid quotation payload for easy reuse.
+     */
+    protected function validQuotationData(array $overrides = []): array
     {
-        $data = [
+        return array_merge([
             'source' => 'intake',
             'requester_type' => 'admin',
-            'requester_email' => 'admin@belgaco.com',
-            'requester_name' => 'Test Customer',
-            'requester_company' => 'Test Company',
-            'requester_phone' => '+1234567890',
+            'contact_email' => 'admin@belgaco.com',
+            'contact_name' => 'Test Customer',
+            'contact_company' => 'Test Company',
+            'contact_phone' => '+1234567890',
             'trade_direction' => 'export',
             'robaws_sync_status' => 'pending',
             'pricing_currency' => 'EUR',
@@ -40,13 +43,16 @@ class BasicQuotationTest extends TestCase
             'cargo_details' => [],
             'cargo_description' => 'Test cargo',
             'status' => 'pending',
-        ];
+        ], $overrides);
+    }
 
-        $quotation = QuotationRequest::create($data);
+    public function test_quotation_creation_works()
+    {
+        $quotation = QuotationRequest::create($this->validQuotationData());
 
         $this->assertNotNull($quotation->request_number);
         $this->assertMatchesRegularExpression('/^QR-\d{4}-\d{4}$/', $quotation->request_number);
-        $this->assertEquals('Test Customer', $quotation->requester_name);
+        $this->assertEquals('Test Customer', $quotation->contact_name);
         $this->assertEquals('RORO_EXPORT', $quotation->service_type);
         $this->assertEquals('Antwerp', $quotation->pol);
         $this->assertEquals('Lagos', $quotation->pod);
@@ -55,44 +61,16 @@ class BasicQuotationTest extends TestCase
     public function test_unique_request_numbers()
     {
         // Create first quotation
-        $first = QuotationRequest::create([
-            'source' => 'intake',
-            'requester_type' => 'admin',
-            'requester_email' => 'admin@belgaco.com',
-            'requester_name' => 'First Customer',
-            'trade_direction' => 'export',
-            'robaws_sync_status' => 'pending',
-            'pricing_currency' => 'EUR',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
-            'pol' => 'Antwerp',
-            'pod' => 'Lagos',
+        $first = QuotationRequest::create($this->validQuotationData([
+            'contact_name' => 'First Customer',
             'routing' => [],
-            'cargo_details' => [],
-            'cargo_description' => 'Test cargo',
-            'status' => 'pending',
-        ]);
+        ]));
 
         // Create second quotation
-        $second = QuotationRequest::create([
-            'source' => 'intake',
-            'requester_type' => 'admin',
-            'requester_email' => 'admin@belgaco.com',
-            'requester_name' => 'Second Customer',
-            'trade_direction' => 'export',
-            'robaws_sync_status' => 'pending',
-            'pricing_currency' => 'EUR',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
-            'pol' => 'Antwerp',
-            'pod' => 'Lagos',
+        $second = QuotationRequest::create($this->validQuotationData([
+            'contact_name' => 'Second Customer',
             'routing' => [],
-            'cargo_details' => [],
-            'cargo_description' => 'Test cargo',
-            'status' => 'pending',
-        ]);
+        ]));
 
         $this->assertNotEquals($first->request_number, $second->request_number);
         $this->assertMatchesRegularExpression('/^QR-\d{4}-\d{4}$/', $first->request_number);
@@ -102,47 +80,19 @@ class BasicQuotationTest extends TestCase
     public function test_soft_deleted_handling()
     {
         // Create and soft delete first quotation
-        $first = QuotationRequest::create([
-            'source' => 'intake',
-            'requester_type' => 'admin',
-            'requester_email' => 'admin@belgaco.com',
-            'requester_name' => 'First Customer',
-            'trade_direction' => 'export',
-            'robaws_sync_status' => 'pending',
-            'pricing_currency' => 'EUR',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
-            'pol' => 'Antwerp',
-            'pod' => 'Lagos',
+        $first = QuotationRequest::create($this->validQuotationData([
+            'contact_name' => 'First Customer',
             'routing' => [],
-            'cargo_details' => [],
-            'cargo_description' => 'Test cargo',
-            'status' => 'pending',
-        ]);
+        ]));
 
         $firstNumber = $first->request_number;
         $first->delete(); // Soft delete
 
         // Create new quotation - should not reuse the soft-deleted number
-        $second = QuotationRequest::create([
-            'source' => 'intake',
-            'requester_type' => 'admin',
-            'requester_email' => 'admin@belgaco.com',
-            'requester_name' => 'Second Customer',
-            'trade_direction' => 'export',
-            'robaws_sync_status' => 'pending',
-            'pricing_currency' => 'EUR',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
-            'pol' => 'Antwerp',
-            'pod' => 'Lagos',
+        $second = QuotationRequest::create($this->validQuotationData([
+            'contact_name' => 'Second Customer',
             'routing' => [],
-            'cargo_details' => [],
-            'cargo_description' => 'Test cargo',
-            'status' => 'pending',
-        ]);
+        ]));
 
         $this->assertNotEquals($firstNumber, $second->request_number);
     }
@@ -162,25 +112,9 @@ class BasicQuotationTest extends TestCase
     public function test_optional_route_fields()
     {
         // Test with only POL and POD (port-to-port shipment)
-        $quotation = QuotationRequest::create([
-            'source' => 'intake',
-            'requester_type' => 'admin',
-            'requester_email' => 'admin@belgaco.com',
-            'requester_name' => 'Test Customer',
-            'trade_direction' => 'export',
-            'robaws_sync_status' => 'pending',
-            'pricing_currency' => 'EUR',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
-            'pol' => 'Antwerp',
-            'pod' => 'Lagos',
+        $quotation = QuotationRequest::create($this->validQuotationData([
             'routing' => [],
-            'cargo_details' => [],
-            'cargo_description' => 'Test cargo',
-            'status' => 'pending',
-            // POR and FDEST intentionally omitted
-        ]);
+        ]));
 
         $this->assertNull($quotation->por);
         $this->assertNull($quotation->fdest);
@@ -190,25 +124,10 @@ class BasicQuotationTest extends TestCase
 
     public function test_customer_reference_field()
     {
-        $quotation = QuotationRequest::create([
-            'source' => 'intake',
-            'requester_type' => 'admin',
-            'requester_email' => 'admin@belgaco.com',
-            'requester_name' => 'Test Customer',
+        $quotation = QuotationRequest::create($this->validQuotationData([
             'customer_reference' => 'REF-12345',
-            'trade_direction' => 'export',
-            'robaws_sync_status' => 'pending',
-            'pricing_currency' => 'EUR',
-            'customer_type' => 'GENERAL',
-            'customer_role' => 'CONSIGNEE',
-            'service_type' => 'RORO_EXPORT',
-            'pol' => 'Antwerp',
-            'pod' => 'Lagos',
             'routing' => [],
-            'cargo_details' => [],
-            'cargo_description' => 'Test cargo',
-            'status' => 'pending',
-        ]);
+        ]));
 
         $this->assertEquals('REF-12345', $quotation->customer_reference);
     }

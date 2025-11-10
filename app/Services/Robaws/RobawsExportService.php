@@ -114,11 +114,11 @@ class RobawsExportService
 
             // Check if already exported recently (unless forced)
             if (!($options['force'] ?? false) && $this->wasRecentlyExported($intake)) {
-                return [
-                    'success' => false,
+                return $this->canonicalResponse([
                     'error' => 'Intake was already exported recently. Use force=true to re-export.',
                     'quotation_id' => $intake->robaws_offer_id,
-                ];
+                    'skipped' => [$intake->id],
+                ]);
             }
 
             // Get extraction data
@@ -158,11 +158,11 @@ class RobawsExportService
             
             // Block export if payload is empty
             if (empty($payload)) {
-                return [
-                    'success' => false,
+                return $this->canonicalResponse([
                     'status' => 422,
                     'error' => 'Mapped payload is empty - no data to export',
-                ];
+                    'failed' => [$intake->id],
+                ]);
             }
             
             // Generate payload hash for idempotency
@@ -290,14 +290,15 @@ class RobawsExportService
                 // Attach documents after successful offer creation/update
                 $this->attachDocumentsToOffer($intake, $offerId, $exportId);
 
-                return [
+                return $this->canonicalResponse([
                     'success' => true,
                     'action' => $action,
                     'quotation_id' => $result['quotation_id'],
                     'idempotency_key' => $result['idempotency_key'],
                     'duration_ms' => $duration,
                     'data' => $result['data'],
-                ];
+                    'uploaded' => array_filter([$result['quotation_id'] ?? null]),
+                ]);
             }
 
             // Handle API failure
@@ -321,13 +322,13 @@ class RobawsExportService
                 'attempt_count' => $intake->export_attempt_count + 1,
             ]);
 
-            return [
-                'success' => false,
+            return $this->canonicalResponse([
                 'error' => $result['error'],
                 'status' => $result['status'] ?? null,
                 'duration_ms' => $duration,
                 'details' => $result['data'] ?? [],
-            ];
+                'failed' => [$intake->id],
+            ]);
 
         } catch (\Exception $e) {
             $duration = round((microtime(true) - $startTime) * 1000, 2);
@@ -344,11 +345,11 @@ class RobawsExportService
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            return [
-                'success' => false,
+            return $this->canonicalResponse([
                 'error' => 'Unexpected error: ' . $e->getMessage(),
                 'duration_ms' => $duration,
-            ];
+                'failed' => [$intake->id],
+            ]);
         }
     }
 
@@ -511,6 +512,58 @@ class RobawsExportService
             // Legacy fallback path
             return $this->buildLegacyTypeSafePayload($intake, $extractionData, $mapped, $exportId);
         }
+    }
+
+    /**
+     * Backwards compatibility shim for legacy tests calling the old method name.
+     *
+     * @deprecated use buildTypeSafePayload instead
+     */
+    private function buildTypeSeafePayload($intake, $extractionData, $mapped, $exportId): array
+    {
+        return $this->buildTypeSafePayload($intake, $extractionData, $mapped, $exportId);
+    }
+
+    /**
+     * Legacy helper retained for tests that expect direct mapping access.
+     *
+     * @deprecated Prefer using the RobawsMapper directly.
+     */
+    private function mapExtractionToRobaws(array $extractionData, ?Intake $intake = null): array
+    {
+        $intake ??= new Intake([
+            'customer_name' => data_get($extractionData, 'contact.name'),
+            'customer_email' => data_get($extractionData, 'contact.email'),
+            'customer_phone' => data_get($extractionData, 'contact.phone'),
+        ]);
+
+        $mapped = $this->mapper->mapIntakeToRobaws($intake, $extractionData);
+        $payload = $this->mapper->toRobawsApiPayload($mapped);
+
+        $defaultClientId = (int) config('services.robaws.default_client_id', 0);
+        if ($defaultClientId > 0 && empty($payload['clientId'])) {
+            $payload['clientId'] = $defaultClientId;
+            $payload['customerId'] = $defaultClientId;
+        }
+
+        return $payload;
+    }
+
+    /**
+     * Guarantee a canonical response shape for downstream consumers.
+     */
+    private function canonicalResponse(array $data): array
+    {
+        $base = [
+            'success' => false,
+            'failed' => [],
+            'uploaded' => [],
+            'exists' => [],
+            'skipped' => [],
+            'stats' => [],
+        ];
+
+        return array_replace($base, $data);
     }
 
     /**

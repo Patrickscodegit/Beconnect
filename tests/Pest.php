@@ -41,7 +41,9 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+use Tests\Support\Pipeline\PipelineTestHelper;
+
+function pipeline_only(): void
 {
-    // ..
+    PipelineTestHelper::requirePipelineTests(test());
 }

@@ -1398,29 +1398,7 @@ class RobawsMapper
         if ($originIsPort && $destinationIsPort) {
             return true;
         }
-        
-        // If no oncarriage is requested and no door-to-door keywords, assume port-to-port
-        if (!$this->hasOncarriageRequest($pricing, $extractionData)) {
-            // Check for door-to-door keywords
-            $documentText = strtolower($extractionData['raw_text'] ?? '');
-            $doorToDoorKeywords = [
-                'door to door',
-                'door delivery',
-                'final destination',
-                'deliver to address',
-                'pickup from',
-                'collect from'
-            ];
-            
-            foreach ($doorToDoorKeywords as $keyword) {
-                if (stripos($documentText, $keyword) !== false) {
-                    return false; // Door-to-door shipping detected
-                }
-            }
-            
-            return true; // No door-to-door indicators found
-        }
-        
+
         return false;
     }
 

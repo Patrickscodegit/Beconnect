@@ -13,6 +13,7 @@ class QuotationRequestArticle extends Model
         'parent_article_id',
         'item_type',
         'quantity',
+        'unit_type',
         'unit_price',
         'selling_price',
         'subtotal',
@@ -24,6 +25,7 @@ class QuotationRequestArticle extends Model
 
     protected $casts = [
         'quantity' => 'integer',
+        'unit_type' => 'string',
         'unit_price' => 'decimal:2',
         'selling_price' => 'decimal:2',
         'subtotal' => 'decimal:2',
@@ -117,6 +119,7 @@ class QuotationRequestArticle extends Model
                         'parent_article_id' => $this->article_cache_id,
                         'item_type' => 'child',
                         'quantity' => $this->quantity, // Same quantity as parent
+                        'unit_type' => $child->unit_type ?? 'unit',
                         'unit_price' => $child->unit_price,
                         'selling_price' => $child->getPriceForRole($role ?: 'default'),
                         'currency' => $child->currency,

@@ -127,11 +127,12 @@ class SmartArticleSelectionService
             }
         }
 
-        // Service type match: 30 points
-        if ($quotation->service_type && $article->service_type) {
-            if (strtoupper($quotation->service_type) === strtoupper($article->service_type)) {
+        // Transport mode match: 30 points
+        $quotationMode = $this->mapServiceTypeToTransportMode($quotation->service_type);
+        if ($quotationMode && $article->transport_mode) {
+            if (strtoupper($quotationMode) === strtoupper($article->transport_mode)) {
                 $score += 30;
-                $debugBreakdown['service_type'] = 30;
+                $debugBreakdown['transport_mode'] = 30;
             }
         }
 
@@ -164,12 +165,13 @@ class SmartArticleSelectionService
                 'quotation_pol' => $quotation->pol,
                 'quotation_pod' => $quotation->pod,
                 'quotation_service_type' => $quotation->service_type,
+                'quotation_transport_mode' => $quotationMode,
                 'quotation_preferred_carrier' => $quotation->preferred_carrier,
                 'quotation_selected_schedule_id' => $quotation->selected_schedule_id,
                 'article_pol' => $article->pol,
                 'article_pod' => $article->pod,
                 'article_shipping_line' => $article->shipping_line,
-                'article_service_type' => $article->service_type,
+                'article_transport_mode' => $article->transport_mode,
                 'article_commodity_type' => $article->commodity_type,
                 'carrier_matched' => $carrierMatched,
             ]
@@ -223,10 +225,11 @@ class SmartArticleSelectionService
             }
         }
 
-        // Check service type match
-        if ($quotation->service_type && $article->service_type) {
-            if (strtoupper($quotation->service_type) === strtoupper($article->service_type)) {
-                $reasons[] = "Service: {$article->service_type}";
+        // Check transport mode match
+        $quotationMode = $this->mapServiceTypeToTransportMode($quotation->service_type);
+        if ($quotationMode && $article->transport_mode) {
+            if (strtoupper($quotationMode) === strtoupper($article->transport_mode)) {
+                $reasons[] = "Transport mode: {$article->transport_mode}";
             }
         }
 
@@ -277,59 +280,110 @@ class SmartArticleSelectionService
             return [];
         }
 
-        return $quotation->commodityItems->map(function ($item) {
-            return $this->normalizeCommodityType($item);
-        })->filter()->unique()->values()->toArray();
+        return $quotation->commodityItems
+            ->flatMap(function ($item) {
+                return $this->normalizeCommodityTypes($item);
+            })
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
     }
 
     /**
-     * Normalize commodity type from commodity item
+     * Normalize commodity types from commodity item
      *
      * @param mixed $commodityItem
-     * @return string|null
+     * @return array<string>
      */
-    protected function normalizeCommodityType($commodityItem): ?string
+    protected function normalizeCommodityTypes($commodityItem): array
     {
         if (!$commodityItem) {
-            return null;
+            return [];
         }
 
         $type = $commodityItem->commodity_type ?? null;
 
         // Map internal commodity types to Robaws article types
         $typeMapping = [
-            'vehicles' => $this->getVehicleCategoryMapping($commodityItem),
-            'machinery' => 'Machinery',
-            'boat' => 'Boat',
-            'general_cargo' => 'General Cargo',
+            'vehicles' => $this->getVehicleCategoryMappings($commodityItem),
+            'machinery' => ['Machinery'],
+            'boat' => ['Boat'],
+            'general_cargo' => ['General Cargo'],
         ];
 
-        return $typeMapping[$type] ?? null;
+        return $typeMapping[$type] ?? [];
     }
 
     /**
-     * Get specific vehicle category for mapping
+     * Get specific vehicle category mappings
      *
      * @param mixed $commodityItem
-     * @return string|null
+     * @return array<string>
      */
-    protected function getVehicleCategoryMapping($commodityItem): ?string
+    protected function getVehicleCategoryMappings($commodityItem): array
     {
-        $category = $commodityItem->vehicle_category ?? null;
+        $category = $commodityItem->category ?? $commodityItem->vehicle_category ?? null;
 
         // Map vehicle categories to Robaws types
         $vehicleMapping = [
-            'car' => 'Car',
-            'suv' => 'SUV',
-            'small_van' => 'Small Van',
-            'big_van' => 'Big Van',
-            'truck' => 'Truck',
-            'truckhead' => 'Truckhead',
-            'bus' => 'Bus',
-            'motorcycle' => 'Motorcycle',
+            'car' => ['CAR'],
+            'suv' => ['SUV'],
+            'small_van' => ['SMALL VAN'],
+            'big_van' => ['BIG VAN', 'LM CARGO'],
+            'truck' => ['TRUCK', 'HH', 'LM CARGO'],
+            'truckhead' => ['TRUCKHEAD', 'HH', 'LM CARGO'],
+            'bus' => ['BUS', 'HH', 'LM CARGO'],
+            'motorcycle' => ['MOTORCYCLE'],
         ];
 
-        return $vehicleMapping[$category] ?? 'Car'; // Default to Car
+        return $vehicleMapping[$category] ?? ['CAR'];
+    }
+
+    /**
+     * Map quotation-level service type to canonical transport mode
+     */
+    protected function mapServiceTypeToTransportMode(?string $serviceType): ?string
+    {
+        if (!$serviceType) {
+            return null;
+        }
+
+        $upper = strtoupper($serviceType);
+
+        if (str_contains($upper, 'RORO')) {
+            return 'RORO';
+        }
+
+        if (str_contains($upper, 'FCL') && str_contains($upper, 'CONSOL')) {
+            return 'FCL CONSOL';
+        }
+
+        if (str_contains($upper, 'FCL')) {
+            return 'FCL';
+        }
+
+        if (str_contains($upper, 'LCL')) {
+            return 'LCL';
+        }
+
+        if (str_contains($upper, 'AIR')) {
+            return 'AIRFREIGHT';
+        }
+
+        if (str_contains($upper, 'BB')) {
+            return 'BB';
+        }
+
+        if (str_contains($upper, 'ROAD')) {
+            return 'ROAD TRANSPORT';
+        }
+
+        if (str_contains($upper, 'CUSTOMS')) {
+            return 'CUSTOMS';
+        }
+
+        return null;
     }
 
     /**

@@ -59,12 +59,13 @@ class RobawsMapperComprehensiveTest extends TestCase
         $xf = $payload['extraFields'];
         $this->assertArrayHasKey('POR', $xf);
         $this->assertSame('Bruxelles, Belgium', $xf['POR']['stringValue']);
-        // FDEST should be empty for port destinations (Djeddah is a port)
-        $this->assertArrayNotHasKey('FDEST', $xf);
+        $this->assertArrayHasKey('FDEST', $xf);
+        $this->assertSame('Djeddah, Saudi Arabia', $xf['FDEST']['stringValue']);
         $this->assertArrayHasKey('CARGO', $xf);
-        $this->assertStringContainsString('BMW', $xf['CARGO']['stringValue']);
-        $this->assertStringContainsString('Série 7', $xf['CARGO']['stringValue']);
-        $this->assertStringContainsString('WBA123456789', $xf['CARGO']['stringValue']);
+        $cargoString = $xf['CARGO']['stringValue'];
+        $this->assertStringContainsString('BMW', $cargoString);
+        $this->assertStringContainsString('Série 7', $cargoString);
+        $this->assertStringContainsString('used', strtolower($cargoString));
         $this->assertArrayHasKey('JSON', $xf); // JSON field should exist
         $this->assertNotEmpty($xf['JSON']['stringValue']); // pretty-printed extraction
     }

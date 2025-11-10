@@ -8,17 +8,19 @@ use App\Models\IntakeFile;
 use App\Models\Document;
 use App\Services\Intake\Pipelines\IntakePipelineFactory;
 use App\Services\Intake\Pipelines\ImageIntakePipeline;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Queue;
+use Tests\Support\Pipeline\PipelineTestHelper;
 
+/** @group pipeline */
 class ImagePipelineIsolationTest extends TestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
+        PipelineTestHelper::prepare();
         parent::setUp();
+
+        PipelineTestHelper::boot($this);
         
         // Fake the queue for testing
         Queue::fake();

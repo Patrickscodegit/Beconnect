@@ -28,7 +28,9 @@ class RobawsFieldMapper
             'SHIPPING_LINE',
             'SHIPPINGLINE',
         ],
-        'service_type' => [
+        'transport_mode' => [
+            'TRANSPORT MODE',
+            'TRANSPORT_MODE',
             'SERVICE TYPE',
             'SERVICE_TYPE',
             'SERVICETYPE',
@@ -58,15 +60,59 @@ class RobawsFieldMapper
             'PORT OF LOADING',
             'PORT_OF_LOADING',
         ],
+        'por' => [
+            'POR',
+            'POINT OF RECEIPT',
+            'POINT_OF_RECEIPT',
+        ],
         'pod' => [
             'POD',
             'PORT OF DISCHARGE',
             'PORT_OF_DISCHARGE',
         ],
+        'fdest' => [
+            'FDEST',
+            'FINAL DESTINATION',
+            'FINAL_DESTINATION',
+        ],
         'type' => [
             'TYPE',
             'COMMODITY TYPE',
             'COMMODITY_TYPE',
+        ],
+        'article_type' => [
+            'ARTICLE TYPE',
+            'ARTICLE_TYPE',
+            'ARTICLETYPE',
+        ],
+        'cost_side' => [
+            'COST SIDE',
+            'COST_SIDE',
+            'COSTSIDE',
+        ],
+        'is_mandatory' => [
+            'IS MANDATORY',
+            'IS_MANDATORY',
+            'MANDATORY',
+        ],
+        'mandatory_condition' => [
+            'MANDATORY CONDITION',
+            'MANDATORY_CONDITION',
+            'MANDATORYCONDITION',
+        ],
+        'notes' => [
+            'NOTES',
+            'NOTE',
+            'INTERNAL NOTES',
+            'INTERNAL_NOTES',
+        ],
+        'pol_code' => [
+            'POL CODE',
+            'POL_CODE',
+        ],
+        'pod_code' => [
+            'POD CODE',
+            'POD_CODE',
         ],
     ];
 

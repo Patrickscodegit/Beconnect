@@ -1,24 +1,24 @@
 <?php
 
-use App\Services\DocumentService;
-use App\Services\LlmExtractor;
-use App\Services\OcrService;
-use App\Services\PdfService;
 use App\Models\Document;
 use App\Models\Intake;
+use App\Services\DocumentService;
+use App\Services\OcrService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
+use Tests\Support\Pipeline\PipelineTestHelper;
 
+/** @group pipeline */
 class DocumentProcessingPipelineTest extends TestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
+        PipelineTestHelper::prepare();
         parent::setUp();
-        
+
+        PipelineTestHelper::boot($this);
+
         // Use fakes for all storage disks that might be used
         Storage::fake('s3');
         Storage::fake('documents'); 
@@ -41,8 +41,8 @@ class DocumentProcessingPipelineTest extends TestCase
         $this->assertEquals('application/pdf', $document->mime_type);
         $this->assertEquals('invoice', $document->document_type);
         
-        // Verify file was stored on the default disk (local)
-        Storage::disk('local')->assertExists($document->file_path);
+        // Verify file was stored on the documents disk (environment-aware)
+        Storage::disk('documents')->assertExists($document->file_path);
     }
 
     /** @test */
@@ -54,7 +54,7 @@ class DocumentProcessingPipelineTest extends TestCase
         
         $documentService = app(DocumentService::class);
         
-        $this->expectException(Exception::class);
+        $this->expectException(\Exception::class);
         $this->expectExceptionMessageMatches('/File size exceeds maximum allowed size/');
         
         $documentService->processUpload($file, 'invoice', 'email');
@@ -67,7 +67,7 @@ class DocumentProcessingPipelineTest extends TestCase
         
         $documentService = app(DocumentService::class);
         
-        $this->expectException(Exception::class);
+        $this->expectException(\Exception::class);
         $this->expectExceptionMessageMatches('/File type not supported/');
         
         $documentService->processUpload($file, 'invoice', 'email');
@@ -93,7 +93,7 @@ class DocumentProcessingPipelineTest extends TestCase
         
         $ocrService = app(OcrService::class);
         
-        $this->expectException(Exception::class);
+        $this->expectException(\Exception::class);
         $this->expectExceptionMessageMatches('/Tesseract OCR not found/');
         
         $ocrService->extractFromImage('/tmp/test.jpg');

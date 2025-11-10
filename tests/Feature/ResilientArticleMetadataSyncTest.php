@@ -8,11 +8,34 @@ use Illuminate\Support\Facades\Log;
 use App\Models\RobawsArticleCache;
 use App\Services\Robaws\RobawsArticleProvider;
 use App\Services\Export\Clients\RobawsApiClient;
+use App\Services\Robaws\ArticleNameParser;
+use App\Services\Robaws\ArticleSyncEnhancementService;
+use App\Services\Robaws\RobawsFieldMapper;
 use Mockery;
 
 class ResilientArticleMetadataSyncTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function makeProviderMock(?RobawsApiClient $client = null): \Mockery\MockInterface
+    {
+        $client = $client ?? Mockery::mock(RobawsApiClient::class);
+        $parser = app(ArticleNameParser::class);
+        $enhancement = app(ArticleSyncEnhancementService::class);
+        $fieldMapper = app(RobawsFieldMapper::class);
+
+        return Mockery::mock(RobawsArticleProvider::class, [$client, $parser, $enhancement, $fieldMapper])->makePartial();
+    }
+
+    protected function makeProviderInstance(?RobawsApiClient $client = null): RobawsArticleProvider
+    {
+        return new RobawsArticleProvider(
+            $client ?? Mockery::mock(RobawsApiClient::class),
+            app(ArticleNameParser::class),
+            app(ArticleSyncEnhancementService::class),
+            app(RobawsFieldMapper::class)
+        );
+    }
 
     public function test_sync_article_metadata_uses_api_when_available()
     {
@@ -28,7 +51,7 @@ class ResilientArticleMetadataSyncTest extends TestCase
         ]);
 
         // Mock the RobawsArticleProvider to return API data
-        $provider = Mockery::mock(RobawsArticleProvider::class)->makePartial();
+        $provider = $this->makeProviderMock();
         $provider->shouldReceive('getArticleDetails')
             ->once()
             ->with('TEST123')
@@ -89,7 +112,7 @@ class ResilientArticleMetadataSyncTest extends TestCase
         ]);
 
         // Mock the RobawsArticleProvider to return null (API failure)
-        $provider = Mockery::mock(RobawsArticleProvider::class)->makePartial();
+        $provider = $this->makeProviderMock();
         $provider->shouldReceive('getArticleDetails')
             ->once()
             ->with('TEST123')
@@ -124,7 +147,7 @@ class ResilientArticleMetadataSyncTest extends TestCase
         ]);
 
         // Mock the RobawsArticleProvider to return null (API failure)
-        $provider = Mockery::mock(RobawsArticleProvider::class)->makePartial();
+        $provider = $this->makeProviderMock();
         $provider->shouldReceive('getArticleDetails')
             ->once()
             ->with('PARENT123')
@@ -139,9 +162,7 @@ class ResilientArticleMetadataSyncTest extends TestCase
 
     public function test_extract_pol_terminal_from_description()
     {
-        $provider = new RobawsArticleProvider(
-            app(RobawsApiClient::class)
-        );
+        $provider = $this->makeProviderInstance();
 
         // Use reflection to access private method
         $reflection = new \ReflectionClass($provider);
@@ -157,9 +178,7 @@ class ResilientArticleMetadataSyncTest extends TestCase
 
     public function test_is_parent_article_detection()
     {
-        $provider = new RobawsArticleProvider(
-            app(RobawsApiClient::class)
-        );
+        $provider = $this->makeProviderInstance();
 
         // Use reflection to access private method
         $reflection = new \ReflectionClass($provider);

@@ -143,11 +143,12 @@ EML;
     expect($dupSame['is_duplicate'])->toBeTrue()
         ->and($dupSame['document']->id)->toBe($resultA['document']->id);
 
-    // Same email in different intake = NOT duplicate (intake-scoped)
+    // Same email in different intake now treated as duplicate due to global SHA guard
     $dupDiff = $svc->isDuplicate($raw, $intakeB->id);
-    expect($dupDiff['is_duplicate'])->toBeFalse();
+    expect($dupDiff['is_duplicate'])->toBeTrue()
+        ->and($dupDiff['document_id'])->toBe($resultA['document']->id);
 
-    // Can ingest into second intake
+    // Ingesting into second intake should be skipped as duplicate
     $resultB = $svc->ingestStoredEmail(
         disk: 'documents',
         path: 'inbox/shared.eml',
@@ -155,8 +156,6 @@ EML;
         originalFilename: 'shared.eml'
     );
 
-    // Should create separate documents
-    expect($resultA['document']->id)->not->toBe($resultB['document']->id)
-        ->and($resultA['document']->intake_id)->toBe($intakeA->id)
-        ->and($resultB['document']->intake_id)->toBe($intakeB->id);
+    expect($resultB['status'])->toBe('duplicate')
+        ->and($resultB['document_id'])->toBe($resultA['document']->id);
 });
