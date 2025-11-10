@@ -117,7 +117,7 @@ class QuotationCreator extends Component
         
         DB::transaction(function () use ($user) {
             $this->quotation = QuotationRequest::create([
-                'status' => 'draft',
+                'status' => 'pending',
                 'source' => 'customer',
                 'requester_type' => 'customer',
                 'contact_email' => $user->email,
