@@ -1191,12 +1191,12 @@ class RobawsArticleProvider
 
         $polCode = $this->fieldMapper->getStringValue($extraFields, 'pol_code');
         if ($polCode !== null) {
-            $info['pol_code'] = strtoupper(trim($polCode));
+            $info['pol_code'] = $this->normalizePortCode($polCode);
         }
 
         $podCode = $this->fieldMapper->getStringValue($extraFields, 'pod_code');
         if ($podCode !== null) {
-            $info['pod_code'] = strtoupper(trim($podCode));
+            $info['pod_code'] = $this->normalizePortCode($podCode);
         }
         
         $parentItem = $this->fieldMapper->getBooleanValue($extraFields, 'parent_item');
@@ -1483,7 +1483,7 @@ class RobawsArticleProvider
         
         $polData = $this->parser->extractPOL($article->article_name);
         if ($polData) {
-            $metadata['pol_code'] = $polData['formatted'];
+            $metadata['pol_code'] = $this->normalizePortCode($polData['code'] ?? $polData['formatted'] ?? null);
             if ($polData['terminal']) {
                 $metadata['pol_terminal'] = $polData['terminal'];
             }
@@ -1496,6 +1496,7 @@ class RobawsArticleProvider
         $podData = $this->parser->extractPOD($article->article_name);
         if ($podData) {
             $metadata['pod_name'] = $podData['formatted'];
+            $metadata['pod_code'] = $this->normalizePortCode($podData['code'] ?? $podData['formatted'] ?? null);
             // Get Port model for direction detection
             if ($podData['name']) {
                 $podPort = \App\Models\Port::where('name', 'LIKE', '%' . $podData['name'] . '%')->first();
@@ -1547,7 +1548,7 @@ class RobawsArticleProvider
         
         $polData = $this->parser->extractPOL($article->article_name);
         if ($polData) {
-            $metadata['pol_code'] = $polData['formatted'];
+            $metadata['pol_code'] = $this->normalizePortCode($polData['code'] ?? $polData['formatted'] ?? null);
             if ($polData['terminal']) {
                 $metadata['pol_terminal'] = $polData['terminal'];
             }
@@ -1565,6 +1566,7 @@ class RobawsArticleProvider
         $podData = $this->parser->extractPOD($article->article_name);
         if ($podData) {
             $metadata['pod_name'] = $podData['formatted'];
+            $metadata['pod_code'] = $this->normalizePortCode($podData['code'] ?? $podData['formatted'] ?? null);
             // Get Port model for direction detection
             if ($podData['name']) {
                 $podPort = \App\Models\Port::where('name', 'LIKE', '%' . $podData['name'] . '%')->first();
@@ -1815,6 +1817,29 @@ class RobawsArticleProvider
         }
 
         return null;
+    }
+
+    /**
+     * Normalize a port code value to the raw UN/LOCODE (max 5 chars).
+     */
+    private function normalizePortCode(?string $raw): ?string
+    {
+        if (!$raw) {
+            return null;
+        }
+
+        $clean = trim($raw);
+
+        // If the string contains parentheses (e.g. "Antwerp (ANR), Belgium"),
+        // extract the content inside the first pair as the code.
+        if (preg_match('/\(([A-Z0-9]{2,5})\)/i', $clean, $match)) {
+            return strtoupper($match[1]);
+        }
+
+        // Otherwise take the first token (split on whitespace/comma) and trim.
+        $token = preg_split('/[\s,]+/', $clean)[0] ?? $clean;
+
+        return strtoupper(substr($token, 0, 5));
     }
 
     /**
