@@ -71,36 +71,58 @@ class ViewRobawsArticle extends ViewRecord
                                 return 'None';
                             })
                             ->columnSpanFull(),
-                        Infolists\Components\TextEntry::make('customer_type')
+                        Infolists\Components\TextEntry::make('shipping_line')
                             ->badge()
-                            ->placeholder('All Customer Types'),
-                        Infolists\Components\TextEntry::make('carriers')
+                            ->placeholder('N/A'),
+                        Infolists\Components\TextEntry::make('transport_mode')
                             ->badge()
-                            ->formatStateUsing(function ($state): string {
-                                // Handle both array and JSON string cases
-                                if (is_string($state)) {
-                                    $decoded = json_decode($state, true);
-                                    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-                                        if (count($decoded) > 0) {
-                                            return implode(', ', $decoded);
-                                        }
-                                        return 'All Carriers';
-                                    }
-                                    return 'Invalid data format';
-                                }
-                                if (is_array($state) && count($state) > 0) {
-                                    return implode(', ', $state);
-                                }
-                                return 'All Carriers';
-                            }),
+                            ->placeholder('N/A'),
+                        Infolists\Components\TextEntry::make('service_type')
+                            ->badge()
+                            ->placeholder('N/A'),
+                        Infolists\Components\TextEntry::make('article_type')
+                            ->badge()
+                            ->placeholder('N/A'),
+                        Infolists\Components\TextEntry::make('cost_side')
+                            ->badge()
+                            ->placeholder('N/A'),
                         Infolists\Components\IconEntry::make('is_parent_article')
                             ->boolean()
                             ->label('Is Parent Article'),
                         Infolists\Components\IconEntry::make('is_surcharge')
                             ->boolean()
                             ->label('Is Surcharge'),
+                        Infolists\Components\IconEntry::make('is_mandatory')
+                            ->boolean()
+                            ->label('Is Mandatory'),
+                        Infolists\Components\TextEntry::make('mandatory_condition')
+                            ->placeholder('—')
+                            ->columnSpanFull(),
                     ])
-                    ->columns(2),
+                    ->columns(3),
+
+                Infolists\Components\Section::make('Routing & Ports')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('pol')
+                            ->label('Port of Loading')
+                            ->placeholder('N/A'),
+                        Infolists\Components\TextEntry::make('pol_code')
+                            ->label('POL Code')
+                            ->placeholder('—'),
+                        Infolists\Components\TextEntry::make('pol_terminal')
+                            ->label('POL Terminal')
+                            ->placeholder('N/A'),
+                        Infolists\Components\TextEntry::make('pod')
+                            ->label('Port of Discharge')
+                            ->placeholder('N/A'),
+                        Infolists\Components\TextEntry::make('pod_code')
+                            ->label('POD Code')
+                            ->placeholder('—'),
+                        Infolists\Components\TextEntry::make('commodity_type')
+                            ->label('Commodity Type')
+                            ->placeholder('N/A'),
+                    ])
+                    ->columns(3),
                     
                 Infolists\Components\Section::make('Quantity & Pricing')
                     ->schema([
@@ -129,6 +151,19 @@ class ViewRobawsArticle extends ViewRecord
                     ])
                     ->columns(3)
                     ->collapsible(),
+
+                Infolists\Components\Section::make('Notes & Extra Information')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('notes')
+                            ->placeholder('No notes provided')
+                            ->columnSpanFull(),
+                        Infolists\Components\TextEntry::make('article_info')
+                            ->label('Raw Article Info')
+                            ->placeholder('N/A')
+                            ->columnSpanFull(),
+                    ])
+                    ->collapsible()
+                    ->collapsed(),
                     
                 Infolists\Components\Section::make('Parent-Child Relationships')
                     ->schema([
@@ -166,6 +201,11 @@ class ViewRobawsArticle extends ViewRecord
                         Infolists\Components\IconEntry::make('requires_manual_review')
                             ->boolean()
                             ->label('Requires Manual Review'),
+                        Infolists\Components\TextEntry::make('metadata_source')
+                            ->label('Sync Source')
+                            ->formatStateUsing(fn ($record) => str_contains((string) $record->article_info, 'Extracted from description') ? 'Fallback' : 'API')
+                            ->badge()
+                            ->color(fn ($record) => str_contains((string) $record->article_info, 'Extracted from description') ? 'warning' : 'success'),
                         Infolists\Components\TextEntry::make('last_synced_at')
                             ->dateTime()
                             ->label('Last Synced'),

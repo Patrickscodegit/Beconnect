@@ -1500,7 +1500,7 @@ class RobawsArticleProvider
             return 'SEAFREIGHT';
         }
 
-        return null;
+        return 'OTHER';
     }
 
     /**
@@ -1738,7 +1738,7 @@ class RobawsArticleProvider
 
         $normalized = Str::upper(trim($mode));
 
-        return match (true) {
+        $candidate = match (true) {
             str_contains($normalized, 'RORO') => 'RORO',
             str_contains($normalized, 'FCL CONS') => 'FCL CONSOL',
             str_contains($normalized, 'FCL') => 'FCL',
@@ -1754,6 +1754,25 @@ class RobawsArticleProvider
             str_contains($normalized, 'SEA') => 'SEAFREIGHT',
             default => $normalized,
         };
+
+        $allowed = [
+            'RORO',
+            'FCL',
+            'FCL CONSOL',
+            'LCL',
+            'BB',
+            'AIRFREIGHT',
+            'ROAD TRANSPORT',
+            'CUSTOMS',
+            'PORT FORWARDING',
+            'VEHICLE PURCHASE',
+            'HOMOLOGATION',
+            'WAREHOUSE',
+            'SEAFREIGHT',
+            'OTHER',
+        ];
+
+        return in_array($candidate, $allowed, true) ? $candidate : 'OTHER';
     }
 
     /**

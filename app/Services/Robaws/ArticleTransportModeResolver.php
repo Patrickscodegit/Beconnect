@@ -18,9 +18,12 @@ class ArticleTransportModeResolver
         'BB',
         'ROAD TRANSPORT',
         'CUSTOMS',
-        'SEAFREIGHT',
-        'WAREHOUSE',
+        'PORT FORWARDING',
+        'VEHICLE PURCHASE',
         'HOMOLOGATION',
+        'WAREHOUSE',
+        'SEAFREIGHT',
+        'OTHER',
     ];
 
     /**

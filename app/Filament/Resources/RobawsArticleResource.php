@@ -132,7 +132,28 @@ class RobawsArticleResource extends Resource
                             ->label('Shipping Line')
                             ->maxLength(100)
                             ->columnSpan(1),
-                            
+
+                        Forms\Components\Select::make('transport_mode')
+                            ->label('Transport Mode')
+                            ->options([
+                                'RORO' => 'RORO',
+                                'FCL' => 'FCL',
+                                'FCL CONSOL' => 'FCL CONSOL',
+                                'LCL' => 'LCL',
+                                'BB' => 'BB',
+                                'AIRFREIGHT' => 'AIRFREIGHT',
+                                'ROAD TRANSPORT' => 'ROAD TRANSPORT',
+                                'CUSTOMS' => 'CUSTOMS',
+                                'PORT FORWARDING' => 'PORT FORWARDING',
+                                'VEHICLE PURCHASE' => 'VEHICLE PURCHASE',
+                                'HOMOLOGATION' => 'HOMOLOGATION',
+                                'WAREHOUSE' => 'WAREHOUSE',
+                                'SEAFREIGHT' => 'SEAFREIGHT',
+                                'OTHER' => 'OTHER',
+                            ])
+                            ->searchable()
+                            ->columnSpan(1),
+
                         Forms\Components\TextInput::make('service_type')
                             ->label('Service Type')
                             ->maxLength(100)
@@ -154,16 +175,62 @@ class RobawsArticleResource extends Resource
                             ->helperText('e.g., Antwerp (ANR), Belgium')
                             ->maxLength(255)
                             ->columnSpan(1),
+
+                        Forms\Components\TextInput::make('pol_code')
+                            ->label('POL Code')
+                            ->maxLength(10)
+                            ->columnSpan(1),
                             
                         Forms\Components\TextInput::make('pod')
                             ->label('POD')
                             ->helperText('e.g., Conakry, Guinea (CKY)')
                             ->maxLength(255)
                             ->columnSpan(1),
+
+                        Forms\Components\TextInput::make('pod_code')
+                            ->label('POD Code')
+                            ->maxLength(10)
+                            ->columnSpan(1),
+                    ])
+                    ->columns(3)
+                    ->collapsible()
+                    ->collapsed(false),
+
+                Forms\Components\Section::make('Robaws Extra Fields')
+                    ->description('Direct mappings from Robaws extra fields; kept to track metadata quality.')
+                    ->schema([
+                        Forms\Components\TextInput::make('article_type')
+                            ->label('Article Type')
+                            ->maxLength(150)
+                            ->columnSpan(1),
+
+                        Forms\Components\TextInput::make('cost_side')
+                            ->label('Cost Side')
+                            ->maxLength(50)
+                            ->columnSpan(1),
+
+                        Forms\Components\Toggle::make('is_mandatory')
+                            ->label('Is Mandatory')
+                            ->inline(false)
+                            ->columnSpan(1),
+
+                        Forms\Components\TextInput::make('mandatory_condition')
+                            ->label('Mandatory Condition')
+                            ->maxLength(255)
+                            ->columnSpan(2),
+
+                        Forms\Components\Textarea::make('notes')
+                            ->rows(2)
+                            ->columnSpan(2),
+
+                        Forms\Components\Textarea::make('article_info')
+                            ->label('Article Info (raw)')
+                            ->rows(2)
+                            ->columnSpanFull(),
                     ])
                     ->columns(2)
                     ->collapsible()
-                    ->collapsed(false),
+                    ->collapsed(),
                     
                 Forms\Components\Section::make('Quantity & Pricing')
                     ->schema([
@@ -290,6 +357,12 @@ class RobawsArticleResource extends Resource
                     ->formatStateUsing(fn ($state) => $state ?: 'Not specified')
                     ->color(fn ($state) => $state ? 'primary' : 'gray')
                     ->toggleable(),
+
+                Tables\Columns\BadgeColumn::make('transport_mode')
+                    ->label('Transport Mode')
+                    ->formatStateUsing(fn ($state) => $state ?: 'N/A')
+                    ->color(fn ($state) => $state ? 'warning' : 'gray')
+                    ->toggleable(),
                     
                 Tables\Columns\BadgeColumn::make('service_type')
                     ->label('Service Type')
@@ -305,6 +378,11 @@ class RobawsArticleResource extends Resource
                     ->tooltip('Port of Loading')
                     ->searchable()
                     ->toggleable(),
+
+                Tables\Columns\TextColumn::make('pol_code')
+                    ->label('POL Code')
+                    ->formatStateUsing(fn ($state) => $state ?: '—')
+                    ->toggleable(isToggledHiddenByDefault: true),
                     
                 Tables\Columns\TextColumn::make('pol_terminal')
                     ->label('POL Terminal')
@@ -321,6 +399,11 @@ class RobawsArticleResource extends Resource
                     ->tooltip('Port of Discharge')
                     ->searchable()
                     ->toggleable(),
+
+                Tables\Columns\TextColumn::make('pod_code')
+                    ->label('POD Code')
+                    ->formatStateUsing(fn ($state) => $state ?: '—')
+                    ->toggleable(isToggledHiddenByDefault: true),
                     
                 Tables\Columns\BadgeColumn::make('commodity_type')
                     ->label('Commodity Type')
@@ -328,12 +411,47 @@ class RobawsArticleResource extends Resource
                     ->color(fn ($state) => $state ? 'warning' : 'gray')
                     ->tooltip('For Smart Article Selection')
                     ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\BadgeColumn::make('article_type')
+                    ->label('Article Type')
+                    ->formatStateUsing(fn ($state) => $state ?: 'N/A')
+                    ->color(fn ($state) => $state ? 'secondary' : 'gray')
+                    ->toggleable(),
                     
                 Tables\Columns\IconColumn::make('is_parent_item')
                     ->boolean()
                     ->label('Parent')
                     ->tooltip('Parent item status from Robaws API')
                     ->toggleable(),
+
+                Tables\Columns\IconColumn::make('is_mandatory')
+                    ->boolean()
+                    ->label('Mandatory')
+                    ->toggleable(),
+
+                Tables\Columns\BadgeColumn::make('cost_side')
+                    ->label('Cost Side')
+                    ->formatStateUsing(fn ($state) => $state ?: 'N/A')
+                    ->color(fn ($state) => match ($state) {
+                        'POL' => 'primary',
+                        'POD' => 'info',
+                        'SEA' => 'success',
+                        'AIR' => 'warning',
+                        'INLAND' => 'secondary',
+                        'ADMIN' => 'gray',
+                        default => 'gray',
+                    })
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('mandatory_condition')
+                    ->label('Mandatory Condition')
+                    ->limit(30)
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('notes')
+                    ->label('Notes')
+                    ->limit(30)
+                    ->toggleable(isToggledHiddenByDefault: true),
                     
                 Tables\Columns\TextColumn::make('validity_date')
                     ->date('M d, Y')
@@ -403,6 +521,13 @@ class RobawsArticleResource extends Resource
                     ->since()
                     ->sortable()
                     ->toggleable(),
+
+                Tables\Columns\BadgeColumn::make('metadata_source')
+                    ->label('Sync Source')
+                    ->state(fn (RobawsArticleCache $record) => str_contains((string) $record->article_info, 'Extracted from description') ? 'Fallback' : 'API')
+                    ->color(fn (RobawsArticleCache $record) => str_contains((string) $record->article_info, 'Extracted from description') ? 'warning' : 'success')
+                    ->tooltip(fn (RobawsArticleCache $record) => str_contains((string) $record->article_info, 'Extracted from description') ? 'Populated via name parsing fallback' : 'Fetched directly from Robaws API')
+                    ->toggleable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('brand')
@@ -425,12 +550,26 @@ class RobawsArticleResource extends Resource
                         ->whereNotNull('service_type')
                         ->pluck('service_type', 'service_type')
                         ->toArray()),
+
+                Tables\Filters\SelectFilter::make('transport_mode')
+                    ->label('Transport Mode')
+                    ->options(fn () => RobawsArticleCache::distinct()
+                        ->whereNotNull('transport_mode')
+                        ->pluck('transport_mode', 'transport_mode')
+                        ->toArray()),
                         
                 Tables\Filters\SelectFilter::make('pol')
                     ->label('POL')
                     ->options(fn () => RobawsArticleCache::distinct()
                         ->whereNotNull('pol')
                         ->pluck('pol', 'pol')
+                        ->toArray()),
+
+                Tables\Filters\SelectFilter::make('pol_code')
+                    ->label('POL Code')
+                    ->options(fn () => RobawsArticleCache::distinct()
+                        ->whereNotNull('pol_code')
+                        ->pluck('pol_code', 'pol_code')
                         ->toArray()),
                         
                 Tables\Filters\SelectFilter::make('pol_terminal')
@@ -445,6 +584,13 @@ class RobawsArticleResource extends Resource
                     ->options(fn () => RobawsArticleCache::distinct()
                         ->whereNotNull('pod')
                         ->pluck('pod', 'pod')
+                        ->toArray()),
+
+                Tables\Filters\SelectFilter::make('pod_code')
+                    ->label('POD Code')
+                    ->options(fn () => RobawsArticleCache::distinct()
+                        ->whereNotNull('pod_code')
+                        ->pluck('pod_code', 'pod_code')
                         ->toArray()),
                     
                 Tables\Filters\TernaryFilter::make('is_parent_item')
@@ -475,12 +621,32 @@ class RobawsArticleResource extends Resource
                         'miscellaneous' => 'Miscellaneous',
                         'general' => 'General',
                     ]),
+
+                Tables\Filters\SelectFilter::make('article_type')
+                    ->label('Article Type')
+                    ->options(fn () => RobawsArticleCache::distinct()
+                        ->whereNotNull('article_type')
+                        ->pluck('article_type', 'article_type')
+                        ->toArray()),
+
+                Tables\Filters\SelectFilter::make('cost_side')
+                    ->label('Cost Side')
+                    ->options(fn () => RobawsArticleCache::distinct()
+                        ->whereNotNull('cost_side')
+                        ->pluck('cost_side', 'cost_side')
+                        ->toArray()),
                     
                 Tables\Filters\TernaryFilter::make('is_parent_article')
                     ->label('Is Parent Article')
                     ->placeholder('All articles')
                     ->trueLabel('Only parent articles')
                     ->falseLabel('Only child articles'),
+
+                Tables\Filters\TernaryFilter::make('is_mandatory')
+                    ->label('Is Mandatory')
+                    ->placeholder('All articles')
+                    ->trueLabel('Mandatory only')
+                    ->falseLabel('Optional only'),
                     
                 Tables\Filters\TernaryFilter::make('is_surcharge')
                     ->label('Is Surcharge')
