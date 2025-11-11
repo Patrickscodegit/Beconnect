@@ -293,20 +293,20 @@ class RobawsArticleResource extends Resource
                         Forms\Components\DatePicker::make('update_date')
                             ->label('Update Date')
                             ->native(false)
-                            ->displayFormat('Y-m-d')
+                            ->displayFormat('d-m-Y')
                             ->placeholder('Select update date')
                             ->columnSpan(1),
 
                         Forms\Components\DatePicker::make('validity_date')
                             ->label('Validity Date')
                             ->native(false)
-                            ->displayFormat('Y-m-d')
+                            ->displayFormat('d-m-Y')
                             ->placeholder('Select validity date')
                             ->columnSpan(1),
                     ])
                     ->columns(2)
                     ->collapsible()
-                    ->collapsed(),
+                    ->collapsed(false),
                     
                 Forms\Components\Section::make('Quantity & Pricing')
                     ->schema([
