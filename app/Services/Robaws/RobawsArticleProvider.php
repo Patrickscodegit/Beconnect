@@ -1022,6 +1022,10 @@ class RobawsArticleProvider
                 // Non-critical - continue without enhanced fields
             }
             
+            // Ensure date fields are normalized before persisting
+            $metadata['update_date'] = $this->normalizeRobawsDate($metadata['update_date'] ?? null, 'update_date');
+            $metadata['validity_date'] = $this->normalizeRobawsDate($metadata['validity_date'] ?? null, 'validity_date');
+
             // Update article with metadata
             $article->update($metadata);
 
@@ -1282,7 +1286,7 @@ class RobawsArticleProvider
         $extraFields = $rawData['extraFields'] ?? [];
         
         foreach ($extraFields as $fieldName => $field) {
-            $value = $field['stringValue'] ?? $field['value'] ?? null;
+            $value = $field['stringValue'] ?? $field['value'] ?? $field['dateValue'] ?? null;
 
             switch ($fieldName) {
                 case 'ARTICLE_INFO':
@@ -1291,11 +1295,11 @@ class RobawsArticleProvider
                     break;
                 case 'UPDATE DATE':
                 case 'UPDATE_DATE':
-                    $info['update_date'] = $value ? \Carbon\Carbon::parse($value)->format('Y-m-d') : null;
+                    $info['update_date'] = $this->normalizeRobawsDate($value, 'update_date');
                     break;
                 case 'VALIDITY DATE':
                 case 'VALIDITY_DATE':
-                    $info['validity_date'] = $value ? \Carbon\Carbon::parse($value)->format('Y-m-d') : null;
+                    $info['validity_date'] = $this->normalizeRobawsDate($value, 'validity_date');
                     break;
             }
         }
@@ -1817,6 +1821,65 @@ class RobawsArticleProvider
         }
 
         return null;
+    }
+
+    /**
+     * Normalize Robaws metadata date fields, returning Y-m-d or null.
+     */
+    private function normalizeRobawsDate(mixed $value, string $fieldName): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+
+        $raw = trim((string) $value);
+
+        if ($raw === '') {
+            return null;
+        }
+
+        $sentinels = [
+            '-0001-11-30',
+            '-0001-11-30 00:00:00',
+            '0000-00-00',
+            '0000-00-00 00:00:00',
+        ];
+
+        if (in_array($raw, $sentinels, true)) {
+            Log::debug('Robaws metadata date ignored (sentinel)', [
+                'field' => $fieldName,
+                'raw_value' => $raw,
+            ]);
+
+            return null;
+        }
+
+        try {
+            $date = \Carbon\Carbon::parse($raw);
+        } catch (\Throwable $e) {
+            Log::debug('Failed to parse Robaws metadata date', [
+                'field' => $fieldName,
+                'raw_value' => $raw,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        if ($date->year < 1900) {
+            Log::debug('Robaws metadata date rejected (year < 1900)', [
+                'field' => $fieldName,
+                'raw_value' => $raw,
+            ]);
+
+            return null;
+        }
+
+        return $date->format('Y-m-d');
     }
 
     /**
