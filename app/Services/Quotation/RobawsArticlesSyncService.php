@@ -59,7 +59,7 @@ class RobawsArticlesSyncService
         
         foreach ($articles as $articleData) {
             try {
-                $this->processArticle($articleData);
+                $this->processArticle($articleData, fetchFullDetails: true);
                 $synced++;
             } catch (\Exception $e) {
                 $errors++;
@@ -142,7 +142,7 @@ class RobawsArticlesSyncService
         foreach ($articles as $articleData) {
             try {
                 // Only process basic data, skip API call for extraFields
-                $this->processArticle($articleData, fetchFullDetails: false);
+                $this->processArticle($articleData, fetchFullDetails: true);
                 
                 // Extract metadata from stored data
                 $this->articleProvider->syncArticleMetadata(
@@ -206,14 +206,14 @@ class RobawsArticlesSyncService
         ]);
         
         // Webhook includes full article data - no API call needed!
-        $this->processArticle($articleData, fetchFullDetails: false);
+        $this->processArticle($articleData, fetchFullDetails: true);
         
         // Extract metadata from the article name
         if (isset($articleData['id'])) {
             try {
                 $this->articleProvider->syncArticleMetadata(
                     $articleData['id'],
-                    useApi: false // Use webhook data, not API
+                    useApi: true
                 );
             } catch (\Exception $e) {
                 Log::warning('Failed to sync metadata from webhook', [

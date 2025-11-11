@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Str;
+use App\Models\QuotationAdditionalService;
 
 class QuotationRequest extends Model
 {
@@ -251,6 +252,11 @@ class QuotationRequest extends Model
             ->withPivot(['parent_article_id', 'item_type', 'quantity', 'unit_price', 'unit_type', 'selling_price', 'subtotal', 'currency', 'formula_inputs', 'calculated_price', 'notes'])
             ->withTimestamps()
             ->orderBy('quotation_request_articles.id'); // Preserve insertion order
+    }
+
+    public function additionalServices(): HasMany
+    {
+        return $this->hasMany(QuotationAdditionalService::class);
     }
 
     public function introTemplate(): BelongsTo

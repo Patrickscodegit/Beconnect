@@ -867,7 +867,9 @@ class RobawsArticleProvider
             ]);
 
             $response = $this->robawsClient->getHttpClientForQuotation()
-                ->get("/api/v2/articles/{$articleId}");
+                ->get("/api/v2/articles/{$articleId}", [
+                    'include' => 'extraFields,additionalItems,compositeItems,lineItems,children',
+                ]);
 
             $this->handleRateLimitResponse($response);
 
@@ -917,71 +919,69 @@ class RobawsArticleProvider
                 throw new \Exception("Article not found in cache: {$articleId}");
             }
 
-            // Check if critical metadata (POL/POD) is already populated
-            $hasPolPod = !empty($article->pol_code) && !empty($article->pod_name);
+            $hasCoreMetadata = !empty($article->shipping_line)
+                && !empty($article->transport_mode)
+                && !empty($article->pol_code)
+                && !empty($article->pod_code);
+
+            $shouldUseApi = $useApi
+                || (bool) $article->is_parent_item
+                || !$hasCoreMetadata;
             
-            if ($hasPolPod && !$useApi) {
-                // POL/POD already exists - just extract applicable_services
+            if (!$shouldUseApi) {
+                // We already have the basics, only refresh derived values
                 $metadata = $this->extractMetadataFromArticle($article);
                 $source = 'stored';
-                
-                Log::debug('Using stored POL/POD metadata from initial sync', [
+
+                Log::debug('Using cached metadata snapshot', [
                     'article_id' => $articleId,
-                    'article_name' => $article->article_name
+                    'article_name' => $article->article_name,
                 ]);
             } else {
-                // Either no metadata stored OR API explicitly requested
-                if ($useApi || $article->is_parent_item) {
-                    // Try to fetch full article details from Robaws API
-                    $details = $this->getArticleDetails($article->robaws_article_id);
+                // Fetch full article details from Robaws API when needed
+                $details = $this->getArticleDetails($article->robaws_article_id);
+                
+                if ($details) {
+                    // ✅ API success - parse from API response
+                    $metadata = $this->parseArticleMetadata($details);
+                    $source = 'api';
                     
-                    if ($details) {
-                        // ✅ API success - parse from API response
-                        $metadata = $this->parseArticleMetadata($details);
-                        $source = 'api';
-                        
-                        // SUPPLEMENT: Always try to extract POL/POD from article name
-                        $nameExtraction = $this->extractMetadataFromArticleWithContext($article, $metadata);
-                        
-                        // Merge POL/POD from article name if API didn't provide them
-                        if (empty($metadata['pol_code']) && !empty($nameExtraction['pol_code'])) {
-                            $metadata['pol_code'] = $nameExtraction['pol_code'];
-                        }
-                        
-                        if (empty($metadata['pod_name']) && !empty($nameExtraction['pod_name'])) {
-                            $metadata['pod_name'] = $nameExtraction['pod_name'];
-                        }
-                        
-                        // Also supplement pol_terminal if not provided by API
-                        if (empty($metadata['pol_terminal']) && !empty($nameExtraction['pol_terminal'])) {
-                            $metadata['pol_terminal'] = $nameExtraction['pol_terminal'];
-                        }
-                        
-                        // IMPORTANT: Always use direction-aware applicable_services from name extraction
-                        if (!empty($nameExtraction['applicable_services'])) {
-                            $metadata['applicable_services'] = $nameExtraction['applicable_services'];
-                        }
-                        
-                    } else {
-                        // ⚠️ API failed - use fallback extraction from article description
-                        Log::warning('Robaws API unavailable, using fallback extraction', [
-                            'article_id' => $articleId,
-                            'robaws_article_id' => $article->robaws_article_id,
-                            'article_name' => $article->article_name
-                        ]);
-                        
-                        $metadata = $this->extractMetadataFromArticle($article);
-                        $source = 'fallback';
+                    // SUPPLEMENT: Always try to extract POL/POD from article name
+                    $nameExtraction = $this->extractMetadataFromArticleWithContext($article, $metadata);
+                    
+                    // Merge POL/POD from article name if API didn't provide them
+                    if (empty($metadata['pol_code']) && !empty($nameExtraction['pol_code'])) {
+                        $metadata['pol_code'] = $nameExtraction['pol_code'];
                     }
-                } else {
-                    // Fast path: Use name extraction directly (no API call)
-                    $metadata = $this->extractMetadataFromArticle($article);
-                    $source = 'fallback';
                     
-                    Log::debug('Using fast fallback extraction (no API call)', [
+                    if (empty($metadata['pod_name']) && !empty($nameExtraction['pod_name'])) {
+                        $metadata['pod_name'] = $nameExtraction['pod_name'];
+                    }
+                    
+                    // Also supplement pol_terminal if not provided by API
+                    if (empty($metadata['pol_terminal']) && !empty($nameExtraction['pol_terminal'])) {
+                        $metadata['pol_terminal'] = $nameExtraction['pol_terminal'];
+                    }
+                    
+                    // IMPORTANT: Always use direction-aware applicable_services from name extraction
+                    if (!empty($nameExtraction['applicable_services'])) {
+                        $metadata['applicable_services'] = $nameExtraction['applicable_services'];
+                    }
+
+                    if (isset($metadata['is_parent_item']) && $metadata['is_parent_item']) {
+                        $metadata['is_parent_article'] = true;
+                    }
+                    
+                } else {
+                    // ⚠️ API failed - use fallback extraction from article description
+                    Log::warning('Robaws API unavailable, using fallback extraction', [
                         'article_id' => $articleId,
+                        'robaws_article_id' => $article->robaws_article_id,
                         'article_name' => $article->article_name
                     ]);
+                    
+                    $metadata = $this->extractMetadataFromArticle($article);
+                    $source = 'fallback';
                 }
             }
             
@@ -1028,6 +1028,20 @@ class RobawsArticleProvider
 
             // Update article with metadata
             $article->update($metadata);
+
+            // Ensure parent flag stays in sync
+            if (isset($metadata['is_parent_item']) && $metadata['is_parent_item']) {
+                $article->is_parent_article = true;
+            }
+
+            // Sync composite items for parent articles
+            $shouldSyncChildren = $article->is_parent_article
+                || (!empty($metadata['is_parent_article']))
+                || (!empty($metadata['is_parent_item']));
+
+            if ($shouldSyncChildren) {
+                $this->syncCompositeItems($article->id);
+            }
 
             Log::info('Article metadata synced', [
                 'article_id' => $articleId,
@@ -1316,18 +1330,37 @@ class RobawsArticleProvider
         $compositeItems = [];
 
         // Look for composite items in various possible locations
-        $items = $rawData['compositeItems'] ?? $rawData['children'] ?? $rawData['lineItems'] ?? [];
+        $items = $rawData['compositeItems']
+            ?? $rawData['children']
+            ?? $rawData['lineItems']
+            ?? $rawData['additionalItems']
+            ?? [];
 
         foreach ($items as $item) {
+            $linkedArticle = $item['article'] ?? null;
+
             $compositeItems[] = [
-                'robaws_article_id' => $item['articleId'] ?? $item['id'] ?? null,
-                'name' => $item['description'] ?? $item['name'] ?? '',
-                'cost_type' => $item['costType'] ?? $item['cost_type'] ?? 'Material',
-                'description' => $item['description'] ?? '',
-                'unit_type' => $item['unitType'] ?? $item['unit_type'] ?? '',
+                'robaws_article_id' => $item['articleId']
+                    ?? $item['id']
+                    ?? ($linkedArticle['id'] ?? null),
+                'name' => $item['description']
+                    ?? $item['name']
+                    ?? ($linkedArticle['name'] ?? ''),
+                'cost_type' => $item['costType']
+                    ?? $item['cost_type']
+                    ?? ($linkedArticle['costType'] ?? 'Material'),
+                'description' => $item['description']
+                    ?? ($linkedArticle['description'] ?? ''),
+                'unit_type' => $item['unitType']
+                    ?? $item['unit_type']
+                    ?? ($linkedArticle['unitType'] ?? ''),
                 'quantity' => $item['quantity'] ?? 1.00,
-                'cost_price' => $item['costPrice'] ?? $item['unitPrice'] ?? null,
-                'is_required' => $item['isRequired'] ?? true,
+                'cost_price' => $item['costPrice']
+                    ?? $item['unitPrice']
+                    ?? ($linkedArticle['costPrice'] ?? null),
+                'is_required' => $item['isRequired']
+                    ?? $item['required']
+                    ?? true,
             ];
         }
 
