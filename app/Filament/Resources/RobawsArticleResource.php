@@ -164,10 +164,21 @@ class RobawsArticleResource extends Resource
                             ->maxLength(100)
                             ->columnSpan(1),
                             
-                        Forms\Components\TextInput::make('commodity_type')
+                        Forms\Components\Select::make('commodity_type')
                             ->label('Commodity Type')
-                            ->helperText('Big Van, Car, LM Cargo, etc.')
-                            ->maxLength(100)
+                            ->options([
+                                'Car' => 'Car',
+                                'Small Van' => 'Small Van',
+                                'Big Van' => 'Big Van',
+                                'Very Big Van' => 'Very Big Van',
+                                'HH' => 'HH',
+                                'All cargo' => 'All cargo',
+                                'FCL' => 'FCL',
+                                'LCL' => 'LCL',
+                                'BB' => 'BB',
+                            ])
+                            ->searchable()
+                            ->placeholder('Select Commodity Type')
                             ->columnSpan(1),
                             
                         Forms\Components\Select::make('pol')
@@ -278,6 +289,20 @@ class RobawsArticleResource extends Resource
                             ->label('Article Info (raw)')
                             ->rows(2)
                             ->columnSpanFull(),
+
+                        Forms\Components\DatePicker::make('update_date')
+                            ->label('Update Date')
+                            ->native(false)
+                            ->displayFormat('Y-m-d')
+                            ->placeholder('Select update date')
+                            ->columnSpan(1),
+
+                        Forms\Components\DatePicker::make('validity_date')
+                            ->label('Validity Date')
+                            ->native(false)
+                            ->displayFormat('Y-m-d')
+                            ->placeholder('Select validity date')
+                            ->columnSpan(1),
                     ])
                     ->columns(2)
                     ->collapsible()
