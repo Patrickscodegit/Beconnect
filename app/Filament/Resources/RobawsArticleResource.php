@@ -170,10 +170,19 @@ class RobawsArticleResource extends Resource
                             ->maxLength(100)
                             ->columnSpan(1),
                             
-                        Forms\Components\TextInput::make('pol')
+                        Forms\Components\Select::make('pol')
                             ->label('POL')
-                            ->helperText('e.g., Antwerp (ANR), Belgium')
-                            ->maxLength(255)
+                            ->options([
+                                'Antwerp (ANR), Belgium' => 'Antwerp (ANR), Belgium',
+                                'Zeebrugge (ZEE), Belgium' => 'Zeebrugge (ZEE), Belgium',
+                                'Flushing (FLU), Belgium' => 'Flushing (FLU), Belgium',
+                                'Flushing (FLU), Netherlands' => 'Flushing (FLU), Netherlands',
+                                'Jebel Ali (JEA), United Arab Emirates' => 'Jebel Ali (JEA), United Arab Emirates',
+                                'Al Maktoum International (DWC), United Arab Emirates' => 'Al Maktoum International (DWC), United Arab Emirates',
+                                'Dubai International (DXB), United Arab Emirates' => 'Dubai International (DXB), United Arab Emirates',
+                            ])
+                            ->searchable()
+                            ->placeholder('Select POL')
                             ->columnSpan(1),
 
                         Forms\Components\TextInput::make('pol_code')
@@ -181,10 +190,32 @@ class RobawsArticleResource extends Resource
                             ->maxLength(10)
                             ->columnSpan(1),
                             
-                        Forms\Components\TextInput::make('pod')
+                        Forms\Components\Select::make('pod')
                             ->label('POD')
-                            ->helperText('e.g., Conakry, Guinea (CKY)')
-                            ->maxLength(255)
+                            ->options([
+                                'Pointe-Noire (PNR), Congo' => 'Pointe-Noire (PNR), Congo',
+                                'Dakar (DKR), Senegal' => 'Dakar (DKR), Senegal',
+                                'Cotonou (COO), Benin' => 'Cotonou (COO), Benin',
+                                'Conakry (CKY), Guinea' => 'Conakry (CKY), Guinea',
+                                'Dar es Salaam (DAR), Tanzania' => 'Dar es Salaam (DAR), Tanzania',
+                                'Douala (DLA), Cameroon' => 'Douala (DLA), Cameroon',
+                                'Durban (DUR), South Africa' => 'Durban (DUR), South Africa',
+                                'East London (ELS), South Africa' => 'East London (ELS), South Africa',
+                                'Lagos (LOS), Nigeria' => 'Lagos (LOS), Nigeria',
+                                'Lomé (LFW), Togo' => 'Lomé (LFW), Togo',
+                                'Nouakchott (NKC), Mauritania' => 'Nouakchott (NKC), Mauritania',
+                                'Libreville (LBV), Gabon' => 'Libreville (LBV), Gabon',
+                                'Freetown (FNA), Sierra Leone' => 'Freetown (FNA), Sierra Leone',
+                                'Abidjan (ABJ), Ivory Coast' => 'Abidjan (ABJ), Ivory Coast',
+                                'Antwerp (ANR), Belgium' => 'Antwerp (ANR), Belgium',
+                                'Zeebrugge (ZEE), Belgium' => 'Zeebrugge (ZEE), Belgium',
+                                'Flushing (FLU), Belgium' => 'Flushing (FLU), Belgium',
+                                'Jebel Ali (JEA), United Arab Emirates' => 'Jebel Ali (JEA), United Arab Emirates',
+                                'Al Maktoum International (DWC), United Arab Emirates' => 'Al Maktoum International (DWC), United Arab Emirates',
+                                'Dubai International (DXB), United Arab Emirates' => 'Dubai International (DXB), United Arab Emirates',
+                            ])
+                            ->searchable()
+                            ->placeholder('Select POD')
                             ->columnSpan(1),
 
                         Forms\Components\TextInput::make('pod_code')
