@@ -491,12 +491,50 @@ class RobawsArticleCache extends Model
     {
         // Only show parent items when dataset contains them; otherwise fall back to all active articles.
         $hasParentItems = static::query()
-            ->where('is_parent_item', true)
+            ->where('is_parent_article', true)
             ->limit(1)
             ->exists();
 
         if ($hasParentItems) {
-            $query->where('is_parent_item', true);
+            $query->where('is_parent_article', true);
+        }
+
+        // Include non-surcharge parents when surcharge flag is missing, but always prefer surcharges when available.
+        $hasParentSurcharges = static::query()
+            ->where('is_parent_article', true)
+            ->where('is_surcharge', true)
+            ->limit(1)
+            ->exists();
+
+        if ($hasParentSurcharges) {
+            $query->where(function ($q) use ($quotation, $useIlike) {
+                // Prefer surcharge parent articles
+                $q->where(function ($qq) {
+                    $qq->where('is_surcharge', true)
+                        ->orWhereNull('is_surcharge');
+                });
+
+                // Allow non-surcharge fallback only if no surcharge matches the route
+                $q->orWhere(function ($qq) use ($quotation, $useIlike) {
+                    $qq->where('is_surcharge', false)
+                        ->where(function ($routeQuery) use ($quotation, $useIlike) {
+                            if ($quotation->pol) {
+                                if ($useIlike) {
+                                    $routeQuery->where('pol', 'ILIKE', '%' . $quotation->pol . '%');
+                                } else {
+                                    $routeQuery->whereRaw('LOWER(pol) LIKE ?', ['%' . strtolower($quotation->pol) . '%']);
+                                }
+                            }
+                            if ($quotation->pod) {
+                                if ($useIlike) {
+                                    $routeQuery->where('pod', 'ILIKE', '%' . $quotation->pod . '%');
+                                } else {
+                                    $routeQuery->whereRaw('LOWER(pod) LIKE ?', ['%' . strtolower($quotation->pod) . '%']);
+                                }
+                            }
+                        });
+                });
+            });
         }
 
         $query->where('is_active', true)
@@ -570,7 +608,7 @@ class RobawsArticleCache extends Model
                 } else {
                     $query->whereRaw('LOWER(shipping_line) LIKE ?', ['%' . strtolower($schedule->carrier->name) . '%']);
                 }
-                // Do NOT include articles with NULL shipping_line - require a match
+                $query->orWhereNull('shipping_line');
             }
         }
 

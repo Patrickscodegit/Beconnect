@@ -422,9 +422,19 @@ class SmartArticleSelectionService
     {
         $suggestions = $this->suggestParentArticles($quotation);
         
-        // Since we filter for exact POL/POD/type/carrier matches, all results are 100% matches
-        // No need to filter by score - just return top N
-        return $suggestions->take($limit);
+        $exactMatches = $suggestions->filter(function ($suggestion) use ($quotation) {
+            /** @var \App\Models\RobawsArticleCache $article */
+            $article = $suggestion['article'];
+            return $article->pol === $quotation->pol && $article->pod === $quotation->pod;
+        });
+
+        if ($exactMatches->isNotEmpty()) {
+            return $exactMatches->take($limit);
+        }
+
+        // Fallback: return best matches but ensure a decent score threshold
+        return $suggestions->filter(fn ($suggestion) => ($suggestion['match_score'] ?? 0) >= 80)
+            ->take($limit);
     }
 }
 
