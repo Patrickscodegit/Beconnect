@@ -245,9 +245,19 @@ class RobawsArticleResource extends Resource
                             ->placeholder('Select Article Type')
                             ->columnSpan(1),
 
-                        Forms\Components\TextInput::make('cost_side')
+                        Forms\Components\Select::make('cost_side')
                             ->label('Cost Side')
-                            ->maxLength(50)
+                            ->options([
+                                'POL' => 'POL',
+                                'POD' => 'POD',
+                                'SEA' => 'SEA',
+                                'AIR' => 'AIR',
+                                'INLAND' => 'INLAND',
+                                'ADMIN' => 'ADMIN',
+                                'WAREHOUSE' => 'WAREHOUSE',
+                            ])
+                            ->searchable()
+                            ->placeholder('Select Cost Side')
                             ->columnSpan(1),
 
                         Forms\Components\Toggle::make('is_mandatory')
