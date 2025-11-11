@@ -858,48 +858,80 @@ class RobawsArticleProvider
      */
     public function getArticleDetails(string $articleId): ?array
     {
-        try {
-            $this->checkRateLimit();
+        $attempt = 0;
+        $maxAttempts = 5;
 
-            Log::debug('Fetching article details from Robaws', [
-                'article_id' => $articleId,
-                'endpoint' => "/api/v2/articles/{$articleId}"
-            ]);
+        while ($attempt < $maxAttempts) {
+            try {
+                $this->checkRateLimit();
 
-            $response = $this->robawsClient->getHttpClientForQuotation()
-                ->get("/api/v2/articles/{$articleId}", [
-                    'include' => 'extraFields,additionalItems,compositeItems,lineItems,children',
+                Log::debug('Fetching article details from Robaws', [
+                    'article_id' => $articleId,
+                    'endpoint' => "/api/v2/articles/{$articleId}",
+                    'attempt' => $attempt + 1,
                 ]);
 
-            $this->handleRateLimitResponse($response);
+                $response = $this->robawsClient->getHttpClientForQuotation()
+                    ->get("/api/v2/articles/{$articleId}", [
+                        'include' => 'extraFields,additionalItems,compositeItems,lineItems,children',
+                    ]);
 
-            if ($response->successful()) {
-                Log::debug('Successfully fetched article details', [
-                    'article_id' => $articleId
+                $this->handleRateLimitResponse($response);
+
+                if ($response->successful()) {
+                    Log::debug('Successfully fetched article details', [
+                        'article_id' => $articleId,
+                        'attempt' => $attempt + 1,
+                    ]);
+                    return $response->json();
+                }
+
+                // Log unsuccessful response
+                Log::error('Robaws API returned unsuccessful response', [
+                    'article_id' => $articleId,
+                    'status_code' => $response->status(),
+                    'response_body' => $response->body(),
+                    'headers' => $response->headers()
                 ]);
-                return $response->json();
+
+                return null;
+            } catch (RateLimitException $e) {
+                $attempt++;
+                $retryAfter = $e->getRetryAfter() ?? 60;
+
+                if ($attempt >= $maxAttempts) {
+                    Log::error('Exceeded retry attempts due to Robaws rate limit', [
+                        'article_id' => $articleId,
+                        'attempts' => $attempt,
+                        'retry_after' => $retryAfter,
+                        'error' => $e->getMessage(),
+                    ]);
+                    return null;
+                }
+
+                Log::warning('Robaws rate limit hit while fetching article, retrying after delay', [
+                    'article_id' => $articleId,
+                    'attempt' => $attempt,
+                    'retry_after' => $retryAfter,
+                ]);
+
+                $sleepFor = max(1, min($retryAfter + 5, 600));
+
+                sleep($sleepFor);
+                continue;
+            } catch (\Exception $e) {
+                Log::error('Failed to get article details from Robaws', [
+                    'article_id' => $articleId,
+                    'error' => $e->getMessage(),
+                    'error_class' => get_class($e),
+                    'trace' => $e->getTraceAsString()
+                ]);
+
+                return null;
             }
-
-            // Log unsuccessful response
-            Log::error('Robaws API returned unsuccessful response', [
-                'article_id' => $articleId,
-                'status_code' => $response->status(),
-                'response_body' => $response->body(),
-                'headers' => $response->headers()
-            ]);
-
-            return null;
-
-        } catch (\Exception $e) {
-            Log::error('Failed to get article details from Robaws', [
-                'article_id' => $articleId,
-                'error' => $e->getMessage(),
-                'error_class' => get_class($e),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return null;
         }
+
+        return null;
     }
 
     /**

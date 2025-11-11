@@ -12,6 +12,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
+use Carbon\Carbon;
 
 class RobawsArticleResource extends Resource
 {
@@ -494,10 +495,14 @@ class RobawsArticleResource extends Resource
                     ->color(fn ($state) => $state ? 'secondary' : 'gray')
                     ->toggleable(),
                     
-                Tables\Columns\IconColumn::make('is_parent_item')
+                Tables\Columns\IconColumn::make('is_parent_article')
                     ->boolean()
                     ->label('Parent')
-                    ->tooltip('Parent item status from Robaws API')
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-x-circle')
+                    ->trueColor('success')
+                    ->falseColor('danger')
+                    ->tooltip('Parent article status from Robaws API')
                     ->toggleable(),
 
                 Tables\Columns\IconColumn::make('is_mandatory')
@@ -797,7 +802,206 @@ class RobawsArticleResource extends Resource
                         ->modalDescription('This will fast-sync metadata (POL/POD, service type, shipping line) for the selected articles using name extraction. No API calls needed - instant processing.')
                         ->modalSubmitActionLabel('Sync Now')
                         ->deselectRecordsAfterCompletion(),
-                        
+                    Tables\Actions\BulkAction::make('bulk_update_fields')
+                        ->label('Update Fields')
+                        ->icon('heroicon-o-pencil-square')
+                        ->color('warning')
+                        ->form([
+                            Forms\Components\TextInput::make('pol')
+                                ->label('POL')
+                                ->placeholder('Leave unchanged'),
+                            Forms\Components\TextInput::make('pod')
+                                ->label('POD')
+                                ->placeholder('Leave unchanged'),
+                            Forms\Components\TextInput::make('pol_terminal')
+                                ->label('POL Terminal')
+                                ->maxLength(100)
+                                ->placeholder('Leave unchanged'),
+                            Forms\Components\Textarea::make('article_info')
+                                ->label('Article Info (raw)')
+                                ->rows(3)
+                                ->placeholder('Leave unchanged'),
+                            Forms\Components\Select::make('is_parent_article')
+                                ->label('Parent Article?')
+                                ->options([
+                                    '1' => 'Yes',
+                                    '0' => 'No',
+                                ])
+                                ->placeholder('Leave unchanged'),
+                            Forms\Components\Select::make('is_surcharge')
+                                ->label('Surcharge Add-on?')
+                                ->options([
+                                    '1' => 'Yes',
+                                    '0' => 'No',
+                                ])
+                                ->placeholder('Leave unchanged'),
+                            Forms\Components\DatePicker::make('update_date')
+                                ->label('Update Date')
+                                ->native(false)
+                                ->displayFormat('d-m-Y'),
+                            Forms\Components\DatePicker::make('validity_date')
+                                ->label('Validity Date')
+                                ->native(false)
+                                ->displayFormat('d-m-Y'),
+                            Forms\Components\TextInput::make('shipping_line')
+                                ->label('Shipping Line')
+                                ->maxLength(100)
+                                ->placeholder('Leave unchanged'),
+                            Forms\Components\Select::make('transport_mode')
+                                ->label('Transport Mode')
+                                ->options([
+                                    'RORO' => 'RORO',
+                                    'FCL' => 'FCL',
+                                    'FCL CONSOL' => 'FCL CONSOL',
+                                    'LCL' => 'LCL',
+                                    'BB' => 'BB',
+                                    'AIRFREIGHT' => 'AIRFREIGHT',
+                                    'ROAD TRANSPORT' => 'ROAD TRANSPORT',
+                                    'CUSTOMS' => 'CUSTOMS',
+                                    'PORT FORWARDING' => 'PORT FORWARDING',
+                                    'VEHICLE PURCHASE' => 'VEHICLE PURCHASE',
+                                    'HOMOLOGATION' => 'HOMOLOGATION',
+                                    'WAREHOUSE' => 'WAREHOUSE',
+                                    'SEAFREIGHT' => 'SEAFREIGHT',
+                                    'OTHER' => 'OTHER',
+                                ])
+                                ->placeholder('Leave unchanged')
+                                ->searchable(),
+                            Forms\Components\TextInput::make('service_type')
+                                ->label('Service Type')
+                                ->maxLength(100)
+                                ->placeholder('Leave unchanged'),
+                            Forms\Components\Select::make('commodity_type')
+                                ->label('Commodity Type')
+                                ->options([
+                                    'Car' => 'Car',
+                                    'Small Van' => 'Small Van',
+                                    'Big Van' => 'Big Van',
+                                    'Very Big Van' => 'Very Big Van',
+                                    'HH' => 'HH',
+                                    'All cargo' => 'All cargo',
+                                    'FCL' => 'FCL',
+                                    'LCL' => 'LCL',
+                                    'BB' => 'BB',
+                                ])
+                                ->placeholder('Leave unchanged')
+                                ->searchable(),
+                            Forms\Components\TextInput::make('unit_price')
+                                ->label('Unit Price')
+                                ->numeric()
+                                ->placeholder('Leave unchanged'),
+                            Forms\Components\TextInput::make('sale_price')
+                                ->label('Sale Price')
+                                ->numeric()
+                                ->placeholder('Leave unchanged'),
+                            Forms\Components\TextInput::make('cost_price')
+                                ->label('Cost Price')
+                                ->numeric()
+                                ->placeholder('Leave unchanged'),
+                            Forms\Components\TextInput::make('tier_label')
+                                ->label('Tier Label')
+                                ->maxLength(50)
+                                ->placeholder('Leave unchanged'),
+                            Forms\Components\Select::make('article_type')
+                                ->label('Article Type')
+                                ->options([
+                                    'SEAFREIGHT' => 'SEAFREIGHT',
+                                    'SEAFREIGHT SURCHARGES' => 'SEAFREIGHT SURCHARGES',
+                                    'LOCAL CHARGES POL' => 'LOCAL CHARGES POL',
+                                    'LOCAL CHARGES POD' => 'LOCAL CHARGES POD',
+                                    'ROAD TRANSPORT SURCHARGES' => 'ROAD TRANSPORT SURCHARGES',
+                                    'INSPECTION SURCHARGES' => 'INSPECTION SURCHARGES',
+                                    'ADMINISTRATIVE / MISC. SURCHARGES' => 'ADMINISTRATIVE / MISC. SURCHARGES',
+                                ])
+                                ->placeholder('Leave unchanged')
+                                ->searchable(),
+                            Forms\Components\Select::make('cost_side')
+                                ->label('Cost Side')
+                                ->options([
+                                    'POL' => 'POL',
+                                    'POD' => 'POD',
+                                    'SEA' => 'SEA',
+                                    'AIR' => 'AIR',
+                                    'INLAND' => 'INLAND',
+                                    'ADMIN' => 'ADMIN',
+                                    'WAREHOUSE' => 'WAREHOUSE',
+                                ])
+                                ->placeholder('Leave unchanged')
+                                ->searchable(),
+                            Forms\Components\Select::make('is_mandatory')
+                                ->label('Mandatory?')
+                                ->options([
+                                    '1' => 'Yes',
+                                    '0' => 'No',
+                                ])
+                                ->placeholder('Leave unchanged'),
+                            Forms\Components\Select::make('requires_manual_review')
+                                ->label('Requires Manual Review?')
+                                ->options([
+                                    '1' => 'Yes',
+                                    '0' => 'No',
+                                ])
+                                ->placeholder('Leave unchanged'),
+                            Forms\Components\Select::make('is_parent_item')
+                                ->label('Parent Item Flag?')
+                                ->options([
+                                    '1' => 'Yes',
+                                    '0' => 'No',
+                                ])
+                                ->placeholder('Leave unchanged'),
+                        ])
+                        ->action(function (\Illuminate\Support\Collection $records, array $data) {
+                            $fields = collect($data)
+                                ->map(fn ($value) => is_string($value) ? trim($value) : $value)
+                                ->reject(fn ($value) => $value === null || $value === '');
+
+                            if ($fields->isEmpty()) {
+                                Notification::make()
+                                    ->title('No changes applied')
+                                    ->body('Please provide at least one field value to update.')
+                                    ->warning()
+                                    ->send();
+                                return;
+                            }
+
+                            $updates = $fields->toArray();
+
+                            foreach (['is_parent_article', 'is_surcharge', 'is_mandatory', 'requires_manual_review', 'is_parent_item'] as $booleanField) {
+                                if (array_key_exists($booleanField, $updates)) {
+                                    $updates[$booleanField] = $updates[$booleanField] === '1';
+                                }
+                            }
+
+                            foreach (['update_date', 'validity_date'] as $dateField) {
+                                if (array_key_exists($dateField, $updates) && $updates[$dateField]) {
+                                    $updates[$dateField] = Carbon::parse($updates[$dateField])->format('Y-m-d');
+                                }
+                            }
+
+                            foreach (['unit_price', 'sale_price', 'cost_price'] as $numericField) {
+                                if (array_key_exists($numericField, $updates)) {
+                                    $updates[$numericField] = $updates[$numericField] === '' ? null : (float) $updates[$numericField];
+                                }
+                            }
+
+                            $updatedCount = 0;
+
+                            foreach ($records as $record) {
+                                $record->update($updates);
+                                $updatedCount++;
+                            }
+
+                            Notification::make()
+                                ->title('Bulk update complete')
+                                ->body("Updated {$updatedCount} article" . ($updatedCount === 1 ? '' : 's') . '.')
+                                ->success()
+                                ->send();
+                        })
+                        ->requiresConfirmation()
+                        ->modalHeading('Update selected articles')
+                        ->modalDescription('Only the fields you fill in will be applied to the selected articles.')
+                        ->modalSubmitActionLabel('Apply Changes')
+                        ->deselectRecordsAfterCompletion(),
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ])
