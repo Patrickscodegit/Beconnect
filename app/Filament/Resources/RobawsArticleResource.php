@@ -230,9 +230,19 @@ class RobawsArticleResource extends Resource
                 Forms\Components\Section::make('Robaws Extra Fields')
                     ->description('Direct mappings from Robaws extra fields; kept to track metadata quality.')
                     ->schema([
-                        Forms\Components\TextInput::make('article_type')
+                        Forms\Components\Select::make('article_type')
                             ->label('Article Type')
-                            ->maxLength(150)
+                            ->options([
+                                'SEAFREIGHT' => 'SEAFREIGHT',
+                                'SEAFREIGHT SURCHARGES' => 'SEAFREIGHT SURCHARGES',
+                                'LOCAL CHARGES POL' => 'LOCAL CHARGES POL',
+                                'LOCAL CHARGES POD' => 'LOCAL CHARGES POD',
+                                'ROAD TRANSPORT SURCHARGES' => 'ROAD TRANSPORT SURCHARGES',
+                                'INSPECTION SURCHARGES' => 'INSPECTION SURCHARGES',
+                                'ADMINISTRATIVE / MISC. SURCHARGES' => 'ADMINISTRATIVE / MISC. SURCHARGES',
+                            ])
+                            ->searchable()
+                            ->placeholder('Select Article Type')
                             ->columnSpan(1),
 
                         Forms\Components\TextInput::make('cost_side')
