@@ -25,8 +25,8 @@ class QuotationCreator extends Component
     public $pod = '';
     public $por = '';
     public $fdest = '';
-    public $simple_service_type = '';
-    public $service_type = '';
+    public $simple_service_type = 'SEA_RORO';
+    public $service_type = 'RORO_EXPORT';
     public $commodity_type = '';
     public $cargo_description = '';
     public $special_requirements = '';
@@ -102,6 +102,12 @@ class QuotationCreator extends Component
     
     public function mount($intakeId = null)
     {
+        if (empty($this->simple_service_type)) {
+            $this->simple_service_type = 'SEA_RORO';
+        }
+
+        $this->service_type = config("quotation.simple_service_types.{$this->simple_service_type}.default_service_type", 'RORO_EXPORT');
+
         // Create draft quotation immediately
         $this->createDraftQuotation();
         
@@ -131,9 +137,9 @@ class QuotationCreator extends Component
                 'vat_rate' => 21.00,
                 'pricing_currency' => 'EUR',
                 // Required fields - will be updated when customer fills form
-                'service_type' => 'RORO_EXPORT', // Default, will be updated
-                'simple_service_type' => 'roro', // Default, will be updated
-                'trade_direction' => 'export', // Derived from RORO_EXPORT
+                'service_type' => $this->service_type, // Default, can be updated by customer
+                'simple_service_type' => $this->simple_service_type, // Default selection
+                'trade_direction' => $this->getDirectionFromServiceType($this->service_type),
                 'cargo_description' => 'Draft - being filled by customer', // Default, will be updated
                 'pol' => '', // Will be filled by customer
                 'pod' => '', // Will be filled by customer
@@ -177,7 +183,15 @@ class QuotationCreator extends Component
         
         // Map simple service type to actual service type
         if ($propertyName === 'simple_service_type') {
-            $this->service_type = config("quotation.simple_service_types.{$this->simple_service_type}.default_service_type");
+            $previousServiceType = $this->service_type;
+            $this->service_type = config(
+                "quotation.simple_service_types.{$this->simple_service_type}.default_service_type",
+                $this->service_type
+            );
+
+            if ($previousServiceType !== $this->service_type) {
+                $this->handleServiceTypeChanged();
+            }
         }
         
         // Cast selected_schedule_id to int if it's not null/empty (handle string "0" or empty string)
@@ -512,15 +526,26 @@ class QuotationCreator extends Component
     
     public function render()
     {
-        $polPorts = Port::europeanOrigins()->orderBy('name')->get();
-        $podPorts = Port::withActivePodSchedules()->orderBy('name')->get();
+        $isAirService = $this->isAirService();
+
+        $polPorts = $isAirService
+            ? collect()
+            : Port::europeanOrigins()->orderBy('name')->get();
+
+        $podPorts = $isAirService
+            ? collect()
+            : Port::forPod()->orderBy('name')->get();
+
+        if (!$isAirService && $podPorts->isEmpty()) {
+            $podPorts = Port::withActivePodSchedules()->orderBy('name')->get();
+        }
         
         // Extract port name and code from formats like:
         // "Dakar (DKR), Senegal" or "Antwerp (ANR), Belgium"
         // "Dakar, Senegal" or just "Dakar"
         $polName = '';
         $polCode = '';
-        if ($this->pol) {
+        if (!$isAirService && $this->pol) {
             $polParts = $this->extractPortInfo($this->pol);
             $polName = $polParts['name'];
             $polCode = $polParts['code'];
@@ -528,7 +553,7 @@ class QuotationCreator extends Component
         
         $podName = '';
         $podCode = '';
-        if ($this->pod) {
+        if (!$isAirService && $this->pod) {
             $podParts = $this->extractPortInfo($this->pod);
             $podName = $podParts['name'];
             $podCode = $podParts['code'];
@@ -540,78 +565,85 @@ class QuotationCreator extends Component
         
         $today = now()->startOfDay();
         
-        $schedules = ShippingSchedule::where('is_active', true)
-            // Filter to only show schedules starting from today
-            // Check either ets_pol or next_sailing_date - show if either is >= today
-            ->where(function ($q) use ($today) {
-                $q->where(function ($query) use ($today) {
-                    // Schedule is valid if ets_pol exists and is >= today
-                    $query->whereNotNull('ets_pol')
-                          ->where('ets_pol', '>=', $today);
-                })->orWhere(function ($query) use ($today) {
-                    // OR if next_sailing_date exists and is >= today
-                    $query->whereNotNull('next_sailing_date')
-                          ->where('next_sailing_date', '>=', $today);
-                });
-            })
-            ->when($polName && $podName, function ($q) use ($polName, $polCode, $podName, $podCode, $useIlike) {
-                // Filter schedules by route if POL/POD selected
-                // Match on port name OR code (handles "City (CODE), Country" format)
-                $q->whereHas('polPort', function ($portQuery) use ($polName, $polCode, $useIlike) {
-                    if ($useIlike) {
-                        // PostgreSQL: Use ILIKE
-                        $portQuery->where(function($q) use ($polName, $polCode) {
-                            $q->where('name', 'ILIKE', '%' . $polName . '%');
-                            if ($polCode) {
-                                $q->orWhere('code', 'ILIKE', '%' . $polCode . '%');
-                            }
-                        });
-                    } else {
-                        // SQLite/MySQL: Use LOWER() with LIKE
-                        $portQuery->where(function($q) use ($polName, $polCode) {
-                            $q->whereRaw('LOWER(name) LIKE ?', ['%' . strtolower($polName) . '%']);
-                            if ($polCode) {
-                                $q->orWhereRaw('LOWER(code) LIKE ?', ['%' . strtolower($polCode) . '%']);
-                            }
-                        });
-                    }
+        $schedules = $isAirService
+            ? collect()
+            : ShippingSchedule::where('is_active', true)
+                // Filter to only show schedules starting from today
+                // Check either ets_pol or next_sailing_date - show if either is >= today
+                ->where(function ($q) use ($today) {
+                    $q->where(function ($query) use ($today) {
+                        // Schedule is valid if ets_pol exists and is >= today
+                        $query->whereNotNull('ets_pol')
+                              ->where('ets_pol', '>=', $today);
+                    })->orWhere(function ($query) use ($today) {
+                        // OR if next_sailing_date exists and is >= today
+                        $query->whereNotNull('next_sailing_date')
+                              ->where('next_sailing_date', '>=', $today);
+                    });
                 })
-                ->whereHas('podPort', function ($portQuery) use ($podName, $podCode, $useIlike) {
-                    if ($useIlike) {
-                        // PostgreSQL: Use ILIKE
-                        $portQuery->where(function($q) use ($podName, $podCode) {
-                            $q->where('name', 'ILIKE', '%' . $podName . '%');
-                            if ($podCode) {
-                                $q->orWhere('code', 'ILIKE', '%' . $podCode . '%');
-                            }
-                        });
-                    } else {
-                        // SQLite/MySQL: Use LOWER() with LIKE
-                        $portQuery->where(function($q) use ($podName, $podCode) {
-                            $q->whereRaw('LOWER(name) LIKE ?', ['%' . strtolower($podName) . '%']);
-                            if ($podCode) {
-                                $q->orWhereRaw('LOWER(code) LIKE ?', ['%' . strtolower($podCode) . '%']);
-                            }
-                        });
-                    }
-                });
-            })
-            ->orderBy('next_sailing_date', 'asc')
-            ->orderBy('ets_pol', 'asc')
-            ->get();
+                ->when($polName && $podName, function ($q) use ($polName, $polCode, $podName, $podCode, $useIlike) {
+                    // Filter schedules by route if POL/POD selected
+                    // Match on port name OR code (handles "City (CODE), Country" format)
+                    $q->whereHas('polPort', function ($portQuery) use ($polName, $polCode, $useIlike) {
+                        if ($useIlike) {
+                            // PostgreSQL: Use ILIKE
+                            $portQuery->where(function($q) use ($polName, $polCode) {
+                                $q->where('name', 'ILIKE', '%' . $polName . '%');
+                                if ($polCode) {
+                                    $q->orWhere('code', 'ILIKE', '%' . $polCode . '%');
+                                }
+                            });
+                        } else {
+                            // SQLite/MySQL: Use LOWER() with LIKE
+                            $portQuery->where(function($q) use ($polName, $polCode) {
+                                $q->whereRaw('LOWER(name) LIKE ?', ['%' . strtolower($polName) . '%']);
+                                if ($polCode) {
+                                    $q->orWhereRaw('LOWER(code) LIKE ?', ['%' . strtolower($polCode) . '%']);
+                                }
+                            });
+                        }
+                    })
+                    ->whereHas('podPort', function ($portQuery) use ($podName, $podCode, $useIlike) {
+                        if ($useIlike) {
+                            // PostgreSQL: Use ILIKE
+                            $portQuery->where(function($q) use ($podName, $podCode) {
+                                $q->where('name', 'ILIKE', '%' . $podName . '%');
+                                if ($podCode) {
+                                    $q->orWhere('code', 'ILIKE', '%' . $podCode . '%');
+                                }
+                            });
+                        } else {
+                            // SQLite/MySQL: Use LOWER() with LIKE
+                            $portQuery->where(function($q) use ($podName, $podCode) {
+                                $q->whereRaw('LOWER(name) LIKE ?', ['%' . strtolower($podName) . '%']);
+                                if ($podCode) {
+                                    $q->orWhereRaw('LOWER(code) LIKE ?', ['%' . strtolower($podCode) . '%']);
+                                }
+                            });
+                        }
+                    });
+                })
+                ->orderBy('next_sailing_date', 'asc')
+                ->orderBy('ets_pol', 'asc')
+                ->get();
         
         $serviceTypes = config('quotation.simple_service_types', []);
         
-        // Format ports for autocomplete JavaScript (standard format: "City (CODE), Country")
-        $polPortsFormatted = $polPorts->mapWithKeys(function ($port) {
-            $display = $port->formatFull();
-            return [$display => $display];
-        })->toArray();
-        
-        $podPortsFormatted = $podPorts->mapWithKeys(function ($port) {
-            $display = $port->formatFull();
-            return [$display => $display];
-        })->toArray();
+        [$polPortsFormatted, $podPortsFormatted] = $this->formatPortOptions($isAirService, $polPorts, $podPorts);
+
+        $polPlaceholder = $isAirService ? 'Search or type any airport...' : 'Search or type any port...';
+        $podPlaceholder = $isAirService ? 'Search or type any airport...' : 'Search or type any port...';
+        $portsEnabled = !empty($this->simple_service_type);
+
+        $this->dispatch(
+            'quotation-ports-updated',
+            polOptions: $polPortsFormatted,
+            podOptions: $podPortsFormatted,
+            isAir: $isAirService,
+            portsEnabled: $portsEnabled,
+            polPlaceholder: $polPlaceholder,
+            podPlaceholder: $podPlaceholder,
+        );
         
         // Ensure quotation is fresh with relationships for child components
         // Load both selectedSchedule.carrier and commodityItems for proper detection
@@ -624,12 +656,56 @@ class QuotationCreator extends Component
         $this->updateShowArticles();
         
         return view('livewire.customer.quotation-creator', compact(
-            'polPorts',
-            'podPorts',
+            'isAirService',
             'schedules',
             'serviceTypes',
             'polPortsFormatted',
-            'podPortsFormatted'
+            'podPortsFormatted',
+            'polPlaceholder',
+            'podPlaceholder',
+            'portsEnabled'
         ));
+    }
+
+    protected function handleServiceTypeChanged(): void
+    {
+        $this->pol = '';
+        $this->pod = '';
+        $this->por = '';
+        $this->fdest = '';
+        $this->selected_schedule_id = null;
+    }
+
+    protected function isAirService(): bool
+    {
+        return $this->simple_service_type === 'AIR';
+    }
+
+    protected function formatPortOptions(bool $isAirService, $polPorts, $podPorts): array
+    {
+        if ($isAirService) {
+            $airports = collect(config('airports', []));
+
+            $formatted = $airports->mapWithKeys(function ($airport) {
+                $display = $airport['full_name']
+                    ?? sprintf('%s (%s) – %s, Airport', $airport['name'], $airport['code'], $airport['country']);
+
+                return [$display => $display];
+            })->toArray();
+
+            return [$formatted, $formatted];
+        }
+
+        $polFormatted = $polPorts->mapWithKeys(function ($port) {
+            $display = $port->formatFull();
+            return [$display => $display];
+        })->toArray();
+
+        $podFormatted = $podPorts->mapWithKeys(function ($port) {
+            $display = $port->formatFull();
+            return [$display => $display];
+        })->toArray();
+
+        return [$polFormatted, $podFormatted];
     }
 }

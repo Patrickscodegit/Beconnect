@@ -110,12 +110,19 @@ class SmartArticleSelector extends Component
             
             $article = \App\Models\RobawsArticleCache::find($articleId);
             $tierPrice = $this->getTierPrice($article);
+
+            $quantity = 1;
+            $unitPrice = $article->unit_price ?? 0;
+            $sellingPrice = $tierPrice ?? $article->sale_price ?? $unitPrice;
+            $subtotal = $sellingPrice * $quantity;
             
             // Attach with tier price and metadata
             $this->quotation->articles()->syncWithoutDetaching([
                 $articleId => [
-                    'quantity' => 1,
-                    'unit_price' => $tierPrice ?? $article->unit_price,
+                    'quantity' => $quantity,
+                    'unit_price' => $unitPrice,
+                    'selling_price' => $sellingPrice,
+                    'subtotal' => $subtotal,
                     'unit_type' => $article->unit_type,
                     'currency' => $article->currency,
                     'created_at' => now(),

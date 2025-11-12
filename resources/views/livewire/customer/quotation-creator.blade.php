@@ -16,125 +16,191 @@
         @endif
     </div>
 
-    {{-- Route & Service Section --}}
+    @php
+        $isAir = $isAirService ?? false;
+        $portsDisabled = !($portsEnabled ?? false);
+        $polLabel = $isAir ? 'Airport of Departure (POL)' : 'Port of Loading (POL)';
+        $podLabel = $isAir ? 'Airport of Arrival (POD)' : 'Port of Discharge (POD)';
+        $locationHelp = $isAir ? 'airport' : 'port';
+    @endphp
+
+    {{-- Service Selection --}}
+    <div class="bg-white rounded-lg shadow p-8 mb-6">
+        <h2 class="text-2xl font-bold text-gray-900 mb-4">
+            <i class="fas fa-shipping-fast mr-2"></i>Select Service Type
+        </h2>
+        <p class="text-sm text-gray-600 mb-6">
+            Choose the transport mode for this quotation. Routes and optional services will adapt automatically.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            @foreach($serviceTypes as $key => $type)
+                @php
+                    $typeIsArray = is_array($type);
+                    $label = $typeIsArray ? ($type['name'] ?? $key) : $type;
+                    $description = $typeIsArray ? ($type['description'] ?? '') : '';
+                    $icon = $typeIsArray ? ($type['icon'] ?? '') : '';
+                    $isSelected = $simple_service_type === $key;
+                @endphp
+                <label wire:key="service-type-{{ $key }}"
+                       class="relative flex items-start p-4 border-2 rounded-xl cursor-pointer transition-all {{ $isSelected ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50/60' }}">
+                    <input type="radio"
+                           class="sr-only"
+                           wire:model.live="simple_service_type"
+                           value="{{ $key }}">
+                    <div class="flex items-center space-x-4">
+                        @if($icon)
+                            <span class="text-2xl leading-none">{{ $icon }}</span>
+                        @else
+                            <span class="text-2xl leading-none text-blue-500">
+                                <i class="fas fa-route"></i>
+                            </span>
+                        @endif
+                        <div>
+                            <div class="font-semibold text-gray-900">{{ $label }}</div>
+                            @if($description)
+                                <p class="text-sm text-gray-600 mt-1">{{ $description }}</p>
+                            @endif
+                        </div>
+                    </div>
+                    @if($isSelected)
+                        <span class="absolute top-3 right-3 text-blue-500">
+                            <i class="fas fa-check-circle"></i>
+                        </span>
+                    @endif
+                </label>
+            @endforeach
+        </div>
+        @error('simple_service_type') <span class="text-red-500 text-xs mt-3 block">{{ $message }}</span> @enderror
+    </div>
+
+    {{-- Route Section --}}
     <div class="bg-white rounded-lg shadow p-8 mb-6">
         <h2 class="text-2xl font-bold text-gray-900 mb-6">
-            <i class="fas fa-route mr-2"></i>Route & Service
+            <i class="fas fa-route mr-2"></i>Route Details
         </h2>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {{-- POL --}}
-            <div wire:ignore>
-                <label for="pol" class="block text-sm font-medium text-gray-700 mb-2">
-                    Port of Loading (POL) <span class="text-red-500">*</span>
-                </label>
-                <input type="text" 
-                       id="pol"
-                       class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                       placeholder="Search or type any port..."
-                       required>
-                <p class="text-xs text-gray-500 mt-1">
-                    <i class="fas fa-info-circle"></i> Type to search, or enter a custom port name
-                </p>
-                @error('pol') <span class="text-red-500 text-xs mt-1">{{ $message }}</span> @enderror
+
+        @if($portsDisabled)
+            <div class="mb-6 rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+                <i class="fas fa-info-circle mr-2"></i>Select a service type above to unlock the route fields.
             </div>
-            
-            {{-- POD --}}
-            <div wire:ignore>
-                <label for="pod" class="block text-sm font-medium text-gray-700 mb-2">
-                    Port of Discharge (POD) <span class="text-red-500">*</span>
-                </label>
-                <input type="text" 
-                       id="pod"
-                       class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                       placeholder="Search or type any port..."
-                       required>
-                <p class="text-xs text-gray-500 mt-1">
-                    <i class="fas fa-info-circle"></i> Type to search, or enter a custom port name
-                </p>
-                @error('pod') <span class="text-red-500 text-xs mt-1">{{ $message }}</span> @enderror
-            </div>
-            
-            {{-- POR (Optional) --}}
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Place of Receipt (POR) <span class="text-gray-400 text-xs">(Optional)</span>
-                </label>
-                <input type="text" 
-                       wire:model.debounce.500ms="por"
-                       class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                       placeholder="e.g., Brussels">
-            </div>
-            
-            {{-- FDEST (Optional) --}}
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Final Destination (FDEST) <span class="text-gray-400 text-xs">(Optional)</span>
-                </label>
-                <input type="text" 
-                       wire:model.debounce.500ms="fdest"
-                       class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                       placeholder="e.g., Bamako">
-            </div>
-            
-            {{-- Service Type --}}
-            <div class="col-span-1 md:col-span-2">
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Service Type <span class="text-red-500">*</span>
-                </label>
-                <select wire:model="simple_service_type" 
-                        class="form-select w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                        required>
-                    <option value="">-- Select Service Type --</option>
-                    @foreach($serviceTypes as $key => $type)
-                        <option value="{{ $key }}">{{ is_array($type) ? $type['name'] : $type }}</option>
-                    @endforeach
-                </select>
-                @error('simple_service_type') <span class="text-red-500 text-xs mt-1">{{ $message }}</span> @enderror
+        @endif
+
+        <div class="{{ $portsDisabled ? 'opacity-50 pointer-events-none select-none' : '' }}">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {{-- POL --}}
+                <div wire:ignore>
+                    <label for="pol" class="block text-sm font-medium text-gray-700 mb-2">
+                        {{ $polLabel }} <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text"
+                           id="pol"
+                           class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                           placeholder="{{ $polPlaceholder }}"
+                           @disabled($portsDisabled)
+                           required>
+                    <p class="text-xs text-gray-500 mt-1">
+                        <i class="fas fa-info-circle"></i> Type to search, or enter a custom {{ $locationHelp }} name
+                    </p>
+                    @error('pol') <span class="text-red-500 text-xs mt-1">{{ $message }}</span> @enderror
+                </div>
+
+                {{-- POD --}}
+                <div wire:ignore>
+                    <label for="pod" class="block text-sm font-medium text-gray-700 mb-2">
+                        {{ $podLabel }} <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text"
+                           id="pod"
+                           class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                           placeholder="{{ $podPlaceholder }}"
+                           @disabled($portsDisabled)
+                           required>
+                    <p class="text-xs text-gray-500 mt-1">
+                        <i class="fas fa-info-circle"></i> Only {{ $locationHelp }}s with matching schedules will appear first. You can still enter a custom value.
+                    </p>
+                    @error('pod') <span class="text-red-500 text-xs mt-1">{{ $message }}</span> @enderror
+                </div>
+
+                {{-- POR (Optional) --}}
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Place of Receipt (POR) <span class="text-gray-400 text-xs">(Optional)</span>
+                    </label>
+                    <input type="text"
+                           wire:model.debounce.500ms="por"
+                           class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                           placeholder="e.g., Brussels"
+                           @disabled($portsDisabled)>
+                </div>
+
+                {{-- FDEST (Optional) --}}
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Final Destination (FDEST) <span class="text-gray-400 text-xs">(Optional)</span>
+                    </label>
+                    <input type="text"
+                           wire:model.debounce.500ms="fdest"
+                           class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                           placeholder="e.g., Bamako"
+                           @disabled($portsDisabled)>
+                </div>
             </div>
         </div>
     </div>
-    
+
     {{-- Schedule Selection --}}
     <div class="bg-white rounded-lg shadow p-8 mb-6">
         <h2 class="text-2xl font-bold text-gray-900 mb-6">
-            <i class="fas fa-calendar-alt mr-2"></i>Select Sailing Schedule
-            <span class="text-sm font-normal text-gray-500">(Required for pricing & article suggestions)</span>
+            <i class="fas fa-calendar-alt mr-2"></i>
+            @if($isAir)
+                Flight & Handling Schedule
+                <span class="text-sm font-normal text-gray-500">(Optional for airfreight)</span>
+            @else
+                Select Sailing Schedule
+                <span class="text-sm font-normal text-gray-500">(Required for pricing & article suggestions)</span>
+            @endif
         </h2>
-        
+
         {{-- Debug info (temporary) - Always visible to diagnose issues --}}
         <div class="mb-4 text-xs text-gray-400 bg-gray-50 p-2 rounded border border-gray-200">
-            <strong>Debug:</strong> POL: "{{ $pol }}" | POD: "{{ $pod }}" | POL filled: {{ !empty(trim($pol)) ? 'YES' : 'NO' }} | POD filled: {{ !empty(trim($pod)) ? 'YES' : 'NO' }} | Schedule ID: {{ $selected_schedule_id ?? 'null' }} | Commodity Type: "{{ $this->getEffectiveCommodityType() ?: 'NONE' }}" | Mode: {{ $quotationMode }} | Show Articles: {{ $showArticles ? 'YES' : 'NO' }} | Schedules found: {{ $schedules->count() ?? 0 }}
+            <strong>Debug:</strong> POL: "{{ $pol }}" | POD: "{{ $pod }}" | POL filled: {{ !empty(trim($pol)) ? 'YES' : 'NO' }} | POD filled: {{ !empty(trim($pod)) ? 'YES' : 'NO' }} | Schedule ID: {{ $selected_schedule_id ?? 'null' }} | Commodity Type: "{{ $this->getEffectiveCommodityType() ?: 'NONE' }}" | Mode: {{ $quotationMode }} | Service: {{ $simple_service_type ?? 'NONE' }} | Show Articles: {{ $showArticles ? 'YES' : 'NO' }} | Schedules found: {{ $schedules->count() ?? 0 }}
         </div>
-        
-        @if($pol && $pod)
-            <select wire:model="selected_schedule_id" 
-                    wire:change="$refresh"
-                    wire:key="schedule-select-{{ md5($pol) }}-{{ md5($pod) }}"
-                    class="form-select w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                <option value="">-- Select a Sailing --</option>
-                @foreach($schedules as $schedule)
-                    <option value="{{ $schedule->id }}" {{ $selected_schedule_id == $schedule->id ? 'selected' : '' }}>
-                        {{ $schedule->carrier->name ?? 'Unknown Carrier' }} - 
-                        Departure: {{ $schedule->ets_pol ? $schedule->ets_pol->format('M d, Y') : ($schedule->next_sailing_date ? $schedule->next_sailing_date->format('M d, Y') : 'TBA') }}
-                        @if($schedule->eta_pod)
-                            - Arrival: {{ $schedule->eta_pod->format('M d, Y') }}
-                        @endif
-                    </option>
-                @endforeach
-            </select>
-            
-            @if($schedules->count() === 0)
-                <p class="text-sm text-gray-500 mt-2">
-                    <i class="fas fa-info-circle mr-1"></i>
-                    No scheduled sailings found for this route. You can still submit your request.
-                </p>
-            @endif
-        @else
-            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
-                <i class="fas fa-arrow-up text-gray-400 text-3xl mb-2"></i>
-                <p class="text-gray-600">Please select POL and POD first to see available sailings</p>
+
+        @if($isAir)
+            <div class="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+                <i class="fas fa-info-circle mr-2"></i>Airfreight quotations do not require a sailing schedule. Our team will confirm flights and handling windows separately.
             </div>
+        @else
+            @if($pol && $pod)
+                <select wire:model="selected_schedule_id"
+                        wire:change="$refresh"
+                        wire:key="schedule-select-{{ md5($pol) }}-{{ md5($pod) }}"
+                        class="form-select w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                    <option value="">-- Select a Sailing --</option>
+                    @foreach($schedules as $schedule)
+                        <option value="{{ $schedule->id }}" {{ $selected_schedule_id == $schedule->id ? 'selected' : '' }}>
+                            {{ $schedule->carrier->name ?? 'Unknown Carrier' }} -
+                            Departure: {{ $schedule->ets_pol ? $schedule->ets_pol->format('M d, Y') : ($schedule->next_sailing_date ? $schedule->next_sailing_date->format('M d, Y') : 'TBA') }}
+                            @if($schedule->eta_pod)
+                                - Arrival: {{ $schedule->eta_pod->format('M d, Y') }}
+                            @endif
+                        </option>
+                    @endforeach
+                </select>
+
+                @if($schedules->count() === 0)
+                    <p class="text-sm text-gray-500 mt-2">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        No scheduled sailings found for this route. You can still submit your request.
+                    </p>
+                @endif
+            @else
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+                    <i class="fas fa-arrow-up text-gray-400 text-3xl mb-2"></i>
+                    <p class="text-gray-600">Please select POL and POD first to see available sailings</p>
+                </div>
+            @endif
         @endif
     </div>
     
@@ -537,226 +603,330 @@
 </div>
 
 <script>
-// Initialize searchable port selects with custom input
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('🔵 Autocomplete: DOMContentLoaded - initializing autocomplete');
-    
-    // Port data from backend
-    const polSeaports = @json($polPortsFormatted);
-    const podSeaports = @json($podPortsFormatted);
-    
-    console.log('🔵 Autocomplete: Port data loaded', { polCount: Object.keys(polSeaports).length, podCount: Object.keys(podSeaports).length });
-    
-    const polInput = document.getElementById('pol');
-    const podInput = document.getElementById('pod');
-    
-    console.log('🔵 Autocomplete: Inputs found', { polInput: !!polInput, podInput: !!podInput });
-    
-    // Initialize autocomplete for POL and POD
-    if (polInput && podInput) {
-        console.log('🔵 Autocomplete: Setting up autocomplete for POL and POD');
-        // Function to get current port list based on field type
-        function getCurrentPortList(fieldType) {
-            return fieldType === 'pol' ? polSeaports : podSeaports;
+(function () {
+    const state = {
+        polOptions: @json($polPortsFormatted),
+        podOptions: @json($podPortsFormatted),
+        polPlaceholder: @json($polPlaceholder),
+        podPlaceholder: @json($podPlaceholder),
+        portsEnabled: @json($portsEnabled),
+    };
+
+    const dropdowns = {};
+    const MAX_RESULTS = 10;
+
+    function log(...args) {
+        if (window?.console) {
+            console.log('🔵 Autocomplete:', ...args);
         }
-        
-        // Setup autocomplete for an input field
-        function setupAutocomplete(input) {
-            // IMPORTANT: Don't wrap or move the input! This breaks Livewire's event listeners.
-            // Instead, make the parent relative and position dropdown absolutely
-            const parent = input.parentElement;
-            if (!parent) {
-                console.error('🔴 Autocomplete: Input has no parent element');
-                return;
-            }
-            
-            // Check if autocomplete already set up for this input
-            const existingDropdown = parent.querySelector('.autocomplete-dropdown');
-            if (existingDropdown) {
-                console.log(`🔵 Autocomplete: ${input.id} already has dropdown, skipping setup`);
-                return;
-            }
-            
-            // Make parent relative if not already
-            if (getComputedStyle(parent).position === 'static') {
-                parent.style.position = 'relative';
-            }
-            
-            const dropdown = document.createElement('div');
+    }
+
+    function getInput(id) {
+        return document.getElementById(id);
+    }
+
+    function getOptions(field) {
+        return field === 'pol' ? state.polOptions || {} : state.podOptions || {};
+    }
+
+    function ensureDropdown(input) {
+        const parent = input.parentElement;
+        if (!parent) {
+            return null;
+        }
+
+        if (getComputedStyle(parent).position === 'static') {
+            parent.style.position = 'relative';
+        }
+
+        let dropdown = parent.querySelector('.autocomplete-dropdown');
+        if (!dropdown) {
+            dropdown = document.createElement('div');
             dropdown.className = 'autocomplete-dropdown absolute z-50 w-full bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto hidden';
             dropdown.style.width = input.offsetWidth + 'px';
             parent.appendChild(dropdown);
-            
-            // Function to render dropdown with matches
-            function renderDropdown(query = '') {
-                const fieldType = input.id; // 'pol' or 'pod'
-                console.log(`🔵 Autocomplete: renderDropdown called for ${fieldType} with query: "${query}"`);
-                
-                const portList = getCurrentPortList(fieldType);
-                const lowerQuery = query.toLowerCase().trim();
-                
-                console.log(`🔵 Autocomplete: Port list size for ${fieldType}: ${Object.keys(portList).length}`);
-                
-                // Filter matching ports (or show all if no query)
-                let matches = Object.entries(portList);
-                if (lowerQuery.length > 0) {
-                    matches = matches.filter(([key, value]) => 
-                        key.toLowerCase().includes(lowerQuery) || value.toLowerCase().includes(lowerQuery)
-                    );
-                }
-                matches = matches.slice(0, 10);
-                
-                console.log(`🔵 Autocomplete: ${fieldType} - Found ${matches.length} matches`);
-                
-                if (matches.length === 0 && lowerQuery.length > 0) {
-                    dropdown.innerHTML = `
-                        <div class="px-4 py-3 text-sm text-gray-500">
-                            <i class="fas fa-info-circle mr-2"></i>
-                            No matches found. Press Enter to use "${query}" as a custom port.
-                        </div>
-                    `;
-                    dropdown.classList.remove('hidden');
-                    console.log(`🔵 Autocomplete: ${fieldType} - Showing "no matches" dropdown`);
-                } else if (matches.length > 0) {
-                    dropdown.innerHTML = matches.map(([key, value]) => `
-                        <div class="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0" 
-                             data-value="${key}">
-                            <div class="font-medium text-gray-900">${key}</div>
-                        </div>
-                    `).join('');
-                    dropdown.classList.remove('hidden');
-                    console.log(`✅ Autocomplete: ${fieldType} - Dropdown shown with ${matches.length} items`);
-                    
-                    // Add click handlers DIRECTLY to items (like public form)
-                    dropdown.querySelectorAll('[data-value]').forEach(item => {
-                        item.addEventListener('click', function() {
-                            const selectedValue = this.dataset.value;
-                            console.log(`🔵 Autocomplete: Item clicked - ${fieldType} = "${selectedValue}"`);
-                            
-                            input.value = selectedValue;
-                            dropdown.classList.add('hidden');
-                            
-                            // Manually sync to Livewire (wire:ignore prevents automatic sync)
-                            // Find Livewire component
-                            let component = null;
-                            let element = input;
-                            while (element && element !== document.body) {
-                                if (element.hasAttribute && element.hasAttribute('wire:id')) {
-                                    const componentId = element.getAttribute('wire:id');
-                                    if (window.Livewire) {
-                                        try {
-                                            component = window.Livewire.find(componentId);
-                                            break;
-                                        } catch (e) {
-                                            console.warn('Could not find Livewire component:', e);
-                                        }
-                                    }
-                                    break;
-                                }
-                                element = element.parentElement;
-                            }
-                            
-                            // Update Livewire property manually using public method setPort()
-                            // This method triggers updated() automatically, ensuring showArticles is updated
-                            if (component) {
-                                try {
-                                    console.log(`🔵 Autocomplete: Syncing ${fieldType} = "${selectedValue}" to Livewire`);
-                                    
-                                    // In Livewire v3, use component.call() directly (NOT component.$wire.call)
-                                    // The $wire property is only available in Alpine.js context, not in JS
-                                    if (component.call && typeof component.call === 'function') {
-                                        console.log(`🔵 Autocomplete: Calling component.call('setPort', '${fieldType}', '${selectedValue}')`);
-                                        component.call('setPort', fieldType, selectedValue);
-                                        console.log(`✅ Autocomplete: ${fieldType} synced to Livewire via setPort()`);
-                                    } else {
-                                        // Fallback: Use component.set() + dispatch event + refresh
-                                        console.log(`🔵 Autocomplete: Fallback - using component.set() + dispatch event`);
-                                        // Set the property
-                                        component.set(fieldType, selectedValue);
-                                        
-                                        // Dispatch a custom event that the component can listen to
-                                        if (window.Livewire && window.Livewire.dispatch) {
-                                            window.Livewire.dispatch('port-updated', {
-                                                field: fieldType,
-                                                value: selectedValue
-                                            });
-                                        }
-                                        
-                                        // Force refresh to trigger updated()
-                                        setTimeout(() => {
-                                            if (component.$refresh) {
-                                                component.$refresh();
-                                            }
-                                        }, 100);
-                                        console.log(`✅ Autocomplete: ${fieldType} synced to Livewire via fallback method`);
-                                    }
-                                } catch (e) {
-                                    console.error('🔴 Autocomplete: Error syncing to Livewire:', e);
-                                    console.error('🔴 Autocomplete: Error details:', e.message, e.stack);
-                                    
-                                    // Last resort: try to dispatch event only
-                                    try {
-                                        if (window.Livewire && window.Livewire.dispatch) {
-                                            window.Livewire.dispatch('port-updated', {
-                                                field: fieldType,
-                                                value: selectedValue
-                                            });
-                                            console.log(`🔵 Autocomplete: Dispatched port-updated event as last resort`);
-                                        }
-                                    } catch (err) {
-                                        console.error('🔴 Autocomplete: All sync methods failed:', err);
-                                    }
-                                }
-                            } else {
-                                console.warn('⚠️ Autocomplete: Could not find Livewire component to sync');
-                            }
-                        });
-                    });
-                    
-                    console.log(`✅ Autocomplete: ${fieldType} - Click handlers attached to ${matches.length} items`);
-                    
-                } else {
-                    // No matches and empty query - hide dropdown
-                    dropdown.classList.add('hidden');
-                    console.log(`🔵 Autocomplete: ${fieldType} - Dropdown hidden (no matches and no query)`);
-                }
-            }
-            
-            // Show dropdown on focus/click
-            input.addEventListener('focus', function() {
-                console.log(`🔵 Autocomplete: ${input.id} focus event`);
-                renderDropdown(this.value);
-            });
-            
-            input.addEventListener('click', function() {
-                console.log(`🔵 Autocomplete: ${input.id} click event`);
-                renderDropdown(this.value);
-            });
-            
-            // Update dropdown as user types
-            input.addEventListener('input', function() {
-                renderDropdown(this.value);
-            });
-            
-            // Hide dropdown when clicking outside (simplified like public form)
-            document.addEventListener('click', function(e) {
-                if (!parent.contains(e.target)) {
-                    dropdown.classList.add('hidden');
-                }
-            });
-            
-            // Allow pressing Enter to use custom value
-            input.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter' && this.value.trim()) {
-                    dropdown.classList.add('hidden');
-                    e.preventDefault();
-                }
-            });
         }
-        
-        // Setup both inputs
-        setupAutocomplete(polInput);
-        setupAutocomplete(podInput);
+
+        return dropdown;
     }
-});
+
+    function syncValueToLivewire(fieldType, selectedValue) {
+        let component = null;
+        let element = document.getElementById(fieldType);
+
+        while (element && element !== document.body) {
+            if (element.hasAttribute && element.hasAttribute('wire:id')) {
+                const componentId = element.getAttribute('wire:id');
+                if (window.Livewire) {
+                    try {
+                        component = window.Livewire.find(componentId);
+                    } catch (e) {
+                        console.warn('Could not find Livewire component:', e);
+                    }
+                }
+                break;
+            }
+            element = element.parentElement;
+        }
+
+        if (!component) {
+            console.warn('⚠️ Autocomplete: Livewire component not found for', fieldType);
+            return;
+        }
+
+        try {
+            if (component.call && typeof component.call === 'function') {
+                component.call('setPort', fieldType, selectedValue);
+            } else {
+                component.set(fieldType, selectedValue);
+                if (window.Livewire && window.Livewire.dispatch) {
+                    window.Livewire.dispatch('port-updated', {
+                        field: fieldType,
+                        value: selectedValue,
+                    });
+                }
+
+                setTimeout(() => {
+                    if (component.$refresh) {
+                        component.$refresh();
+                    }
+                }, 100);
+            }
+        } catch (error) {
+            console.error('🔴 Autocomplete: Failed to sync with Livewire', error);
+        }
+    }
+
+    function setupAutocomplete(input) {
+        if (!input) {
+            return;
+        }
+
+        const dropdown = ensureDropdown(input);
+        if (!dropdown) {
+            return;
+        }
+
+        const fieldType = input.id;
+        let isFocused = false;
+        let isSelecting = false;
+
+        function renderDropdown(query = '', force = false) {
+            if (!state.portsEnabled) {
+                dropdown.classList.add('hidden');
+                return;
+            }
+
+            // Only show dropdown if input is focused (unless forced)
+            if (!force && !isFocused) {
+                dropdown.classList.add('hidden');
+                return;
+            }
+
+            const options = getOptions(fieldType);
+            const lowerQuery = (query || '').toLowerCase().trim();
+            let matches = Object.entries(options);
+
+            if (lowerQuery.length > 0) {
+                matches = matches.filter(([key, value]) =>
+                    key.toLowerCase().includes(lowerQuery) || value.toLowerCase().includes(lowerQuery)
+                );
+            }
+
+            matches = matches.slice(0, MAX_RESULTS);
+
+            if (!force && lowerQuery.length === 0) {
+                dropdown.classList.add('hidden');
+                dropdown.innerHTML = '';
+                return;
+            }
+
+            if (matches.length === 0 && lowerQuery.length > 0) {
+                dropdown.innerHTML = `
+                    <div class="px-4 py-3 text-sm text-gray-500">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        No matches found. Press Enter to use "${query}" as a custom value.
+                    </div>
+                `;
+                dropdown.classList.remove('hidden');
+            } else if (matches.length > 0) {
+                dropdown.innerHTML = matches.map(([key]) => `
+                    <div class="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                         data-value="${key}">
+                        <div class="font-medium text-gray-900">${key}</div>
+                    </div>
+                `).join('');
+                dropdown.classList.remove('hidden');
+
+                dropdown.querySelectorAll('[data-value]').forEach(item => {
+                    item.addEventListener('click', function () {
+                        isSelecting = true;
+                        const selectedValue = this.dataset.value;
+                        input.value = selectedValue;
+                        dropdown.classList.add('hidden');
+                        syncValueToLivewire(fieldType, selectedValue);
+                        // Don't trigger blur - just remove focus state
+                        isFocused = false;
+                        setTimeout(() => { isSelecting = false; }, 100);
+                    }, { once: true });
+                });
+            } else {
+                dropdown.classList.add('hidden');
+                dropdown.innerHTML = '';
+            }
+        }
+
+        dropdowns[fieldType] = { input, dropdown, renderDropdown };
+
+        if (!input.dataset.autocompleteBound) {
+            input.addEventListener('focus', function () {
+                isFocused = true;
+                renderDropdown(this.value, true);
+            });
+
+            input.addEventListener('click', function () {
+                isFocused = true;
+                renderDropdown(this.value, true);
+            });
+
+            input.addEventListener('input', function () {
+                if (isFocused) {
+                    renderDropdown(this.value, true);
+                }
+            });
+
+            input.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' && this.value.trim()) {
+                    dropdown.classList.add('hidden');
+                    event.preventDefault();
+                    isFocused = false;
+                    this.blur();
+                }
+            });
+
+            input.addEventListener('blur', function () {
+                // Don't close if user is selecting from dropdown
+                if (isSelecting) {
+                    return;
+                }
+                isFocused = false;
+                setTimeout(() => {
+                    if (!isFocused && !isSelecting) {
+                        dropdown.classList.add('hidden');
+                    }
+                }, 150);
+            });
+
+            document.addEventListener('click', function (event) {
+                if (!dropdown.contains(event.target) && event.target !== input) {
+                    dropdown.classList.add('hidden');
+                    isFocused = false;
+                }
+            });
+
+            input.dataset.autocompleteBound = 'true';
+        }
+
+        // Don't render dropdown on initialization - wait for user interaction
+        dropdown.classList.add('hidden');
+    }
+
+    function updatePlaceholdersAndDisabled() {
+        const polInput = getInput('pol');
+        const podInput = getInput('pod');
+
+        if (polInput) {
+            if (state.polPlaceholder) {
+                polInput.placeholder = state.polPlaceholder;
+            }
+            polInput.disabled = !state.portsEnabled;
+        }
+
+        if (podInput) {
+            if (state.podPlaceholder) {
+                podInput.placeholder = state.podPlaceholder;
+            }
+            podInput.disabled = !state.portsEnabled;
+        }
+    }
+
+    function refreshDropdowns() {
+        Object.values(dropdowns).forEach(({ renderDropdown, input, dropdown }) => {
+            // Only refresh if dropdown is currently open (user is interacting)
+            const isOpen = dropdown && !dropdown.classList.contains('hidden');
+            if (isOpen) {
+                renderDropdown(input.value, true);
+            }
+        });
+    }
+
+    function reinitialize() {
+        setupAutocomplete(getInput('pol'));
+        setupAutocomplete(getInput('pod'));
+        updatePlaceholdersAndDisabled();
+        refreshDropdowns();
+    }
+
+    function handlePortEvent(payload = {}) {
+        if (payload.polOptions !== undefined) {
+            state.polOptions = payload.polOptions || {};
+        }
+        if (payload.podOptions !== undefined) {
+            state.podOptions = payload.podOptions || {};
+        }
+        if (payload.polPlaceholder !== undefined) {
+            state.polPlaceholder = payload.polPlaceholder;
+        }
+        if (payload.podPlaceholder !== undefined) {
+            state.podPlaceholder = payload.podPlaceholder;
+        }
+        if (payload.portsEnabled !== undefined) {
+            state.portsEnabled = !!payload.portsEnabled;
+        }
+
+        requestAnimationFrame(() => {
+            reinitialize();
+
+            if (!state.portsEnabled) {
+                Object.values(dropdowns).forEach(({ dropdown }) => dropdown.classList.add('hidden'));
+            }
+        });
+    }
+
+    function registerLivewireListener() {
+        if (window.Livewire && typeof window.Livewire.on === 'function') {
+            window.Livewire.on('quotation-ports-updated', handlePortEvent);
+            return true;
+        }
+        return false;
+    }
+
+    function init() {
+        updatePlaceholdersAndDisabled();
+        reinitialize();
+    }
+
+    if (!window.__quotationPortsListenerRegistered) {
+        window.__quotationPortsListenerRegistered = registerLivewireListener();
+    }
+
+    if (!window.__quotationPortsListenerRegistered) {
+        document.addEventListener('livewire:load', () => {
+            if (!window.__quotationPortsListenerRegistered) {
+                window.__quotationPortsListenerRegistered = registerLivewireListener();
+            }
+            init();
+        }, { once: true });
+    } else {
+        init();
+    }
+
+    document.addEventListener('livewire:navigated', () => {
+        init();
+    });
+
+    window.addEventListener('quotation-ports-updated', event => {
+        handlePortEvent(event.detail || {});
+    });
+})();
 </script>

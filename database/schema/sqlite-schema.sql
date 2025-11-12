@@ -561,6 +561,7 @@ CREATE TABLE IF NOT EXISTS "quotation_requests"(
   "quoted_at" datetime,
   "expires_at" datetime,
   "customer_role" varchar,
+  "pricing_tier_id" integer,
   "customer_type" varchar,
   "subtotal" numeric,
   "discount_amount" numeric not null default '0',
@@ -595,6 +596,7 @@ CREATE TABLE IF NOT EXISTS "quotation_requests"(
   "robaws_dim_field" text,
   "commodity_type" varchar,
   "simple_service_type" varchar,
+  foreign key("pricing_tier_id") references "pricing_tiers"("id") on delete SET NULL,
   foreign key("selected_schedule_id") references "shipping_schedules"("id") on delete SET NULL,
   foreign key("intake_id") references "intakes"("id") on delete SET NULL,
   foreign key("intro_template_id") references "offer_templates"("id"),
@@ -614,6 +616,9 @@ CREATE INDEX "quotation_requests_requester_email_index" on "quotation_requests"(
 );
 CREATE UNIQUE INDEX "quotation_requests_request_number_unique" on "quotation_requests"(
   "request_number"
+);
+CREATE INDEX "quotation_requests_pricing_tier_id_index" on "quotation_requests"(
+  "pricing_tier_id"
 );
 CREATE TABLE IF NOT EXISTS "quotation_request_files"(
   "id" integer primary key autoincrement not null,
