@@ -545,14 +545,6 @@ class QuotationCreator extends Component
             ? collect()
             : Port::europeanOrigins()->orderBy('name')->get();
 
-        $podPorts = $isAirService
-            ? collect()
-            : Port::forPod()->orderBy('name')->get();
-
-        if (!$isAirService && $podPorts->isEmpty()) {
-            $podPorts = Port::withActivePodSchedules()->orderBy('name')->get();
-        }
-        
         // Extract port name and code from formats like:
         // "Dakar (DKR), Senegal" or "Antwerp (ANR), Belgium"
         // "Dakar, Senegal" or just "Dakar"
@@ -578,28 +570,81 @@ class QuotationCreator extends Component
         
         $today = now()->startOfDay();
         
-        $schedules = $isAirService
-            ? collect()
+        // Build base schedule query for POD extraction (without POD filtering)
+        $baseScheduleQuery = $isAirService
+            ? null
             : ShippingSchedule::where('is_active', true)
-                // Filter to only show schedules starting from today
-                // Check either ets_pol or next_sailing_date - show if either is >= today
                 ->where(function ($q) use ($today) {
                     $q->where(function ($query) use ($today) {
-                        // Schedule is valid if ets_pol exists and is >= today
                         $query->whereNotNull('ets_pol')
                               ->where('ets_pol', '>=', $today);
                     })->orWhere(function ($query) use ($today) {
-                        // OR if next_sailing_date exists and is >= today
+                        $query->whereNotNull('next_sailing_date')
+                              ->where('next_sailing_date', '>=', $today);
+                    });
+                });
+        
+        // If POL is selected, filter schedules by POL to get relevant PODs
+        if (!$isAirService && $baseScheduleQuery && $polName) {
+            $baseScheduleQuery->whereHas('polPort', function ($portQuery) use ($polName, $polCode, $useIlike) {
+                if ($useIlike) {
+                    $portQuery->where(function($q) use ($polName, $polCode) {
+                        $q->where('name', 'ILIKE', '%' . $polName . '%');
+                        if ($polCode) {
+                            $q->orWhere('code', 'ILIKE', '%' . $polCode . '%');
+                        }
+                    });
+                } else {
+                    $portQuery->where(function($q) use ($polName, $polCode) {
+                        $q->whereRaw('LOWER(name) LIKE ?', ['%' . strtolower($polName) . '%']);
+                        if ($polCode) {
+                            $q->orWhereRaw('LOWER(code) LIKE ?', ['%' . strtolower($polCode) . '%']);
+                        }
+                    });
+                }
+            });
+        }
+        
+        // Extract POD ports from active schedules
+        $podPorts = collect();
+        if (!$isAirService && $baseScheduleQuery) {
+            // Get unique POD IDs from schedules
+            $podIds = $baseScheduleQuery
+                ->whereNotNull('pod_id')
+                ->distinct()
+                ->pluck('pod_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->toArray();
+            
+            if (!empty($podIds)) {
+                $podPorts = Port::whereIn('id', $podIds)->orderBy('name')->get();
+            }
+        }
+        
+        // Fallback: if no PODs from schedules, use ports with active schedules
+        if (!$isAirService && $podPorts->isEmpty()) {
+            $podPorts = Port::withActivePodSchedules()->orderBy('name')->get();
+        }
+        
+        // Build full schedule query for display (with POL/POD filtering if both selected)
+        $schedules = $isAirService
+            ? collect()
+            : ShippingSchedule::where('is_active', true)
+                ->where(function ($q) use ($today) {
+                    $q->where(function ($query) use ($today) {
+                        $query->whereNotNull('ets_pol')
+                              ->where('ets_pol', '>=', $today);
+                    })->orWhere(function ($query) use ($today) {
                         $query->whereNotNull('next_sailing_date')
                               ->where('next_sailing_date', '>=', $today);
                     });
                 })
                 ->when($polName && $podName, function ($q) use ($polName, $polCode, $podName, $podCode, $useIlike) {
                     // Filter schedules by route if POL/POD selected
-                    // Match on port name OR code (handles "City (CODE), Country" format)
                     $q->whereHas('polPort', function ($portQuery) use ($polName, $polCode, $useIlike) {
                         if ($useIlike) {
-                            // PostgreSQL: Use ILIKE
                             $portQuery->where(function($q) use ($polName, $polCode) {
                                 $q->where('name', 'ILIKE', '%' . $polName . '%');
                                 if ($polCode) {
@@ -607,7 +652,6 @@ class QuotationCreator extends Component
                                 }
                             });
                         } else {
-                            // SQLite/MySQL: Use LOWER() with LIKE
                             $portQuery->where(function($q) use ($polName, $polCode) {
                                 $q->whereRaw('LOWER(name) LIKE ?', ['%' . strtolower($polName) . '%']);
                                 if ($polCode) {
@@ -618,7 +662,6 @@ class QuotationCreator extends Component
                     })
                     ->whereHas('podPort', function ($portQuery) use ($podName, $podCode, $useIlike) {
                         if ($useIlike) {
-                            // PostgreSQL: Use ILIKE
                             $portQuery->where(function($q) use ($podName, $podCode) {
                                 $q->where('name', 'ILIKE', '%' . $podName . '%');
                                 if ($podCode) {
@@ -626,7 +669,6 @@ class QuotationCreator extends Component
                                 }
                             });
                         } else {
-                            // SQLite/MySQL: Use LOWER() with LIKE
                             $portQuery->where(function($q) use ($podName, $podCode) {
                                 $q->whereRaw('LOWER(name) LIKE ?', ['%' . strtolower($podName) . '%']);
                                 if ($podCode) {
