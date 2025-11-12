@@ -49,6 +49,9 @@ class QuotationCreator extends Component
     public bool $loading = false;
     public bool $submitting = false;
     
+    // Track previous service category to detect sea ↔ air switches
+    protected ?string $previousServiceCategory = null;
+    
     // Listen for article selection events and port updates
     protected $listeners = [
         'articleAdded' => 'handleArticleAdded',
@@ -107,6 +110,9 @@ class QuotationCreator extends Component
         }
 
         $this->service_type = config("quotation.simple_service_types.{$this->simple_service_type}.default_service_type", 'RORO_EXPORT');
+
+        // Initialize service category tracking
+        $this->previousServiceCategory = $this->getServiceCategory($this->simple_service_type);
 
         // Create draft quotation immediately
         $this->createDraftQuotation();
@@ -184,12 +190,19 @@ class QuotationCreator extends Component
         // Map simple service type to actual service type
         if ($propertyName === 'simple_service_type') {
             $previousServiceType = $this->service_type;
+            $currentCategory = $this->getServiceCategory($this->simple_service_type);
+            $categoryChanged = $this->previousServiceCategory !== null && $this->previousServiceCategory !== $currentCategory;
+            
             $this->service_type = config(
                 "quotation.simple_service_types.{$this->simple_service_type}.default_service_type",
                 $this->service_type
             );
 
-            if ($previousServiceType !== $this->service_type) {
+            // Update previous category for next change
+            $this->previousServiceCategory = $currentCategory;
+
+            // Clear route fields if category changed (sea ↔ air) or service type changed
+            if ($categoryChanged || $previousServiceType !== $this->service_type) {
                 $this->handleServiceTypeChanged();
             }
         }
@@ -679,6 +692,23 @@ class QuotationCreator extends Component
     protected function isAirService(): bool
     {
         return $this->simple_service_type === 'AIR';
+    }
+
+    /**
+     * Get service category (sea or air) from simple service type
+     */
+    protected function getServiceCategory(?string $simpleServiceType): string
+    {
+        if (empty($simpleServiceType)) {
+            return 'sea'; // Default to sea
+        }
+        
+        // AIR is air, everything else starting with SEA_ is sea
+        if ($simpleServiceType === 'AIR') {
+            return 'air';
+        }
+        
+        return 'sea';
     }
 
     protected function formatPortOptions(bool $isAirService, $polPorts, $podPorts): array

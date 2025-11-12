@@ -610,6 +610,7 @@
         polPlaceholder: @json($polPlaceholder),
         podPlaceholder: @json($podPlaceholder),
         portsEnabled: @json($portsEnabled),
+        isAir: @json($isAirService),
     };
 
     const dropdowns = {};
@@ -868,6 +869,9 @@
     }
 
     function handlePortEvent(payload = {}) {
+        const previousPortsEnabled = state.portsEnabled;
+        const previousIsAir = state.isAir;
+        
         if (payload.polOptions !== undefined) {
             state.polOptions = payload.polOptions || {};
         }
@@ -882,6 +886,20 @@
         }
         if (payload.portsEnabled !== undefined) {
             state.portsEnabled = !!payload.portsEnabled;
+        }
+        if (payload.isAir !== undefined) {
+            state.isAir = !!payload.isAir;
+        }
+
+        // Clear input values if switching between sea and air categories
+        const categorySwitched = previousIsAir !== undefined && previousIsAir !== state.isAir;
+        const portsDisabled = previousPortsEnabled && !state.portsEnabled;
+        
+        if (categorySwitched || portsDisabled) {
+            const polInput = getInput('pol');
+            const podInput = getInput('pod');
+            if (polInput) polInput.value = '';
+            if (podInput) podInput.value = '';
         }
 
         requestAnimationFrame(() => {
