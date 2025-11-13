@@ -871,7 +871,10 @@ class RobawsArticleProvider
                     'attempt' => $attempt + 1,
                 ]);
 
+                // Use longer timeout for article details (includes many related items)
                 $response = $this->robawsClient->getHttpClientForQuotation()
+                    ->timeout(30) // Increased timeout for article details
+                    ->connectTimeout(10)
                     ->get("/api/v2/articles/{$articleId}", [
                         'include' => 'extraFields,additionalItems,compositeItems,lineItems,children',
                     ]);
@@ -919,6 +922,54 @@ class RobawsArticleProvider
 
                 sleep($sleepFor);
                 continue;
+            } catch (\Illuminate\Http\Client\ConnectionException $e) {
+                // Handle timeout/connection errors specifically
+                $attempt++;
+                
+                Log::warning('Robaws API connection timeout/error, retrying', [
+                    'article_id' => $articleId,
+                    'attempt' => $attempt,
+                    'max_attempts' => $maxAttempts,
+                    'error' => $e->getMessage(),
+                ]);
+
+                if ($attempt >= $maxAttempts) {
+                    Log::error('Exceeded retry attempts due to connection errors', [
+                        'article_id' => $articleId,
+                        'attempts' => $attempt,
+                        'error' => $e->getMessage(),
+                    ]);
+                    return null;
+                }
+
+                // Exponential backoff for connection errors
+                $sleepFor = min(pow(2, $attempt), 10); // Max 10 seconds
+                sleep($sleepFor);
+                continue;
+            } catch (\Illuminate\Http\Client\RequestException $e) {
+                // Handle other HTTP request errors
+                $attempt++;
+                
+                Log::warning('Robaws API request error, retrying', [
+                    'article_id' => $articleId,
+                    'attempt' => $attempt,
+                    'max_attempts' => $maxAttempts,
+                    'error' => $e->getMessage(),
+                    'status_code' => $e->response?->status(),
+                ]);
+
+                if ($attempt >= $maxAttempts) {
+                    Log::error('Exceeded retry attempts due to request errors', [
+                        'article_id' => $articleId,
+                        'attempts' => $attempt,
+                        'error' => $e->getMessage(),
+                    ]);
+                    return null;
+                }
+
+                // Short delay for request errors
+                sleep(2);
+                continue;
             } catch (\Exception $e) {
                 Log::error('Failed to get article details from Robaws', [
                     'article_id' => $articleId,
@@ -932,6 +983,206 @@ class RobawsArticleProvider
         }
 
         return null;
+    }
+
+    /**
+     * Sync article metadata from webhook payload (zero API calls)
+     * Webhook payload contains full article data including extraFields
+     * 
+     * @param int|string $articleId The article cache ID or robaws_article_id
+     * @param array $webhookData Full article data from webhook payload
+     * @return array Synced metadata
+     */
+    public function syncArticleMetadataFromWebhook(int|string $articleId, array $webhookData): array
+    {
+        try {
+            // Find article by ID (could be cache ID or robaws_article_id)
+            $article = is_numeric($articleId) 
+                ? RobawsArticleCache::find($articleId)
+                : RobawsArticleCache::where('robaws_article_id', $articleId)->first();
+            
+            if (!$article) {
+                // Article doesn't exist yet - process from webhook data first
+                Log::info('Article not found in cache, processing from webhook data', [
+                    'article_id' => $articleId,
+                    'robaws_article_id' => $webhookData['id'] ?? null
+                ]);
+                
+                // This will create the article from webhook data
+                // The processArticle method will be called from RobawsArticlesSyncService
+                throw new \Exception("Article not found in cache. Process webhook data first.");
+            }
+
+            // Webhook data contains full article data including extraFields
+            // Parse metadata directly from webhook payload (no API call needed)
+            $metadata = $this->parseArticleMetadata($webhookData);
+            $source = 'webhook';
+
+            // SUPPLEMENT: Always try to extract POL/POD from article name
+            $nameExtraction = $this->extractMetadataFromArticleWithContext($article, $metadata);
+            
+            // Merge POL/POD from article name if API didn't provide them
+            if (empty($metadata['pol_code']) && !empty($nameExtraction['pol_code'])) {
+                $metadata['pol_code'] = $nameExtraction['pol_code'];
+            }
+            
+            if (empty($metadata['pod_name']) && !empty($nameExtraction['pod_name'])) {
+                $metadata['pod_name'] = $nameExtraction['pod_name'];
+            }
+            
+            // Also supplement pol_terminal if not provided by API
+            if (empty($metadata['pol_terminal']) && !empty($nameExtraction['pol_terminal'])) {
+                $metadata['pol_terminal'] = $nameExtraction['pol_terminal'];
+            }
+            
+            // IMPORTANT: Always use direction-aware applicable_services from name extraction
+            if (!empty($nameExtraction['applicable_services'])) {
+                $metadata['applicable_services'] = $nameExtraction['applicable_services'];
+            }
+
+            if (isset($metadata['is_parent_item']) && $metadata['is_parent_item']) {
+                $metadata['is_parent_article'] = true;
+            }
+            
+            // Extract enhanced fields for Smart Article Selection
+            try {
+                // Strategy: Use Robaws fields first, fallback to name parsing
+                
+                // 1. Commodity Type - Check multiple sources
+                if (!empty($metadata['type'])) {
+                    // Direct from Robaws TYPE field - most reliable
+                    $metadata['commodity_type'] = $this->enhancementService->extractCommodityType(['type' => $metadata['type']]);
+                } else {
+                    // Fallback: Extract from article name
+                    $articleData = [
+                        'article_name' => $article->article_name,
+                        'name' => $article->article_name,
+                    ];
+                    $metadata['commodity_type'] = $this->enhancementService->extractCommodityType($articleData);
+                }
+                
+                // 2. POD Code - Check multiple sources
+                if (!empty($metadata['pod'])) {
+                    // Direct from Robaws POD field
+                    $metadata['pod_code'] = $this->enhancementService->extractPodCode($metadata['pod']);
+                } elseif (!empty($metadata['pod_name'])) {
+                    // From pod_name field
+                    $metadata['pod_code'] = $this->enhancementService->extractPodCode($metadata['pod_name']);
+                } else {
+                    // Fallback: Try to extract from article name
+                    $metadata['pod_code'] = null;
+                }
+                
+            } catch (\Exception $e) {
+                Log::debug('Failed to extract enhanced fields during webhook metadata sync', [
+                    'article_id' => $articleId,
+                    'error' => $e->getMessage()
+                ]);
+                // Non-critical - continue without enhanced fields
+            }
+            
+            // Ensure date fields are normalized before persisting
+            $metadata['update_date'] = $this->normalizeRobawsDate($metadata['update_date'] ?? null, 'update_date');
+            $metadata['validity_date'] = $this->normalizeRobawsDate($metadata['validity_date'] ?? null, 'validity_date');
+
+            // Update article with metadata
+            $article->update($metadata);
+
+            // Ensure parent flag stays in sync
+            if (isset($metadata['is_parent_item']) && $metadata['is_parent_item']) {
+                $article->is_parent_article = true;
+            }
+
+            // Sync composite items for parent articles (but don't make API calls - use webhook data)
+            $shouldSyncChildren = $article->is_parent_article
+                || (!empty($metadata['is_parent_article']))
+                || (!empty($metadata['is_parent_item']));
+
+            if ($shouldSyncChildren && !empty($webhookData['compositeItems'])) {
+                // Use composite items from webhook data instead of API call
+                $this->syncCompositeItemsFromWebhook($article->id, $webhookData);
+            }
+
+            Log::info('Article metadata synced from webhook', [
+                'article_id' => $articleId,
+                'source' => $source,
+                'metadata_keys' => array_keys($metadata),
+                'api_calls_made' => 0
+            ]);
+
+            return $metadata;
+
+        } catch (\Exception $e) {
+            Log::error('Failed to sync article metadata from webhook', [
+                'article_id' => $articleId,
+                'error' => $e->getMessage()
+            ]);
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Sync composite items from webhook data (zero API calls)
+     * 
+     * @param int $parentArticleId The parent article cache ID
+     * @param array $webhookData Full article data from webhook payload
+     */
+    public function syncCompositeItemsFromWebhook(int $parentArticleId, array $webhookData): void
+    {
+        try {
+            $parent = RobawsArticleCache::find($parentArticleId);
+            
+            if (!$parent) {
+                throw new \Exception("Parent article not found: {$parentArticleId}");
+            }
+
+            // Parse composite items from webhook data (no API call needed)
+            $compositeItems = $this->parseCompositeItems($webhookData);
+            
+            if (empty($compositeItems)) {
+                Log::info('No composite items found in webhook data for parent article', [
+                    'parent_id' => $parentArticleId
+                ]);
+                return;
+            }
+
+            // Link composite items as children
+            foreach ($compositeItems as $index => $item) {
+                $child = $this->findOrCreateChildArticle($item);
+                
+                if ($child) {
+                    // Check if relationship already exists
+                    $exists = $parent->children()->wherePivot('child_article_id', $child->id)->exists();
+                    
+                    if (!$exists) {
+                        $parent->children()->attach($child->id, [
+                            'sort_order' => $index + 1,
+                            'is_required' => $item['is_required'] ?? true,
+                            'is_conditional' => false,
+                            'cost_type' => $item['cost_type'] ?? null,
+                            'default_quantity' => $item['quantity'] ?? 1.00,
+                            'default_cost_price' => $item['cost_price'] ?? null,
+                            'unit_type' => $item['unit_type'] ?? null,
+                        ]);
+
+                        Log::info('Linked composite item to parent from webhook', [
+                            'parent' => $parent->article_name,
+                            'child' => $child->article_name
+                        ]);
+                    }
+                }
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Failed to sync composite items from webhook', [
+                'parent_article_id' => $parentArticleId,
+                'error' => $e->getMessage()
+            ]);
+
+            // Don't throw - just log and continue
+            // This allows the system to continue working even if some articles fail
+        }
     }
 
     /**

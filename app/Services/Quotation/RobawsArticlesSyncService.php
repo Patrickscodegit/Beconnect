@@ -59,7 +59,10 @@ class RobawsArticlesSyncService
         
         foreach ($articles as $articleData) {
             try {
-                $this->processArticle($articleData, fetchFullDetails: true);
+                // Only fetch full details if extraFields not in list API response
+                // List API may not include extraFields, so we check first
+                $needsFullDetails = empty($articleData['extraFields']);
+                $this->processArticle($articleData, fetchFullDetails: $needsFullDetails);
                 $synced++;
             } catch (\Exception $e) {
                 $errors++;
@@ -138,17 +141,23 @@ class RobawsArticlesSyncService
         
         Log::info('Found modified articles', ['count' => count($articles)]);
         
-        // Process each modified article (NO API calls - webhooks handle real-time)
+        // Process each modified article (minimal API calls - use existing data when available)
         foreach ($articles as $articleData) {
             try {
-                // Only process basic data, skip API call for extraFields
-                $this->processArticle($articleData, fetchFullDetails: true);
+                // Only fetch full details if extraFields not in incremental API response
+                // Incremental API may include extraFields for changed articles
+                $needsFullDetails = empty($articleData['extraFields']);
+                $this->processArticle($articleData, fetchFullDetails: $needsFullDetails);
                 
-                // Extract metadata from stored data
-                $this->articleProvider->syncArticleMetadata(
-                    $articleData['id'],
-                    useApi: false
-                );
+                // Extract metadata from stored data (no API call - webhooks handle real-time updates)
+                // If article was just updated, it may have extraFields from the incremental API
+                $article = \App\Models\RobawsArticleCache::where('robaws_article_id', $articleData['id'])->first();
+                if ($article) {
+                    $this->articleProvider->syncArticleMetadata(
+                        $article->id,
+                        useApi: false  // ✅ No API call - use stored data
+                    );
+                }
                 
                 $synced++;
                 
@@ -156,11 +165,12 @@ class RobawsArticlesSyncService
                     Log::info('Incremental sync progress', [
                         'processed' => $synced,
                         'total' => count($articles),
-                        'note' => 'Fast sync - no API calls (webhooks handle real-time)'
+                        'note' => 'Fast sync - minimal API calls (webhooks handle real-time)',
+                        'api_calls_made' => $needsFullDetails ? 1 : 0
                     ]);
                 }
             } catch (\RuntimeException $e) {
-                // Handle daily quota exceeded (shouldn't happen with no API calls)
+                // Handle daily quota exceeded
                 if (str_contains($e->getMessage(), 'Daily API quota')) {
                     Log::critical('Sync stopped: Daily API quota exhausted', [
                         'synced' => $synced,
@@ -195,37 +205,68 @@ class RobawsArticlesSyncService
     }
 
     /**
-     * Process article from webhook event (no API calls needed)
+     * Process article from webhook event (zero API calls - uses webhook data directly)
+     * Webhook payload contains full article data including extraFields, so no API calls needed
      */
     public function processArticleFromWebhook(array $articleData, string $event): void
     {
+        $startTime = microtime(true);
+        
         Log::info('Processing webhook event', [
             'event' => $event,
             'article_id' => $articleData['id'] ?? null,
-            'article_name' => $articleData['name'] ?? null
+            'article_name' => $articleData['name'] ?? null,
+            'has_extraFields' => !empty($articleData['extraFields'])
         ]);
         
-        // Webhook includes full article data - no API call needed!
-        $this->processArticle($articleData, fetchFullDetails: true);
+        // Webhook includes full article data with extraFields - no API call needed!
+        // Use fetchFullDetails: false since webhook data already has everything
+        $this->processArticle($articleData, fetchFullDetails: false);
         
-        // Extract metadata from the article name
+        // Extract metadata directly from webhook payload (zero API calls)
         if (isset($articleData['id'])) {
             try {
-                $this->articleProvider->syncArticleMetadata(
-                    $articleData['id'],
-                    useApi: true
-                );
+                // Find article by robaws_article_id to get cache ID
+                $article = \App\Models\RobawsArticleCache::where('robaws_article_id', $articleData['id'])->first();
+                
+                if ($article) {
+                    // Use webhook data directly - no API call
+                    $this->articleProvider->syncArticleMetadataFromWebhook(
+                        $article->id,
+                        $articleData
+                    );
+                } else {
+                    // Article not in cache yet - it was just created by processArticle
+                    // Find it again after processArticle creates it
+                    $article = \App\Models\RobawsArticleCache::where('robaws_article_id', $articleData['id'])->first();
+                    
+                    if ($article) {
+                        $this->articleProvider->syncArticleMetadataFromWebhook(
+                            $article->id,
+                            $articleData
+                        );
+                    } else {
+                        Log::warning('Article not found in cache after processing webhook', [
+                            'article_id' => $articleData['id']
+                        ]);
+                    }
+                }
             } catch (\Exception $e) {
                 Log::warning('Failed to sync metadata from webhook', [
                     'article_id' => $articleData['id'],
                     'error' => $e->getMessage()
                 ]);
+                // Don't throw - webhook processing should continue even if metadata sync fails
             }
         }
         
-        Log::info('Webhook event processed successfully', [
+        $processingTime = (microtime(true) - $startTime) * 1000;
+        
+        Log::info('Webhook event processed successfully (zero API calls)', [
             'event' => $event,
-            'article_id' => $articleData['id'] ?? null
+            'article_id' => $articleData['id'] ?? null,
+            'processing_time_ms' => round($processingTime, 2),
+            'api_calls_made' => 0
         ]);
     }
 
@@ -336,10 +377,20 @@ class RobawsArticlesSyncService
             }
         }
         
-        // Fetch full article details including extraFields if requested (for incremental sync)
+        // Fetch full article details including extraFields only if:
+        // 1. fetchFullDetails is true AND
+        // 2. extraFields are not already in article data (webhook/list API may include them)
         $metadata = [];
-        if ($fetchFullDetails) {
+        $hasExtraFields = !empty($article['extraFields']);
+        
+        if ($fetchFullDetails && !$hasExtraFields) {
+            // Only fetch if extraFields not already available
             try {
+                Log::debug('Fetching full article details (extraFields missing)', [
+                    'article_id' => $data['robaws_article_id'],
+                    'has_extraFields_in_data' => $hasExtraFields
+                ]);
+                
                 $fullDetails = $this->fetchFullArticleDetails($data['robaws_article_id']);
                 if ($fullDetails) {
                     // Extract and store all metadata from full details
@@ -353,6 +404,15 @@ class RobawsArticlesSyncService
                 ]);
                 // Continue with basic data only
             }
+        } elseif ($hasExtraFields) {
+            // extraFields already in article data (from webhook or list API) - use them directly
+            Log::debug('Using extraFields from article data (no API call needed)', [
+                'article_id' => $data['robaws_article_id'],
+                'extraFields_count' => count($article['extraFields'] ?? [])
+            ]);
+            
+            $metadata = $this->extractMetadataFromFullDetails($article, $articleName);
+            $data = array_merge($data, $metadata);
         }
 
         $resolvedTransportMode = $this->transportModeResolver->resolve($articleName, [
