@@ -197,6 +197,73 @@
             </div>
         </x-filament::card>
         
+        {{-- Optimization Metrics --}}
+        @php
+            $optimizationStats = $this->getOptimizationStats();
+        @endphp
+        
+        <x-filament::card>
+            <h3 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">⚡ Optimization Metrics</h3>
+            
+            <div class="grid gap-4 md:grid-cols-2">
+                <div class="rounded-lg border border-success-200 bg-success-50 p-4 dark:border-success-700 dark:bg-success-950">
+                    <div class="text-2xl font-bold text-success-600 dark:text-success-400">
+                        {{ number_format($optimizationStats['api_calls_saved_from_webhooks']) }}
+                    </div>
+                    <div class="mt-1 text-sm text-success-700 dark:text-success-300">
+                        API Calls Saved (24h)
+                    </div>
+                    <div class="mt-1 text-xs text-success-600 dark:text-success-400">
+                        From webhook optimization (2 → 0 API calls per webhook)
+                    </div>
+                </div>
+                
+                <div class="rounded-lg border border-success-200 bg-success-50 p-4 dark:border-success-700 dark:bg-success-950">
+                    <div class="text-2xl font-bold text-success-600 dark:text-success-400">
+                        {{ $optimizationStats['avg_webhook_processing_time_ms'] > 0 ? $optimizationStats['avg_webhook_processing_time_ms'] . 'ms' : 'N/A' }}
+                    </div>
+                    <div class="mt-1 text-sm text-success-700 dark:text-success-300">
+                        Avg Webhook Processing Time
+                    </div>
+                    <div class="mt-1 text-xs text-success-600 dark:text-success-400">
+                        @if($optimizationStats['avg_webhook_processing_time_ms'] > 0)
+                            @if($optimizationStats['avg_webhook_processing_time_ms'] < 100)
+                                ⚡ Optimized (<100ms target)
+                            @else
+                                {{ round($optimizationStats['avg_webhook_processing_time_ms'] / 1000, 2) }}s per webhook
+                            @endif
+                        @else
+                            No processing time data
+                        @endif
+                    </div>
+                </div>
+                
+                <div class="rounded-lg border border-info-200 bg-info-50 p-4 dark:border-info-700 dark:bg-info-950">
+                    <div class="text-2xl font-bold text-info-600 dark:text-info-400">
+                        ~{{ number_format($optimizationStats['api_calls_saved_per_sync']) }}
+                    </div>
+                    <div class="mt-1 text-sm text-info-700 dark:text-info-300">
+                        API Calls Saved Per Sync
+                    </div>
+                    <div class="mt-1 text-xs text-info-600 dark:text-info-400">
+                        {{ $optimizationStats['optimization_percentage'] }}% reduction (articles with extraFields)
+                    </div>
+                </div>
+                
+                <div class="rounded-lg border border-info-200 bg-info-50 p-4 dark:border-info-700 dark:bg-info-950">
+                    <div class="text-2xl font-bold text-info-600 dark:text-info-400">
+                        {{ number_format($optimizationStats['articles_with_extraFields']) }}
+                    </div>
+                    <div class="mt-1 text-sm text-info-700 dark:text-info-300">
+                        Articles Optimized
+                    </div>
+                    <div class="mt-1 text-xs text-info-600 dark:text-info-400">
+                        Don't need API calls (have extraFields)
+                    </div>
+                </div>
+            </div>
+        </x-filament::card>
+        
         {{-- Actions --}}
         <x-filament::card>
             <div class="flex items-center justify-between">

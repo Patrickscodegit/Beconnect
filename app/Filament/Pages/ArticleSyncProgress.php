@@ -47,6 +47,19 @@ class ArticleSyncProgress extends Page
     {
         $total = RobawsArticleCache::count();
         
+        // Optimization metrics: Articles with extraFields don't need API calls
+        $articlesWithExtraFields = RobawsArticleCache::where(function($query) {
+            $query->whereNotNull('shipping_line')
+                ->orWhereNotNull('transport_mode')
+                ->orWhereNotNull('pol_terminal');
+        })->count();
+        
+        $articlesWithoutExtraFields = max(0, $total - $articlesWithExtraFields);
+        
+        // Estimated API calls saved per full sync
+        $apiCallsSavedPerSync = $articlesWithExtraFields;
+        $optimizationPercentage = $total > 0 ? round(($apiCallsSavedPerSync / $total) * 100) : 0;
+        
         return [
             'total' => $total,
             'parent_items' => RobawsArticleCache::where('is_parent_item', true)->count(),
@@ -54,6 +67,39 @@ class ArticleSyncProgress extends Page
             'with_pod_code' => RobawsArticleCache::whereNotNull('pod_code')->count(),
             'with_pol_terminal' => RobawsArticleCache::whereNotNull('pol_terminal')->count(),
             'with_shipping_line' => RobawsArticleCache::whereNotNull('shipping_line')->count(),
+            // Optimization metrics
+            'articles_with_extraFields' => $articlesWithExtraFields,
+            'articles_without_extraFields' => $articlesWithoutExtraFields,
+            'api_calls_saved_per_sync' => $apiCallsSavedPerSync,
+            'optimization_percentage' => $optimizationPercentage,
+        ];
+    }
+    
+    public function getOptimizationStats(): array
+    {
+        // Get webhook stats for optimization metrics
+        $webhooksLast24h = \App\Models\RobawsWebhookLog::where('created_at', '>=', now()->subDay())
+            ->where('status', 'processed')
+            ->count();
+        $apiCallsSavedFromWebhooks = $webhooksLast24h * 2; // 2 API calls saved per webhook
+        
+        // Get average processing time for webhooks (optimization: should be <100ms)
+        $avgProcessingTime = \App\Models\RobawsWebhookLog::where('created_at', '>=', now()->subDay())
+            ->whereNotNull('processing_duration_ms')
+            ->where('processing_duration_ms', '>', 0)
+            ->avg('processing_duration_ms');
+        $avgProcessingTimeMs = $avgProcessingTime ? round($avgProcessingTime, 0) : 0;
+        
+        $fieldStats = $this->getFieldStats();
+        
+        return [
+            'webhooks_last24h' => $webhooksLast24h,
+            'api_calls_saved_from_webhooks' => $apiCallsSavedFromWebhooks,
+            'avg_webhook_processing_time_ms' => $avgProcessingTimeMs,
+            'articles_with_extraFields' => $fieldStats['articles_with_extraFields'],
+            'articles_without_extraFields' => $fieldStats['articles_without_extraFields'],
+            'api_calls_saved_per_sync' => $fieldStats['api_calls_saved_per_sync'],
+            'optimization_percentage' => $fieldStats['optimization_percentage'],
         ];
     }
     
