@@ -118,6 +118,12 @@
                                             <span class="font-medium">Shipping Line:</span> {{ $article->shipping_line }}
                                         </p>
                                     @endif
+                                    
+                                    @if($article->validity_date)
+                                        <p class="text-sm text-gray-600 dark:text-gray-400">
+                                            <span class="font-medium">Validity Date:</span> {{ $article->validity_date->format('d-m-Y') }}
+                                        </p>
+                                    @endif
                                 </div>
                                 
                                 {{-- Match Reasons --}}
