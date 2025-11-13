@@ -484,11 +484,35 @@ class RobawsArticleCache extends Model
     }
 
     /**
+     * Extract port code from POL/POD string
+     * Examples: "Antwerp (ANR), Belgium" -> "ANR"
+     *           "Dakar (DKR), Senegal" -> "DKR"
+     *           "Conakry" -> null
+     */
+    private function extractPortCode(?string $portString): ?string
+    {
+        if (!$portString) {
+            return null;
+        }
+
+        // Extract code from parentheses if present: "City (CODE), Country"
+        if (preg_match('/\(([^)]+)\)/', $portString, $matches)) {
+            return strtoupper(trim($matches[1]));
+        }
+
+        return null;
+    }
+
+    /**
      * Scope for filtering articles based on complete quotation context
      * This is the main method for smart article selection
      */
     public function scopeForQuotationContext(Builder $query, \App\Models\QuotationRequest $quotation): Builder
     {
+        // Use database-agnostic case-insensitive matching
+        // PostgreSQL supports ILIKE, SQLite/MySQL use LOWER() with LIKE
+        $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
+
         // Only show parent items when dataset contains them; otherwise fall back to all active articles.
         $hasParentItems = static::query()
             ->where('is_parent_article', true)
@@ -519,17 +543,43 @@ class RobawsArticleCache extends Model
                     $qq->where('is_surcharge', false)
                         ->where(function ($routeQuery) use ($quotation, $useIlike) {
                             if ($quotation->pol) {
-                                if ($useIlike) {
-                                    $routeQuery->where('pol', 'ILIKE', '%' . $quotation->pol . '%');
+                                $quotationPolCode = $this->extractPortCode($quotation->pol);
+                                if ($quotationPolCode) {
+                                    // Match by port code in parentheses
+                                    if ($useIlike) {
+                                        $routeQuery->where('pol', 'ILIKE', '%(' . $quotationPolCode . ')%')
+                                            ->orWhere('pol', 'ILIKE', $quotation->pol);
+                                    } else {
+                                        $routeQuery->whereRaw('LOWER(pol) LIKE LOWER(?)', ['%(' . $quotationPolCode . ')%'])
+                                            ->orWhereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
+                                    }
                                 } else {
-                                    $routeQuery->whereRaw('LOWER(pol) LIKE ?', ['%' . strtolower($quotation->pol) . '%']);
+                                    // Exact string match if no code
+                                    if ($useIlike) {
+                                        $routeQuery->where('pol', 'ILIKE', $quotation->pol);
+                                    } else {
+                                        $routeQuery->whereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
+                                    }
                                 }
                             }
                             if ($quotation->pod) {
-                                if ($useIlike) {
-                                    $routeQuery->where('pod', 'ILIKE', '%' . $quotation->pod . '%');
+                                $quotationPodCode = $this->extractPortCode($quotation->pod);
+                                if ($quotationPodCode) {
+                                    // Match by port code in parentheses
+                                    if ($useIlike) {
+                                        $routeQuery->where('pod', 'ILIKE', '%(' . $quotationPodCode . ')%')
+                                            ->orWhere('pod', 'ILIKE', $quotation->pod);
+                                    } else {
+                                        $routeQuery->whereRaw('LOWER(pod) LIKE LOWER(?)', ['%(' . $quotationPodCode . ')%'])
+                                            ->orWhereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
+                                    }
                                 } else {
-                                    $routeQuery->whereRaw('LOWER(pod) LIKE ?', ['%' . strtolower($quotation->pod) . '%']);
+                                    // Exact string match if no code
+                                    if ($useIlike) {
+                                        $routeQuery->where('pod', 'ILIKE', $quotation->pod);
+                                    } else {
+                                        $routeQuery->whereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
+                                    }
                                 }
                             }
                         });
@@ -540,46 +590,104 @@ class RobawsArticleCache extends Model
         $query->where('is_active', true)
               ->validAsOf(now());
 
-        // Use database-agnostic case-insensitive matching
-        // PostgreSQL supports ILIKE, SQLite/MySQL use LOWER() with LIKE
-        $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
-
-        // Apply POL/POD filtering - STRICT MATCHING ONLY (100% match required)
-        // Both POL and POD must match exactly or as substring match
-        // No articles without POL/POD restrictions are included
+        // Apply POL/POD filtering - EXACT MATCHING ONLY (100% match required)
+        // Extract port codes and compare exactly, fall back to exact string match
         if ($quotation->pol && $quotation->pod) {
-            // Require both POL and POD to match
-            $query->where(function ($q) use ($quotation, $useIlike) {
-                // POL must match (as substring - handles format differences)
-                if ($useIlike) {
-                    $q->where('pol', 'ILIKE', '%' . $quotation->pol . '%');
+            $quotationPolCode = $this->extractPortCode($quotation->pol);
+            $quotationPodCode = $this->extractPortCode($quotation->pod);
+
+            // Require both POL and POD to match exactly
+            $query->where(function ($q) use ($quotation, $quotationPolCode, $useIlike) {
+                if ($quotationPolCode) {
+                    // Match by port code in parentheses (more flexible but still exact code match)
+                    $q->where(function ($codeQuery) use ($quotationPolCode, $quotation, $useIlike) {
+                        // Match if article POL contains the port code in parentheses
+                        if ($useIlike) {
+                            $codeQuery->where('pol', 'ILIKE', '%(' . $quotationPolCode . ')%')
+                                ->orWhere('pol', 'ILIKE', $quotation->pol);
+                        } else {
+                            $codeQuery->whereRaw('LOWER(pol) LIKE LOWER(?)', ['%(' . $quotationPolCode . ')%'])
+                                ->orWhereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
+                        }
+                    });
                 } else {
-                    $q->whereRaw('LOWER(pol) LIKE ?', ['%' . strtolower($quotation->pol) . '%']);
+                    // No code available - exact string match
+                    if ($useIlike) {
+                        $q->where('pol', 'ILIKE', $quotation->pol);
+                    } else {
+                        $q->whereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
+                    }
                 }
-            })->where(function ($q) use ($quotation, $useIlike) {
-                // POD must match (as substring - handles format differences)
-                if ($useIlike) {
-                    $q->where('pod', 'ILIKE', '%' . $quotation->pod . '%');
+            })->where(function ($q) use ($quotation, $quotationPodCode, $useIlike) {
+                if ($quotationPodCode) {
+                    // Match by port code in parentheses
+                    $q->where(function ($codeQuery) use ($quotationPodCode, $quotation, $useIlike) {
+                        // Match if article POD contains the port code in parentheses
+                        if ($useIlike) {
+                            $codeQuery->where('pod', 'ILIKE', '%(' . $quotationPodCode . ')%')
+                                ->orWhere('pod', 'ILIKE', $quotation->pod);
+                        } else {
+                            $codeQuery->whereRaw('LOWER(pod) LIKE LOWER(?)', ['%(' . $quotationPodCode . ')%'])
+                                ->orWhereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
+                        }
+                    });
                 } else {
-                    $q->whereRaw('LOWER(pod) LIKE ?', ['%' . strtolower($quotation->pod) . '%']);
+                    // No code available - exact string match
+                    if ($useIlike) {
+                        $q->where('pod', 'ILIKE', $quotation->pod);
+                    } else {
+                        $q->whereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
+                    }
                 }
             });
         } elseif ($quotation->pol) {
-            // Only POL specified - require POL match
-            $query->where(function ($q) use ($quotation, $useIlike) {
-                if ($useIlike) {
-                    $q->where('pol', 'ILIKE', '%' . $quotation->pol . '%');
+            // Only POL specified - require exact POL match
+            $quotationPolCode = $this->extractPortCode($quotation->pol);
+            $query->where(function ($q) use ($quotation, $quotationPolCode, $useIlike) {
+                if ($quotationPolCode) {
+                    // Match by port code in parentheses (more flexible)
+                    $q->where(function ($codeQuery) use ($quotationPolCode, $quotation, $useIlike) {
+                        // Match if article POL contains the port code in parentheses
+                        if ($useIlike) {
+                            $codeQuery->where('pol', 'ILIKE', '%(' . $quotationPolCode . ')%')
+                                ->orWhere('pol', 'ILIKE', $quotation->pol);
+                        } else {
+                            $codeQuery->whereRaw('LOWER(pol) LIKE LOWER(?)', ['%(' . $quotationPolCode . ')%'])
+                                ->orWhereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
+                        }
+                    });
                 } else {
-                    $q->whereRaw('LOWER(pol) LIKE ?', ['%' . strtolower($quotation->pol) . '%']);
+                    // No code available - exact string match
+                    if ($useIlike) {
+                        $q->where('pol', 'ILIKE', $quotation->pol);
+                    } else {
+                        $q->whereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
+                    }
                 }
             });
         } elseif ($quotation->pod) {
-            // Only POD specified - require POD match
-            $query->where(function ($q) use ($quotation, $useIlike) {
-                if ($useIlike) {
-                    $q->where('pod', 'ILIKE', '%' . $quotation->pod . '%');
+            // Only POD specified - require exact POD match
+            $quotationPodCode = $this->extractPortCode($quotation->pod);
+            $query->where(function ($q) use ($quotation, $quotationPodCode, $useIlike) {
+                if ($quotationPodCode) {
+                    // Match by port code in parentheses
+                    $q->where(function ($codeQuery) use ($quotationPodCode, $quotation, $useIlike) {
+                        // Match if article POD contains the port code in parentheses
+                        if ($useIlike) {
+                            $codeQuery->where('pod', 'ILIKE', '%(' . $quotationPodCode . ')%')
+                                ->orWhere('pod', 'ILIKE', $quotation->pod);
+                        } else {
+                            $codeQuery->whereRaw('LOWER(pod) LIKE LOWER(?)', ['%(' . $quotationPodCode . ')%'])
+                                ->orWhereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
+                        }
+                    });
                 } else {
-                    $q->whereRaw('LOWER(pod) LIKE ?', ['%' . strtolower($quotation->pod) . '%']);
+                    // No code available - exact string match
+                    if ($useIlike) {
+                        $q->where('pod', 'ILIKE', $quotation->pod);
+                    } else {
+                        $q->whereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
+                    }
                 }
             });
         }
@@ -599,20 +707,21 @@ class RobawsArticleCache extends Model
             });
         }
 
-        // Apply shipping line filter if schedule is selected - REQUIRE exact match (no NULL fallback)
+        // Apply shipping line filter if schedule is selected - REQUIRE exact match (NO NULL fallback)
         if ($quotation->selected_schedule_id && $quotation->selectedSchedule) {
             $schedule = $quotation->selectedSchedule;
             if ($schedule->carrier) {
-                if ($useIlike) {
-                    $query->where('shipping_line', 'ILIKE', '%' . $schedule->carrier->name . '%');
-                } else {
-                    $query->whereRaw('LOWER(shipping_line) LIKE ?', ['%' . strtolower($schedule->carrier->name) . '%']);
-                }
-                $query->orWhereNull('shipping_line');
+                $query->where(function ($q) use ($schedule, $useIlike) {
+                    if ($useIlike) {
+                        $q->where('shipping_line', 'ILIKE', '%' . $schedule->carrier->name . '%');
+                    } else {
+                        $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%' . strtolower($schedule->carrier->name) . '%']);
+                    }
+                });
             }
         }
 
-        // Apply commodity type filter (HYBRID: strict when selected, flexible when not)
+        // Apply commodity type filter - STRICT when selected (NO NULL fallback)
         $commodityTypes = [];
         
         // Check simple commodity_type field first (used in Filament quotations)
@@ -629,7 +738,7 @@ class RobawsArticleCache extends Model
             $commodityTypes = array_merge($commodityTypes, $itemTypes);
         }
         
-        // STRICT filtering when commodity is selected
+        // STRICT filtering when commodity is selected (NO NULL fallback)
         if (!empty($commodityTypes)) {
             $commodityTypes = collect($commodityTypes)
                 ->map(fn ($type) => Str::upper(trim($type)))
@@ -651,17 +760,13 @@ class RobawsArticleCache extends Model
             ]);
 
             $placeholders = implode(', ', array_fill(0, count($commodityTypes), '?'));
-            $query->where(function ($q) use ($commodityTypes, $placeholders) {
-                $q->whereRaw("UPPER(commodity_type) IN ($placeholders)", $commodityTypes)
-                  ->orWhereNull('commodity_type');
-            });
+            // NO NULL fallback - require exact commodity_type match
+            $query->whereRaw("UPPER(commodity_type) IN ($placeholders)", $commodityTypes);
         }
         // If no commodity selected, show all articles (existing behavior)
 
         return $query;
     }
-
-    // extractPortCodeFromString() removed - now using direct LIKE matching in scopeForQuotationContext()
 
     /**
      * Map quotation commodity_type field to article commodity_type
