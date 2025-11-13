@@ -760,8 +760,8 @@ class RobawsArticleCache extends Model
             ]);
 
             $placeholders = implode(', ', array_fill(0, count($commodityTypes), '?'));
-            // NO NULL fallback - require exact commodity_type match
-            $query->whereRaw("UPPER(commodity_type) IN ($placeholders)", $commodityTypes);
+            // NO NULL fallback - require exact commodity_type match (case-insensitive with TRIM)
+            $query->whereRaw("UPPER(TRIM(commodity_type)) IN ($placeholders)", $commodityTypes);
         }
         // If no commodity selected, show all articles (existing behavior)
 
