@@ -82,11 +82,18 @@ class QuotationCreator extends Component
         // Update showArticles flag (commodity item might now have commodity_type set)
         $this->updateShowArticles();
         
+        // Always dispatch quotationUpdated if articles are showing
+        // This ensures SmartArticleSelector reloads when commodity items change
+        if ($this->showArticles) {
+            $this->dispatch('quotationUpdated');
+        }
+        
         // Log for debugging
         Log::info('QuotationCreator::handleCommodityItemSaved() called', [
             'quotation_id' => $this->quotationId,
             'commodity_items_count' => $this->quotation?->commodityItems?->count() ?? 0,
-            'show_articles' => $this->showArticles
+            'show_articles' => $this->showArticles,
+            'event_dispatched' => $this->showArticles
         ]);
     }
     

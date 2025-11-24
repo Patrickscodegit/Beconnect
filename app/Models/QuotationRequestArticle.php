@@ -103,9 +103,27 @@ class QuotationRequestArticle extends Model
         $quotationRequest = $this->quotationRequest;
         $role = $quotationRequest->customer_role;
         
+        $conditionMatcher = app(\App\Services\CompositeItems\ConditionMatcherService::class);
+        
         foreach ($children as $child) {
-            // Only add if required (not conditional)
-            if ($child->pivot->is_required && !$child->pivot->is_conditional) {
+            $childType = $child->pivot->child_type ?? 'optional';
+            $shouldAdd = false;
+            
+            // Determine if child should be added based on child_type
+            if ($childType === 'mandatory') {
+                // Always add mandatory items
+                $shouldAdd = true;
+            } elseif ($childType === 'conditional') {
+                // Add conditional items only if conditions match
+                $conditions = is_string($child->pivot->conditions) 
+                    ? json_decode($child->pivot->conditions, true) 
+                    : $child->pivot->conditions;
+                
+                $shouldAdd = $conditionMatcher->matchConditions($conditions, $quotationRequest);
+            }
+            // Optional items are never auto-added (customer chooses in UI)
+            
+            if ($shouldAdd) {
                 // Check if child article is not already added
                 $exists = self::where('quotation_request_id', $quotationRequest->id)
                     ->where('article_cache_id', $child->id)
@@ -118,9 +136,9 @@ class QuotationRequestArticle extends Model
                         'article_cache_id' => $child->id,
                         'parent_article_id' => $this->article_cache_id,
                         'item_type' => 'child',
-                        'quantity' => $this->quantity, // Same quantity as parent
-                        'unit_type' => $child->unit_type ?? 'unit',
-                        'unit_price' => $child->unit_price,
+                        'quantity' => $child->pivot->default_quantity ?? $this->quantity,
+                        'unit_type' => $child->pivot->unit_type ?? $child->unit_type ?? 'unit',
+                        'unit_price' => $child->pivot->default_cost_price ?? $child->unit_price,
                         'selling_price' => $child->getPriceForRole($role ?: 'default'),
                         'currency' => $child->currency,
                     ]);
@@ -143,6 +161,28 @@ class QuotationRequestArticle extends Model
     public function isChild(): bool
     {
         return $this->item_type === 'child' && $this->parent_article_id !== null;
+    }
+
+    /**
+     * Check if this is a mandatory child article (cannot be removed)
+     */
+    public function isMandatoryChild(): bool
+    {
+        if (!$this->isChild()) {
+            return false;
+        }
+        
+        $parent = RobawsArticleCache::find($this->parent_article_id);
+        if (!$parent) {
+            return false;
+        }
+        
+        $childRelation = $parent->children()->where('robaws_articles_cache.id', $this->article_cache_id)->first();
+        if (!$childRelation) {
+            return false;
+        }
+        
+        return ($childRelation->pivot->child_type ?? 'optional') === 'mandatory';
     }
 
     /**
@@ -174,6 +214,54 @@ class QuotationRequestArticle extends Model
             ->where('parent_article_id', $this->article_cache_id)
             ->with('articleCache')
             ->get();
+    }
+
+    /**
+     * Check if this is a mandatory child article
+     */
+    public function isMandatory(): bool
+    {
+        if (!$this->isChild() || !$this->parentArticle) {
+            return false;
+        }
+        
+        $child = $this->parentArticle->children()
+            ->where('robaws_articles_cache.id', $this->article_cache_id)
+            ->first();
+            
+        return $child && ($child->pivot->child_type ?? 'optional') === 'mandatory';
+    }
+
+    /**
+     * Check if this is an optional child article
+     */
+    public function isOptional(): bool
+    {
+        if (!$this->isChild() || !$this->parentArticle) {
+            return false;
+        }
+        
+        $child = $this->parentArticle->children()
+            ->where('robaws_articles_cache.id', $this->article_cache_id)
+            ->first();
+            
+        return $child && ($child->pivot->child_type ?? 'optional') === 'optional';
+    }
+
+    /**
+     * Check if this is a conditional child article
+     */
+    public function isConditional(): bool
+    {
+        if (!$this->isChild() || !$this->parentArticle) {
+            return false;
+        }
+        
+        $child = $this->parentArticle->children()
+            ->where('robaws_articles_cache.id', $this->article_cache_id)
+            ->first();
+            
+        return $child && ($child->pivot->child_type ?? 'optional') === 'conditional';
     }
 }
 

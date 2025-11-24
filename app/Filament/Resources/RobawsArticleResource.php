@@ -1014,8 +1014,7 @@ class RobawsArticleResource extends Resource
     public static function getRelations(): array
     {
         return [
-            // Temporarily disabled due to namespace issue
-            // RelationManagers\CompositeItemsRelationManager::class,
+            \App\Filament\Resources\RobawsArticleResource\RelationManagers\CompositeItemsRelationManager::class,
         ];
     }
     

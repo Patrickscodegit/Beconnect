@@ -24,8 +24,41 @@ class CompositeItemsRelationManager extends RelationManager
             ->schema([
                 Forms\Components\Select::make('child_article_id')
                     ->label('Child Article')
-                    ->options(RobawsArticleCache::all()->pluck('article_name', 'id'))
+                    ->options(function ($livewire) {
+                        // Get parent article
+                        $parent = $livewire->getOwnerRecord();
+                        
+                        // Filter to surcharge articles or articles not already children
+                        $excludeIds = $parent->children()->pluck('robaws_articles_cache.id')->toArray();
+                        
+                        return RobawsArticleCache::where(function ($query) {
+                                $query->where('is_surcharge', true)
+                                    ->orWhere('article_type', 'LIKE', '%SURCHARGE%')
+                                    ->orWhere('article_type', 'LIKE', '%LOCAL CHARGES%');
+                            })
+                            ->whereNotIn('id', $excludeIds)
+                            ->get()
+                            ->mapWithKeys(function ($article) {
+                                return [$article->id => $article->article_code . ' - ' . $article->article_name];
+                            });
+                    })
                     ->searchable()
+                    ->getSearchResultsUsing(function (string $search) {
+                        return RobawsArticleCache::where(function ($query) {
+                                $query->where('is_surcharge', true)
+                                    ->orWhere('article_type', 'LIKE', '%SURCHARGE%')
+                                    ->orWhere('article_type', 'LIKE', '%LOCAL CHARGES%');
+                            })
+                            ->where(function ($query) use ($search) {
+                                $query->where('article_code', 'LIKE', "%{$search}%")
+                                    ->orWhere('article_name', 'LIKE', "%{$search}%");
+                            })
+                            ->limit(50)
+                            ->get()
+                            ->mapWithKeys(function ($article) {
+                                return [$article->id => $article->article_code . ' - ' . $article->article_name];
+                            });
+                    })
                     ->required()
                     ->columnSpan(2),
                     
@@ -64,21 +97,49 @@ class CompositeItemsRelationManager extends RelationManager
                     ->maxLength(50)
                     ->placeholder('e.g., shipm., w/m, unit, lumps.'),
                     
+                Forms\Components\Select::make('child_type')
+                    ->label('Child Type')
+                    ->options([
+                        'mandatory' => 'Mandatory (Always Added)',
+                        'optional' => 'Optional (Customer Chooses)',
+                        'conditional' => 'Conditional (Auto-Added if Conditions Match)',
+                    ])
+                    ->default('optional')
+                    ->required()
+                    ->reactive()
+                    ->helperText('Mandatory: Always added. Optional: Customer chooses. Conditional: Auto-added if conditions match.')
+                    ->afterStateUpdated(function ($state, Forms\Set $set) {
+                        // Auto-update is_required and is_conditional based on child_type
+                        if ($state === 'mandatory') {
+                            $set('is_required', true);
+                            $set('is_conditional', false);
+                        } elseif ($state === 'conditional') {
+                            $set('is_required', false);
+                            $set('is_conditional', true);
+                        } else { // optional
+                            $set('is_required', false);
+                            $set('is_conditional', false);
+                        }
+                    }),
+                    
                 Forms\Components\Toggle::make('is_required')
                     ->label('Required')
-                    ->default(true)
-                    ->helperText('If enabled, this item will always be included'),
+                    ->default(false)
+                    ->disabled(fn (Forms\Get $get) => $get('child_type') !== null)
+                    ->helperText('Auto-set based on child type'),
                     
                 Forms\Components\Toggle::make('is_conditional')
                     ->label('Conditional')
                     ->default(false)
-                    ->helperText('If enabled, this item will only be included under certain conditions'),
+                    ->disabled(fn (Forms\Get $get) => $get('child_type') !== null)
+                    ->helperText('Auto-set based on child type'),
                     
                 Forms\Components\Textarea::make('conditions')
                     ->label('Conditions (JSON)')
-                    ->helperText('JSON object defining when this item should be included')
-                    ->visible(fn (Forms\Get $get) => $get('is_conditional'))
-                    ->columnSpan(2),
+                    ->helperText('JSON object defining when this item should be included. Example: {"commodity": ["EXCAVATOR"], "dimensions": {"width_m_gt": 2.50}, "route": {"pol": ["ANR"], "pod": ["CNSHA"]}}')
+                    ->visible(fn (Forms\Get $get) => $get('child_type') === 'conditional')
+                    ->columnSpan(2)
+                    ->rows(4),
             ]);
     }
 
@@ -121,6 +182,22 @@ class CompositeItemsRelationManager extends RelationManager
                     ->money('EUR')
                     ->default('—'),
                     
+                Tables\Columns\TextColumn::make('pivot.child_type')
+                    ->label('Type')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'mandatory' => 'danger',
+                        'optional' => 'success',
+                        'conditional' => 'warning',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'mandatory' => 'Mandatory',
+                        'optional' => 'Optional',
+                        'conditional' => 'Conditional',
+                        default => $state,
+                    }),
+                    
                 Tables\Columns\IconColumn::make('pivot.is_required')
                     ->label('Required')
                     ->boolean()
@@ -138,6 +215,14 @@ class CompositeItemsRelationManager extends RelationManager
                     ->falseColor('gray'),
             ])
             ->filters([
+                Tables\Filters\SelectFilter::make('child_type')
+                    ->label('Child Type')
+                    ->options([
+                        'mandatory' => 'Mandatory',
+                        'optional' => 'Optional',
+                        'conditional' => 'Conditional',
+                    ]),
+                    
                 Tables\Filters\SelectFilter::make('cost_type')
                     ->options([
                         'Material' => 'Material',
@@ -145,16 +230,54 @@ class CompositeItemsRelationManager extends RelationManager
                         'Service' => 'Service',
                         'Equipment' => 'Equipment',
                     ]),
-                    
-                Tables\Filters\TernaryFilter::make('is_required')
-                    ->label('Required Items')
-                    ->placeholder('All items')
-                    ->trueLabel('Required only')
-                    ->falseLabel('Optional only'),
             ])
             ->headerActions([
                 Tables\Actions\AttachAction::make()
-                    ->preloadRecordSelect()
+                    ->recordSelectOptionsQuery(function (Builder $query) {
+                        $parent = $this->getOwnerRecord();
+                        $excludeIds = $parent->children()->pluck('robaws_articles_cache.id')->toArray();
+                        
+                        return $query
+                            ->where(function ($q) {
+                                $q->where('is_surcharge', true)
+                                    ->orWhere('article_type', 'LIKE', '%SURCHARGE%')
+                                    ->orWhere('article_type', 'LIKE', '%LOCAL CHARGES%');
+                            })
+                            ->where('is_parent_article', false) // Exclude parent articles
+                            ->whereNotIn('id', $excludeIds) // Exclude already attached children
+                            ->orderBy('article_code');
+                    })
+                    ->recordSelect(
+                        fn (Forms\Components\Select $select) => $select
+                            ->label('Child Article')
+                            ->searchable()
+                            ->getSearchResultsUsing(function (string $search) {
+                                $parent = $this->getOwnerRecord();
+                                $excludeIds = $parent->children()->pluck('robaws_articles_cache.id')->toArray();
+                                
+                                return RobawsArticleCache::where(function ($query) {
+                                        $query->where('is_surcharge', true)
+                                            ->orWhere('article_type', 'LIKE', '%SURCHARGE%')
+                                            ->orWhere('article_type', 'LIKE', '%LOCAL CHARGES%');
+                                    })
+                                    ->where('is_parent_article', false)
+                                    ->whereNotIn('id', $excludeIds)
+                                    ->where(function ($query) use ($search) {
+                                        $query->where('article_code', 'LIKE', "%{$search}%")
+                                            ->orWhere('article_name', 'LIKE', "%{$search}%");
+                                    })
+                                    ->orderBy('article_code')
+                                    ->limit(50)
+                                    ->get()
+                                    ->mapWithKeys(function ($article) {
+                                        return [$article->id => $article->article_code . ' - ' . $article->article_name];
+                                    });
+                            })
+                            ->getOptionLabelUsing(function ($value) {
+                                $article = RobawsArticleCache::find($value);
+                                return $article ? $article->article_code . ' - ' . $article->article_name : $value;
+                            })
+                    )
                     ->form(fn (Tables\Actions\AttachAction $action): array => [
                         $action->getRecordSelect(),
                         Forms\Components\TextInput::make('sort_order')
@@ -185,12 +308,41 @@ class CompositeItemsRelationManager extends RelationManager
                         Forms\Components\TextInput::make('unit_type')
                             ->label('Unit Type')
                             ->maxLength(50),
+                        Forms\Components\Select::make('child_type')
+                            ->label('Child Type')
+                            ->options([
+                                'mandatory' => 'Mandatory (Always Added)',
+                                'optional' => 'Optional (Customer Chooses)',
+                                'conditional' => 'Conditional (Auto-Added if Conditions Match)',
+                            ])
+                            ->default('optional')
+                            ->required()
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, Forms\Set $set) {
+                                if ($state === 'mandatory') {
+                                    $set('is_required', true);
+                                    $set('is_conditional', false);
+                                } elseif ($state === 'conditional') {
+                                    $set('is_required', false);
+                                    $set('is_conditional', true);
+                                } else {
+                                    $set('is_required', false);
+                                    $set('is_conditional', false);
+                                }
+                            }),
                         Forms\Components\Toggle::make('is_required')
                             ->label('Required')
-                            ->default(true),
+                            ->default(false)
+                            ->disabled(),
                         Forms\Components\Toggle::make('is_conditional')
                             ->label('Conditional')
-                            ->default(false),
+                            ->default(false)
+                            ->disabled(),
+                        Forms\Components\Textarea::make('conditions')
+                            ->label('Conditions (JSON)')
+                            ->helperText('JSON object defining when this item should be included')
+                            ->visible(fn (Forms\Get $get) => $get('child_type') === 'conditional')
+                            ->rows(4),
                     ]),
             ])
             ->actions([
@@ -221,10 +373,38 @@ class CompositeItemsRelationManager extends RelationManager
                         Forms\Components\TextInput::make('unit_type')
                             ->label('Unit Type')
                             ->maxLength(50),
+                        Forms\Components\Select::make('child_type')
+                            ->label('Child Type')
+                            ->options([
+                                'mandatory' => 'Mandatory (Always Added)',
+                                'optional' => 'Optional (Customer Chooses)',
+                                'conditional' => 'Conditional (Auto-Added if Conditions Match)',
+                            ])
+                            ->required()
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, Forms\Set $set) {
+                                if ($state === 'mandatory') {
+                                    $set('is_required', true);
+                                    $set('is_conditional', false);
+                                } elseif ($state === 'conditional') {
+                                    $set('is_required', false);
+                                    $set('is_conditional', true);
+                                } else {
+                                    $set('is_required', false);
+                                    $set('is_conditional', false);
+                                }
+                            }),
                         Forms\Components\Toggle::make('is_required')
-                            ->label('Required'),
+                            ->label('Required')
+                            ->disabled(),
                         Forms\Components\Toggle::make('is_conditional')
-                            ->label('Conditional'),
+                            ->label('Conditional')
+                            ->disabled(),
+                        Forms\Components\Textarea::make('conditions')
+                            ->label('Conditions (JSON)')
+                            ->helperText('JSON object defining when this item should be included')
+                            ->visible(fn (Forms\Get $get) => $get('child_type') === 'conditional')
+                            ->rows(4),
                     ]),
                 Tables\Actions\DetachAction::make(),
             ])

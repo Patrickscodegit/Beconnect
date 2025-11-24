@@ -209,7 +209,7 @@ class RobawsArticleCache extends Model
             'article_children',
             'parent_article_id',
             'child_article_id'
-        )->withPivot(['sort_order', 'is_required', 'is_conditional', 'conditions', 'cost_type', 'default_quantity', 'default_cost_price', 'unit_type'])
+        )->withPivot(['sort_order', 'is_required', 'is_conditional', 'child_type', 'conditions', 'cost_type', 'default_quantity', 'default_cost_price', 'unit_type'])
           ->withTimestamps()
           ->orderBy('sort_order');
     }
@@ -224,7 +224,7 @@ class RobawsArticleCache extends Model
             'article_children',
             'child_article_id',
             'parent_article_id'
-        )->withPivot(['sort_order', 'is_required', 'is_conditional', 'conditions', 'cost_type', 'default_quantity', 'default_cost_price', 'unit_type'])
+        )->withPivot(['sort_order', 'is_required', 'is_conditional', 'child_type', 'conditions', 'cost_type', 'default_quantity', 'default_cost_price', 'unit_type'])
           ->withTimestamps();
     }
 
@@ -236,6 +236,24 @@ class RobawsArticleCache extends Model
         return $this->belongsToMany(QuotationRequest::class, 'quotation_request_articles', 'article_cache_id', 'quotation_request_id')
             ->withPivot(['parent_article_id', 'item_type', 'quantity', 'unit_price', 'unit_type', 'selling_price', 'subtotal', 'currency', 'formula_inputs', 'calculated_price', 'notes'])
             ->withTimestamps();
+    }
+
+    /**
+     * Relationship query modifiers for filtering children by child_type
+     */
+    public function mandatoryChildren(): BelongsToMany
+    {
+        return $this->children()->wherePivot('child_type', 'mandatory');
+    }
+
+    public function optionalChildren(): BelongsToMany
+    {
+        return $this->children()->wherePivot('child_type', 'optional');
+    }
+
+    public function conditionalChildren(): BelongsToMany
+    {
+        return $this->children()->wherePivot('child_type', 'conditional');
     }
 
     /**

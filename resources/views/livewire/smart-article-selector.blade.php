@@ -156,15 +156,30 @@
                             <div class="ml-4">
                                 @if($isEditable)
                                     @if($isSelected)
-                                        <button 
-                                            wire:click="removeArticle({{ $article->id }})"
-                                            class="inline-flex items-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
-                                        >
-                                            <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                            </svg>
-                                            Remove
-                                        </button>
+                                        @php
+                                            $isMandatory = $this->isMandatoryChild($article->id);
+                                        @endphp
+                                        @if($isMandatory)
+                                            <span 
+                                                class="inline-flex items-center rounded-md bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-600 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400" 
+                                                title="This item is mandatory and cannot be removed"
+                                            >
+                                                <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                                </svg>
+                                                Required
+                                            </span>
+                                        @else
+                                            <button 
+                                                wire:click="removeArticle({{ $article->id }})"
+                                                class="inline-flex items-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+                                            >
+                                                <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                                </svg>
+                                                Remove
+                                            </button>
+                                        @endif
                                     @else
                                         <button 
                                             wire:click="selectArticle({{ $article->id }})"

@@ -54,6 +54,11 @@ class SmartArticleSelector extends Component
         
         try {
             $service = app(SmartArticleSelectionService::class);
+            
+            // Clear cache before loading to ensure fresh suggestions
+            // This is critical when commodity items change, as cache key might not update immediately
+            $service->clearCache($this->quotation);
+            
             $suggestions = $service->getTopSuggestions(
                 $this->quotation, 
                 $this->maxArticles, 
@@ -105,41 +110,45 @@ class SmartArticleSelector extends Component
             return; // Prevent selection on approved quotations
         }
         
+        // Check if article is already added
+        $alreadyAdded = $this->quotation->articles()->where('robaws_articles_cache.id', $articleId)->exists();
+        if ($alreadyAdded) {
+            return;
+        }
+        
+        $article = \App\Models\RobawsArticleCache::find($articleId);
+        if (!$article) {
+            return;
+        }
+        
+        // Ensure pricing tier is set on quotation if we have one
+        if ($this->pricingTierId && !$this->quotation->pricing_tier_id) {
+            $this->quotation->pricing_tier_id = $this->pricingTierId;
+            $this->quotation->save();
+        }
+        
+        // Use addArticle() which creates QuotationRequestArticle model
+        // This triggers the boot() method which automatically adds child articles
+        $quotationRequestArticle = $this->quotation->addArticle($article, 1);
+        
+        // Override selling price with tier price if we calculated one
+        $tierPrice = $this->getTierPrice($article);
+        if ($tierPrice && $tierPrice != $quotationRequestArticle->selling_price) {
+            $quotationRequestArticle->selling_price = $tierPrice;
+            $quotationRequestArticle->subtotal = $tierPrice * $quotationRequestArticle->quantity;
+            $quotationRequestArticle->save();
+        }
+        
+        // Update selected articles array
         if (!in_array($articleId, $this->selectedArticles)) {
             $this->selectedArticles[] = $articleId;
-            
-            $article = \App\Models\RobawsArticleCache::find($articleId);
-            $tierPrice = $this->getTierPrice($article);
-
-            $quantity = 1;
-            $unitPrice = $article->unit_price ?? 0;
-            $sellingPrice = $tierPrice ?? $article->sale_price ?? $unitPrice;
-            $subtotal = $sellingPrice * $quantity;
-            
-            // Attach with tier price and metadata
-            $this->quotation->articles()->syncWithoutDetaching([
-                $articleId => [
-                    'quantity' => $quantity,
-                    'unit_price' => $unitPrice,
-                    'selling_price' => $sellingPrice,
-                    'subtotal' => $subtotal,
-                    'unit_type' => $article->unit_type,
-                    'currency' => $article->currency,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]
-            ]);
-            
-            // Recalculate quotation totals
-            $this->quotation->calculateTotals();
-            $this->quotation->save();
-            
-            // Refresh quotation
-            $this->quotation = $this->quotation->fresh();
-            
-            // Emit to parent
-            $this->dispatch('articleAdded', articleId: $articleId);
         }
+        
+        // Refresh quotation to get updated articles (including children)
+        $this->quotation = $this->quotation->fresh(['articles']);
+        
+        // Emit to parent
+        $this->dispatch('articleAdded', articleId: $articleId);
     }
     
     public function removeArticle($articleId)
@@ -150,15 +159,25 @@ class SmartArticleSelector extends Component
         
         $this->selectedArticles = array_filter($this->selectedArticles, fn($id) => $id !== $articleId);
         
-        // Detach from quotation
-        $this->quotation->articles()->detach($articleId);
+        // Find and delete the QuotationRequestArticle model
+        // This will trigger the deleted event which automatically removes child articles
+        $quotationRequestArticle = \App\Models\QuotationRequestArticle::where('quotation_request_id', $this->quotation->id)
+            ->where('article_cache_id', $articleId)
+            ->first();
         
-        // Recalculate quotation totals
+        if ($quotationRequestArticle) {
+            $quotationRequestArticle->delete(); // This triggers deleted event and removes children
+        } else {
+            // Fallback: if model not found, use detach (shouldn't happen, but safe fallback)
+            $this->quotation->articles()->detach($articleId);
+        }
+        
+        // Recalculate quotation totals (already done in deleted event, but ensure it's done)
         $this->quotation->calculateTotals();
         $this->quotation->save();
         
         // Refresh quotation
-        $this->quotation = $this->quotation->fresh();
+        $this->quotation = $this->quotation->fresh(['articles']);
         
         // Emit to parent
         $this->dispatch('articleRemoved', articleId: $articleId);
@@ -201,6 +220,18 @@ class SmartArticleSelector extends Component
             'low' => 'Fair',
             default => 'Excellent' // Default to Excellent for high confidence
         };
+    }
+    
+    /**
+     * Check if an article is a mandatory child (cannot be removed)
+     */
+    public function isMandatoryChild($articleId): bool
+    {
+        $quotationArticle = \App\Models\QuotationRequestArticle::where('quotation_request_id', $this->quotation->id)
+            ->where('article_cache_id', $articleId)
+            ->first();
+        
+        return $quotationArticle ? $quotationArticle->isMandatoryChild() : false;
     }
     
     public function render()

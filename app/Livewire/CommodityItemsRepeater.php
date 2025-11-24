@@ -142,6 +142,16 @@ class CommodityItemsRepeater extends Component
                         ->where('quotation_request_id', $this->quotationId)
                         ->delete();
                     
+                    // Touch parent quotation to update updated_at timestamp
+                    // This ensures cache keys change when commodity items are removed
+                    \App\Models\QuotationRequest::where('id', $this->quotationId)->touch();
+                    
+                    // Dispatch event to parent component when item is removed
+                    // This triggers refresh of SmartArticleSelector
+                    $this->dispatch('commodity-item-saved', [
+                        'quotation_id' => $this->quotationId
+                    ]);
+                    
                     \Log::info('CommodityItemsRepeater::removeItem() deleted from database', [
                         'item_id' => $item['id'],
                         'quotation_id' => $this->quotationId
@@ -412,6 +422,10 @@ class CommodityItemsRepeater extends Component
             // Update the item's ID from temporary to database ID
             $this->items[$index]['id'] = $dbItem->id;
             
+            // Touch parent quotation to update updated_at timestamp
+            // This ensures cache keys change when commodity items are created
+            \App\Models\QuotationRequest::where('id', $this->quotationId)->touch();
+            
             \Log::info('CommodityItemsRepeater::createItemInDatabase() created item', [
                 'item_id' => $dbItem->id,
                 'quotation_id' => $this->quotationId,
@@ -479,6 +493,10 @@ class CommodityItemsRepeater extends Component
             \App\Models\QuotationCommodityItem::where('id', $item['id'])
                 ->where('quotation_request_id', $this->quotationId)
                 ->update($data);
+            
+            // Touch parent quotation to update updated_at timestamp
+            // This ensures cache keys change when commodity items are modified
+            \App\Models\QuotationRequest::where('id', $this->quotationId)->touch();
             
             \Log::info('CommodityItemsRepeater::saveItemToDatabase() saved item', [
                 'item_id' => $item['id'],

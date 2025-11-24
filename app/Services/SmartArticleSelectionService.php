@@ -19,8 +19,19 @@ class SmartArticleSelectionService
      */
     public function suggestParentArticles(QuotationRequest $quotation): Collection
     {
+        // Include commodity items hash in cache key to ensure cache invalidates when commodity changes
+        // This is in addition to updated_at timestamp for extra safety
+        $commodityHash = '';
+        if ($quotation->commodityItems && $quotation->commodityItems->count() > 0) {
+            $commodityHash = $quotation->commodityItems
+                ->map(fn($item) => ($item->commodity_type ?? '') . '|' . ($item->id ?? ''))
+                ->sort()
+                ->implode('|');
+        }
+        $commodityHash = md5($commodityHash); // Hash for shorter cache key
+        
         // Use caching for performance
-        $cacheKey = "article_suggestions_{$quotation->id}_{$quotation->updated_at->timestamp}";
+        $cacheKey = "article_suggestions_{$quotation->id}_{$quotation->updated_at->timestamp}_{$commodityHash}";
         
         return Cache::remember($cacheKey, 3600, function () use ($quotation) {
             return $this->calculateSuggestions($quotation);
@@ -388,14 +399,36 @@ class SmartArticleSelectionService
 
     /**
      * Clear cached suggestions for a quotation
+     * Clears cache with current updated_at timestamp and commodity hash
      *
      * @param QuotationRequest $quotation
      * @return void
      */
     public function clearCache(QuotationRequest $quotation): void
     {
-        $cacheKey = "article_suggestions_{$quotation->id}_{$quotation->updated_at->timestamp}";
+        // Calculate commodity hash (same logic as in suggestParentArticles)
+        $commodityHash = '';
+        if ($quotation->commodityItems && $quotation->commodityItems->count() > 0) {
+            $commodityHash = $quotation->commodityItems
+                ->map(fn($item) => ($item->commodity_type ?? '') . '|' . ($item->id ?? ''))
+                ->sort()
+                ->implode('|');
+        }
+        $commodityHash = md5($commodityHash);
+        
+        // Clear cache with current format (includes commodity hash)
+        $cacheKey = "article_suggestions_{$quotation->id}_{$quotation->updated_at->timestamp}_{$commodityHash}";
         Cache::forget($cacheKey);
+        
+        // Also clear old format (without commodity hash) for backward compatibility
+        $oldKey = "article_suggestions_{$quotation->id}_{$quotation->updated_at->timestamp}";
+        Cache::forget($oldKey);
+        
+        Log::debug('Cleared article suggestion cache', [
+            'quotation_id' => $quotation->id,
+            'updated_at' => $quotation->updated_at->timestamp,
+            'commodity_hash' => $commodityHash
+        ]);
     }
 
     /**
