@@ -415,6 +415,22 @@ class QuotationCreator extends Component
         ]);
     }
     
+    /**
+     * Check if an article is a mandatory child (cannot be removed)
+     */
+    public function isMandatoryChild($articleId): bool
+    {
+        if (!$this->quotation) {
+            return false;
+        }
+        
+        $quotationArticle = \App\Models\QuotationRequestArticle::where('quotation_request_id', $this->quotation->id)
+            ->where('article_cache_id', $articleId)
+            ->first();
+        
+        return $quotationArticle ? $quotationArticle->isMandatoryChild() : false;
+    }
+    
     public function saveDraft()
     {
         // Already auto-saving, just show confirmation message
