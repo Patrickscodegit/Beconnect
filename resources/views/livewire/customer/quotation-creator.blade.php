@@ -466,7 +466,7 @@
                 @foreach($quotation->articles as $article)
                     <div class="flex items-center justify-between bg-gray-50 p-4 rounded-lg border border-gray-200">
                         <div class="flex-1">
-                            <p class="font-medium text-gray-900">{{ $article->description }}</p>
+                            <p class="font-medium text-gray-900">{{ $article->description ?? $article->article_name ?? 'N/A' }}</p>
                             <p class="text-sm text-gray-600 mt-1">
                                 Code: {{ $article->article_code }}
                                 @if($article->pivot->quantity && $article->pivot->unit_price)
@@ -519,6 +519,74 @@
                     <i class="fas fa-info-circle mr-1"></i>
                     Prices are estimates and subject to final confirmation by our team
                 </p>
+            </div>
+        </div>
+    @endif
+    
+    {{-- Optional Services Section --}}
+    @php
+        $optionalItems = $this->getOptionalItems();
+    @endphp
+    @if($quotation && $optionalItems->count() > 0)
+        <div class="bg-white rounded-lg shadow p-8 mb-6">
+            <h3 class="text-xl font-semibold text-gray-900 mb-4">
+                <i class="fas fa-plus-circle text-blue-600 mr-2"></i>
+                Optional Services ({{ $optionalItems->count() }})
+            </h3>
+            <p class="text-sm text-gray-600 mb-4">
+                You can add these optional services to your quotation:
+            </p>
+            
+            <div class="space-y-3">
+                @foreach($optionalItems as $item)
+                    @php
+                        $article = $item['article'];
+                        $parent = $item['parent'];
+                        $pivot = $item['pivot'];
+                        $parentQuotationArticleId = $item['parent_quotation_article_id'];
+                        $role = $quotation->customer_role;
+                        $sellingPrice = null;
+                        try {
+                            if ($quotation->pricing_tier_id && $quotation->pricingTier) {
+                                $sellingPrice = $article->getPriceForTier($quotation->pricingTier);
+                            } else {
+                                $sellingPrice = $article->getPriceForRole($role ?: 'default');
+                            }
+                        } catch (\Exception $e) {
+                            $sellingPrice = $article->getPriceForRole($role ?: 'default');
+                        }
+                    @endphp
+                    <div class="flex items-center justify-between bg-gray-50 p-4 rounded-lg border border-gray-200 hover:border-blue-300 transition">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-1">
+                                <p class="font-medium text-gray-900">{{ $article->description ?? $article->article_name }}</p>
+                                <span class="text-xs text-gray-500 bg-blue-100 text-blue-800 px-2 py-0.5 rounded">Optional</span>
+                            </div>
+                            <p class="text-sm text-gray-600">
+                                Code: {{ $article->article_code }}
+                                @if($sellingPrice)
+                                    <br>
+                                    Price: €{{ number_format($sellingPrice, 2) }} {{ $article->currency ?? 'EUR' }} / {{ $article->unit_type ?? 'unit' }}
+                                @endif
+                            </p>
+                            @if($parent)
+                                <p class="text-xs text-gray-500 mt-1">
+                                    Available for: <span class="font-medium">{{ $parent->article_code }}</span> - {{ $parent->description ?? $parent->article_name }}
+                                </p>
+                            @endif
+                        </div>
+                        <button 
+                            type="button"
+                            wire:click="addOptionalItem({{ $article->id }}, {{ $parentQuotationArticleId }})"
+                            class="ml-4 inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                        >
+                            <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                            Add
+                        </button>
+                    </div>
+                @endforeach
             </div>
         </div>
     @endif

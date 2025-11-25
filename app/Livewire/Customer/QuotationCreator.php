@@ -431,6 +431,162 @@ class QuotationCreator extends Component
         return $quotationArticle ? $quotationArticle->isMandatoryChild() : false;
     }
     
+    /**
+     * Get optional composite items available for selection
+     * Returns optional children of all selected parent articles
+     */
+    public function getOptionalItems(): \Illuminate\Support\Collection
+    {
+        if (!$this->quotation) {
+            return collect();
+        }
+        
+        // Ensure quotation is fresh with relationships
+        $this->quotation = $this->quotation->fresh(['pricingTier']);
+        
+        $optionalItems = collect();
+        
+        // Get all parent articles in the quotation
+        $parentQuotationArticles = \App\Models\QuotationRequestArticle::where('quotation_request_id', $this->quotation->id)
+            ->whereIn('item_type', ['parent', 'standalone'])
+            ->with('articleCache')
+            ->get();
+        
+        foreach ($parentQuotationArticles as $parentQuotationArticle) {
+            $parent = $parentQuotationArticle->articleCache;
+            
+            if (!$parent || !$parent->is_parent_article) {
+                continue;
+            }
+            
+            // Get optional children of this parent
+            $optionalChildren = $parent->optionalChildren()->get();
+            
+            foreach ($optionalChildren as $child) {
+                // Check if already added to quotation
+                $alreadyAdded = \App\Models\QuotationRequestArticle::where('quotation_request_id', $this->quotation->id)
+                    ->where('article_cache_id', $child->id)
+                    ->exists();
+                
+                if (!$alreadyAdded) {
+                    $optionalItems->push([
+                        'article' => $child,
+                        'parent' => $parent,
+                        'parent_quotation_article_id' => $parentQuotationArticle->id,
+                        'pivot' => $child->pivot,
+                        'already_added' => false,
+                    ]);
+                }
+            }
+        }
+        
+        // Remove duplicates by article ID
+        return $optionalItems->unique(function ($item) {
+            return $item['article']->id;
+        })->values();
+    }
+    
+    /**
+     * Add an optional composite item to the quotation
+     */
+    public function addOptionalItem($articleId, $parentQuotationArticleId = null)
+    {
+        if (!$this->quotation) {
+            return;
+        }
+        
+        $article = \App\Models\RobawsArticleCache::find($articleId);
+        if (!$article) {
+            return;
+        }
+        
+        // Find the parent quotation article if not provided
+        if (!$parentQuotationArticleId) {
+            // Find parent that has this as optional child
+            $parentQuotationArticles = \App\Models\QuotationRequestArticle::where('quotation_request_id', $this->quotation->id)
+                ->whereIn('item_type', ['parent', 'standalone'])
+                ->with('articleCache')
+                ->get();
+            
+            foreach ($parentQuotationArticles as $parentQuotationArticle) {
+                $parent = $parentQuotationArticle->articleCache;
+                
+                if (!$parent || !$parent->is_parent_article) {
+                    continue;
+                }
+                
+                $optionalChild = $parent->optionalChildren()
+                    ->where('robaws_articles_cache.id', $articleId)
+                    ->first();
+                
+                if ($optionalChild) {
+                    $parentQuotationArticleId = $parentQuotationArticle->id;
+                    break;
+                }
+            }
+        }
+        
+        if (!$parentQuotationArticleId) {
+            return; // Could not find parent
+        }
+        
+        $parentQuotationArticle = \App\Models\QuotationRequestArticle::find($parentQuotationArticleId);
+        if (!$parentQuotationArticle) {
+            return;
+        }
+        
+        $parent = $parentQuotationArticle->articleCache;
+        if (!$parent) {
+            return;
+        }
+        
+        // Get pivot data for default values
+        $childRelation = $parent->optionalChildren()
+            ->where('robaws_articles_cache.id', $articleId)
+            ->first();
+        
+        // Calculate selling price BEFORE creating the model (required for NOT NULL constraint)
+        $role = $this->quotation->customer_role;
+        $sellingPrice = null;
+        try {
+            if ($this->quotation->pricing_tier_id && $this->quotation->pricingTier) {
+                $sellingPrice = $article->getPriceForTier($this->quotation->pricingTier);
+            } else {
+                $sellingPrice = $article->getPriceForRole($role ?: 'default');
+            }
+        } catch (\Exception $e) {
+            $sellingPrice = $article->getPriceForRole($role ?: 'default');
+        }
+        
+        // Ensure we have a valid selling price
+        if ($sellingPrice === null || $sellingPrice === 0) {
+            $sellingPrice = $article->unit_price ?? 0;
+        }
+        
+        $quantity = $childRelation && $childRelation->pivot ? ($childRelation->pivot->default_quantity ?? 1) : 1;
+        $unitPrice = $childRelation && $childRelation->pivot ? ($childRelation->pivot->default_cost_price ?? $article->unit_price) : $article->unit_price;
+        
+        // Create the quotation request article with all required fields including selling_price
+        $quotationRequestArticle = \App\Models\QuotationRequestArticle::create([
+            'quotation_request_id' => $this->quotation->id,
+            'article_cache_id' => $article->id,
+            'parent_article_id' => $parent->id,
+            'item_type' => 'child',
+            'quantity' => $quantity,
+            'unit_type' => $childRelation && $childRelation->pivot ? ($childRelation->pivot->unit_type ?? $article->unit_type ?? 'unit') : ($article->unit_type ?? 'unit'),
+            'unit_price' => $unitPrice,
+            'selling_price' => $sellingPrice,
+            'currency' => $article->currency,
+        ]);
+        
+        // Refresh quotation
+        $this->quotation = $this->quotation->fresh(['articles']);
+        $this->quotation->calculateTotals();
+        $this->quotation->save();
+        
+        $this->dispatch('articleAdded', articleId: $articleId);
+    }
+    
     public function saveDraft()
     {
         // Already auto-saving, just show confirmation message
