@@ -165,5 +165,28 @@ class QuotationCommodityItem extends Model
                 $item->line_total = $item->calculateLineTotal();
             }
         });
+
+        static::saved(function ($item) {
+            // When commodity item dimensions or quantity change, recalculate articles with LM unit type
+            // This ensures article prices update when commodity items change
+            if ($item->quotation_request_id) {
+                $quotation = $item->quotationRequest;
+                if ($quotation) {
+                    // Recalculate all articles with unit_type "LM" for this quotation
+                    $lmArticles = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+                        ->where('unit_type', 'LM')
+                        ->get();
+                    
+                    foreach ($lmArticles as $article) {
+                        // Touch the article to trigger saving event which recalculates quantity and subtotal
+                        $article->touch();
+                        $article->save();
+                    }
+                    
+                    // Recalculate quotation totals
+                    $quotation->calculateTotals();
+                }
+            }
+        });
     }
 }

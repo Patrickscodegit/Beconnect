@@ -356,6 +356,24 @@ class CommodityItemsRepeater extends Component
 
     public function updated($propertyName)
     {
+        // Detect when length_cm or width_cm changes and recalculate LM in real-time
+        if (preg_match('/^items\.(\d+)\.(length_cm|width_cm)$/', $propertyName, $matches)) {
+            $index = (int) $matches[1];
+            $this->calculateLm($index);
+            // Also recalculate CBM if height is also set
+            if (!empty($this->items[$index]['height_cm'] ?? '')) {
+                $this->calculateCbm($index);
+            }
+        }
+        
+        // Detect when quantity changes - this will trigger article price recalculation via model boot()
+        if (preg_match('/^items\.(\d+)\.quantity$/', $propertyName, $matches)) {
+            $index = (int) $matches[1];
+            // Recalculate LM to ensure quantity is included in the calculation
+            if (!empty($this->items[$index]['length_cm'] ?? '') && !empty($this->items[$index]['width_cm'] ?? '')) {
+                $this->calculateLm($index);
+            }
+        }
         // Skip validation for items array changes (when adding/removing items)
         // Only validate when specific item fields are updated
         if (!preg_match('/^items\.(\d+)\./', $propertyName)) {
@@ -519,10 +537,15 @@ class CommodityItemsRepeater extends Component
                 'input_unit_system' => $item['input_unit_system'] ?? $this->unitSystem,
             ];
             
-            // Update item in database
-            \App\Models\QuotationCommodityItem::where('id', $item['id'])
+            // Update item in database using model instance to trigger events
+            $dbItem = \App\Models\QuotationCommodityItem::where('id', $item['id'])
                 ->where('quotation_request_id', $this->quotationId)
-                ->update($data);
+                ->first();
+            
+            if ($dbItem) {
+                $dbItem->fill($data);
+                $dbItem->save(); // This will trigger saved event which recalculates articles
+            }
             
             // Touch parent quotation to update updated_at timestamp
             // This ensures cache keys change when commodity items are modified
