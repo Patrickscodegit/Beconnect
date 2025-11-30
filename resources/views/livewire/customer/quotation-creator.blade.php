@@ -97,6 +97,7 @@
                            id="pol"
                            class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
                            placeholder="{{ $polPlaceholder }}"
+                           value="{{ $pol }}"
                            @disabled($portsDisabled)
                            required>
                     <p class="text-xs text-gray-500 mt-1">
@@ -114,6 +115,7 @@
                            id="pod"
                            class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
                            placeholder="{{ $podPlaceholder }}"
+                           value="{{ $pod }}"
                            @disabled($portsDisabled)
                            required>
                     <p class="text-xs text-gray-500 mt-1">
@@ -1004,7 +1006,22 @@
 
     function init() {
         updatePlaceholdersAndDisabled();
+        
+        // Preserve existing values when initializing (for edit mode)
+        const polInput = getInput('pol');
+        const podInput = getInput('pod');
+        const polValue = polInput ? polInput.value : '';
+        const podValue = podInput ? podInput.value : '';
+        
         reinitialize();
+        
+        // Restore values after reinitialization (if they were set)
+        if (polInput && polValue) {
+            polInput.value = polValue;
+        }
+        if (podInput && podValue) {
+            podInput.value = podValue;
+        }
     }
 
     if (!window.__quotationPortsListenerRegistered) {
