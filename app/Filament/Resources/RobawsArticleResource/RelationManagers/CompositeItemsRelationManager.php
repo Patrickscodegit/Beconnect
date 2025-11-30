@@ -79,9 +79,14 @@ class CompositeItemsRelationManager extends RelationManager
                                     });
                             })
                             ->where('is_parent_article', false)
-                            ->where(function ($query) use ($search) {
-                                $query->where('article_code', 'LIKE', "%{$search}%")
-                                    ->orWhere('article_name', 'LIKE', "%{$search}%");
+                            ->where(function ($query) use ($search, $useIlike) {
+                                if ($useIlike) {
+                                    $query->where('article_code', 'ILIKE', "%{$search}%")
+                                        ->orWhere('article_name', 'ILIKE', "%{$search}%");
+                                } else {
+                                    $query->whereRaw('LOWER(article_code) LIKE ?', ['%' . strtolower($search) . '%'])
+                                        ->orWhereRaw('LOWER(article_name) LIKE ?', ['%' . strtolower($search) . '%']);
+                                }
                             })
                             ->limit(50)
                             ->get()
@@ -320,9 +325,14 @@ class CompositeItemsRelationManager extends RelationManager
                                     })
                                     ->where('is_parent_article', false)
                                     ->whereNotIn('id', $excludeIds)
-                                    ->where(function ($query) use ($search) {
-                                        $query->where('article_code', 'LIKE', "%{$search}%")
-                                            ->orWhere('article_name', 'LIKE', "%{$search}%");
+                                    ->where(function ($query) use ($search, $useIlike) {
+                                        if ($useIlike) {
+                                            $query->where('article_code', 'ILIKE', "%{$search}%")
+                                                ->orWhere('article_name', 'ILIKE', "%{$search}%");
+                                        } else {
+                                            $query->whereRaw('LOWER(article_code) LIKE ?', ['%' . strtolower($search) . '%'])
+                                                ->orWhereRaw('LOWER(article_name) LIKE ?', ['%' . strtolower($search) . '%']);
+                                        }
                                     })
                                     ->orderBy('article_code')
                                     ->limit(50)
