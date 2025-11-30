@@ -26,6 +26,7 @@ class QuotationCommodityItem extends Model
         'width_cm',
         'height_cm',
         'cbm',
+        'lm',
         'weight_kg',
         'bruto_weight_kg',
         'netto_weight_kg',
@@ -54,6 +55,7 @@ class QuotationCommodityItem extends Model
         'width_cm' => 'decimal:2',
         'height_cm' => 'decimal:2',
         'cbm' => 'decimal:4',
+        'lm' => 'decimal:4',
         'weight_kg' => 'decimal:2',
         'bruto_weight_kg' => 'decimal:2',
         'netto_weight_kg' => 'decimal:2',
@@ -85,6 +87,20 @@ class QuotationCommodityItem extends Model
     {
         if ($this->length_cm && $this->width_cm && $this->height_cm) {
             return ($this->length_cm * $this->width_cm * $this->height_cm) / 1000000;
+        }
+        return 0;
+    }
+
+    /**
+     * Calculate LM (Linear Meter) from dimensions: (length_m × width_m) / 2.5
+     * Converts cm to meters: (length_cm / 100 × width_cm / 100) / 2.5
+     */
+    public function calculateLm(): float
+    {
+        if ($this->length_cm && $this->width_cm) {
+            $lengthM = $this->length_cm / 100;
+            $widthM = $this->width_cm / 100;
+            return ($lengthM * $widthM) / 2.5;
         }
         return 0;
     }
@@ -137,6 +153,11 @@ class QuotationCommodityItem extends Model
             // Auto-calculate CBM if dimensions are present
             if ($item->length_cm && $item->width_cm && $item->height_cm) {
                 $item->cbm = $item->calculateCbm();
+            }
+
+            // Auto-calculate LM if length and width are present
+            if ($item->length_cm && $item->width_cm) {
+                $item->lm = $item->calculateLm();
             }
 
             // Auto-calculate line total if unit price is set

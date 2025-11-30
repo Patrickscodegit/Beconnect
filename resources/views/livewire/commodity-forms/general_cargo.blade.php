@@ -108,6 +108,20 @@
                 class="w-full px-4 py-3 rounded-lg border-2 border-purple-400 bg-gradient-to-r from-purple-500 to-purple-600 text-white font-bold">
         </div>
 
+        {{-- LM (Linear Meter) (Auto-calculated) --}}
+        <div>
+            <label class="block text-sm font-medium text-blue-700 mb-2">
+                <i class="fas fa-calculator mr-1"></i>
+                LM (Linear Meter)
+            </label>
+            <input type="text" 
+                value="{{ $item['lm'] ?? '' }}"
+                readonly
+                class="w-full px-4 py-3 rounded-lg border-2 border-blue-400 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold"
+                placeholder="Auto-calculated">
+            <p class="text-xs text-blue-600 mt-1">Auto-calculated: (L × W) / 2.5</p>
+        </div>
+
         {{-- Bruto Weight --}}
         <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">

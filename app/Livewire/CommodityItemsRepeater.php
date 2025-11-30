@@ -94,6 +94,7 @@ class CommodityItemsRepeater extends Component
                 'width_cm' => '',
                 'height_cm' => '',
                 'cbm' => '',
+                'lm' => '',
                 'weight_kg' => '',
                 'bruto_weight_kg' => '',
                 'netto_weight_kg' => '',
@@ -217,6 +218,35 @@ class CommodityItemsRepeater extends Component
             }
         } else {
             $item['cbm'] = '';
+        }
+        
+        // Also calculate LM when dimensions change
+        $this->calculateLm($index);
+    }
+
+    public function calculateLm($index)
+    {
+        $item = &$this->items[$index];
+        
+        $length = floatval($item['length_cm'] ?? 0);
+        $width = floatval($item['width_cm'] ?? 0);
+        
+        if ($length > 0 && $width > 0) {
+            if ($this->unitSystem === 'us') {
+                // Calculate LM from inches: (length_in / 12 × width_in / 12) / 2.5
+                $lengthM = $length / 12 / 0.3048; // Convert inches to meters
+                $widthM = $width / 12 / 0.3048;
+                $lm = ($lengthM * $widthM) / 2.5;
+                $item['lm'] = round($lm, 4);
+            } else {
+                // Calculate LM from cm: (length_cm / 100 × width_cm / 100) / 2.5
+                $lengthM = $length / 100;
+                $widthM = $width / 100;
+                $lm = ($lengthM * $widthM) / 2.5;
+                $item['lm'] = round($lm, 4);
+            }
+        } else {
+            $item['lm'] = '';
         }
     }
 
