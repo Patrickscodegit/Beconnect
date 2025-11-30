@@ -406,6 +406,15 @@ class CommodityItemsRepeater extends Component
             
             // Check if this is a commodity_type change and item doesn't have a database ID yet
             if (strpos($propertyName, '.commodity_type') !== false && !empty($item['commodity_type'])) {
+                \Log::info('CommodityItemsRepeater: commodity_type selected', [
+                    'property' => $propertyName,
+                    'index' => $itemIndex,
+                    'commodity_type' => $item['commodity_type'],
+                    'item_id' => $item['id'] ?? 'none',
+                    'quotation_id' => $this->quotationId,
+                    'is_temp_id' => isset($item['id']) && strpos($item['id'], 'temp_') === 0
+                ]);
+                
                 // If item has a temporary ID and commodity_type is now set, create database record
                 if (isset($item['id']) && strpos($item['id'], 'temp_') === 0) {
                     $this->createItemInDatabase($itemIndex, $item);
@@ -425,7 +434,20 @@ class CommodityItemsRepeater extends Component
      */
     protected function createItemInDatabase($index, $item)
     {
+        \Log::info('CommodityItemsRepeater::createItemInDatabase() called', [
+            'quotation_id' => $this->quotationId,
+            'commodity_type' => $item['commodity_type'] ?? 'empty',
+            'index' => $index,
+            'has_quotation_id' => !empty($this->quotationId),
+            'has_commodity_type' => !empty($item['commodity_type'])
+        ]);
+        
         if (!$this->quotationId || empty($item['commodity_type'])) {
+            \Log::warning('CommodityItemsRepeater::createItemInDatabase() skipped', [
+                'quotation_id' => $this->quotationId,
+                'commodity_type' => $item['commodity_type'] ?? 'empty',
+                'reason' => !$this->quotationId ? 'no_quotation_id' : 'no_commodity_type'
+            ]);
             return;
         }
         
