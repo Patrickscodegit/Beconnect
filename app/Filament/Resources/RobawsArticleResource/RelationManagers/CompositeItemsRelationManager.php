@@ -264,34 +264,42 @@ class CompositeItemsRelationManager extends RelationManager
                         // Use database-agnostic case-insensitive matching
                         $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
                         
-                        // For PostgreSQL, avoid distinct with JSON columns - use groupBy instead
-                        $query = $query
-                            ->where(function ($q) use ($useIlike) {
-                                $q->where('is_surcharge', true)
-                                    ->orWhere(function ($subQ) use ($useIlike) {
-                                        if ($useIlike) {
+                        // For PostgreSQL, prevent distinct on JSON columns by using a subquery
+                        // This avoids the "could not identify an equality operator for type json" error
+                        if ($useIlike) {
+                            // Use a subquery to get IDs first, then select full records
+                            // This prevents Filament from using distinct on JSON columns
+                            $subquery = RobawsArticleCache::query()
+                                ->select('id')
+                                ->where(function ($q) use ($useIlike) {
+                                    $q->where('is_surcharge', true)
+                                        ->orWhere(function ($subQ) use ($useIlike) {
                                             $subQ->where('article_type', 'ILIKE', '%SURCHARGE%')
                                                 ->orWhere('article_type', 'ILIKE', '%Surcharges%')
                                                 ->orWhere('article_type', 'ILIKE', '%LOCAL CHARGES%')
                                                 ->orWhere('article_type', 'ILIKE', '%Administrative%');
-                                        } else {
-                                            $subQ->whereRaw('LOWER(article_type) LIKE ?', ['%surcharge%'])
-                                                ->orWhereRaw('LOWER(article_type) LIKE ?', ['%surcharges%'])
-                                                ->orWhereRaw('LOWER(article_type) LIKE ?', ['%local charges%'])
-                                                ->orWhereRaw('LOWER(article_type) LIKE ?', ['%administrative%']);
-                                        }
-                                    });
-                            })
-                            ->where('is_parent_article', false) // Exclude parent articles
-                            ->whereNotIn('id', $excludeIds) // Exclude already attached children
-                            ->orderBy('article_code');
-                        
-                        // For PostgreSQL, use groupBy instead of distinct to avoid JSON column issues
-                        if ($useIlike) {
-                            $query->groupBy('robaws_articles_cache.id');
+                                        });
+                                })
+                                ->where('is_parent_article', false)
+                                ->whereNotIn('id', $excludeIds);
+                            
+                            return $query->whereIn('id', $subquery)->orderBy('article_code');
                         }
                         
-                        return $query;
+                        // For non-PostgreSQL databases, use the standard query
+                        return $query
+                            ->where(function ($q) use ($useIlike) {
+                                $q->where('is_surcharge', true)
+                                    ->orWhere(function ($subQ) use ($useIlike) {
+                                        $subQ->whereRaw('LOWER(article_type) LIKE ?', ['%surcharge%'])
+                                            ->orWhereRaw('LOWER(article_type) LIKE ?', ['%surcharges%'])
+                                            ->orWhereRaw('LOWER(article_type) LIKE ?', ['%local charges%'])
+                                            ->orWhereRaw('LOWER(article_type) LIKE ?', ['%administrative%']);
+                                    });
+                            })
+                            ->where('is_parent_article', false)
+                            ->whereNotIn('id', $excludeIds)
+                            ->orderBy('article_code');
                     })
                     ->recordSelect(
                         fn (Forms\Components\Select $select) => $select
