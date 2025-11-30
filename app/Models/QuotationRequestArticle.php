@@ -258,12 +258,15 @@ class QuotationRequestArticle extends Model
                 
                 if (!$exists) {
                     try {
+                        // Ensure quantity is an integer (default_quantity might be decimal)
+                        $quantity = (int) ($child->pivot->default_quantity ?? $this->quantity);
+                        
                         $created = self::create([
                             'quotation_request_id' => $quotationRequest->id,
                             'article_cache_id' => $child->id,
                             'parent_article_id' => $this->article_cache_id,
                             'item_type' => 'child',
-                            'quantity' => $child->pivot->default_quantity ?? $this->quantity,
+                            'quantity' => $quantity,
                             'unit_type' => $child->pivot->unit_type ?? $child->unit_type ?? 'unit',
                             'unit_price' => $child->pivot->default_cost_price ?? $child->unit_price,
                             'selling_price' => $child->getPriceForRole($role ?: 'default'),
