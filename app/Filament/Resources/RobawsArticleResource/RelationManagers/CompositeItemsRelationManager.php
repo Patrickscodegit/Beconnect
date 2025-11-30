@@ -145,6 +145,7 @@ class CompositeItemsRelationManager extends RelationManager
                     ->helperText('Mandatory: Always added. Optional: Customer chooses. Conditional: Auto-added if conditions match.')
                     ->afterStateUpdated(function ($state, Forms\Set $set) {
                         // Auto-update is_required and is_conditional based on child_type
+                        // (These fields are kept for backward compatibility but are controlled by child_type)
                         if ($state === 'mandatory') {
                             $set('is_required', true);
                             $set('is_conditional', false);
@@ -156,18 +157,6 @@ class CompositeItemsRelationManager extends RelationManager
                             $set('is_conditional', false);
                         }
                     }),
-                    
-                Forms\Components\Toggle::make('is_required')
-                    ->label('Required')
-                    ->default(false)
-                    ->disabled(fn (Forms\Get $get) => $get('child_type') !== null)
-                    ->helperText('Auto-set based on child type'),
-                    
-                Forms\Components\Toggle::make('is_conditional')
-                    ->label('Conditional')
-                    ->default(false)
-                    ->disabled(fn (Forms\Get $get) => $get('child_type') !== null)
-                    ->helperText('Auto-set based on child type'),
                     
                 Forms\Components\Textarea::make('conditions')
                     ->label('Conditions (JSON)')
@@ -387,6 +376,8 @@ class CompositeItemsRelationManager extends RelationManager
                             ->required()
                             ->reactive()
                             ->afterStateUpdated(function ($state, Forms\Set $set) {
+                                // Auto-update is_required and is_conditional based on child_type
+                                // (These fields are kept for backward compatibility but are controlled by child_type)
                                 if ($state === 'mandatory') {
                                     $set('is_required', true);
                                     $set('is_conditional', false);
@@ -398,14 +389,6 @@ class CompositeItemsRelationManager extends RelationManager
                                     $set('is_conditional', false);
                                 }
                             }),
-                        Forms\Components\Toggle::make('is_required')
-                            ->label('Required')
-                            ->default(false)
-                            ->disabled(),
-                        Forms\Components\Toggle::make('is_conditional')
-                            ->label('Conditional')
-                            ->default(false)
-                            ->disabled(),
                         Forms\Components\Textarea::make('conditions')
                             ->label('Conditions (JSON)')
                             ->helperText('JSON object defining when this item should be included')
@@ -451,6 +434,8 @@ class CompositeItemsRelationManager extends RelationManager
                             ->required()
                             ->reactive()
                             ->afterStateUpdated(function ($state, Forms\Set $set) {
+                                // Auto-update is_required and is_conditional based on child_type
+                                // (These fields are kept for backward compatibility but are controlled by child_type)
                                 if ($state === 'mandatory') {
                                     $set('is_required', true);
                                     $set('is_conditional', false);
@@ -462,12 +447,6 @@ class CompositeItemsRelationManager extends RelationManager
                                     $set('is_conditional', false);
                                 }
                             }),
-                        Forms\Components\Toggle::make('is_required')
-                            ->label('Required')
-                            ->disabled(),
-                        Forms\Components\Toggle::make('is_conditional')
-                            ->label('Conditional')
-                            ->disabled(),
                         Forms\Components\Textarea::make('conditions')
                             ->label('Conditions (JSON)')
                             ->helperText('JSON object defining when this item should be included')
