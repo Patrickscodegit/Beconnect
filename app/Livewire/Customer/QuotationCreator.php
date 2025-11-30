@@ -110,8 +110,14 @@ class QuotationCreator extends Component
         $this->updated($field);
     }
     
-    public function mount($intakeId = null)
+    public function mount($intakeId = null, $quotationId = null)
     {
+        // If editing existing quotation, load it
+        if ($quotationId) {
+            $this->loadQuotationForEditing($quotationId);
+            return;
+        }
+
         if (empty($this->simple_service_type)) {
             $this->simple_service_type = 'SEA_RORO';
         }
@@ -184,6 +190,65 @@ class QuotationCreator extends Component
     {
         // TODO: Implement intake prefill logic if needed
         // This would load data from an intake form
+    }
+    
+    /**
+     * Load an existing quotation for editing
+     */
+    protected function loadQuotationForEditing($quotationId)
+    {
+        $user = auth()->user();
+        
+        // Load quotation and verify ownership
+        $quotation = QuotationRequest::where('id', $quotationId)
+            ->where(function($query) use ($user) {
+                $query->where('contact_email', $user->email)
+                      ->orWhere('client_email', $user->email);
+            })
+            ->with(['commodityItems', 'selectedSchedule.carrier', 'articles'])
+            ->firstOrFail();
+        
+        // Verify editing is allowed
+        if (!in_array($quotation->status, ['draft', 'pending', 'processing'])) {
+            abort(403, 'This quotation cannot be edited');
+        }
+        
+        $this->quotation = $quotation;
+        $this->quotationId = $quotation->id;
+        
+        // Load all form fields from quotation
+        $this->pol = $quotation->pol ?? '';
+        $this->pod = $quotation->pod ?? '';
+        $this->por = $quotation->por ?? '';
+        $this->fdest = $quotation->fdest ?? '';
+        $this->service_type = $quotation->service_type ?? 'RORO_EXPORT';
+        $this->simple_service_type = $quotation->simple_service_type ?? 'SEA_RORO';
+        $this->commodity_type = $quotation->commodity_type ?? '';
+        $this->cargo_description = $quotation->cargo_description ?? '';
+        $this->special_requirements = $quotation->special_requirements ?? '';
+        $this->selected_schedule_id = $quotation->selected_schedule_id;
+        $this->customer_reference = $quotation->customer_reference ?? '';
+        
+        // Quick Quote fields
+        $this->cargo_weight = $quotation->cargo_weight ? (string) $quotation->cargo_weight : '';
+        $this->cargo_volume = $quotation->cargo_volume ? (string) $quotation->cargo_volume : '';
+        $this->cargo_dimensions = $quotation->cargo_dimensions ?? '';
+        
+        // Determine quotation mode based on whether commodity items exist
+        $this->quotationMode = ($quotation->commodityItems && $quotation->commodityItems->count() > 0) ? 'detailed' : 'quick';
+        
+        // Initialize service category tracking
+        $this->previousServiceCategory = $this->getServiceCategory($this->simple_service_type);
+        
+        // Update showArticles flag based on current state
+        $this->updateShowArticles();
+        
+        Log::info('Quotation loaded for editing', [
+            'quotation_id' => $this->quotationId,
+            'user_email' => $user->email,
+            'status' => $quotation->status,
+            'quotation_mode' => $this->quotationMode,
+        ]);
     }
     
     // Auto-save when fields change

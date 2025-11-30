@@ -8,16 +8,17 @@
     {{-- Header --}}
     <div class="mb-8">
         <h1 class="text-3xl font-bold text-gray-900 mb-2">
-            Request a Quotation
+            {{ request()->get('edit') ? 'Edit Quotation' : 'Request a Quotation' }}
         </h1>
         <p class="text-gray-600">
-            Fill in your shipping details and we'll suggest the best services with instant pricing.
+            {{ request()->get('edit') ? 'Update your quotation details below.' : 'Fill in your shipping details and we\'ll suggest the best services with instant pricing.' }}
         </p>
     </div>
     
-    {{-- Livewire Component - Handles entire creation flow --}}
+    {{-- Livewire Component - Handles entire creation/editing flow --}}
     @livewire('customer.quotation-creator', [
-        'intakeId' => request()->get('intake_id')
+        'intakeId' => request()->get('intake_id'),
+        'quotationId' => request()->get('edit')
     ])
     
 </div>

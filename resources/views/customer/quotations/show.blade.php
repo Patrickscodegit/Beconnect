@@ -34,11 +34,17 @@
     {{-- Edit/Duplicate Actions Banner --}}
     @if($canEdit)
         <div class="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div class="flex items-center">
-                <i class="fas fa-info-circle text-blue-600 mr-2"></i>
-                <p class="text-sm text-blue-800">
-                    You can edit this quotation until it's approved by our team. Simply go back and create a new one or wait for our response.
-                </p>
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <i class="fas fa-info-circle text-blue-600 mr-2"></i>
+                    <p class="text-sm text-blue-800">
+                        You can edit this quotation until it's approved by our team.
+                    </p>
+                </div>
+                <a href="{{ route('customer.quotations.create', ['edit' => $quotationRequest->id]) }}" 
+                   class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium">
+                    <i class="fas fa-edit mr-2"></i>Edit Quotation
+                </a>
             </div>
         </div>
     @elseif(in_array($quotationRequest->status, ['quoted', 'accepted', 'approved']))
