@@ -466,7 +466,7 @@
                 @foreach($quotation->articles as $article)
                     <div class="flex items-center justify-between bg-gray-50 p-4 rounded-lg border border-gray-200">
                         <div class="flex-1">
-                            <p class="font-medium text-gray-900">{{ $article->description ?? $article->article_name ?? 'N/A' }}</p>
+                            <p class="font-medium text-gray-900">{{ $article->article_name ?? $article->description ?? 'N/A' }}</p>
                             <p class="text-sm text-gray-600 mt-1">
                                 Code: {{ $article->article_code }}
                                 @if($article->pivot->quantity && $article->pivot->unit_price)
@@ -559,7 +559,7 @@
                     <div class="flex items-center justify-between bg-gray-50 p-4 rounded-lg border border-gray-200 hover:border-blue-300 transition">
                         <div class="flex-1">
                             <div class="flex items-center gap-2 mb-1">
-                                <p class="font-medium text-gray-900">{{ $article->description ?? $article->article_name }}</p>
+                                <p class="font-medium text-gray-900">{{ $article->article_name ?? $article->description ?? 'N/A' }}</p>
                                 <span class="text-xs text-gray-500 bg-blue-100 text-blue-800 px-2 py-0.5 rounded">Optional</span>
                             </div>
                             <p class="text-sm text-gray-600">
