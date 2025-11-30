@@ -391,6 +391,15 @@ class QuotationCreator extends Component
                             break;
                         }
                     }
+                    
+                    // If no items have commodity_type but items exist, still allow articles to show
+                    // This handles cases where items are being filled out but not yet saved with commodity_type
+                    // The SmartArticleSelector can still work without commodity_type filtering
+                    if (!$commoditySelected && $quotation->commodityItems->count() > 0) {
+                        // Allow articles to show even without commodity_type set
+                        // This is less restrictive and allows users to see articles while filling out forms
+                        $commoditySelected = true;
+                    }
                 }
             }
         }
