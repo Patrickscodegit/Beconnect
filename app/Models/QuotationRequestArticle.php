@@ -49,9 +49,45 @@ class QuotationRequestArticle extends Model
         });
 
         static::saved(function ($model) {
+            // Ensure articleCache relationship is loaded
+            if (!$model->relationLoaded('articleCache')) {
+                $model->load('articleCache');
+            }
+            
+            \Log::info('QuotationRequestArticle saved', [
+                'id' => $model->id,
+                'item_type' => $model->item_type,
+                'article_cache_id' => $model->article_cache_id,
+                'is_parent_article' => $model->articleCache->is_parent_article ?? false,
+                'article_name' => $model->articleCache->article_name ?? 'N/A',
+            ]);
+            
+            // Auto-correct item_type if article is actually a parent but was saved as standalone
+            // This can happen if the article was updated to be a parent after being added to quotation
+            if ($model->item_type !== 'parent' 
+                && $model->item_type !== 'child' 
+                && $model->articleCache 
+                && $model->articleCache->is_parent_article
+                && !$model->parent_article_id) {
+                \Log::info('Auto-correcting item_type from standalone to parent', [
+                    'quotation_request_article_id' => $model->id,
+                    'article_id' => $model->article_cache_id,
+                ]);
+                $model->item_type = 'parent';
+                $model->save(); // This will trigger saved event again, but with correct item_type
+                return; // Exit early, let the next saved event handle addChildArticles()
+            }
+            
             // When parent article is added, automatically add children
             if ($model->item_type === 'parent' && $model->articleCache && $model->articleCache->is_parent_article) {
+                \Log::info('Calling addChildArticles()');
                 $model->addChildArticles();
+            } else {
+                \Log::info('Skipping addChildArticles()', [
+                    'item_type_is_parent' => $model->item_type === 'parent',
+                    'has_article_cache' => $model->articleCache !== null,
+                    'is_parent_article' => $model->articleCache->is_parent_article ?? false,
+                ]);
             }
             
             // Recalculate parent quotation totals
@@ -99,7 +135,35 @@ class QuotationRequestArticle extends Model
      */
     public function addChildArticles(): void
     {
+        // Ensure articleCache relationship is loaded
+        if (!$this->relationLoaded('articleCache')) {
+            $this->load('articleCache');
+        }
+        
+        \Log::info('addChildArticles called', [
+            'quotation_request_id' => $this->quotation_request_id,
+            'article_cache_id' => $this->article_cache_id,
+            'item_type' => $this->item_type,
+            'article_name' => $this->articleCache->article_name ?? 'N/A',
+            'is_parent_article' => $this->articleCache->is_parent_article ?? false,
+        ]);
+        
+        // Ensure children relationship is loaded with pivot data
+        if (!$this->articleCache->relationLoaded('children')) {
+            $this->articleCache->load('children');
+        }
+        
         $children = $this->articleCache->children;
+        \Log::info('Children found', [
+            'count' => $children->count(),
+            'children' => $children->map(fn($c) => [
+                'id' => $c->id,
+                'article_code' => $c->article_code,
+                'article_name' => $c->article_name,
+                'child_type' => $c->pivot->child_type ?? 'not_set',
+            ])->toArray(),
+        ]);
+        
         $quotationRequest = $this->quotationRequest;
         $role = $quotationRequest->customer_role;
         
@@ -109,10 +173,17 @@ class QuotationRequestArticle extends Model
             $childType = $child->pivot->child_type ?? 'optional';
             $shouldAdd = false;
             
+            \Log::info('Processing child', [
+                'child_id' => $child->id,
+                'child_code' => $child->article_code,
+                'child_name' => $child->article_name,
+                'child_type' => $childType,
+            ]);
+            
             // Determine if child should be added based on child_type
             if ($childType === 'mandatory') {
-                // Always add mandatory items
                 $shouldAdd = true;
+                \Log::info('Child is mandatory - will add');
             } elseif ($childType === 'conditional') {
                 // Add conditional items only if conditions match
                 $conditions = is_string($child->pivot->conditions) 
@@ -120,8 +191,13 @@ class QuotationRequestArticle extends Model
                     : $child->pivot->conditions;
                 
                 $shouldAdd = $conditionMatcher->matchConditions($conditions, $quotationRequest);
+                \Log::info('Child is conditional', [
+                    'conditions' => $conditions,
+                    'should_add' => $shouldAdd,
+                ]);
+            } else {
+                \Log::info('Child is optional - will not auto-add');
             }
-            // Optional items are never auto-added (customer chooses in UI)
             
             if ($shouldAdd) {
                 // Check if child article is not already added
@@ -130,18 +206,32 @@ class QuotationRequestArticle extends Model
                     ->where('parent_article_id', $this->article_cache_id)
                     ->exists();
                 
+                \Log::info('Checking if child already exists', [
+                    'exists' => $exists,
+                ]);
+                
                 if (!$exists) {
-                    self::create([
-                        'quotation_request_id' => $quotationRequest->id,
-                        'article_cache_id' => $child->id,
-                        'parent_article_id' => $this->article_cache_id,
-                        'item_type' => 'child',
-                        'quantity' => $child->pivot->default_quantity ?? $this->quantity,
-                        'unit_type' => $child->pivot->unit_type ?? $child->unit_type ?? 'unit',
-                        'unit_price' => $child->pivot->default_cost_price ?? $child->unit_price,
-                        'selling_price' => $child->getPriceForRole($role ?: 'default'),
-                        'currency' => $child->currency,
-                    ]);
+                    try {
+                        $created = self::create([
+                            'quotation_request_id' => $quotationRequest->id,
+                            'article_cache_id' => $child->id,
+                            'parent_article_id' => $this->article_cache_id,
+                            'item_type' => 'child',
+                            'quantity' => $child->pivot->default_quantity ?? $this->quantity,
+                            'unit_type' => $child->pivot->unit_type ?? $child->unit_type ?? 'unit',
+                            'unit_price' => $child->pivot->default_cost_price ?? $child->unit_price,
+                            'selling_price' => $child->getPriceForRole($role ?: 'default'),
+                            'currency' => $child->currency,
+                        ]);
+                        \Log::info('Child article created successfully', [
+                            'quotation_request_article_id' => $created->id,
+                        ]);
+                    } catch (\Exception $e) {
+                        \Log::error('Failed to create child article', [
+                            'error' => $e->getMessage(),
+                            'trace' => $e->getTraceAsString(),
+                        ]);
+                    }
                 }
             }
         }
