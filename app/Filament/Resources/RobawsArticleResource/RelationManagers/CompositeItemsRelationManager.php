@@ -256,60 +256,48 @@ class CompositeItemsRelationManager extends RelationManager
                     ]),
             ])
             ->headerActions([
-                Tables\Actions\AttachAction::make()
-                    ->recordSelectOptionsQuery(function (Builder $query) {
-                        $parent = $this->getOwnerRecord();
-                        $excludeIds = $parent->children()->pluck('robaws_articles_cache.id')->toArray();
-                        
-                        // Use database-agnostic case-insensitive matching
-                        $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
-                        
-                        // For PostgreSQL, prevent distinct on JSON columns by using a subquery
-                        // This avoids the "could not identify an equality operator for type json" error
-                        if ($useIlike) {
-                            // Use a subquery to get IDs first, then select full records
-                            // This prevents Filament from using distinct on JSON columns
-                            $subquery = RobawsArticleCache::query()
-                                ->select('id')
-                                ->where(function ($q) use ($useIlike) {
-                                    $q->where('is_surcharge', true)
-                                        ->orWhere(function ($subQ) use ($useIlike) {
-                                            $subQ->where('article_type', 'ILIKE', '%SURCHARGE%')
-                                                ->orWhere('article_type', 'ILIKE', '%Surcharges%')
-                                                ->orWhere('article_type', 'ILIKE', '%LOCAL CHARGES%')
-                                                ->orWhere('article_type', 'ILIKE', '%Administrative%');
-                                        });
-                                })
-                                ->where('is_parent_article', false)
-                                ->whereNotIn('id', $excludeIds);
-                            
-                            return $query->whereIn('id', $subquery)->orderBy('article_code');
-                        }
-                        
-                        // For non-PostgreSQL databases, use the standard query
-                        return $query
-                            ->where(function ($q) use ($useIlike) {
-                                $q->where('is_surcharge', true)
-                                    ->orWhere(function ($subQ) use ($useIlike) {
-                                        $subQ->whereRaw('LOWER(article_type) LIKE ?', ['%surcharge%'])
-                                            ->orWhereRaw('LOWER(article_type) LIKE ?', ['%surcharges%'])
-                                            ->orWhereRaw('LOWER(article_type) LIKE ?', ['%local charges%'])
-                                            ->orWhereRaw('LOWER(article_type) LIKE ?', ['%administrative%']);
+                Tables\Actions\Action::make('attach')
+                    ->label('Attach Child Article')
+                    ->icon('heroicon-o-plus')
+                    ->form([
+                        Forms\Components\Select::make('child_article_id')
+                            ->label('Child Article')
+                            ->options(function () {
+                                $parent = $this->getOwnerRecord();
+                                $excludeIds = $parent->children()->pluck('robaws_articles_cache.id')->toArray();
+                                
+                                $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
+                                
+                                return RobawsArticleCache::where(function ($query) use ($useIlike) {
+                                        $query->where('is_surcharge', true)
+                                            ->orWhere(function ($subQ) use ($useIlike) {
+                                                if ($useIlike) {
+                                                    $subQ->where('article_type', 'ILIKE', '%SURCHARGE%')
+                                                        ->orWhere('article_type', 'ILIKE', '%Surcharges%')
+                                                        ->orWhere('article_type', 'ILIKE', '%LOCAL CHARGES%')
+                                                        ->orWhere('article_type', 'ILIKE', '%Administrative%');
+                                                } else {
+                                                    $subQ->whereRaw('LOWER(article_type) LIKE ?', ['%surcharge%'])
+                                                        ->orWhereRaw('LOWER(article_type) LIKE ?', ['%surcharges%'])
+                                                        ->orWhereRaw('LOWER(article_type) LIKE ?', ['%local charges%'])
+                                                        ->orWhereRaw('LOWER(article_type) LIKE ?', ['%administrative%']);
+                                                }
+                                            });
+                                    })
+                                    ->where('is_parent_article', false)
+                                    ->whereNotIn('id', $excludeIds)
+                                    ->orderBy('article_code')
+                                    ->get()
+                                    ->mapWithKeys(function ($article) {
+                                        return [$article->id => $article->article_code . ' - ' . $article->article_name];
                                     });
                             })
-                            ->where('is_parent_article', false)
-                            ->whereNotIn('id', $excludeIds)
-                            ->orderBy('article_code');
-                    })
-                    ->recordSelect(
-                        fn (Forms\Components\Select $select) => $select
-                            ->label('Child Article')
                             ->searchable()
+                            ->required()
                             ->getSearchResultsUsing(function (string $search) {
                                 $parent = $this->getOwnerRecord();
                                 $excludeIds = $parent->children()->pluck('robaws_articles_cache.id')->toArray();
                                 
-                                // Use database-agnostic case-insensitive matching
                                 $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
                                 
                                 return RobawsArticleCache::where(function ($query) use ($useIlike) {
@@ -345,41 +333,7 @@ class CompositeItemsRelationManager extends RelationManager
                                     ->mapWithKeys(function ($article) {
                                         return [$article->id => $article->article_code . ' - ' . $article->article_name];
                                     });
-                            })
-                            ->getOptionLabelUsing(function ($value) {
-                                $article = RobawsArticleCache::find($value);
-                                return $article ? $article->article_code . ' - ' . $article->article_name : $value;
-                            })
-                    )
-                    ->mutateFormDataUsing(function (array $data): array {
-                        // Ensure child_type is set (default to 'optional' if not provided)
-                        $childType = $data['child_type'] ?? 'optional';
-                        
-                        // Auto-set is_required and is_conditional based on child_type
-                        $data['is_required'] = ($childType === 'mandatory');
-                        $data['is_conditional'] = ($childType === 'conditional');
-                        
-                        // Ensure all required fields have defaults
-                        if (!isset($data['sort_order'])) {
-                            $parent = $this->getOwnerRecord();
-                            $data['sort_order'] = $parent->children()->count() + 1;
-                        }
-                        if (!isset($data['cost_type'])) {
-                            $data['cost_type'] = 'Material';
-                        }
-                        if (!isset($data['default_quantity'])) {
-                            $data['default_quantity'] = 1.0;
-                        }
-                        
-                        // Convert empty conditions to null
-                        if (empty($data['conditions'])) {
-                            $data['conditions'] = null;
-                        }
-                        
-                        return $data;
-                    })
-                    ->form(fn (Tables\Actions\AttachAction $action): array => [
-                        $action->getRecordSelect(),
+                            }),
                         Forms\Components\TextInput::make('sort_order')
                             ->label('Sort Order')
                             ->numeric()
@@ -419,8 +373,6 @@ class CompositeItemsRelationManager extends RelationManager
                             ->required()
                             ->reactive()
                             ->afterStateUpdated(function ($state, Forms\Set $set) {
-                                // Auto-update is_required and is_conditional based on child_type
-                                // (These fields are kept for backward compatibility but are controlled by child_type)
                                 if ($state === 'mandatory') {
                                     $set('is_required', true);
                                     $set('is_conditional', false);
@@ -437,7 +389,32 @@ class CompositeItemsRelationManager extends RelationManager
                             ->helperText('JSON object defining when this item should be included')
                             ->visible(fn (Forms\Get $get) => $get('child_type') === 'conditional')
                             ->rows(4),
-                    ]),
+                    ])
+                    ->action(function (array $data) {
+                        $parent = $this->getOwnerRecord();
+                        
+                        // Ensure child_type is set
+                        $childType = $data['child_type'] ?? 'optional';
+                        $isRequired = ($childType === 'mandatory');
+                        $isConditional = ($childType === 'conditional');
+                        
+                        // Prepare pivot data
+                        $pivotData = [
+                            'sort_order' => $data['sort_order'] ?? ($parent->children()->count() + 1),
+                            'cost_type' => $data['cost_type'] ?? 'Material',
+                            'default_quantity' => $data['default_quantity'] ?? 1.0,
+                            'default_cost_price' => $data['default_cost_price'] ?? null,
+                            'unit_type' => $data['unit_type'] ?? null,
+                            'child_type' => $childType,
+                            'is_required' => $isRequired,
+                            'is_conditional' => $isConditional,
+                            'conditions' => !empty($data['conditions']) ? $data['conditions'] : null,
+                        ];
+                        
+                        // Attach with all pivot data - use direct DB insert to avoid distinct issues
+                        $parent->children()->attach($data['child_article_id'], $pivotData);
+                    })
+                    ->successNotificationTitle('Child article attached successfully'),
             ])
             ->actions([
                 Tables\Actions\EditAction::make()
