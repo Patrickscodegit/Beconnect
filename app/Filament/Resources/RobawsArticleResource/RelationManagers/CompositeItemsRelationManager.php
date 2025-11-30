@@ -264,7 +264,8 @@ class CompositeItemsRelationManager extends RelationManager
                         // Use database-agnostic case-insensitive matching
                         $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
                         
-                        return $query
+                        // For PostgreSQL, avoid distinct with JSON columns - use groupBy instead
+                        $query = $query
                             ->where(function ($q) use ($useIlike) {
                                 $q->where('is_surcharge', true)
                                     ->orWhere(function ($subQ) use ($useIlike) {
@@ -284,6 +285,13 @@ class CompositeItemsRelationManager extends RelationManager
                             ->where('is_parent_article', false) // Exclude parent articles
                             ->whereNotIn('id', $excludeIds) // Exclude already attached children
                             ->orderBy('article_code');
+                        
+                        // For PostgreSQL, use groupBy instead of distinct to avoid JSON column issues
+                        if ($useIlike) {
+                            $query->groupBy('robaws_articles_cache.id');
+                        }
+                        
+                        return $query;
                     })
                     ->recordSelect(
                         fn (Forms\Components\Select $select) => $select
@@ -335,31 +343,32 @@ class CompositeItemsRelationManager extends RelationManager
                                 return $article ? $article->article_code . ' - ' . $article->article_name : $value;
                             })
                     )
-                    ->attachUsing(function (RobawsArticleCache $record, array $data) {
-                        $parent = $this->getOwnerRecord();
-                        
+                    ->mutateFormDataUsing(function (array $data): array {
                         // Ensure child_type is set (default to 'optional' if not provided)
                         $childType = $data['child_type'] ?? 'optional';
                         
                         // Auto-set is_required and is_conditional based on child_type
-                        $isRequired = ($childType === 'mandatory');
-                        $isConditional = ($childType === 'conditional');
+                        $data['is_required'] = ($childType === 'mandatory');
+                        $data['is_conditional'] = ($childType === 'conditional');
                         
-                        // Prepare pivot data with all required fields
-                        $pivotData = [
-                            'sort_order' => $data['sort_order'] ?? ($parent->children()->count() + 1),
-                            'cost_type' => $data['cost_type'] ?? 'Material',
-                            'default_quantity' => $data['default_quantity'] ?? 1.0,
-                            'default_cost_price' => $data['default_cost_price'] ?? null,
-                            'unit_type' => $data['unit_type'] ?? null,
-                            'child_type' => $childType,
-                            'is_required' => $isRequired,
-                            'is_conditional' => $isConditional,
-                            'conditions' => !empty($data['conditions']) ? $data['conditions'] : null,
-                        ];
+                        // Ensure all required fields have defaults
+                        if (!isset($data['sort_order'])) {
+                            $parent = $this->getOwnerRecord();
+                            $data['sort_order'] = $parent->children()->count() + 1;
+                        }
+                        if (!isset($data['cost_type'])) {
+                            $data['cost_type'] = 'Material';
+                        }
+                        if (!isset($data['default_quantity'])) {
+                            $data['default_quantity'] = 1.0;
+                        }
                         
-                        // Attach with all pivot data
-                        $parent->children()->attach($record->id, $pivotData);
+                        // Convert empty conditions to null
+                        if (empty($data['conditions'])) {
+                            $data['conditions'] = null;
+                        }
+                        
+                        return $data;
                     })
                     ->form(fn (Tables\Actions\AttachAction $action): array => [
                         $action->getRecordSelect(),
