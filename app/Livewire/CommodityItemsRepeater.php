@@ -373,9 +373,11 @@ class CommodityItemsRepeater extends Component
             
             \Log::info('CommodityItemsRepeater: quantity changed', [
                 'index' => $index,
+                'old_quantity' => $this->items[$index]['quantity'] ?? 'unknown',
                 'new_quantity' => $newQuantity,
                 'item_id' => $this->items[$index]['id'] ?? 'none',
                 'quotation_id' => $this->quotationId,
+                'has_database_id' => isset($this->items[$index]['id']) && is_numeric($this->items[$index]['id']),
             ]);
             
             // Recalculate LM to ensure quantity is included in the calculation
@@ -587,7 +589,11 @@ class CommodityItemsRepeater extends Component
             \Log::info('CommodityItemsRepeater::saveItemToDatabase() saved item', [
                 'item_id' => $item['id'],
                 'quotation_id' => $this->quotationId,
-                'commodity_type' => $item['commodity_type'] ?? null
+                'commodity_type' => $item['commodity_type'] ?? null,
+                'quantity' => $data['quantity'],
+                'length_cm' => $data['length_cm'],
+                'width_cm' => $data['width_cm'],
+                'lm' => $data['lm'],
             ]);
             
             // Dispatch event to parent component when commodity_type is saved

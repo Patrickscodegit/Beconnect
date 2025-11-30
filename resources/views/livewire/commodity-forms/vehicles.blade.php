@@ -210,7 +210,7 @@
                 Quantity <span class="text-red-500">*</span>
             </label>
             <input type="number" 
-                wire:model="items.{{ $index }}.quantity"
+                wire:model.live="items.{{ $index }}.quantity"
                 min="1"
                 class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
                 placeholder="1">
