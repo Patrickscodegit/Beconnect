@@ -359,15 +359,16 @@
                 // Ensure quotation has commodityItems relationship loaded
                 $existingItems = [];
                 $serviceTypeForRepeater = '';
+                $quotationForRepeater = $this->quotation;
                 
-                if ($quotation) {
+                if ($quotationForRepeater) {
                     try {
                         // Load relationship safely
-                        $quotation = $quotation->fresh(['commodityItems']);
+                        $quotationForRepeater = $quotationForRepeater->fresh(['commodityItems']);
                         
                         // Convert collection to array format expected by component
-                        if ($quotation->commodityItems && $quotation->commodityItems->isNotEmpty()) {
-                            $existingItems = $quotation->commodityItems->map(function ($item) {
+                        if ($quotationForRepeater->commodityItems && $quotationForRepeater->commodityItems->isNotEmpty()) {
+                            $existingItems = $quotationForRepeater->commodityItems->map(function ($item) {
                                 // Convert model to array, removing timestamps and relations
                                 $array = $item->toArray();
                                 // Remove timestamps and relationship keys
@@ -377,11 +378,11 @@
                         }
                         
                         // Ensure serviceType is set, default to service_type or empty string
-                        $serviceTypeForRepeater = $service_type ?: ($quotation->service_type ?? '');
+                        $serviceTypeForRepeater = $service_type ?: ($quotationForRepeater->service_type ?? '');
                     } catch (\Exception $e) {
                         // If there's an error loading, start with empty array
                         \Log::error('Error loading commodity items for quotation', [
-                            'quotation_id' => $quotation->id ?? null,
+                            'quotation_id' => $quotationForRepeater->id ?? null,
                             'error' => $e->getMessage()
                         ]);
                         $existingItems = [];
@@ -393,11 +394,11 @@
                 }
             @endphp
             @livewire('commodity-items-repeater', [
-                'quotationId' => $quotation->id ?? null,
+                'quotationId' => $quotationId ?? ($quotationForRepeater->id ?? null),
                 'existingItems' => $existingItems,
                 'serviceType' => $serviceTypeForRepeater,
                 'unitSystem' => 'metric'
-            ], key('commodity-repeater-' . ($quotation->id ?? 'new')))
+            ], key('commodity-repeater-' . ($quotationId ?? ($quotationForRepeater->id ?? 'new'))))
         </div>
     </div>
     
