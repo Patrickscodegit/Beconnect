@@ -369,6 +369,15 @@ class CommodityItemsRepeater extends Component
         // Detect when quantity changes - this will trigger article price recalculation via model boot()
         if (preg_match('/^items\.(\d+)\.quantity$/', $propertyName, $matches)) {
             $index = (int) $matches[1];
+            $newQuantity = $this->items[$index]['quantity'] ?? 1;
+            
+            \Log::info('CommodityItemsRepeater: quantity changed', [
+                'index' => $index,
+                'new_quantity' => $newQuantity,
+                'item_id' => $this->items[$index]['id'] ?? 'none',
+                'quotation_id' => $this->quotationId,
+            ]);
+            
             // Recalculate LM to ensure quantity is included in the calculation
             if (!empty($this->items[$index]['length_cm'] ?? '') && !empty($this->items[$index]['width_cm'] ?? '')) {
                 $this->calculateLm($index);
