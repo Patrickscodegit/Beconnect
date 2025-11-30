@@ -402,10 +402,18 @@ class QuotationCreator extends Component
                     }
                 }
             }
+            
+            // In detailed mode, if POL/POD/Schedule are set, allow articles to show even without commodity items
+            // This allows users to see articles while they're adding their first commodity item
+            // The SmartArticleSelector can filter based on POL/POD/Schedule alone
+            if (!$commoditySelected && $polFilled && $podFilled && $scheduleSelected) {
+                $commoditySelected = true;
+            }
         }
         
         // Only show articles when ALL required fields are filled (POL, POD, Schedule, Commodity)
-        // Requiring commodity ensures articles are properly filtered from the start
+        // In detailed mode, we're more lenient - if POL/POD/Schedule are set, we allow articles to show
+        // This helps users see articles while they're filling out commodity items
         $this->showArticles = $polFilled && $podFilled && $scheduleSelected && $commoditySelected;
         
         // Emit event to SmartArticleSelector to reload
