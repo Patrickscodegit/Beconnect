@@ -173,13 +173,22 @@ class QuotationCommodityItem extends Model
                 $quotation = $item->quotationRequest;
                 if ($quotation) {
                     // Recalculate all articles with unit_type "LM" for this quotation
+                    // Use case-insensitive comparison to handle "LM", "lm", "Lm" etc.
                     $lmArticles = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotation->id)
-                        ->where('unit_type', 'LM')
+                        ->whereRaw('UPPER(unit_type) = ?', ['LM'])
                         ->get();
                     
+                    \Log::info('QuotationCommodityItem saved - recalculating LM articles', [
+                        'commodity_item_id' => $item->id,
+                        'quotation_request_id' => $quotation->id,
+                        'lm_articles_count' => $lmArticles->count(),
+                        'item_quantity' => $item->quantity,
+                        'item_lm' => $item->lm,
+                    ]);
+                    
                     foreach ($lmArticles as $article) {
-                        // Touch the article to trigger saving event which recalculates quantity and subtotal
-                        $article->touch();
+                        // Save the article to trigger saving event which recalculates quantity and subtotal
+                        // The saving event uses QuantityCalculationService which reads commodity items
                         $article->save();
                     }
                     
