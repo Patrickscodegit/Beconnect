@@ -93,13 +93,15 @@ class QuotationCommodityItem extends Model
 
     /**
      * Calculate LM (Linear Meter) from dimensions: (length_m × width_m) / 2.5
-     * Converts cm to meters: (length_cm / 100 × width_cm / 100) / 2.5
+     * Converts cm to meters: (length_cm / 100 × max(width_cm, 250) / 100) / 2.5
+     * Width has a minimum of 250 cm (2.5m) for LM calculations
      */
     public function calculateLm(): float
     {
         if ($this->length_cm && $this->width_cm) {
             $lengthM = $this->length_cm / 100;
-            $widthM = $this->width_cm / 100;
+            $widthCm = max($this->width_cm, 250); // Minimum width of 250 cm
+            $widthM = $widthCm / 100;
             return ($lengthM * $widthM) / 2.5;
         }
         return 0;

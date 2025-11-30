@@ -234,14 +234,18 @@ class CommodityItemsRepeater extends Component
         if ($length > 0 && $width > 0) {
             if ($this->unitSystem === 'us') {
                 // Calculate LM from inches: (length_in / 12 × width_in / 12) / 2.5
+                // Convert 250 cm minimum to inches: 250 / 2.54 = 98.425 inches
                 $lengthM = $length / 12 / 0.3048; // Convert inches to meters
-                $widthM = $width / 12 / 0.3048;
+                $widthInches = max($width, 250 / 2.54); // Minimum width of 250 cm (98.425 inches)
+                $widthM = $widthInches / 12 / 0.3048;
                 $lm = ($lengthM * $widthM) / 2.5;
                 $item['lm'] = round($lm, 4);
             } else {
-                // Calculate LM from cm: (length_cm / 100 × width_cm / 100) / 2.5
+                // Calculate LM from cm: (length_cm / 100 × max(width_cm, 250) / 100) / 2.5
+                // Width has a minimum of 250 cm (2.5m) for LM calculations
                 $lengthM = $length / 100;
-                $widthM = $width / 100;
+                $widthCm = max($width, 250); // Minimum width of 250 cm
+                $widthM = $widthCm / 100;
                 $lm = ($lengthM * $widthM) / 2.5;
                 $item['lm'] = round($lm, 4);
             }

@@ -208,9 +208,11 @@ class QuotationRequestArticle extends Model
 
         foreach ($commodityItems as $item) {
             if ($item->length_cm && $item->width_cm) {
-                // Calculate LM per item: (length_m × width_m) / 2.5
+                // Calculate LM per item: (length_m × max(width_m, 2.5)) / 2.5
+                // Width has a minimum of 250 cm (2.5m) for LM calculations
                 $lengthM = $item->length_cm / 100;
-                $widthM = $item->width_cm / 100;
+                $widthCm = max($item->width_cm, 250); // Minimum width of 250 cm
+                $widthM = $widthCm / 100;
                 $itemLmPerItem = ($lengthM * $widthM) / 2.5;
                 
                 $itemQuantity = $item->quantity ?? 1;

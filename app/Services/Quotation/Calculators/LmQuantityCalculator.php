@@ -10,15 +10,16 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
      * Calculate LM quantity: Sum of [quantity × (length × width) / 2.5] for all commodity items
      * 
      * Formula per commodity item (converting cm to meters):
-     * - LM per item = (length_cm / 100 × width_cm / 100) / 2.5 = (length_m × width_m) / 2.5
-     * - Or equivalently: (length_cm × width_cm) / 25,000
+     * - Width has a minimum of 250 cm (2.5m) for LM calculations
+     * - LM per item = (length_cm / 100 × max(width_cm, 250) / 100) / 2.5 = (length_m × max(width_m, 2.5)) / 2.5
+     * - Or equivalently: (length_cm × max(width_cm, 250)) / 25,000
      * - LM for item line = LM per item × item quantity
      * - Total LM = Sum of all item lines
      * 
      * Example:
-     * - 3 trucks, each 500cm × 200cm
-     * - LM per truck = (500 / 100 × 200 / 100) / 2.5 = (5 × 2) / 2.5 = 4 LM
-     * - Total LM = 4 × 3 = 12 LM
+     * - 3 trucks, each 500cm × 200cm (width treated as 250cm minimum)
+     * - LM per truck = (500 / 100 × 250 / 100) / 2.5 = (5 × 2.5) / 2.5 = 5 LM
+     * - Total LM = 5 × 3 = 15 LM
      * 
      * @param QuotationRequestArticle $article
      * @return float
@@ -47,9 +48,11 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
         foreach ($commodityItems as $item) {
             if ($item->length_cm && $item->width_cm) {
                 // Convert cm to meters and calculate LM per item: (length_m × width_m) / 2.5
-                // Equivalent to: (length_cm × width_cm) / 25,000
+                // Width has a minimum of 250 cm (2.5m) for LM calculations
+                // Equivalent to: (length_cm × max(width_cm, 250)) / 25,000
                 $lengthM = $item->length_cm / 100;
-                $widthM = $item->width_cm / 100;
+                $widthCm = max($item->width_cm, 250); // Minimum width of 250 cm
+                $widthM = $widthCm / 100;
                 $lmPerItem = ($lengthM * $widthM) / 2.5;
                 
                 // Multiply by item quantity (e.g., 3 trucks with same dimensions)
