@@ -154,7 +154,8 @@
             <p class="text-xs text-purple-600 mt-1">Auto-calculated</p>
         </div>
 
-        {{-- LM (Linear Meter) (Auto-calculated) --}}
+        {{-- LM (Linear Meter) (Auto-calculated) - Hidden for motorcycle, car, suv, small_van, big_van --}}
+        @if(!in_array($item['category'] ?? '', ['motorcycle', 'car', 'suv', 'small_van', 'big_van']))
         <div>
             <label class="block text-sm font-medium text-blue-700 mb-2">
                 <i class="fas fa-calculator mr-1"></i>
@@ -167,6 +168,7 @@
                 placeholder="Auto-calculated">
             <p class="text-xs text-blue-600 mt-1">Auto-calculated: (L × W) / 2.5</p>
         </div>
+        @endif
 
         {{-- Weight --}}
         <div class="lg:col-span-2">
