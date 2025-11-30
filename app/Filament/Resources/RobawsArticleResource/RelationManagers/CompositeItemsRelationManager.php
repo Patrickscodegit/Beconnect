@@ -31,11 +31,26 @@ class CompositeItemsRelationManager extends RelationManager
                         // Filter to surcharge articles or articles not already children
                         $excludeIds = $parent->children()->pluck('robaws_articles_cache.id')->toArray();
                         
-                        return RobawsArticleCache::where(function ($query) {
+                        // Use database-agnostic case-insensitive matching
+                        $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
+                        
+                        return RobawsArticleCache::where(function ($query) use ($useIlike) {
                                 $query->where('is_surcharge', true)
-                                    ->orWhere('article_type', 'LIKE', '%SURCHARGE%')
-                                    ->orWhere('article_type', 'LIKE', '%LOCAL CHARGES%');
+                                    ->orWhere(function ($subQ) use ($useIlike) {
+                                        if ($useIlike) {
+                                            $subQ->where('article_type', 'ILIKE', '%SURCHARGE%')
+                                                ->orWhere('article_type', 'ILIKE', '%Surcharges%')
+                                                ->orWhere('article_type', 'ILIKE', '%LOCAL CHARGES%')
+                                                ->orWhere('article_type', 'ILIKE', '%Administrative%');
+                                        } else {
+                                            $subQ->whereRaw('LOWER(article_type) LIKE ?', ['%surcharge%'])
+                                                ->orWhereRaw('LOWER(article_type) LIKE ?', ['%surcharges%'])
+                                                ->orWhereRaw('LOWER(article_type) LIKE ?', ['%local charges%'])
+                                                ->orWhereRaw('LOWER(article_type) LIKE ?', ['%administrative%']);
+                                        }
+                                    });
                             })
+                            ->where('is_parent_article', false)
                             ->whereNotIn('id', $excludeIds)
                             ->get()
                             ->mapWithKeys(function ($article) {
@@ -44,11 +59,26 @@ class CompositeItemsRelationManager extends RelationManager
                     })
                     ->searchable()
                     ->getSearchResultsUsing(function (string $search) {
-                        return RobawsArticleCache::where(function ($query) {
+                        // Use database-agnostic case-insensitive matching
+                        $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
+                        
+                        return RobawsArticleCache::where(function ($query) use ($useIlike) {
                                 $query->where('is_surcharge', true)
-                                    ->orWhere('article_type', 'LIKE', '%SURCHARGE%')
-                                    ->orWhere('article_type', 'LIKE', '%LOCAL CHARGES%');
+                                    ->orWhere(function ($subQ) use ($useIlike) {
+                                        if ($useIlike) {
+                                            $subQ->where('article_type', 'ILIKE', '%SURCHARGE%')
+                                                ->orWhere('article_type', 'ILIKE', '%Surcharges%')
+                                                ->orWhere('article_type', 'ILIKE', '%LOCAL CHARGES%')
+                                                ->orWhere('article_type', 'ILIKE', '%Administrative%');
+                                        } else {
+                                            $subQ->whereRaw('LOWER(article_type) LIKE ?', ['%surcharge%'])
+                                                ->orWhereRaw('LOWER(article_type) LIKE ?', ['%surcharges%'])
+                                                ->orWhereRaw('LOWER(article_type) LIKE ?', ['%local charges%'])
+                                                ->orWhereRaw('LOWER(article_type) LIKE ?', ['%administrative%']);
+                                        }
+                                    });
                             })
+                            ->where('is_parent_article', false)
                             ->where(function ($query) use ($search) {
                                 $query->where('article_code', 'LIKE', "%{$search}%")
                                     ->orWhere('article_name', 'LIKE', "%{$search}%");
@@ -237,11 +267,25 @@ class CompositeItemsRelationManager extends RelationManager
                         $parent = $this->getOwnerRecord();
                         $excludeIds = $parent->children()->pluck('robaws_articles_cache.id')->toArray();
                         
+                        // Use database-agnostic case-insensitive matching
+                        $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
+                        
                         return $query
-                            ->where(function ($q) {
+                            ->where(function ($q) use ($useIlike) {
                                 $q->where('is_surcharge', true)
-                                    ->orWhere('article_type', 'LIKE', '%SURCHARGE%')
-                                    ->orWhere('article_type', 'LIKE', '%LOCAL CHARGES%');
+                                    ->orWhere(function ($subQ) use ($useIlike) {
+                                        if ($useIlike) {
+                                            $subQ->where('article_type', 'ILIKE', '%SURCHARGE%')
+                                                ->orWhere('article_type', 'ILIKE', '%Surcharges%')
+                                                ->orWhere('article_type', 'ILIKE', '%LOCAL CHARGES%')
+                                                ->orWhere('article_type', 'ILIKE', '%Administrative%');
+                                        } else {
+                                            $subQ->whereRaw('LOWER(article_type) LIKE ?', ['%surcharge%'])
+                                                ->orWhereRaw('LOWER(article_type) LIKE ?', ['%surcharges%'])
+                                                ->orWhereRaw('LOWER(article_type) LIKE ?', ['%local charges%'])
+                                                ->orWhereRaw('LOWER(article_type) LIKE ?', ['%administrative%']);
+                                        }
+                                    });
                             })
                             ->where('is_parent_article', false) // Exclude parent articles
                             ->whereNotIn('id', $excludeIds) // Exclude already attached children
@@ -255,10 +299,24 @@ class CompositeItemsRelationManager extends RelationManager
                                 $parent = $this->getOwnerRecord();
                                 $excludeIds = $parent->children()->pluck('robaws_articles_cache.id')->toArray();
                                 
-                                return RobawsArticleCache::where(function ($query) {
+                                // Use database-agnostic case-insensitive matching
+                                $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
+                                
+                                return RobawsArticleCache::where(function ($query) use ($useIlike) {
                                         $query->where('is_surcharge', true)
-                                            ->orWhere('article_type', 'LIKE', '%SURCHARGE%')
-                                            ->orWhere('article_type', 'LIKE', '%LOCAL CHARGES%');
+                                            ->orWhere(function ($subQ) use ($useIlike) {
+                                                if ($useIlike) {
+                                                    $subQ->where('article_type', 'ILIKE', '%SURCHARGE%')
+                                                        ->orWhere('article_type', 'ILIKE', '%Surcharges%')
+                                                        ->orWhere('article_type', 'ILIKE', '%LOCAL CHARGES%')
+                                                        ->orWhere('article_type', 'ILIKE', '%Administrative%');
+                                                } else {
+                                                    $subQ->whereRaw('LOWER(article_type) LIKE ?', ['%surcharge%'])
+                                                        ->orWhereRaw('LOWER(article_type) LIKE ?', ['%surcharges%'])
+                                                        ->orWhereRaw('LOWER(article_type) LIKE ?', ['%local charges%'])
+                                                        ->orWhereRaw('LOWER(article_type) LIKE ?', ['%administrative%']);
+                                                }
+                                            });
                                     })
                                     ->where('is_parent_article', false)
                                     ->whereNotIn('id', $excludeIds)
