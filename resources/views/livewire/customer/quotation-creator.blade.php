@@ -467,16 +467,34 @@
             
             <div class="space-y-3 mb-4">
                 @foreach($quotation->articles as $article)
+                    @php
+                        // Get the QuotationRequestArticle model to access methods
+                        // The pivot relationship gives us access to the pivot data, but we need the full model
+                        $articleModel = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+                            ->where('article_cache_id', $article->id)
+                            ->first();
+                        $isLmArticle = strtoupper(trim($article->pivot->unit_type ?? '')) === 'LM';
+                        $lmBreakdown = $articleModel ? $articleModel->getLmCalculationBreakdown() : null;
+                    @endphp
                     <div class="flex items-center justify-between bg-gray-50 p-4 rounded-lg border border-gray-200">
                         <div class="flex-1">
                             <p class="font-medium text-gray-900">{{ $article->sales_name ?? $article->article_name ?? $article->description ?? 'N/A' }}</p>
                             <p class="text-sm text-gray-600 mt-1">
                                 Code: {{ $article->article_code }}
-                                @if($article->pivot->quantity && $article->pivot->unit_price)
+                                @if($isLmArticle && $lmBreakdown)
+                                    <br>
+                                    <span class="text-gray-700">
+                                        {{ number_format($lmBreakdown['lm_per_item'], 2) }} LM × 
+                                        {{ $lmBreakdown['quantity'] }} qty = 
+                                        <span class="font-semibold">{{ number_format($lmBreakdown['total_lm'], 2) }} LM</span> × 
+                                        €{{ number_format($lmBreakdown['price'], 2) }} = 
+                                        <span class="font-semibold text-blue-600">€{{ number_format($lmBreakdown['subtotal'], 2) }}</span>
+                                    </span>
+                                @elseif($article->pivot->quantity && $article->pivot->unit_price)
                                     <br>
                                     Qty: {{ $article->pivot->quantity }} × 
                                     €{{ number_format($article->pivot->unit_price, 2) }} = 
-                                    <span class="font-semibold text-blue-600">€{{ number_format($article->pivot->quantity * $article->pivot->unit_price, 2) }}</span>
+                                    <span class="font-semibold text-blue-600">€{{ number_format($article->pivot->subtotal ?? ($article->pivot->quantity * $article->pivot->unit_price), 2) }}</span>
                                 @endif
                             </p>
                         </div>

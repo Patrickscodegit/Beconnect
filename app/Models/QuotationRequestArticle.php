@@ -175,6 +175,70 @@ class QuotationRequestArticle extends Model
         return $this->belongsTo(QuotationRequest::class);
     }
 
+    /**
+     * Get calculation breakdown for LM articles
+     * Returns array with: lm_per_item, quantity, total_lm, price, subtotal
+     * 
+     * @return array|null Returns null if not an LM article or no commodity items
+     */
+    public function getLmCalculationBreakdown(): ?array
+    {
+        if (strtoupper(trim($this->unit_type ?? '')) !== 'LM') {
+            return null;
+        }
+
+        $quotationRequest = $this->quotationRequest;
+        if (!$quotationRequest) {
+            return null;
+        }
+
+        // Load commodity items if not already loaded
+        if (!$quotationRequest->relationLoaded('commodityItems')) {
+            $quotationRequest->load('commodityItems');
+        }
+
+        $commodityItems = $quotationRequest->commodityItems;
+        if ($commodityItems->isEmpty()) {
+            return null;
+        }
+
+        $lmPerItem = 0;
+        $totalQuantity = 0;
+        $totalLm = 0;
+
+        foreach ($commodityItems as $item) {
+            if ($item->length_cm && $item->width_cm) {
+                // Calculate LM per item: (length_m × width_m) / 2.5
+                $lengthM = $item->length_cm / 100;
+                $widthM = $item->width_cm / 100;
+                $itemLmPerItem = ($lengthM * $widthM) / 2.5;
+                
+                $itemQuantity = $item->quantity ?? 1;
+                $itemTotalLm = $itemLmPerItem * $itemQuantity;
+                
+                // For display, use the first item's LM per item (assuming all items have same dimensions)
+                if ($lmPerItem == 0) {
+                    $lmPerItem = $itemLmPerItem;
+                }
+                
+                $totalQuantity += $itemQuantity;
+                $totalLm += $itemTotalLm;
+            }
+        }
+
+        if ($totalLm == 0) {
+            return null;
+        }
+
+        return [
+            'lm_per_item' => round($lmPerItem, 2),
+            'quantity' => $totalQuantity,
+            'total_lm' => round($totalLm, 2),
+            'price' => $this->selling_price ?? $this->unit_price ?? 0,
+            'subtotal' => $this->subtotal ?? 0,
+        ];
+    }
+
     public function articleCache(): BelongsTo
     {
         return $this->belongsTo(RobawsArticleCache::class, 'article_cache_id');
