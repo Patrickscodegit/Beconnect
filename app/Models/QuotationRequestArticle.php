@@ -54,24 +54,43 @@ class QuotationRequestArticle extends Model
                 $model->load('articleCache');
             }
             
+            $articleCache = $model->articleCache;
+            $isParentArticle = $articleCache ? $articleCache->is_parent_article : false;
+            
             \Log::info('QuotationRequestArticle saved', [
                 'id' => $model->id,
+                'quotation_request_id' => $model->quotation_request_id,
                 'item_type' => $model->item_type,
                 'article_cache_id' => $model->article_cache_id,
-                'is_parent_article' => $model->articleCache->is_parent_article ?? false,
-                'article_name' => $model->articleCache->article_name ?? 'N/A',
+                'parent_article_id' => $model->parent_article_id,
+                'has_article_cache' => $articleCache !== null,
+                'is_parent_article' => $isParentArticle,
+                'article_name' => $articleCache->article_name ?? 'N/A',
             ]);
             
             // Auto-correct item_type if article is actually a parent but was saved as standalone
             // This can happen if the article was updated to be a parent after being added to quotation
+            // Also check if article has children even if is_parent_article flag is not set
+            $hasChildren = false;
+            if ($articleCache && !$articleCache->relationLoaded('children')) {
+                $articleCache->load('children');
+            }
+            if ($articleCache) {
+                $hasChildren = $articleCache->children()->count() > 0;
+            }
+            
             if ($model->item_type !== 'parent' 
                 && $model->item_type !== 'child' 
-                && $model->articleCache 
-                && $model->articleCache->is_parent_article
+                && $articleCache 
+                && ($isParentArticle || $hasChildren)
                 && !$model->parent_article_id) {
                 \Log::info('Auto-correcting item_type from standalone to parent', [
                     'quotation_request_article_id' => $model->id,
                     'article_id' => $model->article_cache_id,
+                    'old_item_type' => $model->item_type,
+                    'new_item_type' => 'parent',
+                    'is_parent_article_flag' => $isParentArticle,
+                    'has_children' => $hasChildren,
                 ]);
                 $model->item_type = 'parent';
                 $model->save(); // This will trigger saved event again, but with correct item_type
@@ -79,14 +98,41 @@ class QuotationRequestArticle extends Model
             }
             
             // When parent article is added, automatically add children
-            if ($model->item_type === 'parent' && $model->articleCache && $model->articleCache->is_parent_article) {
-                \Log::info('Calling addChildArticles()');
+            // Check both is_parent_article flag and if article has children (fallback)
+            $hasChildren = false;
+            if ($articleCache) {
+                if (!$articleCache->relationLoaded('children')) {
+                    $articleCache->load('children');
+                }
+                $hasChildren = $articleCache->children()->count() > 0;
+            }
+            
+            $shouldAddChildren = ($model->item_type === 'parent' && $articleCache && ($isParentArticle || $hasChildren));
+            
+            \Log::info('Checking if should add child articles', [
+                'quotation_request_article_id' => $model->id,
+                'item_type' => $model->item_type,
+                'item_type_is_parent' => $model->item_type === 'parent',
+                'has_article_cache' => $articleCache !== null,
+                'is_parent_article' => $isParentArticle,
+                'has_children' => $hasChildren,
+                'should_add_children' => $shouldAddChildren,
+            ]);
+            
+            if ($shouldAddChildren) {
+                \Log::info('Calling addChildArticles()', [
+                    'quotation_request_article_id' => $model->id,
+                    'article_id' => $model->article_cache_id,
+                ]);
                 $model->addChildArticles();
             } else {
                 \Log::info('Skipping addChildArticles()', [
-                    'item_type_is_parent' => $model->item_type === 'parent',
-                    'has_article_cache' => $model->articleCache !== null,
-                    'is_parent_article' => $model->articleCache->is_parent_article ?? false,
+                    'quotation_request_article_id' => $model->id,
+                    'reason' => $model->item_type !== 'parent' ? 'item_type is not parent' : ($articleCache === null ? 'articleCache is null' : (!$isParentArticle && !$hasChildren ? 'is_parent_article is false and no children found' : 'unknown')),
+                    'item_type' => $model->item_type,
+                    'has_article_cache' => $articleCache !== null,
+                    'is_parent_article' => $isParentArticle,
+                    'has_children' => $hasChildren,
                 ]);
             }
             
