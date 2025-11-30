@@ -26,7 +26,7 @@
                     <a href="{{ route('public.schedules.index') }}" class="text-gray-700 hover:text-blue-900 transition">
                         Schedules
                     </a>
-                    <a href="{{ route('public.quotations.create') }}" class="text-gray-700 hover:text-blue-900 transition">
+                    <a href="{{ auth()->check() ? route('customer.quotations.create') : route('public.quotations.create') }}" class="text-gray-700 hover:text-blue-900 transition">
                         Request Quote
                     </a>
                     
@@ -70,7 +70,7 @@
         <div id="mobile-menu" class="hidden md:hidden border-t border-gray-200">
             <div class="px-4 py-3 space-y-3">
                 <a href="{{ route('public.schedules.index') }}" class="block text-gray-700 hover:text-blue-900">Schedules</a>
-                <a href="{{ route('public.quotations.create') }}" class="block text-gray-700 hover:text-blue-900">Request Quote</a>
+                <a href="{{ auth()->check() ? route('customer.quotations.create') : route('public.quotations.create') }}" class="block text-gray-700 hover:text-blue-900">Request Quote</a>
                 @auth
                     @if(auth()->user()->email === 'patrick@belgaco.be' || (auth()->user()->is_admin ?? false))
                         <a href="{{ url('/admin') }}" class="block text-gray-700 hover:text-blue-900 font-medium">🛠️ Admin Panel</a>
@@ -105,7 +105,7 @@
                     <a href="{{ route('public.schedules.index') }}" class="bg-white text-blue-900 px-8 py-4 rounded-lg font-semibold hover:bg-blue-50 transition shadow-lg">
                         View Schedules
                     </a>
-                    <a href="{{ route('public.quotations.create') }}" class="bg-blue-700 text-white px-8 py-4 rounded-lg font-semibold hover:bg-blue-600 transition shadow-lg">
+                    <a href="{{ auth()->check() ? route('customer.quotations.create') : route('public.quotations.create') }}" class="bg-blue-700 text-white px-8 py-4 rounded-lg font-semibold hover:bg-blue-600 transition shadow-lg">
                         Request Quote
                     </a>
                 </div>
@@ -175,7 +175,7 @@
                     <p class="text-gray-600 mb-4">
                         Get competitive quotes for your shipping needs quickly and efficiently.
                     </p>
-                    <a href="{{ route('public.quotations.create') }}" class="text-orange-600 font-semibold hover:text-orange-700 transition inline-flex items-center">
+                    <a href="{{ auth()->check() ? route('customer.quotations.create') : route('public.quotations.create') }}" class="text-orange-600 font-semibold hover:text-orange-700 transition inline-flex items-center">
                         Request Quote
                         <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
@@ -280,7 +280,7 @@
                     <h3 class="text-white text-lg font-semibold mb-4">Quick Links</h3>
                     <ul class="space-y-2 text-sm">
                         <li><a href="{{ route('public.schedules.index') }}" class="hover:text-white transition">Schedules</a></li>
-                        <li><a href="{{ route('public.quotations.create') }}" class="hover:text-white transition">Request Quote</a></li>
+                        <li><a href="{{ auth()->check() ? route('customer.quotations.create') : route('public.quotations.create') }}" class="hover:text-white transition">Request Quote</a></li>
                         @auth
                             <li><a href="{{ route('customer.dashboard') }}" class="hover:text-white transition">Dashboard</a></li>
                         @else
