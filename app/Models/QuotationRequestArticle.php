@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Services\Quotation\QuantityCalculationService;
 
 class QuotationRequestArticle extends Model
 {
@@ -44,8 +45,13 @@ class QuotationRequestArticle extends Model
                 $model->selling_price = $model->calculated_price;
             }
             
-            // Auto-calculate subtotal
-            $model->subtotal = $model->quantity * $model->selling_price;
+            // Calculate effective quantity based on unit type (LM, CBM, etc.)
+            // This uses the QuantityCalculationService to handle different calculation strategies
+            $calculationService = app(QuantityCalculationService::class);
+            $effectiveQuantity = $calculationService->calculateQuantity($model);
+            
+            // Auto-calculate subtotal using effective quantity
+            $model->subtotal = $effectiveQuantity * $model->selling_price;
         });
 
         static::saved(function ($model) {
