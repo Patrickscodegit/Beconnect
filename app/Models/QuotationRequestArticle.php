@@ -50,8 +50,15 @@ class QuotationRequestArticle extends Model
             $calculationService = app(QuantityCalculationService::class);
             $effectiveQuantity = $calculationService->calculateQuantity($model);
             
-            // Auto-calculate subtotal using effective quantity
-            $model->subtotal = $effectiveQuantity * $model->selling_price;
+            // For LM unit type: subtotal = LM × article_quantity × LM_price
+            // For other unit types: subtotal = effective_quantity × selling_price
+            if (strtoupper($model->unit_type ?? '') === 'LM') {
+                // Multiply by article quantity: LM × quantity × price
+                $model->subtotal = $effectiveQuantity * $model->quantity * $model->selling_price;
+            } else {
+                // Standard calculation: effective quantity × price
+                $model->subtotal = $effectiveQuantity * $model->selling_price;
+            }
         });
 
         static::saved(function ($model) {
