@@ -217,10 +217,12 @@ class QuotationCreator extends Component
         $this->quotationId = $quotation->id;
         
         // Load all form fields from quotation
-        $this->pol = $quotation->pol ?? '';
-        $this->pod = $quotation->pod ?? '';
-        $this->por = $quotation->por ?? '';
-        $this->fdest = $quotation->fdest ?? '';
+        // Check individual columns first, then fall back to routing JSON (for older quotations)
+        $routing = $quotation->routing ?? [];
+        $this->pol = $quotation->pol ?? $routing['pol'] ?? '';
+        $this->pod = $quotation->pod ?? $routing['pod'] ?? '';
+        $this->por = $quotation->por ?? $routing['por'] ?? '';
+        $this->fdest = $quotation->fdest ?? $routing['fdest'] ?? '';
         $this->service_type = $quotation->service_type ?? 'RORO_EXPORT';
         $this->simple_service_type = $quotation->simple_service_type ?? 'SEA_RORO';
         $this->commodity_type = $quotation->commodity_type ?? '';
@@ -248,6 +250,13 @@ class QuotationCreator extends Component
             'user_email' => $user->email,
             'status' => $quotation->status,
             'quotation_mode' => $this->quotationMode,
+            'pol' => $this->pol,
+            'pod' => $this->pod,
+            'por' => $this->por,
+            'fdest' => $this->fdest,
+            'pol_from_column' => $quotation->pol,
+            'pod_from_column' => $quotation->pod,
+            'routing_json' => $quotation->routing,
         ]);
     }
     
