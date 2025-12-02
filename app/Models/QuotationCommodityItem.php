@@ -303,6 +303,55 @@ class QuotationCommodityItem extends Model
         });
 
         static::saved(function ($item) {
+            // Sync bidirectional relationships at database level
+            // When Item A is set to "Connected to Item B", automatically set Item B to "Connected to Item A"
+            if ($item->related_item_id && in_array($item->relationship_type, ['connected_to', 'loaded_with'])) {
+                $relatedItem = static::where('id', $item->related_item_id)
+                    ->where('quotation_request_id', $item->quotation_request_id)
+                    ->first();
+                
+                if ($relatedItem) {
+                    // Check if reverse relationship is already set (to avoid infinite loops)
+                    $needsUpdate = false;
+                    if ($relatedItem->relationship_type !== $item->relationship_type || 
+                        $relatedItem->related_item_id != $item->id) {
+                        $needsUpdate = true;
+                    }
+                    
+                    if ($needsUpdate) {
+                        $relatedItem->relationship_type = $item->relationship_type;
+                        $relatedItem->related_item_id = $item->id;
+                        $relatedItem->saveQuietly(); // Use saveQuietly to avoid triggering saved event again
+                        
+                        \Log::info('QuotationCommodityItem: Synced bidirectional relationship at database level', [
+                            'item_id' => $item->id,
+                            'related_item_id' => $item->related_item_id,
+                            'relationship_type' => $item->relationship_type,
+                        ]);
+                    }
+                }
+            } elseif ($item->relationship_type === 'separate' || !$item->related_item_id) {
+                // When relationship is cleared, clear reverse relationship
+                // Find items that are related to this item
+                $itemsRelatedToThis = static::where('quotation_request_id', $item->quotation_request_id)
+                    ->where('related_item_id', $item->id)
+                    ->whereIn('relationship_type', ['connected_to', 'loaded_with'])
+                    ->get();
+                
+                foreach ($itemsRelatedToThis as $relatedItem) {
+                    // Only clear if the relationship type matches (to avoid clearing wrong relationships)
+                    // Actually, if this item is now separate, we should clear all items related to it
+                    $relatedItem->relationship_type = 'separate';
+                    $relatedItem->related_item_id = null;
+                    $relatedItem->saveQuietly();
+                    
+                    \Log::info('QuotationCommodityItem: Cleared reverse relationship at database level', [
+                        'item_id' => $item->id,
+                        'cleared_item_id' => $relatedItem->id,
+                    ]);
+                }
+            }
+            
             // When commodity item dimensions or quantity change, recalculate ALL articles
             // This ensures article prices update when commodity items change
             // For LM articles: quantity is calculated from dimensions
