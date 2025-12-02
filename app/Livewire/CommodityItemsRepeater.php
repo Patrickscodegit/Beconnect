@@ -365,22 +365,52 @@ class CommodityItemsRepeater extends Component
         // Handle relationship_type changes
         if (preg_match('/^items\.(\d+)\.relationship_type$/', $propertyName, $matches)) {
             $index = (int) $matches[1];
-            // If relationship_type is set to 'separate', clear related_item_id
-            if (($this->items[$index]['relationship_type'] ?? 'separate') === 'separate') {
+            $currentItem = $this->items[$index];
+            $newRelationshipType = $currentItem['relationship_type'] ?? 'separate';
+            
+            // If relationship_type is set to 'separate', clear related_item_id and update related item
+            if ($newRelationshipType === 'separate') {
+                $oldRelatedItemId = $currentItem['related_item_id'] ?? null;
                 $this->items[$index]['related_item_id'] = null;
+                
+                // Clear the reverse relationship on the related item
+                if ($oldRelatedItemId) {
+                    $this->clearReverseRelationship($oldRelatedItemId, $currentItem['id'] ?? null);
+                }
             }
         }
 
-        // Handle related_item_id changes - validate it's not the same item
+        // Handle related_item_id changes - validate and sync bidirectional relationship
         if (preg_match('/^items\.(\d+)\.related_item_id$/', $propertyName, $matches)) {
             $index = (int) $matches[1];
-            $relatedItemId = $this->items[$index]['related_item_id'] ?? null;
-            $currentItemId = $this->items[$index]['id'] ?? null;
+            $currentItem = $this->items[$index];
+            $relatedItemId = $currentItem['related_item_id'] ?? null;
+            $currentItemId = $currentItem['id'] ?? null;
+            $relationshipType = $currentItem['relationship_type'] ?? 'separate';
             
             // Prevent item from relating to itself
             if ($relatedItemId && $currentItemId && $relatedItemId == $currentItemId) {
                 $this->items[$index]['related_item_id'] = null;
                 session()->flash('error', 'An item cannot be related to itself.');
+                return;
+            }
+            
+            // If relationship is being set (not cleared), sync bidirectional relationship
+            if ($relatedItemId && in_array($relationshipType, ['connected_to', 'loaded_with'])) {
+                // Clear old reverse relationship if item was previously related to something else
+                $oldRelatedItemId = $this->getOriginalRelatedItemId($index);
+                if ($oldRelatedItemId && $oldRelatedItemId != $relatedItemId) {
+                    $this->clearReverseRelationship($oldRelatedItemId, $currentItemId);
+                }
+                
+                // Set reverse relationship on the related item
+                $this->setReverseRelationship($relatedItemId, $currentItemId, $relationshipType);
+            } elseif (!$relatedItemId) {
+                // Relationship is being cleared, clear reverse relationship
+                $oldRelatedItemId = $this->getOriginalRelatedItemId($index);
+                if ($oldRelatedItemId) {
+                    $this->clearReverseRelationship($oldRelatedItemId, $currentItemId);
+                }
             }
         }
 
@@ -643,6 +673,120 @@ class CommodityItemsRepeater extends Component
                 'trace' => $e->getTraceAsString()
             ]);
         }
+    }
+
+    /**
+     * Set reverse relationship on related item
+     * When Item A is set to "Connected to Item B", automatically set Item B to "Connected to Item A"
+     */
+    protected function setReverseRelationship($relatedItemId, $currentItemId, $relationshipType)
+    {
+        if (!$relatedItemId || !$currentItemId) {
+            return;
+        }
+        
+        // Find the related item in the items array
+        $relatedItemIndex = null;
+        foreach ($this->items as $idx => $item) {
+            $itemId = $item['id'] ?? null;
+            // Match by database ID or temporary ID
+            if ($itemId && (
+                (is_numeric($itemId) && is_numeric($relatedItemId) && $itemId == $relatedItemId) ||
+                ($itemId === $relatedItemId)
+            )) {
+                $relatedItemIndex = $idx;
+                break;
+            }
+        }
+        
+        if ($relatedItemIndex !== null) {
+            // Update the related item to have the reverse relationship
+            $this->items[$relatedItemIndex]['relationship_type'] = $relationshipType;
+            $this->items[$relatedItemIndex]['related_item_id'] = $currentItemId;
+            
+            // Save the related item to database if it has a database ID
+            if (isset($this->items[$relatedItemIndex]['id']) && is_numeric($this->items[$relatedItemIndex]['id']) && $this->quotationId) {
+                $this->saveItemToDatabase($relatedItemIndex, $this->items[$relatedItemIndex]);
+            }
+            
+            \Log::info('CommodityItemsRepeater: Set reverse relationship', [
+                'current_item_id' => $currentItemId,
+                'related_item_id' => $relatedItemId,
+                'relationship_type' => $relationshipType,
+                'related_item_index' => $relatedItemIndex,
+            ]);
+        }
+    }
+    
+    /**
+     * Clear reverse relationship on related item
+     * When Item A's relationship is cleared, clear Item B's relationship too
+     */
+    protected function clearReverseRelationship($relatedItemId, $currentItemId)
+    {
+        if (!$relatedItemId || !$currentItemId) {
+            return;
+        }
+        
+        // Find the related item in the items array
+        $relatedItemIndex = null;
+        foreach ($this->items as $idx => $item) {
+            $itemId = $item['id'] ?? null;
+            $itemRelatedId = $item['related_item_id'] ?? null;
+            
+            // Match by database ID or temporary ID, and check if it's related to current item
+            if ($itemId && (
+                (is_numeric($itemId) && is_numeric($relatedItemId) && $itemId == $relatedItemId) ||
+                ($itemId === $relatedItemId)
+            )) {
+                // Check if this item is related to the current item
+                if ($itemRelatedId && (
+                    (is_numeric($itemRelatedId) && is_numeric($currentItemId) && $itemRelatedId == $currentItemId) ||
+                    ($itemRelatedId === $currentItemId)
+                )) {
+                    $relatedItemIndex = $idx;
+                    break;
+                }
+            }
+        }
+        
+        if ($relatedItemIndex !== null) {
+            // Clear the reverse relationship
+            $this->items[$relatedItemIndex]['relationship_type'] = 'separate';
+            $this->items[$relatedItemIndex]['related_item_id'] = null;
+            
+            // Save the related item to database if it has a database ID
+            if (isset($this->items[$relatedItemIndex]['id']) && is_numeric($this->items[$relatedItemIndex]['id']) && $this->quotationId) {
+                $this->saveItemToDatabase($relatedItemIndex, $this->items[$relatedItemIndex]);
+            }
+            
+            \Log::info('CommodityItemsRepeater: Cleared reverse relationship', [
+                'current_item_id' => $currentItemId,
+                'related_item_id' => $relatedItemId,
+                'related_item_index' => $relatedItemIndex,
+            ]);
+        }
+    }
+    
+    /**
+     * Get the original related_item_id before the update
+     * This is used to detect when a relationship changes from one item to another
+     */
+    protected function getOriginalRelatedItemId($index)
+    {
+        // We need to track the previous value
+        // For now, we'll check the database if the item has a database ID
+        if (isset($this->items[$index]['id']) && is_numeric($this->items[$index]['id']) && $this->quotationId) {
+            $dbItem = \App\Models\QuotationCommodityItem::where('id', $this->items[$index]['id'])
+                ->where('quotation_request_id', $this->quotationId)
+                ->first();
+            
+            if ($dbItem) {
+                return $dbItem->related_item_id;
+            }
+        }
+        
+        return null;
     }
 
     /**
