@@ -83,6 +83,8 @@ class CommodityItemsRepeater extends Component
             
             $this->items[] = [
                 'id' => $tempId, // Temporary ID until commodity_type is selected
+                'relationship_type' => 'separate', // Default: separate unit
+                'related_item_id' => null,
                 'commodity_type' => '',  // This will be used for form display
                 'category' => '',
                 'make' => '',
@@ -360,6 +362,28 @@ class CommodityItemsRepeater extends Component
 
     public function updated($propertyName)
     {
+        // Handle relationship_type changes
+        if (preg_match('/^items\.(\d+)\.relationship_type$/', $propertyName, $matches)) {
+            $index = (int) $matches[1];
+            // If relationship_type is set to 'separate', clear related_item_id
+            if (($this->items[$index]['relationship_type'] ?? 'separate') === 'separate') {
+                $this->items[$index]['related_item_id'] = null;
+            }
+        }
+
+        // Handle related_item_id changes - validate it's not the same item
+        if (preg_match('/^items\.(\d+)\.related_item_id$/', $propertyName, $matches)) {
+            $index = (int) $matches[1];
+            $relatedItemId = $this->items[$index]['related_item_id'] ?? null;
+            $currentItemId = $this->items[$index]['id'] ?? null;
+            
+            // Prevent item from relating to itself
+            if ($relatedItemId && $currentItemId && $relatedItemId == $currentItemId) {
+                $this->items[$index]['related_item_id'] = null;
+                session()->flash('error', 'An item cannot be related to itself.');
+            }
+        }
+
         // Detect when length_cm or width_cm changes and recalculate LM in real-time
         if (preg_match('/^items\.(\d+)\.(length_cm|width_cm)$/', $propertyName, $matches)) {
             $index = (int) $matches[1];
@@ -471,6 +495,8 @@ class CommodityItemsRepeater extends Component
             $data = [
                 'quotation_request_id' => $this->quotationId,
                 'line_number' => $index + 1,
+                'relationship_type' => $item['relationship_type'] ?? 'separate',
+                'related_item_id' => $this->resolveRelatedItemId($item['related_item_id'] ?? null),
                 'commodity_type' => $item['commodity_type'],
                 'category' => $item['category'] ?? null,
                 'make' => $item['make'] ?? null,
@@ -545,6 +571,8 @@ class CommodityItemsRepeater extends Component
             // Prepare data for database save
             $data = [
                 'line_number' => $index + 1,
+                'relationship_type' => $item['relationship_type'] ?? 'separate',
+                'related_item_id' => $this->resolveRelatedItemId($item['related_item_id'] ?? null),
                 'commodity_type' => $item['commodity_type'] ?? null,
                 'category' => $item['category'] ?? null,
                 'make' => $item['make'] ?? null,
@@ -615,6 +643,38 @@ class CommodityItemsRepeater extends Component
                 'trace' => $e->getTraceAsString()
             ]);
         }
+    }
+
+    /**
+     * Resolve related item ID from temporary ID to database ID
+     * If related_item_id is a temporary ID (starts with 'temp_'), find the corresponding database ID
+     */
+    protected function resolveRelatedItemId($relatedItemId)
+    {
+        if (empty($relatedItemId)) {
+            return null;
+        }
+
+        // If it's already a numeric ID, return it
+        if (is_numeric($relatedItemId)) {
+            return (int) $relatedItemId;
+        }
+
+        // If it's a temporary ID, find the corresponding item in $this->items
+        if (is_string($relatedItemId) && strpos($relatedItemId, 'temp_') === 0) {
+            foreach ($this->items as $item) {
+                if (isset($item['id']) && $item['id'] === $relatedItemId) {
+                    // If this item has a database ID, return it
+                    if (isset($item['id']) && is_numeric($item['id'])) {
+                        return (int) $item['id'];
+                    }
+                    // Otherwise, the related item hasn't been saved yet, return null
+                    return null;
+                }
+            }
+        }
+
+        return null;
     }
     
     protected function getValidationRules()

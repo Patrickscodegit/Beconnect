@@ -13,6 +13,8 @@ class QuotationCommodityItem extends Model
     protected $fillable = [
         'quotation_request_id',
         'line_number',
+        'relationship_type',
+        'related_item_id',
         'commodity_type',
         'category',
         'make',
@@ -78,6 +80,67 @@ class QuotationCommodityItem extends Model
     public function quotationRequest(): BelongsTo
     {
         return $this->belongsTo(QuotationRequest::class);
+    }
+
+    /**
+     * Get the related item this item is connected to or loaded with.
+     */
+    public function relatedItem(): BelongsTo
+    {
+        return $this->belongsTo(QuotationCommodityItem::class, 'related_item_id');
+    }
+
+    /**
+     * Get items that are connected to this item.
+     */
+    public function itemsConnectedToThis(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(QuotationCommodityItem::class, 'related_item_id')
+            ->where('relationship_type', 'connected_to');
+    }
+
+    /**
+     * Get items that are loaded with this item.
+     */
+    public function itemsLoadedWithThis(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(QuotationCommodityItem::class, 'related_item_id')
+            ->where('relationship_type', 'loaded_with');
+    }
+
+    /**
+     * Check if item is standalone (separate unit).
+     */
+    public function isSeparate(): bool
+    {
+        return ($this->relationship_type ?? 'separate') === 'separate';
+    }
+
+    /**
+     * Check if item is connected to another item.
+     */
+    public function isConnected(): bool
+    {
+        return ($this->relationship_type ?? 'separate') === 'connected_to';
+    }
+
+    /**
+     * Check if item is loaded with another item.
+     */
+    public function isLoadedWith(): bool
+    {
+        return ($this->relationship_type ?? 'separate') === 'loaded_with';
+    }
+
+    /**
+     * Get the line number of the related item for display.
+     */
+    public function getRelatedItemNumber(): ?int
+    {
+        if ($this->relatedItem) {
+            return $this->relatedItem->line_number;
+        }
+        return null;
     }
 
     /**

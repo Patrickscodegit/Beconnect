@@ -48,6 +48,22 @@
                             <h4 class="text-lg font-semibold text-gray-700">
                                 <i class="fas fa-cube text-gray-500 mr-2"></i>
                                 Item #{{ $index + 1 }}
+                                @if(in_array($item['relationship_type'] ?? 'separate', ['connected_to', 'loaded_with']) && !empty($item['related_item_id'] ?? null))
+                                    @php
+                                        $relatedIndex = null;
+                                        foreach($items as $idx => $relItem) {
+                                            if(($relItem['id'] ?? null) == ($item['related_item_id'] ?? null)) {
+                                                $relatedIndex = $idx;
+                                                break;
+                                            }
+                                        }
+                                    @endphp
+                                    @if($relatedIndex !== null)
+                                        <span class="text-sm font-normal text-gray-500 ml-2">
+                                            ({{ $item['relationship_type'] === 'connected_to' ? 'Connected to' : 'Loaded with' }} Item #{{ $relatedIndex + 1 }})
+                                        </span>
+                                    @endif
+                                @endif
                             </h4>
                             <button 
                                 type="button"
@@ -58,6 +74,62 @@
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <!-- Relationship Type -->
+                            <div class="lg:col-span-3">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Relationship
+                                </label>
+                                <select 
+                                    wire:model.live="items.{{ $index }}.relationship_type"
+                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                    <option value="separate">Separate unit</option>
+                                    <option value="connected_to">Connected to</option>
+                                    <option value="loaded_with">Loaded with</option>
+                                </select>
+                            </div>
+
+                            <!-- Related Item Selector (shown when connected_to or loaded_with) -->
+                            @if(in_array($item['relationship_type'] ?? 'separate', ['connected_to', 'loaded_with']))
+                            <div class="lg:col-span-3">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    {{ $item['relationship_type'] === 'connected_to' ? 'Connected to' : 'Loaded with' }} Item #
+                                </label>
+                                <select 
+                                    wire:model.live="items.{{ $index }}.related_item_id"
+                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                    <option value="">Select Item</option>
+                                    @foreach($items as $relatedIndex => $relatedItem)
+                                        @if($relatedIndex !== $index && ($relatedItem['id'] ?? null))
+                                            @php
+                                                $itemNumber = $relatedIndex + 1;
+                                                $itemType = $relatedItem['commodity_type'] ?? 'N/A';
+                                                $itemDisplay = "Item #{$itemNumber}";
+                                                if ($itemType !== 'N/A' && $itemType !== '') {
+                                                    $itemDisplay .= " - " . ucfirst($itemType);
+                                                }
+                                                if (!empty($relatedItem['make'] ?? '')) {
+                                                    $itemDisplay .= " (" . $relatedItem['make'];
+                                                    if (!empty($relatedItem['type_model'] ?? '')) {
+                                                        $itemDisplay .= " " . $relatedItem['type_model'];
+                                                    }
+                                                    $itemDisplay .= ")";
+                                                }
+                                            @endphp
+                                            <option value="{{ $relatedItem['id'] }}">
+                                                {{ $itemDisplay }}
+                                            </option>
+                                        @endif
+                                    @endforeach
+                                </select>
+                                @if(empty($item['related_item_id']))
+                                    <p class="text-xs text-gray-500 mt-1">
+                                        <i class="fas fa-info-circle mr-1"></i>
+                                        Select an item that has been saved (has a commodity type selected).
+                                    </p>
+                                @endif
+                            </div>
+                            @endif
+
                             <!-- Commodity Type -->
                             <div class="lg:col-span-3">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">

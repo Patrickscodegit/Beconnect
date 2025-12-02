@@ -405,6 +405,22 @@ class ProspectQuotationController extends Controller
                                            ($processedItem['height_cm'] / 100);
                 }
                 
+                // Handle relationship fields
+                // Set default relationship_type if not provided
+                $processedItem['relationship_type'] = $processedItem['relationship_type'] ?? 'separate';
+                
+                // Ensure related_item_id is null if relationship_type is 'separate'
+                if ($processedItem['relationship_type'] === 'separate') {
+                    $processedItem['related_item_id'] = null;
+                }
+                
+                // Note: related_item_id should reference an item that was already created
+                // If it's a temporary ID or index, we'll need to resolve it after all items are created
+                // For now, we'll save it as-is if it's numeric, otherwise set to null
+                if (isset($processedItem['related_item_id']) && !is_numeric($processedItem['related_item_id'])) {
+                    $processedItem['related_item_id'] = null;
+                }
+                
                 $quotationRequest->commodityItems()->create($processedItem);
             }
             
