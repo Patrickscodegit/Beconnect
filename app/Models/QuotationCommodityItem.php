@@ -169,52 +169,61 @@ class QuotationCommodityItem extends Model
         });
 
         static::saved(function ($item) {
-            // When commodity item dimensions or quantity change, recalculate articles with LM unit type
+            // When commodity item dimensions or quantity change, recalculate ALL articles
             // This ensures article prices update when commodity items change
+            // For LM articles: quantity is calculated from dimensions
+            // For non-LM articles: quantity is updated to sum of all commodity item quantities
             if ($item->quotation_request_id) {
-                // Use a small delay to ensure any pending transactions are committed
-                // This helps avoid race conditions where articles might not be found immediately
+                // Use DB::afterCommit to ensure the transaction is complete before querying
                 \DB::afterCommit(function () use ($item) {
                     // Reload the relationship to ensure we have fresh data
                     $quotation = \App\Models\QuotationRequest::find($item->quotation_request_id);
                     if ($quotation) {
-                        // Recalculate all articles with unit_type "LM" for this quotation
-                        // Use case-insensitive comparison to handle "LM", "lm", "Lm" etc.
-                        $lmArticles = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotation->id)
-                            ->whereRaw('UPPER(unit_type) = ?', ['LM'])
+                        // Load commodity items to calculate total quantity
+                        $quotation->load('commodityItems');
+                        $totalCommodityQuantity = $quotation->commodityItems->sum('quantity') ?? 0;
+                        
+                        // Get ALL articles for this quotation (not just LM)
+                        $allArticles = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotation->id)
                             ->get();
                         
-                        \Log::info('QuotationCommodityItem saved - recalculating LM articles', [
+                        \Log::info('QuotationCommodityItem saved - recalculating all articles', [
                             'commodity_item_id' => $item->id,
                             'quotation_request_id' => $quotation->id,
-                            'lm_articles_count' => $lmArticles->count(),
+                            'total_articles_count' => $allArticles->count(),
                             'item_quantity' => $item->quantity,
+                            'total_commodity_quantity' => $totalCommodityQuantity,
                             'item_lm' => $item->lm,
                             'item_length' => $item->length_cm,
                             'item_width' => $item->width_cm,
                         ]);
                         
-                        if ($lmArticles->isEmpty()) {
-                            \Log::warning('No LM articles found for recalculation', [
-                                'quotation_id' => $quotation->id,
-                                'all_articles' => \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotation->id)
-                                    ->pluck('unit_type', 'id')
-                                    ->toArray(),
-                            ]);
-                        }
-                        
-                        foreach ($lmArticles as $article) {
+                        foreach ($allArticles as $article) {
                             // Reload the article to ensure we have fresh relationship data
                             $article->load('quotationRequest.commodityItems');
                             
                             $oldSubtotal = $article->subtotal;
+                            $oldQuantity = $article->quantity;
+                            $unitType = strtoupper(trim($article->unit_type ?? ''));
+                            
+                            // For non-LM articles, update quantity to sum of all commodity item quantities
+                            // For LM articles, quantity is calculated by LmQuantityCalculator from dimensions
+                            if ($unitType !== 'LM') {
+                                // Update quantity to total commodity item quantity
+                                // This ensures quantity matches the total number of commodity items
+                                $article->quantity = (int) $totalCommodityQuantity;
+                            }
                             
                             // Save the article to trigger saving event which recalculates quantity and subtotal
-                            // The saving event uses QuantityCalculationService which reads commodity items
+                            // The saving event uses QuantityCalculationService which handles LM calculations
+                            // For non-LM, it uses the updated quantity field
                             $article->save();
                             
-                            \Log::info('LM article recalculated', [
+                            \Log::info('Article recalculated', [
                                 'article_id' => $article->id,
+                                'unit_type' => $unitType,
+                                'old_quantity' => $oldQuantity,
+                                'new_quantity' => $article->quantity,
                                 'old_subtotal' => $oldSubtotal,
                                 'new_subtotal' => $article->subtotal,
                                 'effective_quantity' => app(\App\Services\Quotation\QuantityCalculationService::class)->calculateQuantity($article),

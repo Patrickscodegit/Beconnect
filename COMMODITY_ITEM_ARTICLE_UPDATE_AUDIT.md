@@ -1,347 +1,230 @@
-# Audit: Articles Not Updating When Commodity Items Change
+# Commodity Item and Article Update Audit
 
-## Problem Statement
+## Date: 2025-12-01
 
-When users change commodity items in the customer portal, the suggested articles are not updating automatically. The SmartArticleSelector component should reload when commodity items are added, removed, or their commodity_type is changed.
+## Issues Identified
 
-## Current Flow Analysis
+### Issue 1: Same Article Cannot Be Added Multiple Times
 
-### 1. Commodity Item Change Flow
+**Current Behavior:**
+- When a user adds a second car as a new commodity item, the same article (e.g., article 1301) is suggested again
+- However, when the user tries to add it, `SmartArticleSelector::selectArticle()` checks if the article is already added (line 114-117)
+- If the article exists, it returns early and prevents adding it again
+- This prevents users from adding the same article for multiple commodity items
 
-**File**: `app/Livewire/CommodityItemsRepeater.php`
+**Expected Behavior:**
+- When a new commodity item is added (e.g., second car), the same article should be addable again
+- Each commodity item should be able to have its own article line item
+- This allows proper tracking and pricing per commodity item
 
-**When commodity_type is changed:**
-- Line 317-363: `updated()` method is triggered
-- Line 350-355: If commodity_type is set and item has temp ID, creates database record
-- Line 360: If item has database ID, calls `saveItemToDatabase()`
-- Line 489-495: `saveItemToDatabase()` dispatches `commodity-item-saved` event **ONLY if commodity_type is not empty**
+**Root Cause:**
+- `SmartArticleSelector::selectArticle()` has a check: `if ($alreadyAdded) { return; }`
+- This prevents duplicate articles even when they should be allowed for different commodity items
 
-**Event Dispatch:**
-```php
-// Line 422-425: When creating new item
-$this->dispatch('commodity-item-saved', [
-    'quotation_id' => $this->quotationId
-]);
+**Files Affected:**
+- `app/Livewire/SmartArticleSelector.php` (line 114-117)
 
-// Line 489-495: When updating existing item
-if (!empty($item['commodity_type'])) {
-    $this->dispatch('commodity-item-saved', [
-        'quotation_id' => $this->quotationId
-    ]);
-}
+---
+
+### Issue 2: Quantity Changes Not Updating Article Calculations
+
+**Current Behavior:**
+- When a user increases quantity within a commodity item (e.g., from 1 to 2), the change is detected and logged
+- However, the article's calculation breakdown shows the old quantity
+- For LM articles: Only LM articles are recalculated when commodity item quantity changes (see `QuotationCommodityItem::saved` event, line 183-184)
+- For non-LM articles: The quantity shown is `$article->pivot->quantity` which is stored in `QuotationRequestArticle` and is NOT automatically updated when commodity item quantity changes
+
+**Expected Behavior:**
+- When commodity item quantity changes from 1 to 2, the linked article should:
+  1. Show "Qty: 2" in the calculation breakdown
+  2. Update the pricing accordingly (2 × unit_price = new subtotal)
+  3. Recalculate quotation totals
+
+**Root Cause:**
+- `QuotationCommodityItem::saved` event only recalculates LM articles (line 183-184)
+- Non-LM articles use `QuotationRequestArticle::quantity` which is not synced with commodity item quantity
+- The view shows `$article->pivot->quantity` which comes from `QuotationRequestArticle`, not from commodity items
+
+**Files Affected:**
+- `app/Models/QuotationCommodityItem.php` (line 171-230) - Only recalculates LM articles
+- `app/Models/QuotationRequestArticle.php` - Quantity field is not updated from commodity items
+- `resources/views/livewire/customer/quotation-creator.blade.php` (line 493-497) - Shows pivot quantity
+
+---
+
+## Log Analysis
+
+From local logs (`storage/logs/laravel.log`):
+
+```
+[2025-12-01 20:37:39] local.INFO: CommodityItemsRepeater::createItemInDatabase() created item
+  {"item_id":48,"quotation_id":68,"commodity_type":"vehicles","temp_id":"temp_692dfc8f7cb80"}
+
+[2025-12-01 20:37:39] local.INFO: Smart Match Score Calculation
+  {"quotation_id":68,"article_id":1301,...}
+  # Article 1301 is suggested again for the second commodity item
+
+[2025-12-01 20:37:54] local.INFO: CommodityItemsRepeater: quantity changed
+  {"index":0,"old_quantity":"2","new_quantity":"2","item_id":47,"quotation_id":68}
+  # Note: old_quantity shows "2" but should show previous value (likely "1")
+
+[2025-12-01 20:37:54] local.INFO: QuotationCommodityItem saved - recalculating LM articles
+  {"commodity_item_id":47,"quotation_request_id":68,"lm_articles_count":0,...}
+
+[2025-12-01 20:37:54] local.WARNING: No LM articles found for recalculation
+  {"quotation_id":68,"all_articles":{"85":"lumpsum","86":"shipm."}}
+  # Articles 85 and 86 are not LM type, so they're not recalculated
 ```
 
-### 2. Parent Component Event Handling
+**Key Observations:**
+1. Article 1301 is suggested again when second commodity item is added (correct)
+2. Quantity change is detected (correct)
+3. Only LM articles are recalculated (incorrect - should recalculate all articles)
+4. Articles 85 and 86 are "lumpsum" and "shipm." unit types, not LM, so they're not recalculated
 
-**File**: `app/Livewire/Customer/QuotationCreator.php`
+---
 
-**Listener Registration:**
-- Line 60: `'commodity-item-saved' => 'handleCommodityItemSaved'`
+## Proposed Solutions
 
-**Handler Method (Line 75-91):**
-```php
-public function handleCommodityItemSaved($data)
-{
-    // Refresh quotation to load latest commodityItems
-    if ($this->quotation) {
-        $this->quotation = $this->quotation->fresh(['commodityItems', 'selectedSchedule.carrier']);
-    }
-    
-    // Update showArticles flag (commodity item might now have commodity_type set)
-    $this->updateShowArticles();
-    
-    // Log for debugging
-    Log::info('QuotationCreator::handleCommodityItemSaved() called', [...]);
-}
-```
+### Solution 1: Allow Same Article to Be Added Multiple Times
 
-**Issue Identified:**
-- `handleCommodityItemSaved()` does **NOT** dispatch `quotationUpdated` event
-- It only calls `updateShowArticles()` which may dispatch `quotationUpdated` if `showArticles` becomes true
-- But if `showArticles` is already true, no event is dispatched
+**Option A: Remove Duplicate Check (Recommended)**
+- Remove the `alreadyAdded` check in `SmartArticleSelector::selectArticle()`
+- Allow the same article to be added multiple times
+- Each addition creates a new `QuotationRequestArticle` record
+- This allows proper tracking per commodity item
 
-### 3. SmartArticleSelector Event Listening
+**Option B: Update Existing Article Instead**
+- Keep the duplicate check but update the existing article's quantity
+- This would merge articles, which might not be desired if commodity items have different dimensions
 
-**File**: `app/Livewire/SmartArticleSelector.php`
+**Recommendation: Option A** - More flexible and allows better tracking
 
-**Listener Registration:**
-- Line 25-29: Listens for `'quotationUpdated' => 'loadSuggestions'`
+---
 
-**Load Suggestions Method (Line 46-82):**
-```php
-public function loadSuggestions()
-{
-    $this->loading = true;
-    
-    // Always refresh quotation to ensure latest data (including commodity_type and commodityItems)
-    $this->quotation = $this->quotation->fresh(['selectedSchedule.carrier', 'commodityItems']);
-    
-    try {
-        $service = app(SmartArticleSelectionService::class);
-        $suggestions = $service->getTopSuggestions(
-            $this->quotation, 
-            $this->maxArticles, 
-            $this->minMatchPercentage
-        );
-        
-        $this->suggestedArticles = $suggestions;
-        // ... rest of method
-    }
-}
-```
+### Solution 2: Recalculate All Articles When Commodity Item Quantity Changes
 
-**Issue Identified:**
-- `loadSuggestions()` refreshes quotation with `commodityItems` relationship
-- But it's only called when `quotationUpdated` event is received
-- If `quotationUpdated` is not dispatched, suggestions never reload
+**Changes Required:**
 
-### 4. updateShowArticles() Method
+1. **Update `QuotationCommodityItem::saved` event:**
+   - Currently only recalculates LM articles (line 183-184)
+   - Should recalculate ALL articles, not just LM articles
+   - For non-LM articles, update `QuotationRequestArticle::quantity` to match commodity item quantity
 
-**File**: `app/Livewire/Customer/QuotationCreator.php`
+2. **Update `QuantityCalculationService`:**
+   - For non-LM articles, the quantity should be the sum of all commodity item quantities
+   - Or, if articles are linked to specific commodity items, use that item's quantity
 
-**Method (Line 286-325):**
-```php
-protected function updateShowArticles()
-{
-    $polFilled = !empty(trim($this->pol));
-    $podFilled = !empty(trim($this->pod));
-    $scheduleSelected = $this->selected_schedule_id !== null && $this->selected_schedule_id > 0;
-    
-    // Check if commodity is selected
-    $commoditySelected = false;
-    
-    // Quick Quote mode: check simple commodity_type field
-    if (!empty($this->commodity_type)) {
-        $commoditySelected = true;
-    }
-    
-    // Detailed Quote mode: check commodityItems
-    if (!$commoditySelected && $this->quotationMode === 'detailed') {
-        if ($this->quotation) {
-            $quotation = $this->quotation->fresh(['commodityItems']);
-            if ($quotation->commodityItems && $quotation->commodityItems->count() > 0) {
-                foreach ($quotation->commodityItems as $item) {
-                    if (!empty($item->commodity_type)) {
-                        $commoditySelected = true;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    
-    $this->showArticles = $polFilled && $podFilled && $scheduleSelected && $commoditySelected;
-    
-    // Emit event to SmartArticleSelector to reload
-    if ($this->showArticles) {
-        $this->dispatch('quotationUpdated');
-    }
-}
-```
+3. **Update View:**
+   - Ensure the view shows the correct quantity from `QuotationRequestArticle`
+   - For LM articles, show the calculated LM quantity
+   - For non-LM articles, show the commodity item quantity
 
-**Issue Identified:**
-- `updateShowArticles()` only dispatches `quotationUpdated` if `showArticles` becomes `true`
-- If `showArticles` is already `true` (POL/POD/Schedule/Commodity already selected), changing commodity_type does NOT trigger reload
-- The condition `if ($this->showArticles)` is true, but the dispatch happens inside, so if `showArticles` was already true, it still dispatches... **Wait, this should work**
+**Implementation Details:**
 
-**Re-evaluation:**
-- Actually, `updateShowArticles()` DOES dispatch `quotationUpdated` when `showArticles` is true
-- But the issue might be that `handleCommodityItemSaved()` calls `updateShowArticles()` which checks if commodity is selected
-- If commodity was already selected, `showArticles` might already be true, so the dispatch should happen
+For non-LM articles, we need to determine:
+- Should quantity be the sum of all commodity item quantities?
+- Or should each commodity item have its own article line?
 
-### 5. SmartArticleSelectionService Caching
+Based on Issue 1 solution (allowing duplicate articles), each commodity item should have its own article line, so:
+- For non-LM articles: `quantity = commodity_item.quantity`
+- For LM articles: `quantity = calculated LM from all commodity items` (current behavior is correct)
 
-**File**: `app/Services/SmartArticleSelectionService.php`
-
-**Cache Key (Line 23):**
-```php
-$cacheKey = "article_suggestions_{$quotation->id}_{$quotation->updated_at->timestamp}";
-```
-
-**Issue Identified:**
-- Cache key includes `updated_at` timestamp
-- When commodity items are saved, the quotation's `updated_at` might not change if only the relationship is updated
-- This could cause stale cache to be used
-
-**Cache Usage:**
-- Line 25: `Cache::remember($cacheKey, 3600, ...)` - 1 hour cache
-- If `updated_at` doesn't change, same cache key is used
-- Stale suggestions are returned
-
-## Root Causes Identified
-
-### Primary Issue: Missing Event Dispatch
-
-**Location**: `app/Livewire/Customer/QuotationCreator.php::handleCommodityItemSaved()`
-
-**Problem**: 
-- When commodity items are saved, `handleCommodityItemSaved()` is called
-- It calls `updateShowArticles()` which should dispatch `quotationUpdated`
-- BUT: `updateShowArticles()` only dispatches if `showArticles` is true
-- If `showArticles` is already true, it should dispatch... but there might be a timing issue
-
-**Actual Issue**: 
-- `updateShowArticles()` checks if commodity is selected by querying database
-- But the database might not have the latest commodity items yet (race condition)
-- Or the quotation needs to be refreshed before checking
-
-### Secondary Issue: Cache Key Not Updating
-
-**Location**: `app/Services/SmartArticleSelectionService.php`
-
-**Problem**:
-- Cache key uses `$quotation->updated_at->timestamp`
-- When commodity items are saved, the quotation's `updated_at` might not change
-- Only the `quotation_commodity_items` table is updated, not the `quotation_requests` table
-- Same cache key = stale cache
-
-### Tertiary Issue: Quotation Not Refreshed Before Check
-
-**Location**: `app/Livewire/Customer/QuotationCreator.php::updateShowArticles()`
-
-**Problem**:
-- `updateShowArticles()` calls `$this->quotation->fresh(['commodityItems'])` inside the method
-- But it assigns to a local variable `$quotation`, not `$this->quotation`
-- Then it checks `$this->quotation->commodityItems` which might be stale
-- Actually wait, line 304: `$quotation = $this->quotation->fresh(['commodityItems']);` - this is correct
-- But then line 305: `if ($quotation->commodityItems && ...)` - uses fresh quotation, so this should be fine
-
-## Detailed Code Flow
-
-### Scenario: User Changes Commodity Type from "Cars" to "Trucks"
-
-1. **User selects "Trucks" in dropdown**
-   - `CommodityItemsRepeater::updated('items.0.commodity_type')` is called
-   - Line 350: Detects commodity_type change
-   - Line 360: Calls `saveItemToDatabase(0, item)`
-   - Line 491: Checks if `!empty($item['commodity_type'])` - **TRUE**
-   - Line 492-494: Dispatches `commodity-item-saved` event
-
-2. **QuotationCreator receives event**
-   - Line 75: `handleCommodityItemSaved($data)` is called
-   - Line 79: Refreshes quotation: `$this->quotation->fresh(['commodityItems', 'selectedSchedule.carrier'])`
-   - Line 83: Calls `updateShowArticles()`
-
-3. **updateShowArticles() executes**
-   - Line 304: Gets fresh quotation: `$quotation = $this->quotation->fresh(['commodityItems'])`
-   - Line 305-313: Checks if commodity is selected - **TRUE** (Trucks is selected)
-   - Line 319: Sets `$this->showArticles = true` (if already true, stays true)
-   - Line 322-324: **IF** `$this->showArticles` is true, dispatches `quotationUpdated`
-   - **This should work!**
-
-4. **SmartArticleSelector receives event**
-   - Line 26: Listens for `quotationUpdated`
-   - Line 46: `loadSuggestions()` is called
-   - Line 53: Refreshes quotation: `$this->quotation->fresh(['selectedSchedule.carrier', 'commodityItems'])`
-   - Line 57: Calls `SmartArticleSelectionService::getTopSuggestions()`
-
-5. **SmartArticleSelectionService calculates suggestions**
-   - Line 23: Creates cache key: `article_suggestions_{id}_{updated_at_timestamp}`
-   - **PROBLEM**: If quotation's `updated_at` didn't change, same cache key is used
-   - Line 25: Returns cached results (stale suggestions for "Cars" instead of "Trucks")
-
-## Issues Summary
-
-### Issue #1: Cache Key Not Invalidated
-**Severity**: HIGH
-**Location**: `app/Services/SmartArticleSelectionService.php:23`
-**Problem**: Cache key uses `updated_at` timestamp, but saving commodity items doesn't update quotation's `updated_at`
-**Impact**: Stale article suggestions are returned even after commodity type changes
-
-### Issue #2: Event Dispatch Timing
-**Severity**: MEDIUM  
-**Location**: `app/Livewire/Customer/QuotationCreator.php:75-91`
-**Problem**: `handleCommodityItemSaved()` might not always trigger `quotationUpdated` if `showArticles` check fails
-**Impact**: SmartArticleSelector doesn't reload when commodity changes
-
-### Issue #3: Quotation Updated_at Not Touched
-**Severity**: HIGH
-**Location**: `app/Livewire/CommodityItemsRepeater.php:479`
-**Problem**: When saving commodity items, quotation's `updated_at` is not updated
-**Impact**: Cache key doesn't change, stale cache is used
-
-## Recommended Fixes
-
-### Fix #1: Update Quotation's updated_at When Commodity Items Change
-**File**: `app/Livewire/CommodityItemsRepeater.php`
-**Location**: `saveItemToDatabase()` method (line 438)
-**Action**: After updating commodity item, touch the parent quotation:
-```php
-// After line 481 (update item)
-\App\Models\QuotationRequest::where('id', $this->quotationId)->touch();
-```
-
-### Fix #2: Always Dispatch quotationUpdated in handleCommodityItemSaved
-**File**: `app/Livewire/Customer/QuotationCreator.php`
-**Location**: `handleCommodityItemSaved()` method (line 75)
-**Action**: Always dispatch `quotationUpdated` if articles are showing:
-```php
-public function handleCommodityItemSaved($data)
-{
-    if ($this->quotation) {
-        $this->quotation = $this->quotation->fresh(['commodityItems', 'selectedSchedule.carrier']);
-    }
-    
-    $this->updateShowArticles();
-    
-    // Always dispatch if articles are showing (commodity changed, need to reload)
-    if ($this->showArticles) {
-        $this->dispatch('quotationUpdated');
-    }
-}
-```
-
-### Fix #3: Clear Cache When Commodity Changes
-**File**: `app/Services/SmartArticleSelectionService.php`
-**Location**: Add `clearCache()` method call in `SmartArticleSelector::loadSuggestions()`
-**Action**: Clear cache before loading new suggestions:
-```php
-public function loadSuggestions()
-{
-    $this->loading = true;
-    $this->quotation = $this->quotation->fresh(['selectedSchedule.carrier', 'commodityItems']);
-    
-    // Clear cache to ensure fresh suggestions
-    $service = app(SmartArticleSelectionService::class);
-    $service->clearCache($this->quotation);
-    
-    // ... rest of method
-}
-```
-
-### Fix #4: Include Commodity Items in Cache Key
-**File**: `app/Services/SmartArticleSelectionService.php`
-**Location**: `suggestParentArticles()` method (line 20)
-**Action**: Include commodity items hash in cache key:
-```php
-$commodityHash = $quotation->commodityItems
-    ->map(fn($item) => $item->commodity_type . $item->id)
-    ->sort()
-    ->implode('|');
-$cacheKey = "article_suggestions_{$quotation->id}_{$quotation->updated_at->timestamp}_{$commodityHash}";
-```
+---
 
 ## Testing Checklist
 
-After fixes are applied, test:
+### Test Case 1: Add Same Article for Multiple Commodity Items
+- [ ] Add first car as commodity item
+- [ ] Add article 1301
+- [ ] Add second car as commodity item
+- [ ] Verify article 1301 is suggested again
+- [ ] Add article 1301 again
+- [ ] Verify both article lines appear in "Selected Services"
+- [ ] Verify each has correct pricing
 
-1. ✅ Add new commodity item with commodity_type → Articles should reload
-2. ✅ Change commodity_type of existing item → Articles should reload  
-3. ✅ Remove commodity item → Articles should reload
-4. ✅ Change from "Cars" to "Trucks" → Articles should show truck-specific articles
-5. ✅ Change from "Trucks" back to "Cars" → Articles should show car-specific articles
-6. ✅ Add multiple commodity items → Articles should reflect all commodity types
-7. ✅ Remove all commodity items → Articles should hide (if commodity required)
+### Test Case 2: Update Commodity Item Quantity
+- [ ] Add commodity item with quantity = 1
+- [ ] Add article (non-LM type, e.g., "lumpsum")
+- [ ] Verify article shows "Qty: 1"
+- [ ] Change commodity item quantity to 2
+- [ ] Verify article shows "Qty: 2"
+- [ ] Verify pricing updates: 2 × unit_price = new subtotal
+- [ ] Verify quotation total updates
+
+### Test Case 3: Update LM Article Quantity
+- [ ] Add commodity item with quantity = 1, dimensions set
+- [ ] Add LM article
+- [ ] Verify LM calculation shows correct quantity
+- [ ] Change commodity item quantity to 2
+- [ ] Verify LM calculation updates: 2 × (LM per item) = new total LM
+- [ ] Verify pricing updates accordingly
+
+---
+
+## Implementation Plan
+
+### Phase 1: Allow Duplicate Articles
+1. Remove duplicate check in `SmartArticleSelector::selectArticle()`
+2. Test adding same article multiple times
+3. Verify each appears as separate line item
+
+### Phase 2: Recalculate All Articles on Quantity Change
+1. Update `QuotationCommodityItem::saved` event to recalculate ALL articles
+2. For non-LM articles, update `QuotationRequestArticle::quantity` based on commodity item quantity
+3. Ensure `QuotationRequestArticle::saving` event recalculates subtotal
+4. Test quantity changes for both LM and non-LM articles
+
+### Phase 3: View Updates
+1. Verify view correctly displays quantity for all article types
+2. Ensure calculation breakdown shows correct values
+3. Test real-time updates when quantity changes
+
+---
+
+## Questions to Clarify
+
+1. **Article-Commodity Item Relationship:**
+   - Should each commodity item have its own article line, or should articles be shared?
+   - If shared, how should quantity be calculated (sum of all items or max)?
+
+2. **Non-LM Article Quantity:**
+   - For non-LM articles, should quantity = sum of all commodity item quantities?
+   - Or should quantity = quantity of the specific commodity item it's linked to?
+
+3. **Article Removal:**
+   - If an article is added for commodity item 1, and commodity item 1 is removed, should the article be removed too?
+   - Or should articles be independent of commodity items?
+
+---
 
 ## Files to Modify
 
-1. `app/Livewire/CommodityItemsRepeater.php` - Touch quotation when items saved
-2. `app/Livewire/Customer/QuotationCreator.php` - Always dispatch event in handler
-3. `app/Livewire/SmartArticleSelector.php` - Clear cache before loading
-4. `app/Services/SmartArticleSelectionService.php` - Include commodity hash in cache key
+1. `app/Livewire/SmartArticleSelector.php`
+   - Remove or modify duplicate check (line 114-117)
 
-## Priority
+2. `app/Models/QuotationCommodityItem.php`
+   - Update `saved` event to recalculate ALL articles, not just LM (line 183-184)
+   - Add logic to update non-LM article quantities
 
-**HIGH** - This is a critical UX issue. Users expect articles to update when they change commodity types, but currently they don't, leading to confusion and incorrect article selection.
+3. `app/Models/QuotationRequestArticle.php`
+   - Ensure `saving` event properly recalculates subtotal for all unit types
 
+4. `resources/views/livewire/customer/quotation-creator.blade.php`
+   - Verify quantity display is correct for all article types
 
+---
+
+## Risk Assessment
+
+**Low Risk:**
+- Removing duplicate check might allow accidental duplicate articles
+- Mitigation: Add UI indicator showing how many times an article is added
+
+**Medium Risk:**
+- Recalculating all articles on quantity change might cause performance issues with many articles
+- Mitigation: Use database transactions and batch updates
+
+**High Risk:**
+- Changing quantity calculation logic might break existing quotations
+- Mitigation: Test thoroughly with existing data, add migration if needed

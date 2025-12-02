@@ -110,11 +110,9 @@ class SmartArticleSelector extends Component
             return; // Prevent selection on approved quotations
         }
         
-        // Check if article is already added
-        $alreadyAdded = $this->quotation->articles()->where('robaws_articles_cache.id', $articleId)->exists();
-        if ($alreadyAdded) {
-            return;
-        }
+        // Allow same article to be added multiple times
+        // This enables adding the same article for different commodity items
+        // Each addition creates a separate QuotationRequestArticle record
         
         $article = \App\Models\RobawsArticleCache::find($articleId);
         if (!$article) {
