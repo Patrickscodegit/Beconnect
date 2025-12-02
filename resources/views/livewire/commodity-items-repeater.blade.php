@@ -74,6 +74,21 @@
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <!-- Commodity Type -->
+                            <div class="lg:col-span-3">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Commodity Type <span class="text-red-500">*</span>
+                                </label>
+                                <select 
+                                    wire:model.live="items.{{ $index }}.commodity_type"
+                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                    <option value="">Select Type</option>
+                                    @foreach($commodityTypes as $key => $config)
+                                        <option value="{{ $key }}">{{ $config['name'] }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+
                             <!-- Relationship Type -->
                             <div class="lg:col-span-3">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">
@@ -129,21 +144,6 @@
                                 @endif
                             </div>
                             @endif
-
-                            <!-- Commodity Type -->
-                            <div class="lg:col-span-3">
-                                <label class="block text-sm font-medium text-gray-700 mb-2">
-                                    Commodity Type <span class="text-red-500">*</span>
-                                </label>
-                                <select 
-                                    wire:model.live="items.{{ $index }}.commodity_type"
-                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                                    <option value="">Select Type</option>
-                                    @foreach($commodityTypes as $key => $config)
-                                        <option value="{{ $key }}">{{ $config['name'] }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
 
                             @if($item['commodity_type'])
                                 @include('livewire.commodity-forms.' . $item['commodity_type'], ['index' => $index, 'item' => $item])
