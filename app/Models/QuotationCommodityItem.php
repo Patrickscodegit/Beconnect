@@ -145,6 +145,77 @@ class QuotationCommodityItem extends Model
     }
 
     /**
+     * Find commodity items that match an article's commodity type
+     * 
+     * @param \Illuminate\Support\Collection $commodityItems
+     * @param string $articleCommodityType The article's commodity type (e.g., "CAR", "SMALL VAN")
+     * @return \Illuminate\Support\Collection Matching commodity items
+     */
+    public static function findMatchingCommodityItems($commodityItems, string $articleCommodityType): \Illuminate\Support\Collection
+    {
+        $articleCommodityTypeUpper = strtoupper(trim($articleCommodityType));
+        
+        return $commodityItems->filter(function ($item) use ($articleCommodityTypeUpper) {
+            // Normalize commodity item to Robaws article types
+            $mappedTypes = static::normalizeCommodityTypes($item);
+            
+            // Check if article's commodity type matches any mapped type
+            return in_array($articleCommodityTypeUpper, array_map('strtoupper', $mappedTypes));
+        });
+    }
+
+    /**
+     * Normalize commodity types from commodity item to Robaws article types
+     * Reuses logic from SmartArticleSelectionService
+     * 
+     * @param mixed $commodityItem
+     * @return array<string> Array of Robaws commodity type strings
+     */
+    public static function normalizeCommodityTypes($commodityItem): array
+    {
+        if (!$commodityItem) {
+            return [];
+        }
+
+        $type = $commodityItem->commodity_type ?? null;
+
+        // Map internal commodity types to Robaws article types
+        $typeMapping = [
+            'vehicles' => static::getVehicleCategoryMappings($commodityItem),
+            'machinery' => ['Machinery'],
+            'boat' => ['Boat'],
+            'general_cargo' => ['General Cargo'],
+        ];
+
+        return $typeMapping[$type] ?? [];
+    }
+
+    /**
+     * Get specific vehicle category mappings to Robaws article types
+     * 
+     * @param mixed $commodityItem
+     * @return array<string> Array of Robaws commodity type strings
+     */
+    public static function getVehicleCategoryMappings($commodityItem): array
+    {
+        $category = $commodityItem->category ?? $commodityItem->vehicle_category ?? null;
+
+        // Map vehicle categories to Robaws types
+        $vehicleMapping = [
+            'car' => ['CAR'],
+            'suv' => ['SUV'],
+            'small_van' => ['SMALL VAN'],
+            'big_van' => ['BIG VAN', 'LM CARGO'],
+            'truck' => ['TRUCK', 'HH', 'LM CARGO'],
+            'truckhead' => ['TRUCKHEAD', 'HH', 'LM CARGO'],
+            'bus' => ['BUS', 'HH', 'LM CARGO'],
+            'motorcycle' => ['MOTORCYCLE'],
+        ];
+
+        return $vehicleMapping[$category] ?? ['CAR'];
+    }
+
+    /**
      * Boot method to auto-calculate CBM before saving
      */
     protected static function boot()
@@ -172,19 +243,20 @@ class QuotationCommodityItem extends Model
             // When commodity item dimensions or quantity change, recalculate ALL articles
             // This ensures article prices update when commodity items change
             // For LM articles: quantity is calculated from dimensions
-            // For non-LM articles: quantity is updated to sum of all commodity item quantities
+            // For non-LM articles: quantity is updated based on matching commodity items only
             if ($item->quotation_request_id) {
                 // Use DB::afterCommit to ensure the transaction is complete before querying
                 \DB::afterCommit(function () use ($item) {
                     // Reload the relationship to ensure we have fresh data
                     $quotation = \App\Models\QuotationRequest::find($item->quotation_request_id);
                     if ($quotation) {
-                        // Load commodity items to calculate total quantity
+                        // Load commodity items to calculate quantities
                         $quotation->load('commodityItems');
                         $totalCommodityQuantity = $quotation->commodityItems->sum('quantity') ?? 0;
                         
                         // Get ALL articles for this quotation (not just LM)
                         $allArticles = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+                            ->with('articleCache')
                             ->get();
                         
                         \Log::info('QuotationCommodityItem saved - recalculating all articles', [
@@ -200,18 +272,61 @@ class QuotationCommodityItem extends Model
                         
                         foreach ($allArticles as $article) {
                             // Reload the article to ensure we have fresh relationship data
-                            $article->load('quotationRequest.commodityItems');
+                            $article->load('quotationRequest.commodityItems', 'articleCache');
                             
                             $oldSubtotal = $article->subtotal;
                             $oldQuantity = $article->quantity;
                             $unitType = strtoupper(trim($article->unit_type ?? ''));
                             
-                            // For non-LM articles, update quantity to sum of all commodity item quantities
                             // For LM articles, quantity is calculated by LmQuantityCalculator from dimensions
+                            // For non-LM articles, calculate quantity based on matching commodity items
                             if ($unitType !== 'LM') {
-                                // Update quantity to total commodity item quantity
-                                // This ensures quantity matches the total number of commodity items
-                                $article->quantity = (int) $totalCommodityQuantity;
+                                // Get article's commodity type from articleCache
+                                $articleCommodityType = $article->articleCache->commodity_type ?? null;
+                                
+                                if ($articleCommodityType) {
+                                    // Find matching commodity items based on commodity type
+                                    $matchingItems = static::findMatchingCommodityItems(
+                                        $quotation->commodityItems,
+                                        $articleCommodityType
+                                    );
+                                    
+                                    // Sum quantities of matching items only
+                                    $matchingQuantity = $matchingItems->sum('quantity') ?? 0;
+                                    $article->quantity = (int) $matchingQuantity;
+                                    
+                                    \Log::debug('Article quantity calculated from matching commodity items', [
+                                        'article_id' => $article->id,
+                                        'article_commodity_type' => $articleCommodityType,
+                                        'matching_items_count' => $matchingItems->count(),
+                                        'matching_quantity' => $matchingQuantity,
+                                    ]);
+                                } else {
+                                    // Fallback: For articles without commodity_type (e.g., surcharges),
+                                    // use sum of all commodity items
+                                    // For child articles, use parent's quantity if available
+                                    if ($article->parent_article_id) {
+                                        // Child article: use parent's quantity
+                                        $parentArticle = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+                                            ->where('article_cache_id', $article->parent_article_id)
+                                            ->first();
+                                        
+                                        if ($parentArticle) {
+                                            $article->quantity = $parentArticle->quantity;
+                                        } else {
+                                            $article->quantity = (int) $totalCommodityQuantity;
+                                        }
+                                    } else {
+                                        // Article without commodity type: sum all items
+                                        $article->quantity = (int) $totalCommodityQuantity;
+                                    }
+                                    
+                                    \Log::debug('Article quantity calculated from all items (no commodity type)', [
+                                        'article_id' => $article->id,
+                                        'quantity' => $article->quantity,
+                                        'is_child' => $article->parent_article_id !== null,
+                                    ]);
+                                }
                             }
                             
                             // Save the article to trigger saving event which recalculates quantity and subtotal
