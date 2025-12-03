@@ -83,6 +83,8 @@
                                 </select>
                             </div>
 
+                            <!-- Relationship Section (only shown when there are 2+ items) -->
+                            @if(count($items) > 1)
                             <!-- Relationship Type -->
                             <div class="lg:col-span-3">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">
@@ -137,6 +139,7 @@
                                     </p>
                                 @endif
                             </div>
+                            @endif
                             @endif
 
                             @if($item['commodity_type'])
