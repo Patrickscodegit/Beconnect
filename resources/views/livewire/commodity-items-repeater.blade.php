@@ -24,17 +24,11 @@
 
     <!-- Commodity Items -->
     <div class="border-2 border-dashed border-blue-300 rounded-lg p-6 bg-blue-50">
-        <div class="flex justify-between items-center mb-4">
+        <div class="mb-4">
             <h3 class="text-lg font-semibold text-gray-900">
                 <i class="fas fa-list-ul text-blue-600 mr-2"></i>
                 Commodity Items ({{ count($items) }})
             </h3>
-            <button 
-                type="button"
-                wire:click="addItem" 
-                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-                <i class="fas fa-plus mr-2"></i>Add Item
-            </button>
         </div>
 
         @if(count($items) > 0)
@@ -151,6 +145,16 @@
                         </div>
                     </div>
                 @endforeach
+            </div>
+            
+            <!-- Add Item Button at Bottom -->
+            <div class="mt-6 flex justify-center">
+                <button 
+                    type="button"
+                    wire:click="addItem" 
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">
+                    <i class="fas fa-plus mr-2"></i>Add Item
+                </button>
             </div>
         @else
             <div class="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-300">
