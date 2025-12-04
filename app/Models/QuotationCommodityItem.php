@@ -556,6 +556,10 @@ class QuotationCommodityItem extends Model
                             $oldQuantity = $article->quantity;
                             $unitType = strtoupper(trim($article->unit_type ?? ''));
                             
+                            // Check if this is a unit-count-based article (e.g., "Chassis nr")
+                            // These articles use stack_unit_count instead of stack count
+                            $isUnitCountBased = $unitType === 'CHASSIS NR';
+                            
                             // For LM articles, quantity is calculated by LmQuantityCalculator from dimensions
                             // For non-LM articles, calculate quantity based on matching commodity items
                             if ($unitType !== 'LM') {
@@ -569,57 +573,110 @@ class QuotationCommodityItem extends Model
                                         $articleCommodityType
                                     );
                                     
-                                    // Group matching items by stack and count stacks
-                                    $stacks = [];
-                                    $processed = [];
-                                    
-                                    foreach ($matchingItems as $item) {
-                                        if (in_array($item->id, $processed)) {
-                                            continue;
+                                    if ($isUnitCountBased) {
+                                        // For unit-count-based articles (e.g., "Chassis nr"), sum stack_unit_count
+                                        $totalUnitCount = 0;
+                                        $processed = [];
+                                        
+                                        foreach ($matchingItems as $item) {
+                                            if (in_array($item->id, $processed)) {
+                                                continue;
+                                            }
+                                            
+                                            // Check if item is in a stack
+                                            if ($item->isInStack()) {
+                                                $baseId = $item->getStackGroup();
+                                                if (!in_array($baseId, $processed)) {
+                                                    $baseItem = static::find($baseId);
+                                                    if ($baseItem) {
+                                                        $stackMembers = $baseItem->getStackMembers();
+                                                        // Check if any member of this stack matches the article type
+                                                        $hasMatchingMember = false;
+                                                        foreach ($stackMembers as $member) {
+                                                            $memberTypes = static::normalizeCommodityTypes($member);
+                                                            if (in_array(strtoupper($articleCommodityType), array_map('strtoupper', $memberTypes))) {
+                                                                $hasMatchingMember = true;
+                                                                break;
+                                                            }
+                                                        }
+                                                        if ($hasMatchingMember) {
+                                                            // Use stack_unit_count if available, otherwise calculate it
+                                                            $stackUnitCount = $baseItem->stack_unit_count ?? $baseItem->getStackUnitCount() ?? 0;
+                                                            $totalUnitCount += $stackUnitCount;
+                                                            foreach ($stackMembers as $member) {
+                                                                $processed[] = $member->id;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            } else {
+                                                // Separate item (not in stack) - use its quantity
+                                                $totalUnitCount += $item->quantity ?? 1;
+                                                $processed[] = $item->id;
+                                            }
                                         }
                                         
-                                        // Check if item is in a stack
-                                        if ($item->isInStack()) {
-                                            $baseId = $item->getStackGroup();
-                                            if (!isset($stacks[$baseId])) {
-                                                $stackMembers = $item->getStackMembers();
-                                                // Check if any member of this stack matches the article type
-                                                $hasMatchingMember = false;
-                                                foreach ($stackMembers as $member) {
-                                                    $memberTypes = static::normalizeCommodityTypes($member);
-                                                    if (in_array(strtoupper($articleCommodityType), array_map('strtoupper', $memberTypes))) {
-                                                        $hasMatchingMember = true;
-                                                        break;
-                                                    }
-                                                }
-                                                if ($hasMatchingMember) {
-                                                    $stacks[$baseId] = true;
-                                                    foreach ($stackMembers as $member) {
-                                                        $processed[] = $member->id;
-                                                    }
-                                                }
+                                        $article->quantity = (int) $totalUnitCount;
+                                        
+                                        \Log::debug('Article quantity calculated from stack unit count (unit-count-based)', [
+                                            'article_id' => $article->id,
+                                            'article_commodity_type' => $articleCommodityType,
+                                            'unit_type' => $article->unit_type,
+                                            'matching_items_count' => $matchingItems->count(),
+                                            'total_unit_count' => $totalUnitCount,
+                                        ]);
+                                    } else {
+                                        // For regular articles, count stacks (each stack = quantity 1)
+                                        $stacks = [];
+                                        $processed = [];
+                                        
+                                        foreach ($matchingItems as $item) {
+                                            if (in_array($item->id, $processed)) {
+                                                continue;
                                             }
-                                        } else {
-                                            // Separate item (not in stack) counts as 1
-                                            $stacks['separate_' . $item->id] = true;
-                                            $processed[] = $item->id;
+                                            
+                                            // Check if item is in a stack
+                                            if ($item->isInStack()) {
+                                                $baseId = $item->getStackGroup();
+                                                if (!isset($stacks[$baseId])) {
+                                                    $stackMembers = $item->getStackMembers();
+                                                    // Check if any member of this stack matches the article type
+                                                    $hasMatchingMember = false;
+                                                    foreach ($stackMembers as $member) {
+                                                        $memberTypes = static::normalizeCommodityTypes($member);
+                                                        if (in_array(strtoupper($articleCommodityType), array_map('strtoupper', $memberTypes))) {
+                                                            $hasMatchingMember = true;
+                                                            break;
+                                                        }
+                                                    }
+                                                    if ($hasMatchingMember) {
+                                                        $stacks[$baseId] = true;
+                                                        foreach ($stackMembers as $member) {
+                                                            $processed[] = $member->id;
+                                                        }
+                                                    }
+                                                }
+                                            } else {
+                                                // Separate item (not in stack) counts as 1
+                                                $stacks['separate_' . $item->id] = true;
+                                                $processed[] = $item->id;
+                                            }
                                         }
+                                        
+                                        // Count stacks (each stack = quantity 1)
+                                        $stackCount = count($stacks);
+                                        $article->quantity = (int) $stackCount;
+                                        
+                                        \Log::debug('Article quantity calculated from stacks', [
+                                            'article_id' => $article->id,
+                                            'article_commodity_type' => $articleCommodityType,
+                                            'matching_items_count' => $matchingItems->count(),
+                                            'stack_count' => $stackCount,
+                                            'old_method_quantity' => $matchingItems->sum('quantity'),
+                                        ]);
                                     }
-                                    
-                                    // Count stacks (each stack = quantity 1)
-                                    $stackCount = count($stacks);
-                                    $article->quantity = (int) $stackCount;
-                                    
-                                    \Log::debug('Article quantity calculated from stacks', [
-                                        'article_id' => $article->id,
-                                        'article_commodity_type' => $articleCommodityType,
-                                        'matching_items_count' => $matchingItems->count(),
-                                        'stack_count' => $stackCount,
-                                        'old_method_quantity' => $matchingItems->sum('quantity'),
-                                    ]);
                                 } else {
                                     // Fallback: For articles without commodity_type (e.g., surcharges),
-                                    // use sum of all commodity items
                                     // For child articles, use parent's quantity if available
                                     if ($article->parent_article_id) {
                                         // Child article: use parent's quantity
@@ -630,17 +687,64 @@ class QuotationCommodityItem extends Model
                                         if ($parentArticle) {
                                             $article->quantity = $parentArticle->quantity;
                                         } else {
-                                            $article->quantity = (int) $totalCommodityQuantity;
+                                            // If unit-count-based, sum stack_unit_count; otherwise sum all items
+                                            if ($isUnitCountBased) {
+                                                $totalUnitCount = 0;
+                                                foreach ($quotation->commodityItems as $item) {
+                                                    if ($item->isInStack() && $item->isStackBase()) {
+                                                        $totalUnitCount += $item->stack_unit_count ?? $item->getStackUnitCount() ?? 0;
+                                                    } else if ($item->isSeparate()) {
+                                                        $totalUnitCount += $item->quantity ?? 1;
+                                                    }
+                                                }
+                                                $article->quantity = (int) $totalUnitCount;
+                                            } else {
+                                                $article->quantity = (int) $totalCommodityQuantity;
+                                            }
                                         }
                                     } else {
-                                        // Article without commodity type: sum all items
-                                        $article->quantity = (int) $totalCommodityQuantity;
+                                        // Article without commodity type
+                                        if ($isUnitCountBased) {
+                                            // Sum stack_unit_count for all stacks + individual item quantities
+                                            $totalUnitCount = 0;
+                                            $processed = [];
+                                            
+                                            foreach ($quotation->commodityItems as $item) {
+                                                if (in_array($item->id, $processed)) {
+                                                    continue;
+                                                }
+                                                
+                                                if ($item->isInStack()) {
+                                                    $baseId = $item->getStackGroup();
+                                                    if (!in_array($baseId, $processed)) {
+                                                        $baseItem = static::find($baseId);
+                                                        if ($baseItem) {
+                                                            $stackUnitCount = $baseItem->stack_unit_count ?? $baseItem->getStackUnitCount() ?? 0;
+                                                            $totalUnitCount += $stackUnitCount;
+                                                            $stackMembers = $baseItem->getStackMembers();
+                                                            foreach ($stackMembers as $member) {
+                                                                $processed[] = $member->id;
+                                                            }
+                                                        }
+                                                    }
+                                                } else {
+                                                    $totalUnitCount += $item->quantity ?? 1;
+                                                    $processed[] = $item->id;
+                                                }
+                                            }
+                                            $article->quantity = (int) $totalUnitCount;
+                                        } else {
+                                            // Sum all items (regular behavior)
+                                            $article->quantity = (int) $totalCommodityQuantity;
+                                        }
                                     }
                                     
                                     \Log::debug('Article quantity calculated from all items (no commodity type)', [
                                         'article_id' => $article->id,
                                         'quantity' => $article->quantity,
                                         'is_child' => $article->parent_article_id !== null,
+                                        'is_unit_count_based' => $isUnitCountBased,
+                                        'unit_type' => $article->unit_type,
                                     ]);
                                 }
                             }
