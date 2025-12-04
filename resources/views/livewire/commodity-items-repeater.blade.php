@@ -108,13 +108,11 @@
                                 </h4>
                                 
                                 @php
-                                    // Show inline buttons only if:
-                                    // 1. Item has a real ID (not a temp ID) - meaning it's been saved
-                                    // 2. There are multiple items (can't have relationships with just 1 item)
+                                    // Show inline buttons if item has a real ID (not a temp ID) - meaning it's been saved
+                                    // Buttons are visible from the first item so users can add related items
                                     $hasRealId = isset($item['id']) && !empty($item['id']) && !str_starts_with($item['id'], 'temp_');
-                                    $canHaveRelationships = count($items) > 1 && $hasRealId;
                                 @endphp
-                                @if($canHaveRelationships)
+                                @if($hasRealId)
                                     <div class="flex gap-2 ml-4">
                                         <button 
                                             type="button"
