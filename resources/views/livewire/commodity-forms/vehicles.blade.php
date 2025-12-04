@@ -210,6 +210,8 @@
                 class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
                 placeholder="Additional information..."></textarea>
         </div>
+
+        @include('livewire.commodity-forms._stack-dimensions', ['index' => $index, 'item' => $item, 'unitSystem' => $unitSystem])
         @endif
     </div>
 </div>

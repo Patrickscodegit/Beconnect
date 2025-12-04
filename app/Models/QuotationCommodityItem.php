@@ -46,6 +46,13 @@ class QuotationCommodityItem extends Model
         'extra_info',
         'attachments',
         'input_unit_system',
+        'stack_length_cm',
+        'stack_width_cm',
+        'stack_height_cm',
+        'stack_weight_kg',
+        'stack_cbm',
+        'stack_lm',
+        'stack_unit_count',
     ];
 
     protected $casts = [
@@ -72,6 +79,13 @@ class QuotationCommodityItem extends Model
         'is_unpacked' => 'boolean',
         'is_ispm15' => 'boolean',
         'attachments' => 'array',
+        'stack_length_cm' => 'decimal:2',
+        'stack_width_cm' => 'decimal:2',
+        'stack_height_cm' => 'decimal:2',
+        'stack_weight_kg' => 'decimal:2',
+        'stack_cbm' => 'decimal:4',
+        'stack_lm' => 'decimal:4',
+        'stack_unit_count' => 'integer',
     ];
 
     /**
@@ -141,6 +155,143 @@ class QuotationCommodityItem extends Model
             return $this->relatedItem->line_number;
         }
         return null;
+    }
+
+    /**
+     * Stack Identification and Management Methods
+     */
+
+    /**
+     * Get the base item ID for this item's stack.
+     * Returns this item's ID if it's a base, or the base item's ID if it's in a stack.
+     */
+    public function getStackGroup(): ?int
+    {
+        // If this item is separate or is a base (others point to it), it's the base
+        if ($this->isSeparate() || $this->isStackBase()) {
+            return $this->id;
+        }
+        
+        // If this item is loaded_with or connected_to another, find the base
+        if ($this->related_item_id) {
+            $baseItem = static::find($this->related_item_id);
+            if ($baseItem) {
+                // Recursively find the base (in case of chains)
+                return $baseItem->getStackGroup();
+            }
+        }
+        
+        return $this->id; // Fallback: this item is the base
+    }
+
+    /**
+     * Get all items in the same stack (base + all items pointing to it).
+     */
+    public function getStackMembers(): \Illuminate\Support\Collection
+    {
+        $baseId = $this->getStackGroup();
+        
+        // Get base item
+        $baseItem = static::find($baseId);
+        if (!$baseItem) {
+            return collect([$this]);
+        }
+        
+        // Get all items that point to this base
+        $stackedItems = static::where('quotation_request_id', $this->quotation_request_id)
+            ->where(function ($query) use ($baseId) {
+                $query->where('id', $baseId)
+                    ->orWhere(function ($q) use ($baseId) {
+                        $q->where('related_item_id', $baseId)
+                            ->whereIn('relationship_type', ['loaded_with', 'connected_to']);
+                    });
+            })
+            ->get();
+        
+        return $stackedItems;
+    }
+
+    /**
+     * Check if this item is the base of a stack (others point to it).
+     */
+    public function isStackBase(): bool
+    {
+        return static::where('quotation_request_id', $this->quotation_request_id)
+            ->where('related_item_id', $this->id)
+            ->whereIn('relationship_type', ['loaded_with', 'connected_to'])
+            ->exists();
+    }
+
+    /**
+     * Check if this item is part of any stack.
+     */
+    public function isInStack(): bool
+    {
+        return $this->isLoadedWith() || $this->isConnected() || $this->isStackBase();
+    }
+
+    /**
+     * Get all stacks for a quotation request.
+     * Returns array of collections, each collection is a stack.
+     */
+    public static function getAllStacks(int $quotationRequestId): array
+    {
+        $allItems = static::where('quotation_request_id', $quotationRequestId)->get();
+        $stacks = [];
+        $processed = [];
+        
+        foreach ($allItems as $item) {
+            if (in_array($item->id, $processed)) {
+                continue;
+            }
+            
+            $baseId = $item->getStackGroup();
+            if (!isset($stacks[$baseId])) {
+                $stackMembers = $item->getStackMembers();
+                $stacks[$baseId] = $stackMembers;
+                foreach ($stackMembers as $member) {
+                    $processed[] = $member->id;
+                }
+            }
+        }
+        
+        return array_values($stacks);
+    }
+
+    /**
+     * Calculate stack CBM from stack dimensions.
+     */
+    public function calculateStackCbm(): float
+    {
+        if ($this->stack_length_cm && $this->stack_width_cm && $this->stack_height_cm) {
+            return ($this->stack_length_cm * $this->stack_width_cm * $this->stack_height_cm) / 1000000;
+        }
+        return 0;
+    }
+
+    /**
+     * Calculate stack LM from stack dimensions.
+     * Formula: (stack_length_m × max(stack_width_m, 2.5)) / 2.5
+     */
+    public function calculateStackLm(): float
+    {
+        if ($this->stack_length_cm && $this->stack_width_cm) {
+            $lengthM = $this->stack_length_cm / 100;
+            $widthCm = max($this->stack_width_cm, 250); // Minimum width of 250 cm
+            $widthM = $widthCm / 100;
+            return ($lengthM * $widthM) / 2.5;
+        }
+        return 0;
+    }
+
+    /**
+     * Get total number of units in this stack.
+     * Counts base item quantity + sum of all stacked items' quantities.
+     */
+    public function getStackUnitCount(): int
+    {
+        $stackMembers = $this->getStackMembers();
+        return $stackMembers->sum('quantity') ?? 0;
     }
 
     /**
@@ -296,6 +447,21 @@ class QuotationCommodityItem extends Model
                 $item->lm = $item->calculateLm();
             }
 
+            // Auto-calculate stack CBM if stack dimensions are present
+            if ($item->stack_length_cm && $item->stack_width_cm && $item->stack_height_cm) {
+                $item->stack_cbm = $item->calculateStackCbm();
+            }
+
+            // Auto-calculate stack LM if stack length and width are present
+            if ($item->stack_length_cm && $item->stack_width_cm) {
+                $item->stack_lm = $item->calculateStackLm();
+            }
+
+            // Auto-calculate stack unit count if item is a stack base
+            if ($item->isStackBase()) {
+                $item->stack_unit_count = $item->getStackUnitCount();
+            }
+
             // Auto-calculate line total if unit price is set
             if ($item->unit_price) {
                 $item->line_total = $item->calculateLineTotal();
@@ -403,15 +569,53 @@ class QuotationCommodityItem extends Model
                                         $articleCommodityType
                                     );
                                     
-                                    // Sum quantities of matching items only
-                                    $matchingQuantity = $matchingItems->sum('quantity') ?? 0;
-                                    $article->quantity = (int) $matchingQuantity;
+                                    // Group matching items by stack and count stacks
+                                    $stacks = [];
+                                    $processed = [];
                                     
-                                    \Log::debug('Article quantity calculated from matching commodity items', [
+                                    foreach ($matchingItems as $item) {
+                                        if (in_array($item->id, $processed)) {
+                                            continue;
+                                        }
+                                        
+                                        // Check if item is in a stack
+                                        if ($item->isInStack()) {
+                                            $baseId = $item->getStackGroup();
+                                            if (!isset($stacks[$baseId])) {
+                                                $stackMembers = $item->getStackMembers();
+                                                // Check if any member of this stack matches the article type
+                                                $hasMatchingMember = false;
+                                                foreach ($stackMembers as $member) {
+                                                    $memberTypes = static::normalizeCommodityTypes($member);
+                                                    if (in_array(strtoupper($articleCommodityType), array_map('strtoupper', $memberTypes))) {
+                                                        $hasMatchingMember = true;
+                                                        break;
+                                                    }
+                                                }
+                                                if ($hasMatchingMember) {
+                                                    $stacks[$baseId] = true;
+                                                    foreach ($stackMembers as $member) {
+                                                        $processed[] = $member->id;
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            // Separate item (not in stack) counts as 1
+                                            $stacks['separate_' . $item->id] = true;
+                                            $processed[] = $item->id;
+                                        }
+                                    }
+                                    
+                                    // Count stacks (each stack = quantity 1)
+                                    $stackCount = count($stacks);
+                                    $article->quantity = (int) $stackCount;
+                                    
+                                    \Log::debug('Article quantity calculated from stacks', [
                                         'article_id' => $article->id,
                                         'article_commodity_type' => $articleCommodityType,
                                         'matching_items_count' => $matchingItems->count(),
-                                        'matching_quantity' => $matchingQuantity,
+                                        'stack_count' => $stackCount,
+                                        'old_method_quantity' => $matchingItems->sum('quantity'),
                                     ]);
                                 } else {
                                     // Fallback: For articles without commodity_type (e.g., surcharges),

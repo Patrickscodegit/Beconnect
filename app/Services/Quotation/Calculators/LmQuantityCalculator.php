@@ -44,12 +44,35 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
         }
         
         $totalLm = 0;
+        $processedStacks = [];
         
         foreach ($commodityItems as $item) {
-            if ($item->length_cm && $item->width_cm) {
-                // Convert cm to meters and calculate LM per item: (length_m × width_m) / 2.5
-                // Width has a minimum of 250 cm (2.5m) for LM calculations
-                // Equivalent to: (length_cm × max(width_cm, 250)) / 25,000
+            // Skip if this item is part of a stack we've already processed
+            if ($item->isInStack() && !$item->isStackBase()) {
+                continue; // Only process stack bases
+            }
+            
+            // Check if item is in a stack with stack dimensions
+            if ($item->isStackBase() && $item->stack_length_cm && $item->stack_width_cm) {
+                // Use stack dimensions
+                $baseId = $item->getStackGroup();
+                if (in_array($baseId, $processedStacks)) {
+                    continue; // Already processed this stack
+                }
+                $processedStacks[] = $baseId;
+                
+                $lengthM = $item->stack_length_cm / 100;
+                $widthCm = max($item->stack_width_cm, 250); // Minimum width of 250 cm
+                $widthM = $widthCm / 100;
+                $lmPerStack = ($lengthM * $widthM) / 2.5;
+                
+                // Multiply by stack unit count (number of units in the stack)
+                $stackUnitCount = $item->stack_unit_count ?? $item->getStackUnitCount() ?? 1;
+                $lmForStack = $lmPerStack * $stackUnitCount;
+                
+                $totalLm += $lmForStack;
+            } elseif ($item->length_cm && $item->width_cm) {
+                // Use individual item dimensions
                 $lengthM = $item->length_cm / 100;
                 $widthCm = max($item->width_cm, 250); // Minimum width of 250 cm
                 $widthM = $widthCm / 100;

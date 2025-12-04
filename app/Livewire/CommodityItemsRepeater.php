@@ -98,6 +98,13 @@ class CommodityItemsRepeater extends Component
                 'cbm' => '',
                 'lm' => '',
                 'weight_kg' => '',
+                'stack_length_cm' => '',
+                'stack_width_cm' => '',
+                'stack_height_cm' => '',
+                'stack_weight_kg' => '',
+                'stack_cbm' => '',
+                'stack_lm' => '',
+                'stack_unit_count' => 0,
                 'bruto_weight_kg' => '',
                 'netto_weight_kg' => '',
                 'wheelbase_cm' => '',
@@ -253,6 +260,120 @@ class CommodityItemsRepeater extends Component
             }
         } else {
             $item['lm'] = '';
+        }
+    }
+
+    /**
+     * Check if an item is a stack base (has items loaded_with or connected_to it)
+     */
+    public function isStackBase($index): bool
+    {
+        $item = $this->items[$index] ?? null;
+        if (!$item || !isset($item['id'])) {
+            return false;
+        }
+        
+        $itemId = $item['id'];
+        
+        // Check if any other item points to this item
+        foreach ($this->items as $otherIndex => $otherItem) {
+            if ($otherIndex === $index) {
+                continue;
+            }
+            
+            if (isset($otherItem['related_item_id']) && 
+                $otherItem['related_item_id'] == $itemId &&
+                in_array($otherItem['relationship_type'] ?? 'separate', ['loaded_with', 'connected_to'])) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Get stack unit count for an item (base + all stacked items)
+     */
+    public function getStackUnitCount($index): int
+    {
+        $item = $this->items[$index] ?? null;
+        if (!$item || !isset($item['id'])) {
+            return $item['quantity'] ?? 1;
+        }
+        
+        if (!$this->isStackBase($index)) {
+            return $item['quantity'] ?? 1;
+        }
+        
+        $itemId = $item['id'];
+        $totalQuantity = $item['quantity'] ?? 1;
+        
+        // Sum quantities of all items that point to this base
+        foreach ($this->items as $otherIndex => $otherItem) {
+            if ($otherIndex === $index) {
+                continue;
+            }
+            
+            if (isset($otherItem['related_item_id']) && 
+                $otherItem['related_item_id'] == $itemId &&
+                in_array($otherItem['relationship_type'] ?? 'separate', ['loaded_with', 'connected_to'])) {
+                $totalQuantity += $otherItem['quantity'] ?? 1;
+            }
+        }
+        
+        return $totalQuantity;
+    }
+
+    /**
+     * Calculate stack CBM
+     */
+    public function calculateStackCbm($index)
+    {
+        $item = &$this->items[$index];
+        
+        $length = floatval($item['stack_length_cm'] ?? 0);
+        $width = floatval($item['stack_width_cm'] ?? 0);
+        $height = floatval($item['stack_height_cm'] ?? 0);
+        
+        if ($length > 0 && $width > 0 && $height > 0) {
+            if ($this->unitSystem === 'us') {
+                $cuft = ($length / 12) * ($width / 12) * ($height / 12);
+                $item['stack_cbm'] = round($cuft, 2);
+            } else {
+                $cbm = ($length / 100) * ($width / 100) * ($height / 100);
+                $item['stack_cbm'] = round($cbm, 4);
+            }
+        } else {
+            $item['stack_cbm'] = '';
+        }
+    }
+
+    /**
+     * Calculate stack LM
+     */
+    public function calculateStackLm($index)
+    {
+        $item = &$this->items[$index];
+        
+        $length = floatval($item['stack_length_cm'] ?? 0);
+        $width = floatval($item['stack_width_cm'] ?? 0);
+        
+        if ($length > 0 && $width > 0) {
+            if ($this->unitSystem === 'us') {
+                $lengthM = $length / 12 / 0.3048;
+                $widthInches = max($width, 250 / 2.54);
+                $widthM = $widthInches / 12 / 0.3048;
+                $lm = ($lengthM * $widthM) / 2.5;
+                $item['stack_lm'] = round($lm, 4);
+            } else {
+                $lengthM = $length / 100;
+                $widthCm = max($width, 250);
+                $widthM = $widthCm / 100;
+                $lm = ($lengthM * $widthM) / 2.5;
+                $item['stack_lm'] = round($lm, 4);
+            }
+        } else {
+            $item['stack_lm'] = '';
         }
     }
 
@@ -556,6 +677,13 @@ class CommodityItemsRepeater extends Component
                 'extra_info' => $item['extra_info'] ?? null,
                 'attachments' => $item['attachments'] ?? [],
                 'input_unit_system' => $item['input_unit_system'] ?? $this->unitSystem,
+                'stack_length_cm' => !empty($item['stack_length_cm']) ? (float) $item['stack_length_cm'] : null,
+                'stack_width_cm' => !empty($item['stack_width_cm']) ? (float) $item['stack_width_cm'] : null,
+                'stack_height_cm' => !empty($item['stack_height_cm']) ? (float) $item['stack_height_cm'] : null,
+                'stack_weight_kg' => !empty($item['stack_weight_kg']) ? (float) $item['stack_weight_kg'] : null,
+                'stack_cbm' => !empty($item['stack_cbm']) ? (float) $item['stack_cbm'] : null,
+                'stack_lm' => !empty($item['stack_lm']) ? (float) $item['stack_lm'] : null,
+                'stack_unit_count' => !empty($item['stack_unit_count']) ? (int) $item['stack_unit_count'] : null,
             ];
             
             // Create item in database
@@ -632,6 +760,13 @@ class CommodityItemsRepeater extends Component
                 'extra_info' => $item['extra_info'] ?? null,
                 'attachments' => $item['attachments'] ?? [],
                 'input_unit_system' => $item['input_unit_system'] ?? $this->unitSystem,
+                'stack_length_cm' => !empty($item['stack_length_cm']) ? (float) $item['stack_length_cm'] : null,
+                'stack_width_cm' => !empty($item['stack_width_cm']) ? (float) $item['stack_width_cm'] : null,
+                'stack_height_cm' => !empty($item['stack_height_cm']) ? (float) $item['stack_height_cm'] : null,
+                'stack_weight_kg' => !empty($item['stack_weight_kg']) ? (float) $item['stack_weight_kg'] : null,
+                'stack_cbm' => !empty($item['stack_cbm']) ? (float) $item['stack_cbm'] : null,
+                'stack_lm' => !empty($item['stack_lm']) ? (float) $item['stack_lm'] : null,
+                'stack_unit_count' => !empty($item['stack_unit_count']) ? (int) $item['stack_unit_count'] : null,
             ];
             
             // Update item in database using model instance to trigger events
