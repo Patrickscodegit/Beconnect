@@ -65,19 +65,42 @@
                                     @endif
                                 @elseif($isBase)
                                     @php
-                                        // Count how many items are loaded/connected to this base
-                                        $stackedCount = 0;
+                                        // Count how many items are loaded/connected to this base and track relationship types
+                                        $loadedCount = 0;
+                                        $connectedCount = 0;
                                         foreach($items as $idx => $otherItem) {
                                             if($idx !== $index && 
-                                               ($otherItem['related_item_id'] ?? null) == ($item['id'] ?? null) &&
-                                               in_array($otherItem['relationship_type'] ?? 'separate', ['connected_to', 'loaded_with'])) {
-                                                $stackedCount++;
+                                               ($otherItem['related_item_id'] ?? null) == ($item['id'] ?? null)) {
+                                                if(($otherItem['relationship_type'] ?? 'separate') === 'loaded_with') {
+                                                    $loadedCount++;
+                                                } elseif(($otherItem['relationship_type'] ?? 'separate') === 'connected_to') {
+                                                    $connectedCount++;
+                                                }
                                             }
                                         }
+                                        $totalCount = $loadedCount + $connectedCount;
+                                        
+                                        // Build relationship text based on what's actually connected
+                                        $relationshipText = '';
+                                        if($loadedCount > 0 && $connectedCount > 0) {
+                                            // Mixed relationships
+                                            $parts = [];
+                                            if($loadedCount > 0) {
+                                                $parts[] = $loadedCount . ' ' . ($loadedCount === 1 ? 'item is' : 'items are') . ' loaded';
+                                            }
+                                            if($connectedCount > 0) {
+                                                $parts[] = $connectedCount . ' ' . ($connectedCount === 1 ? 'item is' : 'items are') . ' connected';
+                                            }
+                                            $relationshipText = implode(', ', $parts);
+                                        } elseif($loadedCount > 0) {
+                                            $relationshipText = $loadedCount . ' ' . ($loadedCount === 1 ? 'item is' : 'items are') . ' loaded';
+                                        } elseif($connectedCount > 0) {
+                                            $relationshipText = $connectedCount . ' ' . ($connectedCount === 1 ? 'item is' : 'items are') . ' connected';
+                                        }
                                     @endphp
-                                    @if($stackedCount > 0)
+                                    @if($totalCount > 0)
                                         <span class="text-sm font-normal text-blue-600 ml-2">
-                                            (Base - {{ $stackedCount }} {{ $stackedCount === 1 ? 'item' : 'items' }} {{ $stackedCount === 1 ? 'is' : 'are' }} loaded/connected)
+                                            (Base - {{ $relationshipText }})
                                         </span>
                                     @endif
                                 @endif
