@@ -42,7 +42,13 @@
                             <h4 class="text-lg font-semibold text-gray-700">
                                 <i class="fas fa-cube text-gray-500 mr-2"></i>
                                 Item #{{ $index + 1 }}
-                                @if(in_array($item['relationship_type'] ?? 'separate', ['connected_to', 'loaded_with']) && !empty($item['related_item_id'] ?? null))
+                                @php
+                                    // Only show relationship label if item is NOT a stack base
+                                    // Stack bases don't show relationship labels (they are the base)
+                                    $isBase = $this->isStackBase($index);
+                                    $hasRelationship = in_array($item['relationship_type'] ?? 'separate', ['connected_to', 'loaded_with']) && !empty($item['related_item_id'] ?? null);
+                                @endphp
+                                @if($hasRelationship && !$isBase)
                                     @php
                                         $relatedIndex = null;
                                         foreach($items as $idx => $relItem) {
@@ -55,6 +61,23 @@
                                     @if($relatedIndex !== null)
                                         <span class="text-sm font-normal text-gray-500 ml-2">
                                             ({{ $item['relationship_type'] === 'connected_to' ? 'Connected to' : 'Loaded with' }} Item #{{ $relatedIndex + 1 }})
+                                        </span>
+                                    @endif
+                                @elseif($isBase)
+                                    @php
+                                        // Count how many items are loaded/connected to this base
+                                        $stackedCount = 0;
+                                        foreach($items as $idx => $otherItem) {
+                                            if($idx !== $index && 
+                                               ($otherItem['related_item_id'] ?? null) == ($item['id'] ?? null) &&
+                                               in_array($otherItem['relationship_type'] ?? 'separate', ['connected_to', 'loaded_with'])) {
+                                                $stackedCount++;
+                                            }
+                                        }
+                                    @endphp
+                                    @if($stackedCount > 0)
+                                        <span class="text-sm font-normal text-blue-600 ml-2">
+                                            (Base - {{ $stackedCount }} {{ $stackedCount === 1 ? 'item' : 'items' }} {{ $stackedCount === 1 ? 'is' : 'are' }} loaded/connected)
                                         </span>
                                     @endif
                                 @endif
