@@ -1,9 +1,25 @@
 {{-- Machinery Form --}}
-<div class="lg:col-span-3 bg-orange-50 p-4 rounded-lg border border-orange-200">
-    <h5 class="font-semibold text-orange-900 mb-3">
-        <i class="fas fa-cog mr-2"></i>Machinery Details
-    </h5>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+<div class="lg:col-span-3 bg-orange-50 p-4 rounded-lg border border-orange-200" x-data="{ expanded: false }">
+    <div class="flex justify-between items-center mb-3">
+        <h5 class="font-semibold text-orange-900">
+            <i class="fas fa-cog mr-2"></i>Machinery Details
+        </h5>
+        <button 
+            type="button"
+            @click="expanded = !expanded"
+            class="text-orange-600 hover:text-orange-800 font-medium text-sm flex items-center gap-1 transition-colors">
+            <i class="fas transition-transform duration-200" :class="expanded ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+            <span x-text="expanded ? 'Collapse' : 'Expand'"></span>
+        </button>
+    </div>
+    <div x-show="expanded" 
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0 max-h-0"
+         x-transition:enter-end="opacity-100 max-h-screen"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100 max-h-screen"
+         x-transition:leave-end="opacity-0 max-h-0"
+         class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-hidden">
         @if(!empty($item['category']))
         {{-- Make --}}
         <div>
@@ -180,6 +196,7 @@
 
         @include('livewire.commodity-forms._stack-dimensions', ['index' => $index, 'item' => $item, 'unitSystem' => $unitSystem])
         @endif
+    </div>
     </div>
 </div>
 
