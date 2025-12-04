@@ -327,6 +327,100 @@ class CommodityItemsRepeater extends Component
     }
 
     /**
+     * Get all unique stack groups and assign numbers
+     * Returns array: ['base_item_id' => stack_number, ...]
+     */
+    public function getStackNumbers(): array
+    {
+        $stackNumbers = [];
+        $stackNumber = 1;
+        $processedBases = [];
+
+        foreach ($this->items as $index => $item) {
+            if (!isset($item['id']) || str_starts_with($item['id'], 'temp_')) {
+                continue;
+            }
+
+            $baseId = $this->getStackBaseId($index);
+            if ($baseId && !in_array($baseId, $processedBases)) {
+                $stackNumbers[$baseId] = $stackNumber;
+                $processedBases[] = $baseId;
+                $stackNumber++;
+            }
+        }
+
+        return $stackNumbers;
+    }
+
+    /**
+     * Get the stack base ID for an item
+     */
+    private function getStackBaseId($index, $visited = []): ?string
+    {
+        $item = $this->items[$index] ?? null;
+        if (!$item || !isset($item['id'])) {
+            return null;
+        }
+
+        // Prevent infinite recursion
+        if (in_array($item['id'], $visited)) {
+            return null;
+        }
+        $visited[] = $item['id'];
+
+        // If this item is a base (others point to it), return its ID
+        if ($this->isStackBase($index)) {
+            return $item['id'];
+        }
+
+        // If this item is linked to another, find the base
+        if (isset($item['related_item_id']) && !empty($item['related_item_id'])) {
+            $relatedId = $item['related_item_id'];
+            
+            // Find the related item
+            foreach ($this->items as $otherIndex => $otherItem) {
+                if (isset($otherItem['id']) && $otherItem['id'] == $relatedId) {
+                    // Recursively find the base
+                    return $this->getStackBaseId($otherIndex, $visited);
+                }
+            }
+        }
+
+        // If separate item, return null (not in a stack)
+        return null;
+    }
+
+    /**
+     * Get the stack number for a specific item
+     * Returns null if item is not in a stack
+     */
+    public function getStackNumber($index): ?int
+    {
+        $baseId = $this->getStackBaseId($index);
+        if (!$baseId) {
+            return null;
+        }
+
+        $stackNumbers = $this->getStackNumbers();
+        return $stackNumbers[$baseId] ?? null;
+    }
+
+    /**
+     * Check if this item is the base of its stack (for showing dimensions)
+     * Only the base should show stack dimensions
+     */
+    public function isStackBaseForDimensions($index): bool
+    {
+        $item = $this->items[$index] ?? null;
+        if (!$item || !isset($item['id'])) {
+            return false;
+        }
+
+        // Check if this item is a base (others point to it)
+        return $this->isStackBase($index);
+    }
+
+    /**
      * Calculate stack CBM
      */
     public function calculateStackCbm($index)

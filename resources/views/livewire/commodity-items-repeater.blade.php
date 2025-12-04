@@ -61,7 +61,7 @@
                                         @endphp
                                         @if($relatedIndex !== null)
                                             <span class="text-sm font-normal text-gray-500 ml-2">
-                                                ({{ $item['relationship_type'] === 'connected_to' ? 'Connected to' : 'Loaded with' }} Item #{{ $relatedIndex + 1 }})
+                                                ({{ $item['relationship_type'] === 'connected_to' ? 'Connected to' : 'Loaded on' }} Item #{{ $relatedIndex + 1 }})
                                             </span>
                                         @endif
                                     @elseif($isBase)
@@ -104,6 +104,23 @@
                                                 (Base - {{ $relationshipText }})
                                             </span>
                                         @endif
+                                    @endif
+                                    
+                                    @php
+                                        // Get stack number for this item
+                                        $stackNumber = $this->getStackNumber($index);
+                                        $isStackBase = $this->isStackBaseForDimensions($index);
+                                        $isInStack = $stackNumber !== null;
+                                    @endphp
+                                    
+                                    @if($isInStack && !$isStackBase)
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 ml-2">
+                                            <i class="fas fa-layer-group mr-1"></i>Stack #{{ $stackNumber }}
+                                        </span>
+                                    @elseif($isInStack && $isStackBase)
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 ml-2">
+                                            <i class="fas fa-layer-group mr-1"></i>Stack #{{ $stackNumber }} (Base)
+                                        </span>
                                     @endif
                                 </h4>
                                 

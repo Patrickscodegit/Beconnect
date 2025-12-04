@@ -197,6 +197,5 @@
         @include('livewire.commodity-forms._stack-dimensions', ['index' => $index, 'item' => $item, 'unitSystem' => $unitSystem])
         @endif
     </div>
-    </div>
 </div>
 

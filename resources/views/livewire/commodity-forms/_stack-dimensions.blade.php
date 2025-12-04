@@ -1,8 +1,11 @@
 {{-- Stack Dimensions (shown when item is stack base) --}}
-@if($this->isStackBase($index))
+@if($this->isStackBaseForDimensions($index))
+@php
+    $stackNumber = $this->getStackNumber($index);
+@endphp
 <div class="lg:col-span-3 mt-4 pt-4 border-t-2 border-blue-300">
     <h6 class="font-semibold text-blue-900 mb-3">
-        <i class="fas fa-layer-group mr-2"></i>Stack Dimensions (Overall)
+        <i class="fas fa-layer-group mr-2"></i>Stack Dimensions (Overall)@if($stackNumber) - Stack #{{ $stackNumber }}@endif
     </h6>
     <div class="bg-blue-100 p-3 rounded-lg mb-3">
         <p class="text-sm text-blue-800">
