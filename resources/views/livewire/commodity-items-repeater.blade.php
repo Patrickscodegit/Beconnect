@@ -83,6 +83,55 @@
                                 </select>
                             </div>
 
+                            <!-- Category/Subtype Fields (shown immediately after Commodity Type selection) -->
+                            @if($item['commodity_type'] === 'vehicles')
+                            <div class="lg:col-span-3">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Vehicle Category <span class="text-red-500">*</span>
+                                </label>
+                                <select 
+                                    wire:model.live="items.{{ $index }}.category"
+                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                    <option value="">Select Category</option>
+                                    @foreach(config('quotation.commodity_types.vehicles.categories') as $key => $name)
+                                        <option value="{{ $key }}">{{ $name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            @endif
+
+                            @if($item['commodity_type'] === 'machinery')
+                            <div class="lg:col-span-3">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Machinery Type <span class="text-red-500">*</span>
+                                </label>
+                                <select 
+                                    wire:model.live="items.{{ $index }}.category"
+                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                    <option value="">Select Type</option>
+                                    @foreach(config('quotation.commodity_types.machinery.categories') as $key => $name)
+                                        <option value="{{ $key }}">{{ $name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            @endif
+
+                            @if($item['commodity_type'] === 'general_cargo')
+                            <div class="lg:col-span-3">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Cargo Type <span class="text-red-500">*</span>
+                                </label>
+                                <select 
+                                    wire:model.live="items.{{ $index }}.category"
+                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                                    <option value="">Select Type</option>
+                                    @foreach(config('quotation.commodity_types.general_cargo.categories') as $key => $name)
+                                        <option value="{{ $key }}">{{ $name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            @endif
+
                             <!-- Relationship Section (only shown when there are 2+ items) -->
                             @if(count($items) > 1)
                             <!-- Relationship Type -->

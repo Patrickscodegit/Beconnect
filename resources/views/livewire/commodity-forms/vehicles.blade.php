@@ -4,22 +4,7 @@
         <i class="fas fa-car mr-2"></i>Vehicle Details
     </h5>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        
-        {{-- Vehicle Category --}}
-        <div class="lg:col-span-3">
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-                Vehicle Category <span class="text-red-500">*</span>
-            </label>
-            <select 
-                wire:model.live="items.{{ $index }}.category"
-                class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                <option value="">Select Category</option>
-                @foreach(config('quotation.commodity_types.vehicles.categories') as $key => $name)
-                    <option value="{{ $key }}">{{ $name }}</option>
-                @endforeach
-            </select>
-        </div>
-
+        @if(!empty($item['category']))
         {{-- Make --}}
         <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">
@@ -225,6 +210,7 @@
                 class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
                 placeholder="Additional information..."></textarea>
         </div>
+        @endif
     </div>
 </div>
 
