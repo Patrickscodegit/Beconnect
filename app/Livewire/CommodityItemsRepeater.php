@@ -69,12 +69,14 @@ class CommodityItemsRepeater extends Component
         // Otherwise, ignore the prop update to preserve user-added items
     }
 
-    public function addItem()
+    public function addItem($relationshipType = 'separate', $relatedItemId = null)
     {
         try {
             \Log::info('CommodityItemsRepeater::addItem() called', [
                 'current_items_count' => count($this->items),
-                'quotation_id' => $this->quotationId
+                'quotation_id' => $this->quotationId,
+                'relationship_type' => $relationshipType,
+                'related_item_id' => $relatedItemId
             ]);
             
             // Don't create database record yet - commodity_type is required (NOT NULL)
@@ -83,8 +85,8 @@ class CommodityItemsRepeater extends Component
             
             $this->items[] = [
                 'id' => $tempId, // Temporary ID until commodity_type is selected
-                'relationship_type' => 'separate', // Default: separate unit
-                'related_item_id' => null,
+                'relationship_type' => $relationshipType, // Set from parameter
+                'related_item_id' => $relatedItemId, // Set from parameter
                 'commodity_type' => '',  // This will be used for form display
                 'category' => '',
                 'make' => '',

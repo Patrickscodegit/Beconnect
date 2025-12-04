@@ -39,72 +39,98 @@
                         
                         <!-- Item Header -->
                         <div class="flex justify-between items-center mb-4">
-                            <h4 class="text-lg font-semibold text-gray-700">
-                                <i class="fas fa-cube text-gray-500 mr-2"></i>
-                                Item #{{ $index + 1 }}
-                                @php
-                                    // Only show relationship label if item is NOT a stack base
-                                    // Stack bases don't show relationship labels (they are the base)
-                                    $isBase = $this->isStackBase($index);
-                                    $hasRelationship = in_array($item['relationship_type'] ?? 'separate', ['connected_to', 'loaded_with']) && !empty($item['related_item_id'] ?? null);
-                                @endphp
-                                @if($hasRelationship && !$isBase)
+                            <div class="flex items-center gap-3">
+                                <h4 class="text-lg font-semibold text-gray-700">
+                                    <i class="fas fa-cube text-gray-500 mr-2"></i>
+                                    Item #{{ $index + 1 }}
                                     @php
-                                        $relatedIndex = null;
-                                        foreach($items as $idx => $relItem) {
-                                            if(($relItem['id'] ?? null) == ($item['related_item_id'] ?? null)) {
-                                                $relatedIndex = $idx;
-                                                break;
-                                            }
-                                        }
+                                        // Only show relationship label if item is NOT a stack base
+                                        // Stack bases don't show relationship labels (they are the base)
+                                        $isBase = $this->isStackBase($index);
+                                        $hasRelationship = in_array($item['relationship_type'] ?? 'separate', ['connected_to', 'loaded_with']) && !empty($item['related_item_id'] ?? null);
                                     @endphp
-                                    @if($relatedIndex !== null)
-                                        <span class="text-sm font-normal text-gray-500 ml-2">
-                                            ({{ $item['relationship_type'] === 'connected_to' ? 'Connected to' : 'Loaded with' }} Item #{{ $relatedIndex + 1 }})
-                                        </span>
-                                    @endif
-                                @elseif($isBase)
-                                    @php
-                                        // Count how many items are loaded/connected to this base and track relationship types
-                                        $loadedCount = 0;
-                                        $connectedCount = 0;
-                                        foreach($items as $idx => $otherItem) {
-                                            if($idx !== $index && 
-                                               ($otherItem['related_item_id'] ?? null) == ($item['id'] ?? null)) {
-                                                if(($otherItem['relationship_type'] ?? 'separate') === 'loaded_with') {
-                                                    $loadedCount++;
-                                                } elseif(($otherItem['relationship_type'] ?? 'separate') === 'connected_to') {
-                                                    $connectedCount++;
+                                    @if($hasRelationship && !$isBase)
+                                        @php
+                                            $relatedIndex = null;
+                                            foreach($items as $idx => $relItem) {
+                                                if(($relItem['id'] ?? null) == ($item['related_item_id'] ?? null)) {
+                                                    $relatedIndex = $idx;
+                                                    break;
                                                 }
                                             }
-                                        }
-                                        $totalCount = $loadedCount + $connectedCount;
-                                        
-                                        // Build relationship text based on what's actually connected
-                                        $relationshipText = '';
-                                        if($loadedCount > 0 && $connectedCount > 0) {
-                                            // Mixed relationships
-                                            $parts = [];
-                                            if($loadedCount > 0) {
-                                                $parts[] = $loadedCount . ' ' . ($loadedCount === 1 ? 'item is' : 'items are') . ' loaded';
+                                        @endphp
+                                        @if($relatedIndex !== null)
+                                            <span class="text-sm font-normal text-gray-500 ml-2">
+                                                ({{ $item['relationship_type'] === 'connected_to' ? 'Connected to' : 'Loaded with' }} Item #{{ $relatedIndex + 1 }})
+                                            </span>
+                                        @endif
+                                    @elseif($isBase)
+                                        @php
+                                            // Count how many items are loaded/connected to this base and track relationship types
+                                            $loadedCount = 0;
+                                            $connectedCount = 0;
+                                            foreach($items as $idx => $otherItem) {
+                                                if($idx !== $index && 
+                                                   ($otherItem['related_item_id'] ?? null) == ($item['id'] ?? null)) {
+                                                    if(($otherItem['relationship_type'] ?? 'separate') === 'loaded_with') {
+                                                        $loadedCount++;
+                                                    } elseif(($otherItem['relationship_type'] ?? 'separate') === 'connected_to') {
+                                                        $connectedCount++;
+                                                    }
+                                                }
                                             }
-                                            if($connectedCount > 0) {
-                                                $parts[] = $connectedCount . ' ' . ($connectedCount === 1 ? 'item is' : 'items are') . ' connected';
+                                            $totalCount = $loadedCount + $connectedCount;
+                                            
+                                            // Build relationship text based on what's actually connected
+                                            $relationshipText = '';
+                                            if($loadedCount > 0 && $connectedCount > 0) {
+                                                // Mixed relationships
+                                                $parts = [];
+                                                if($loadedCount > 0) {
+                                                    $parts[] = $loadedCount . ' ' . ($loadedCount === 1 ? 'item is' : 'items are') . ' loaded';
+                                                }
+                                                if($connectedCount > 0) {
+                                                    $parts[] = $connectedCount . ' ' . ($connectedCount === 1 ? 'item is' : 'items are') . ' connected';
+                                                }
+                                                $relationshipText = implode(', ', $parts);
+                                            } elseif($loadedCount > 0) {
+                                                $relationshipText = $loadedCount . ' ' . ($loadedCount === 1 ? 'item is' : 'items are') . ' loaded';
+                                            } elseif($connectedCount > 0) {
+                                                $relationshipText = $connectedCount . ' ' . ($connectedCount === 1 ? 'item is' : 'items are') . ' connected';
                                             }
-                                            $relationshipText = implode(', ', $parts);
-                                        } elseif($loadedCount > 0) {
-                                            $relationshipText = $loadedCount . ' ' . ($loadedCount === 1 ? 'item is' : 'items are') . ' loaded';
-                                        } elseif($connectedCount > 0) {
-                                            $relationshipText = $connectedCount . ' ' . ($connectedCount === 1 ? 'item is' : 'items are') . ' connected';
-                                        }
-                                    @endphp
-                                    @if($totalCount > 0)
-                                        <span class="text-sm font-normal text-blue-600 ml-2">
-                                            (Base - {{ $relationshipText }})
-                                        </span>
+                                        @endphp
+                                        @if($totalCount > 0)
+                                            <span class="text-sm font-normal text-blue-600 ml-2">
+                                                (Base - {{ $relationshipText }})
+                                            </span>
+                                        @endif
                                     @endif
+                                </h4>
+                                
+                                @php
+                                    // Show inline buttons only if:
+                                    // 1. Item has a real ID (not a temp ID) - meaning it's been saved
+                                    // 2. There are multiple items (can't have relationships with just 1 item)
+                                    $hasRealId = isset($item['id']) && !empty($item['id']) && !str_starts_with($item['id'], 'temp_');
+                                    $canHaveRelationships = count($items) > 1 && $hasRealId;
+                                @endphp
+                                @if($canHaveRelationships)
+                                    <div class="flex gap-2 ml-4">
+                                        <button 
+                                            type="button"
+                                            wire:click="addItem('loaded_with', '{{ $item['id'] }}')"
+                                            class="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded font-medium transition-colors">
+                                            <i class="fas fa-plus mr-1"></i>Add Loaded
+                                        </button>
+                                        <button 
+                                            type="button"
+                                            wire:click="addItem('connected_to', '{{ $item['id'] }}')"
+                                            class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-medium transition-colors">
+                                            <i class="fas fa-plus mr-1"></i>Add Connected
+                                        </button>
+                                    </div>
                                 @endif
-                            </h4>
+                            </div>
                             <button 
                                 type="button"
                                 wire:click="removeItem({{ $index }})"
@@ -176,65 +202,6 @@
                                     @endforeach
                                 </select>
                             </div>
-                            @endif
-
-                            <!-- Relationship Section (only shown when there are 2+ items) -->
-                            @if(count($items) > 1)
-                            <!-- Relationship Type -->
-                            <div class="lg:col-span-3">
-                                <label class="block text-sm font-medium text-gray-700 mb-2">
-                                    Relationship
-                                </label>
-                                <select 
-                                    wire:model.live="items.{{ $index }}.relationship_type"
-                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                                    <option value="separate">Separate unit</option>
-                                    <option value="connected_to">Connected to</option>
-                                    <option value="loaded_with">Loaded with</option>
-                                </select>
-                            </div>
-
-                            <!-- Related Item Selector (shown when connected_to or loaded_with) -->
-                            @if(in_array($item['relationship_type'] ?? 'separate', ['connected_to', 'loaded_with']))
-                            <div class="lg:col-span-3">
-                                <label class="block text-sm font-medium text-gray-700 mb-2">
-                                    {{ $item['relationship_type'] === 'connected_to' ? 'Connected to' : 'Loaded with' }} Item #
-                                </label>
-                                <select 
-                                    wire:model.live="items.{{ $index }}.related_item_id"
-                                    class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                                    <option value="">Select Item</option>
-                                    @foreach($items as $relatedIndex => $relatedItem)
-                                        @if($relatedIndex !== $index && ($relatedItem['id'] ?? null))
-                                            @php
-                                                $itemNumber = $relatedIndex + 1;
-                                                $itemType = $relatedItem['commodity_type'] ?? 'N/A';
-                                                $itemDisplay = "Item #{$itemNumber}";
-                                                if ($itemType !== 'N/A' && $itemType !== '') {
-                                                    $itemDisplay .= " - " . ucfirst($itemType);
-                                                }
-                                                if (!empty($relatedItem['make'] ?? '')) {
-                                                    $itemDisplay .= " (" . $relatedItem['make'];
-                                                    if (!empty($relatedItem['type_model'] ?? '')) {
-                                                        $itemDisplay .= " " . $relatedItem['type_model'];
-                                                    }
-                                                    $itemDisplay .= ")";
-                                                }
-                                            @endphp
-                                            <option value="{{ $relatedItem['id'] }}">
-                                                {{ $itemDisplay }}
-                                            </option>
-                                        @endif
-                                    @endforeach
-                                </select>
-                                @if(empty($item['related_item_id']))
-                                    <p class="text-xs text-gray-500 mt-1">
-                                        <i class="fas fa-info-circle mr-1"></i>
-                                        Select an item that has been saved (has a commodity type selected).
-                                    </p>
-                                @endif
-                            </div>
-                            @endif
                             @endif
 
                             @if($item['commodity_type'])
