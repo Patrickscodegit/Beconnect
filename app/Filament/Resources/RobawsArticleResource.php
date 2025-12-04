@@ -67,15 +67,38 @@ class RobawsArticleResource extends Resource
                             
                         Forms\Components\Select::make('unit_type')
                             ->options([
-                                'unit' => 'Unit',
-                                'shipment' => 'Per Shipment',
-                                'container' => 'Per Container',
-                                'vehicle' => 'Per Vehicle',
-                                'cbm' => 'Per CBM',
-                                'kg' => 'Per KG',
-                                'ton' => 'Per Ton',
+                                '%' => '%',
+                                '20FT DV' => '20FT DV',
+                                '20FT OT' => '20FT OT',
+                                '40FT DV' => '40FT DV',
+                                '40FT FR' => '40FT FR',
+                                '40FT HC' => '40FT HC',
+                                '40FT OT' => '40FT OT',
+                                'CBM' => 'CBM',
+                                'Chassis nr' => 'Chassis nr',
+                                'Cont.' => 'Cont.',
+                                'Day' => 'Day',
+                                'Doc' => 'Doc',
+                                'FRT' => 'FRT',
+                                'Hour' => 'Hour',
+                                'LM' => 'LM',
+                                'Lumps.' => 'Lumps.',
+                                'M3' => 'M3',
+                                'Meter' => 'Meter',
+                                'Rit' => 'Rit',
+                                'RT' => 'RT',
+                                'Shipm.' => 'Shipm.',
+                                'SQM' => 'SQM',
+                                'stacked unit' => 'stacked unit',
+                                'Teu' => 'Teu',
+                                'Ton' => 'Ton',
+                                'Truck' => 'Truck',
+                                'Unit' => 'Unit',
+                                'Vehicle' => 'Vehicle',
+                                'w/m' => 'w/m',
                             ])
-                            ->default('unit')
+                            ->searchable()
+                            ->default('Unit')
                             ->columnSpan(1),
                             
                         Forms\Components\Select::make('category')
