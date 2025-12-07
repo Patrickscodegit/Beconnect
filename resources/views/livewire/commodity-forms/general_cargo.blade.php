@@ -165,8 +165,10 @@
                 class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"></textarea>
         </div>
 
-        @include('livewire.commodity-forms._stack-dimensions', ['index' => $index, 'item' => $item, 'unitSystem' => $unitSystem])
         @endif
     </div>
+    
+    {{-- Overall Dimensions (separate, always visible section) --}}
+    @include('livewire.commodity-forms._overall-dimensions', ['index' => $index, 'item' => $item, 'unitSystem' => $unitSystem])
 </div>
 

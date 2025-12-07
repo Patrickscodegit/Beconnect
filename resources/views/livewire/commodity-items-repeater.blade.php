@@ -44,107 +44,50 @@
                                     <i class="fas fa-cube text-gray-500 mr-2"></i>
                                     Item #{{ $index + 1 }}
                                     @php
-                                        // Only show relationship label if item is NOT a stack base
-                                        // Stack bases don't show relationship labels (they are the base)
-                                        $isBase = $this->isStackBase($index);
-                                        $hasRelationship = in_array($item['relationship_type'] ?? 'separate', ['connected_to', 'loaded_with']) && !empty($item['related_item_id'] ?? null);
+                                        // Get relationship labels once for both header text and badge
+                                        $baseLabel = $this->getRelationshipLabel($index);
+                                        $linkedLabel = $this->getLinkedItemLabel($index);
+                                        $relationshipNumber = $this->getRelationshipNumber($index);
+                                        
+                                        // Build labels with numbers if applicable
+                                        $baseLabelDisplay = $baseLabel;
+                                        $linkedLabelDisplay = $linkedLabel;
+                                        
+                                        if ($relationshipNumber !== null) {
+                                            if ($baseLabel) {
+                                                $baseLabelDisplay = $baseLabel . ' #' . $relationshipNumber;
+                                            }
+                                            if ($linkedLabel) {
+                                                // Extract the relationship type and add number
+                                                $relationshipType = str_replace('Part of ', '', $linkedLabel);
+                                                $linkedLabelDisplay = 'Part of ' . $relationshipType . ' #' . $relationshipNumber;
+                                            }
+                                        }
                                     @endphp
-                                    @if($hasRelationship && !$isBase)
-                                        @php
-                                            $relatedIndex = null;
-                                            foreach($items as $idx => $relItem) {
-                                                if(($relItem['id'] ?? null) == ($item['related_item_id'] ?? null)) {
-                                                    $relatedIndex = $idx;
-                                                    break;
-                                                }
-                                            }
-                                        @endphp
-                                        @if($relatedIndex !== null)
-                                            <span class="text-sm font-normal text-gray-500 ml-2">
-                                                ({{ $item['relationship_type'] === 'connected_to' ? 'Connected to' : 'Loaded on' }} Item #{{ $relatedIndex + 1 }})
-                                            </span>
-                                        @endif
-                                    @elseif($isBase)
-                                        @php
-                                            // Count how many items are loaded/connected to this base and track relationship types
-                                            $loadedCount = 0;
-                                            $connectedCount = 0;
-                                            foreach($items as $idx => $otherItem) {
-                                                if($idx !== $index && 
-                                                   ($otherItem['related_item_id'] ?? null) == ($item['id'] ?? null)) {
-                                                    if(($otherItem['relationship_type'] ?? 'separate') === 'loaded_with') {
-                                                        $loadedCount++;
-                                                    } elseif(($otherItem['relationship_type'] ?? 'separate') === 'connected_to') {
-                                                        $connectedCount++;
-                                                    }
-                                                }
-                                            }
-                                            $totalCount = $loadedCount + $connectedCount;
-                                            
-                                            // Build relationship text based on what's actually connected
-                                            $relationshipText = '';
-                                            if($loadedCount > 0 && $connectedCount > 0) {
-                                                // Mixed relationships
-                                                $parts = [];
-                                                if($loadedCount > 0) {
-                                                    $parts[] = $loadedCount . ' ' . ($loadedCount === 1 ? 'item is' : 'items are') . ' loaded';
-                                                }
-                                                if($connectedCount > 0) {
-                                                    $parts[] = $connectedCount . ' ' . ($connectedCount === 1 ? 'item is' : 'items are') . ' connected';
-                                                }
-                                                $relationshipText = implode(', ', $parts);
-                                            } elseif($loadedCount > 0) {
-                                                $relationshipText = $loadedCount . ' ' . ($loadedCount === 1 ? 'item is' : 'items are') . ' loaded';
-                                            } elseif($connectedCount > 0) {
-                                                $relationshipText = $connectedCount . ' ' . ($connectedCount === 1 ? 'item is' : 'items are') . ' connected';
-                                            }
-                                        @endphp
-                                        @if($totalCount > 0)
-                                            <span class="text-sm font-normal text-blue-600 ml-2">
-                                                (Base - {{ $relationshipText }})
-                                            </span>
-                                        @endif
+                                    @if($linkedLabelDisplay)
+                                        <span class="text-sm font-normal text-gray-500 ml-2">
+                                            ({{ $linkedLabelDisplay }})
+                                        </span>
+                                    @elseif($baseLabelDisplay)
+                                        <span class="text-sm font-normal text-blue-600 ml-2">
+                                            (Base - {{ $baseLabelDisplay }})
+                                        </span>
                                     @endif
                                     
-                                    @php
-                                        // Get stack number for this item
-                                        $stackNumber = $this->getStackNumber($index);
-                                        $isStackBase = $this->isStackBaseForDimensions($index);
-                                        $isInStack = $stackNumber !== null;
-                                    @endphp
-                                    
-                                    @if($isInStack && !$isStackBase)
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 ml-2">
-                                            <i class="fas fa-layer-group mr-1"></i>Stack #{{ $stackNumber }}
-                                        </span>
-                                    @elseif($isInStack && $isStackBase)
+                                    @if($baseLabelDisplay)
                                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 ml-2">
-                                            <i class="fas fa-layer-group mr-1"></i>Stack #{{ $stackNumber }} (Base)
+                                            <i class="fas fa-layer-group mr-1"></i>{{ ucfirst($baseLabelDisplay) }}
+                                        </span>
+                                    @elseif($linkedLabelDisplay)
+                                        @php
+                                            // Extract the relationship type from "Part of [type]"
+                                            $relationshipType = str_replace('Part of ', '', $linkedLabelDisplay);
+                                        @endphp
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 ml-2">
+                                            <i class="fas fa-layer-group mr-1"></i>{{ ucfirst($relationshipType) }}
                                         </span>
                                     @endif
                                 </h4>
-                                
-                                @php
-                                    // Show inline buttons if item has a real ID (not a temp ID) - meaning it's been saved
-                                    // Buttons are visible from the first item so users can add related items
-                                    $hasRealId = isset($item['id']) && !empty($item['id']) && !str_starts_with($item['id'], 'temp_');
-                                @endphp
-                                @if($hasRealId)
-                                    <div class="flex gap-2 ml-4">
-                                        <button 
-                                            type="button"
-                                            wire:click="addItem('loaded_with', '{{ $item['id'] }}')"
-                                            class="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded font-medium transition-colors">
-                                            <i class="fas fa-plus mr-1"></i>Add Loaded
-                                        </button>
-                                        <button 
-                                            type="button"
-                                            wire:click="addItem('connected_to', '{{ $item['id'] }}')"
-                                            class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-medium transition-colors">
-                                            <i class="fas fa-plus mr-1"></i>Add Connected
-                                        </button>
-                                    </div>
-                                @endif
                             </div>
                             <button 
                                 type="button"
@@ -223,6 +166,27 @@
                                 @include('livewire.commodity-forms.' . $item['commodity_type'], ['index' => $index, 'item' => $item])
                             @endif
                         </div>
+                        
+                        {{-- Action buttons at bottom of item card --}}
+                        @php
+                            $hasRealId = isset($item['id']) && !empty($item['id']) && !str_starts_with($item['id'], 'temp_');
+                        @endphp
+                        @if($hasRealId)
+                            <div class="mt-4 pt-4 border-t border-gray-200 flex justify-center gap-3">
+                                <button 
+                                    type="button"
+                                    wire:click="addItem('loaded_with', '{{ $item['id'] }}')"
+                                    class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm">
+                                    <i class="fas fa-plus mr-1"></i>Add Loaded
+                                </button>
+                                <button 
+                                    type="button"
+                                    wire:click="addItem('connected_to', '{{ $item['id'] }}')"
+                                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm">
+                                    <i class="fas fa-plus mr-1"></i>Add Connected
+                                </button>
+                            </div>
+                        @endif
                     </div>
                 @endforeach
             </div>

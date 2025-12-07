@@ -227,8 +227,10 @@
                 placeholder="Additional information..."></textarea>
         </div>
 
-        @include('livewire.commodity-forms._stack-dimensions', ['index' => $index, 'item' => $item, 'unitSystem' => $unitSystem])
         @endif
     </div>
+    
+    {{-- Overall Dimensions (separate, always visible section) --}}
+    @include('livewire.commodity-forms._overall-dimensions', ['index' => $index, 'item' => $item, 'unitSystem' => $unitSystem])
 </div>
 
