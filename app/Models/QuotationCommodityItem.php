@@ -626,8 +626,10 @@ class QuotationCommodityItem extends Model
                                             'total_unit_count' => $totalUnitCount,
                                         ]);
                                     } else {
-                                        // For regular articles, count stacks (each stack = quantity 1)
+                                        // For regular articles, count stacks (each stack = quantity 1) + sum separate item quantities
+                                        // Note: "stack" is the internal term for a group of related items (combinations/loaded combinations/loaded units)
                                         $stacks = [];
+                                        $separateItemQuantity = 0;
                                         $processed = [];
                                         
                                         foreach ($matchingItems as $item) {
@@ -635,7 +637,7 @@ class QuotationCommodityItem extends Model
                                                 continue;
                                             }
                                             
-                                            // Check if item is in a stack
+                                            // Check if item is in a stack (combination/loaded combination/loaded unit)
                                             if ($item->isInStack()) {
                                                 $baseId = $item->getStackGroup();
                                                 if (!isset($stacks[$baseId])) {
@@ -657,21 +659,23 @@ class QuotationCommodityItem extends Model
                                                     }
                                                 }
                                             } else {
-                                                // Separate item (not in stack) counts as 1
-                                                $stacks['separate_' . $item->id] = true;
+                                                // Separate item - use its actual quantity field
+                                                $separateItemQuantity += $item->quantity ?? 1;
                                                 $processed[] = $item->id;
                                             }
                                         }
                                         
-                                        // Count stacks (each stack = quantity 1)
+                                        // Total quantity = stack count (each group = 1) + separate item quantities (sum of quantity fields)
                                         $stackCount = count($stacks);
-                                        $article->quantity = (int) $stackCount;
+                                        $article->quantity = (int) ($stackCount + $separateItemQuantity);
                                         
-                                        \Log::debug('Article quantity calculated from stacks', [
+                                        \Log::debug('Article quantity calculated from stacks and separate items', [
                                             'article_id' => $article->id,
                                             'article_commodity_type' => $articleCommodityType,
                                             'matching_items_count' => $matchingItems->count(),
                                             'stack_count' => $stackCount,
+                                            'separate_item_quantity' => $separateItemQuantity,
+                                            'total_quantity' => $article->quantity,
                                             'old_method_quantity' => $matchingItems->sum('quantity'),
                                         ]);
                                     }
