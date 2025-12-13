@@ -51,7 +51,13 @@
                                     €{{ number_format($quotation->total_incl_vat, 2) }}
                                 </p>
                                 <p style="margin: 8px 0 0 0; font-size: 13px; color: #6b7280;">
-                                    Including {{ $quotation->vat_rate ?? 21 }}% VAT
+                                    @if($quotation->project_vat_code === 'vrijgesteld VF')
+                                        Exempt from VAT
+                                    @elseif($quotation->project_vat_code === 'intracommunautaire levering VF')
+                                        Intra-EU (0% VAT)
+                                    @else
+                                        Including {{ $quotation->effective_vat_rate }}% VAT
+                                    @endif
                                 </p>
                                 
                                 @if($quotation->total_excl_vat && $quotation->discount_amount > 0)

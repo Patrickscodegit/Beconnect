@@ -310,11 +310,11 @@
                             <dd class="text-sm text-gray-900">€{{ number_format($quotationRequest->total_excl_vat, 2) }}</dd>
                         </div>
                         <div class="flex justify-between">
-                            <dt class="text-sm font-medium text-gray-500">VAT ({{ $quotationRequest->vat_rate }}%)</dt>
+                            <dt class="text-sm font-medium text-gray-500">{{ $quotationRequest->vat_label }}</dt>
                             <dd class="text-sm text-gray-900">€{{ number_format($quotationRequest->vat_amount, 2) }}</dd>
                         </div>
                         <div class="flex justify-between pt-3 border-t border-gray-200">
-                            <dt class="text-lg font-bold text-gray-900">Total (incl. VAT)</dt>
+                            <dt class="text-lg font-bold text-gray-900">{{ $quotationRequest->total_label }}</dt>
                             <dd class="text-lg font-bold text-gray-900">€{{ number_format($quotationRequest->total_incl_vat, 2) }}</dd>
                         </div>
                     </dl>

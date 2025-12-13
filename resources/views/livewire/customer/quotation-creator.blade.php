@@ -529,11 +529,11 @@
                     <span class="font-semibold text-gray-900">€{{ number_format($quotation->subtotal, 2) }}</span>
                 </div>
                 <div class="flex justify-between text-sm mb-2">
-                    <span class="text-gray-700">VAT ({{ $quotation->vat_rate }}%):</span>
+                    <span class="text-gray-700">{{ $quotation->vat_label }}:</span>
                     <span class="font-semibold text-gray-900">€{{ number_format($quotation->vat_amount, 2) }}</span>
                 </div>
                 <div class="flex justify-between text-lg font-bold pt-3 border-t border-gray-300">
-                    <span class="text-gray-900">Total (incl. VAT):</span>
+                    <span class="text-gray-900">{{ $quotation->total_label }}:</span>
                     <span class="text-blue-600">€{{ number_format($quotation->total_incl_vat, 2) }}</span>
                 </div>
                 <p class="text-xs text-gray-500 mt-2 text-center">

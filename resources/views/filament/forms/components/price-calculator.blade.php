@@ -142,7 +142,10 @@
         
         {{-- Total Incl VAT --}}
         <div class="flex justify-between">
-            <span class="text-base font-bold text-gray-900 dark:text-white">Total (incl. VAT):</span>
+            <span class="text-base font-bold text-gray-900 dark:text-white">
+                <span x-show="vatAmount > 0">Total (incl. VAT):</span>
+                <span x-show="vatAmount === 0">Total:</span>
+            </span>
             <span class="text-lg font-bold text-primary-600 dark:text-primary-400" x-text="formatCurrency(totalInclVat)"></span>
         </div>
     </div>

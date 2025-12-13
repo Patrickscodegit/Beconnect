@@ -68,6 +68,7 @@ class QuotationRequest extends Model
         'vat_rate',
         'total_incl_vat',
         'pricing_currency',
+        'project_vat_code', // Robaws VAT code for entire quotation
         // Template fields
         'intro_template_id',
         'end_template_id',
@@ -275,6 +276,22 @@ class QuotationRequest extends Model
     }
 
     /**
+     * Get customer from Robaws customer cache
+     */
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(RobawsCustomerCache::class, 'robaws_client_id', 'robaws_client_id');
+    }
+
+    /**
+     * Get all quotation request articles (HasMany relationship)
+     */
+    public function quotationRequestArticles(): HasMany
+    {
+        return $this->hasMany(QuotationRequestArticle::class);
+    }
+
+    /**
      * Accessors
      */
     
@@ -371,6 +388,43 @@ class QuotationRequest extends Model
     }
 
     /**
+     * Get effective VAT rate for display (0% for exempt, actual rate otherwise)
+     */
+    public function getEffectiveVatRateAttribute(): float
+    {
+        if ($this->project_vat_code === 'vrijgesteld VF' || $this->project_vat_code === 'intracommunautaire levering VF') {
+            return 0.00;
+        }
+        return $this->vat_rate ?? config('quotation.vat_rate', 21.00);
+    }
+
+    /**
+     * Get VAT label text for display
+     */
+    public function getVatLabelAttribute(): string
+    {
+        if ($this->project_vat_code === 'vrijgesteld VF') {
+            return 'Exempt from VAT';
+        }
+        if ($this->project_vat_code === 'intracommunautaire levering VF') {
+            return 'Intra-EU (0% VAT)';
+        }
+        $rate = $this->effective_vat_rate;
+        return "VAT ({$rate}%)";
+    }
+
+    /**
+     * Get total label text for display (excludes "incl. VAT" when exempt)
+     */
+    public function getTotalLabelAttribute(): string
+    {
+        if ($this->project_vat_code === 'vrijgesteld VF' || $this->project_vat_code === 'intracommunautaire levering VF') {
+            return 'Total';
+        }
+        return 'Total (incl. VAT)';
+    }
+
+    /**
      * Business Logic Methods
      */
     
@@ -393,10 +447,24 @@ class QuotationRequest extends Model
         
         $this->total_excl_vat = $this->subtotal - ($this->discount_amount ?? 0);
         
-        // Calculate VAT
-        $vatRate = $this->vat_rate ?? config('quotation.vat_rate', 21.00);
-        $this->vat_amount = ($this->total_excl_vat * $vatRate) / 100;
+        // Calculate VAT - check project_vat_code to determine if VAT should be applied
+        $vatRate = 0.00; // Default to 0 for exempt cases
         
+        if ($this->project_vat_code === 'vrijgesteld VF') {
+            // Export/exempt: no VAT
+            $vatRate = 0.00;
+        } elseif ($this->project_vat_code === 'intracommunautaire levering VF') {
+            // Intra-EU: no VAT (reverse charge)
+            $vatRate = 0.00;
+        } elseif ($this->project_vat_code === '21% VF') {
+            // Standard Belgian VAT
+            $vatRate = $this->vat_rate ?? config('quotation.vat_rate', 21.00);
+        } else {
+            // Fallback: use vat_rate if project_vat_code is not set or unknown
+            $vatRate = $this->vat_rate ?? config('quotation.vat_rate', 21.00);
+        }
+        
+        $this->vat_amount = ($this->total_excl_vat * $vatRate) / 100;
         $this->total_incl_vat = $this->total_excl_vat + $this->vat_amount;
         
         // Save without triggering events (to avoid recursion)

@@ -26,6 +26,9 @@ class AppServiceProvider extends ServiceProvider
         
         // Register Robaws services with proper DI
         $this->registerRobawsServices();
+        
+        // Register pricing services (VAT resolution)
+        $this->registerPricingServices();
     }
 
     /**
@@ -41,6 +44,16 @@ class AppServiceProvider extends ServiceProvider
         
         // Register OptimizedPdfExtractionStrategy
         $this->app->bind(\App\Services\Extraction\Strategies\OptimizedPdfExtractionStrategy::class);
+    }
+
+    /**
+     * Register pricing services (VAT resolution)
+     */
+    private function registerPricingServices(): void
+    {
+        $this->app->singleton(\App\Services\Pricing\EuCountryChecker::class);
+        $this->app->singleton(\App\Services\Pricing\VatResolverInterface::class, \App\Services\Pricing\VatResolver::class);
+        $this->app->singleton(\App\Services\Pricing\QuotationVatService::class);
     }
 
     /**
@@ -88,6 +101,7 @@ class AppServiceProvider extends ServiceProvider
         // Quotation System Observers
         \App\Models\Intake::observe(\App\Observers\IntakeObserver::class);
         \App\Models\QuotationRequest::observe(\App\Observers\QuotationRequestObserver::class);
+        \App\Models\QuotationRequestArticle::observe(\App\Observers\QuotationRequestArticleObserver::class);
         
         // Configure Filament to display timestamps in Belgium timezone
         $this->configureFilamentTimezone();

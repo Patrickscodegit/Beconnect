@@ -19,6 +19,7 @@ class QuotationRequestArticle extends Model
         'unit_price',
         'selling_price',
         'subtotal',
+        'vat_code', // Robaws VAT code for this article line
         'currency',
         'formula_inputs',
         'calculated_price',
