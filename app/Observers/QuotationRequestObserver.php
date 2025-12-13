@@ -6,6 +6,7 @@ use App\Models\QuotationRequest;
 use App\Services\Pricing\VatResolverInterface;
 use App\Services\Pricing\QuotationVatService;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class QuotationRequestObserver
 {
@@ -19,6 +20,12 @@ class QuotationRequestObserver
      */
     public function saving(QuotationRequest $quotationRequest): void
     {
+        // Check if column exists to prevent errors if migration hasn't run
+        if (!$this->columnExists('quotation_requests', 'project_vat_code')) {
+            Log::warning('QuotationRequestObserver::saving - project_vat_code column does not exist, skipping VAT code assignment');
+            return;
+        }
+
         try {
             $projectVatCode = $this->vatResolver->determineProjectVatCode($quotationRequest);
             $quotationRequest->project_vat_code = $projectVatCode;
@@ -35,8 +42,15 @@ class QuotationRequestObserver
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            // Fallback to default
-            $quotationRequest->project_vat_code = '21% VF';
+            // Fallback to default - only set if column exists
+            try {
+                $quotationRequest->project_vat_code = '21% VF';
+            } catch (\Exception $fallbackError) {
+                Log::error('QuotationRequestObserver::saving - Error setting fallback VAT code', [
+                    'quotation_id' => $quotationRequest->id,
+                    'error' => $fallbackError->getMessage(),
+                ]);
+            }
         }
     }
 
@@ -45,6 +59,12 @@ class QuotationRequestObserver
      */
     public function saved(QuotationRequest $quotationRequest): void
     {
+        // Check if columns exist to prevent errors if migration hasn't run
+        if (!$this->columnExists('quotation_requests', 'project_vat_code')) {
+            Log::warning('QuotationRequestObserver::saved - project_vat_code column does not exist, skipping VAT recalculation');
+            return;
+        }
+
         // Recalculate if relevant fields changed OR if project_vat_code changed
         $relevantFieldsChanged = $quotationRequest->wasChanged(['pol', 'pod', 'robaws_client_id', 'project_vat_code']);
         
@@ -65,6 +85,7 @@ class QuotationRequestObserver
                     'error' => $e->getMessage(),
                     'trace' => $e->getTraceAsString(),
                 ]);
+                // Don't throw - allow quotation to save even if VAT calculation fails
             }
         }
     }
@@ -119,6 +140,24 @@ class QuotationRequestObserver
                 'intake_status_old' => $oldStatus,
                 'intake_status_new' => $intakeStatus,
             ]);
+        }
+    }
+
+    /**
+     * Check if a column exists in a table
+     */
+    protected function columnExists(string $table, string $column): bool
+    {
+        try {
+            return Schema::hasColumn($table, $column);
+        } catch (\Exception $e) {
+            Log::warning('QuotationRequestObserver::columnExists - Error checking column', [
+                'table' => $table,
+                'column' => $column,
+                'error' => $e->getMessage(),
+            ]);
+            // If we can't check, assume it exists to avoid breaking saves
+            return true;
         }
     }
 }
