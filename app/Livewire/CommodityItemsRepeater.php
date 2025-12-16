@@ -713,6 +713,9 @@ class CommodityItemsRepeater extends Component
         } else {
             $item['stack_cbm'] = '';
         }
+        
+        // Also calculate LM when dimensions change
+        $this->calculateStackLm($index);
     }
 
     /**
@@ -724,7 +727,7 @@ class CommodityItemsRepeater extends Component
         
         $length = floatval($item['stack_length_cm'] ?? 0);
         $width = floatval($item['stack_width_cm'] ?? 0);
-        
+
         if ($length > 0 && $width > 0) {
             if ($this->unitSystem === 'us') {
                 $lengthM = $length / 12 / 0.3048;
