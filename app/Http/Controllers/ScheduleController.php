@@ -36,9 +36,36 @@ class ScheduleController extends Controller
         }
 
         if ($request->filled('service_type')) {
-            $query->whereHas('carrier', function($q) use ($request) {
-                $q->whereJsonContains('service_types', $request->service_type);
-            });
+            // Normalize service_type to uppercase (database stores RORO, FCL, etc. in uppercase)
+            $serviceType = strtoupper($request->service_type);
+            
+            // Get all carriers and filter by service_type in PHP (whereJsonContains doesn't work reliably)
+            $allCarriers = \App\Models\ShippingCarrier::all();
+            $matchingCarrierIds = [];
+            
+            foreach ($allCarriers as $carrier) {
+                // Ensure service_types is an array (handle both array and JSON string)
+                $serviceTypes = $carrier->service_types;
+                if (is_string($serviceTypes)) {
+                    $serviceTypes = json_decode($serviceTypes, true) ?? [];
+                }
+                if (!is_array($serviceTypes)) {
+                    $serviceTypes = [];
+                }
+                
+                // Check if this carrier has the requested service type
+                if (in_array($serviceType, $serviceTypes)) {
+                    $matchingCarrierIds[] = $carrier->id;
+                }
+            }
+            
+            // Filter schedules by matching carrier IDs
+            if (!empty($matchingCarrierIds)) {
+                $query->whereIn('carrier_id', $matchingCarrierIds);
+            } else {
+                // No matching carriers, return empty result
+                $query->whereRaw('1 = 0'); // Force no results
+            }
         }
 
         $schedules = $query->orderBy('vessel_name')
@@ -173,9 +200,36 @@ class ScheduleController extends Controller
             }
 
             if ($request->filled('service_type')) {
-                $query->whereHas('carrier', function($q) use ($request) {
-                    $q->whereJsonContains('service_types', $request->service_type);
-                });
+                // Normalize service_type to uppercase (database stores RORO, FCL, etc. in uppercase)
+                $serviceType = strtoupper($request->service_type);
+                
+                // Get all carriers and filter by service_type in PHP (whereJsonContains doesn't work reliably)
+                $allCarriers = \App\Models\ShippingCarrier::all();
+                $matchingCarrierIds = [];
+                
+                foreach ($allCarriers as $carrier) {
+                    // Ensure service_types is an array (handle both array and JSON string)
+                    $serviceTypes = $carrier->service_types;
+                    if (is_string($serviceTypes)) {
+                        $serviceTypes = json_decode($serviceTypes, true) ?? [];
+                    }
+                    if (!is_array($serviceTypes)) {
+                        $serviceTypes = [];
+                    }
+                    
+                    // Check if this carrier has the requested service type
+                    if (in_array($serviceType, $serviceTypes)) {
+                        $matchingCarrierIds[] = $carrier->id;
+                    }
+                }
+                
+                // Filter schedules by matching carrier IDs
+                if (!empty($matchingCarrierIds)) {
+                    $query->whereIn('carrier_id', $matchingCarrierIds);
+                } else {
+                    // No matching carriers, return empty result
+                    $query->whereRaw('1 = 0'); // Force no results
+                }
             }
 
             $schedules = $query->orderBy('ets_pol', 'asc')
