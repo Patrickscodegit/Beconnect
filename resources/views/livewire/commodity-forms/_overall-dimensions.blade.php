@@ -13,7 +13,9 @@
         <h6 class="font-semibold text-blue-900">
             <i class="fas fa-layer-group mr-2"></i>Overall Dimensions
             @if($relationshipLabelDisplay)
-                - {{ ucfirst($relationshipLabelDisplay) }}
+                (Entire {{ ucfirst($relationshipLabelDisplay) }})
+            @else
+                (Entire Combination)
             @endif
         </h6>
         <button 

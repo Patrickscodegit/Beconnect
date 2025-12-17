@@ -58,11 +58,8 @@
                                             if ($baseLabel) {
                                                 $baseLabelDisplay = $baseLabel . ' #' . $relationshipNumber;
                                             }
-                                            if ($linkedLabel) {
-                                                // Extract the relationship type and add number
-                                                $relationshipType = str_replace('Part of ', '', $linkedLabel);
-                                                $linkedLabelDisplay = 'Part of ' . $relationshipType . ' #' . $relationshipNumber;
-                                            }
+                                            // Note: linked labels already include item numbers (e.g., "item #2")
+                                            // so we don't append combination numbers to them
                                         }
                                     @endphp
                                     @if($linkedLabelDisplay)
