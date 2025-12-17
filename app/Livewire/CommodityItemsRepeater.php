@@ -433,7 +433,106 @@ class CommodityItemsRepeater extends Component
     }
 
     /**
-     * Get the relationship label for a base item
+     * Get the ultimate base index for an item (follows chain of connected_to relationships)
+     * Returns the index of the true base item
+     */
+    public function getUltimateBaseIndex($index): ?int
+    {
+        $item = $this->items[$index] ?? null;
+        if (!$item || !isset($item['id'])) {
+            return null;
+        }
+
+        $currentIndex = $index;
+        $visited = [];
+
+        while (true) {
+            if (in_array($currentIndex, $visited)) {
+                break; // Prevent infinite loops
+            }
+            $visited[] = $currentIndex;
+
+            $currentItem = $this->items[$currentIndex] ?? null;
+            if (!$currentItem || !isset($currentItem['id'])) {
+                break;
+            }
+
+            // If this item is connected to something, follow the chain
+            if (isset($currentItem['related_item_id']) && 
+                !empty($currentItem['related_item_id']) &&
+                ($currentItem['relationship_type'] ?? 'separate') === 'connected_to') {
+                
+                // Find the parent item
+                $parentIndex = null;
+                foreach ($this->items as $idx => $parentItem) {
+                    if ($idx === $currentIndex || in_array($idx, $visited)) {
+                        continue;
+                    }
+                    if (($parentItem['id'] ?? null) == ($currentItem['related_item_id'] ?? null)) {
+                        $parentIndex = $idx;
+                        break;
+                    }
+                }
+
+                if ($parentIndex === null) {
+                    break; // Can't find parent, stop here
+                }
+
+                $currentIndex = $parentIndex;
+            } else {
+                // This is the ultimate base
+                break;
+            }
+        }
+
+        return $currentIndex;
+    }
+
+    /**
+     * Check if an item is a true base (not connected/loaded to anything else)
+     */
+    public function isTrueBase($index): bool
+    {
+        $item = $this->items[$index] ?? null;
+        if (!$item || !isset($item['id'])) {
+            return false;
+        }
+
+        $relationshipType = $item['relationship_type'] ?? 'separate';
+        $hasRelatedItem = !empty($item['related_item_id'] ?? null);
+
+        // True base: relationship_type is 'separate' or null, and has no related_item_id
+        return ($relationshipType === 'separate' || $relationshipType === null) && !$hasRelatedItem;
+    }
+
+    /**
+     * Check if an item is connected to another (relationship_type = 'connected_to')
+     */
+    public function isConnectedItem($index): bool
+    {
+        $item = $this->items[$index] ?? null;
+        if (!$item) {
+            return false;
+        }
+
+        return ($item['relationship_type'] ?? 'separate') === 'connected_to';
+    }
+
+    /**
+     * Check if an item is loaded with another (relationship_type = 'loaded_with')
+     */
+    public function isLoadedItem($index): bool
+    {
+        $item = $this->items[$index] ?? null;
+        if (!$item) {
+            return false;
+        }
+
+        return ($item['relationship_type'] ?? 'separate') === 'loaded_with';
+    }
+
+    /**
+     * Get the relationship label for a base item or connected item
      * Returns: "combination", "loaded combination", or "loaded unit"
      * 
      * - "combination": 2 or more commodity types connected to each other
@@ -447,12 +546,25 @@ class CommodityItemsRepeater extends Component
             return null;
         }
         
-        // Only bases get labels
-        if (!$this->isStackBase($index)) {
+        // If item is loaded, return null (handled by getLinkedItemLabel)
+        if ($this->isLoadedItem($index)) {
             return null;
         }
         
-        // Count relationship types
+        // If item is connected, get the label from its ultimate base
+        if ($this->isConnectedItem($index)) {
+            $ultimateBaseIndex = $this->getUltimateBaseIndex($index);
+            if ($ultimateBaseIndex !== null && $ultimateBaseIndex !== $index) {
+                return $this->getRelationshipLabel($ultimateBaseIndex);
+            }
+        }
+        
+        // Only true bases or items that are bases (have items pointing to them) get labels
+        if (!$this->isStackBase($index) && !$this->isTrueBase($index)) {
+            return null;
+        }
+        
+        // Count relationship types for the true base
         $hasConnected = false;
         $hasLoaded = false;
         $connectedItemsHaveLoaded = false; // Check if any connected items have loaded items
@@ -509,8 +621,38 @@ class CommodityItemsRepeater extends Component
     }
 
     /**
-     * Get the relationship label for a linked item (not a base)
-     * Returns: "Part of combination", "Part of loaded combination", or "Part of loaded unit"
+     * Get the badge label for an item
+     * Returns: "base unit", "base connected unit", "loaded unit", or null
+     */
+    public function getBadgeLabel($index): ?string
+    {
+        $item = $this->items[$index] ?? null;
+        if (!$item || !isset($item['id'])) {
+            return null;
+        }
+        
+        // True base (not connected/loaded to anything): "base unit"
+        if ($this->isTrueBase($index)) {
+            return 'base unit';
+        }
+        
+        // Connected item: "base connected unit"
+        if ($this->isConnectedItem($index)) {
+            return 'base connected unit';
+        }
+        
+        // Loaded item: "loaded unit"
+        if ($this->isLoadedItem($index)) {
+            return 'loaded unit';
+        }
+        
+        // Standalone item (no relationships): no badge
+        return null;
+    }
+
+    /**
+     * Get the relationship label for a loaded item (loaded_with)
+     * Returns: "Part of loaded combination" or "Part of loaded unit"
      */
     public function getLinkedItemLabel($index): ?string
     {
@@ -519,18 +661,28 @@ class CommodityItemsRepeater extends Component
             return null;
         }
         
-        // Only linked items (not bases) get labels
-        if ($this->isStackBase($index)) {
+        // Only handle loaded_with items (connected items are now handled by getRelationshipLabel)
+        if (!$this->isLoadedItem($index)) {
             return null;
         }
         
-        $relationshipType = $item['relationship_type'] ?? 'separate';
-        if (!in_array($relationshipType, ['connected_to', 'loaded_with']) || 
-            empty($item['related_item_id'] ?? null)) {
+        // Find the ultimate base
+        $ultimateBaseIndex = $this->getUltimateBaseIndex($index);
+        if ($ultimateBaseIndex === null) {
             return null;
         }
         
-        // Find the base item
+        // Get the ultimate base's relationship label
+        $ultimateBaseLabel = $this->getRelationshipLabel($ultimateBaseIndex);
+        
+        // Use the ultimate base label to determine what this loaded item is part of
+        if ($ultimateBaseLabel === 'loaded combination') {
+            return 'Part of loaded combination';
+        } elseif ($ultimateBaseLabel === 'loaded unit') {
+            return 'Part of loaded unit';
+        }
+        
+        // Fallback: check if the direct parent (what this item is loaded on) is connected to something
         $baseIndex = null;
         foreach ($this->items as $idx => $otherItem) {
             if (($otherItem['id'] ?? null) == ($item['related_item_id'] ?? null)) {
@@ -539,104 +691,37 @@ class CommodityItemsRepeater extends Component
             }
         }
         
-        if ($baseIndex === null) {
-            return null;
-        }
-        
-        $baseItem = $this->items[$baseIndex] ?? null;
-        if (!$baseItem) {
-            return null;
-        }
-        
-        // Find the ultimate base (the item that others point to, not a connected item)
-        // If the direct base is itself connected to something, follow the chain to find the ultimate base
-        $ultimateBaseIndex = $baseIndex;
-        $visited = [];
-        while (true) {
-            $currentItem = $this->items[$ultimateBaseIndex] ?? null;
-            if (!$currentItem || !isset($currentItem['id'])) {
-                break;
-            }
-            
-            // Check if this item is connected to something else (it has related_item_id pointing to another item)
-            if (isset($currentItem['related_item_id']) && 
-                !empty($currentItem['related_item_id']) &&
-                ($currentItem['relationship_type'] ?? 'separate') === 'connected_to') {
-                
-                // Find the parent item this is connected to
-                $parentIndex = null;
-                foreach ($this->items as $idx => $parentItem) {
-                    if ($idx === $ultimateBaseIndex || in_array($idx, $visited)) {
+        if ($baseIndex !== null) {
+            $baseItem = $this->items[$baseIndex] ?? null;
+            if ($baseItem) {
+                // Check if the parent is connected to something
+                $parentIsConnected = false;
+                foreach ($this->items as $otherIndex => $otherItem) {
+                    if ($otherIndex === $baseIndex || $otherIndex === $index) {
                         continue;
                     }
-                    if (($parentItem['id'] ?? null) == ($currentItem['related_item_id'] ?? null)) {
-                        $parentIndex = $idx;
+                    if (($otherItem['related_item_id'] ?? null) == ($baseItem['id'] ?? null) &&
+                        ($otherItem['relationship_type'] ?? 'separate') === 'connected_to') {
+                        $parentIsConnected = true;
                         break;
                     }
                 }
                 
-                if ($parentIndex === null) {
-                    break; // Can't find parent, stop here
+                // If parent is connected to something, this is part of loaded combination
+                if ($parentIsConnected) {
+                    return 'Part of loaded combination';
                 }
-                
-                // Prevent infinite loops
-                if (in_array($parentIndex, $visited)) {
-                    break;
-                }
-                
-                $visited[] = $ultimateBaseIndex;
-                $ultimateBaseIndex = $parentIndex;
-            } else {
-                break; // This item is not connected to anything else, it's the ultimate base
             }
         }
         
-        // Get the ultimate base's relationship label
-        $ultimateBaseLabel = $this->getRelationshipLabel($ultimateBaseIndex);
-        
-        if ($relationshipType === 'connected_to') {
-            // If ultimate base is a loaded combination, connected items are part of loaded combination
-            if ($ultimateBaseLabel === 'loaded combination') {
-                return 'Part of loaded combination';
-            }
-            return 'Part of combination';
-        } elseif ($relationshipType === 'loaded_with') {
-            // Use the ultimate base label to determine what this loaded item is part of
-            if ($ultimateBaseLabel === 'loaded combination') {
-                return 'Part of loaded combination';
-            } elseif ($ultimateBaseLabel === 'loaded unit') {
-                return 'Part of loaded unit';
-            }
-            
-            // Fallback: check if the direct parent (what this item is loaded on) is connected to something
-            // Check if the parent (baseItem) is connected to something
-            $parentIsConnected = false;
-            foreach ($this->items as $otherIndex => $otherItem) {
-                if ($otherIndex === $baseIndex || $otherIndex === $index) {
-                    continue;
-                }
-                if (($otherItem['related_item_id'] ?? null) == ($baseItem['id'] ?? null) &&
-                    ($otherItem['relationship_type'] ?? 'separate') === 'connected_to') {
-                    $parentIsConnected = true;
-                    break;
-                }
-            }
-            
-            // If parent is connected to something, this is part of loaded combination
-            if ($parentIsConnected) {
-                return 'Part of loaded combination';
-            }
-            
-            // Otherwise, it's part of a loaded unit
-            return 'Part of loaded unit';
-        }
-        
-        return null;
+        // Otherwise, it's part of a loaded unit
+        return 'Part of loaded unit';
     }
 
     /**
      * Get all relationship group numbers
-     * Groups all base items by their relationship label type and assigns sequential numbers
+     * Groups all true bases by their relationship label type and assigns sequential numbers
+     * Always assigns numbers (even for single combinations)
      * Returns array: ['base_item_id' => ['type' => 'combination', 'number' => 1], ...]
      */
     public function getRelationshipGroupNumbers(): array
@@ -647,9 +732,10 @@ class CommodityItemsRepeater extends Component
             'loaded unit' => [],
         ];
         
-        // Group all bases by their relationship type
+        // Group all true bases by their relationship type
         foreach ($this->items as $index => $item) {
-            if (!$this->isStackBase($index)) {
+            // Only process true bases (not connected items)
+            if (!$this->isTrueBase($index)) {
                 continue;
             }
             
@@ -662,14 +748,11 @@ class CommodityItemsRepeater extends Component
             }
         }
         
-        // Assign numbers to each group (only if there are 2+ of the same type)
+        // Always assign numbers (even for single combinations)
         $result = [];
         foreach ($groups as $type => $baseIds) {
-            if (count($baseIds) > 1) {
-                // Only number if there are 2+ of this type
-                foreach ($baseIds as $number => $baseId) {
-                    $result[$baseId] = ['type' => $type, 'number' => $number + 1];
-                }
+            foreach ($baseIds as $number => $baseId) {
+                $result[$baseId] = ['type' => $type, 'number' => $number + 1];
             }
         }
         
@@ -678,13 +761,24 @@ class CommodityItemsRepeater extends Component
 
     /**
      * Get the relationship number for an item
-     * Returns the number for that base's relationship type, or null if only 1 of that type exists
+     * Returns the number for that combination, using the ultimate base's combination type and number
      */
     public function getRelationshipNumber($index): ?int
     {
-        $baseId = $this->getStackBaseId($index);
-        if (!$baseId) {
+        // Find the ultimate base for this item
+        $ultimateBaseIndex = $this->getUltimateBaseIndex($index);
+        if ($ultimateBaseIndex === null) {
             return null;
+        }
+        
+        $ultimateBaseItem = $this->items[$ultimateBaseIndex] ?? null;
+        if (!$ultimateBaseItem || !isset($ultimateBaseItem['id'])) {
+            return null;
+        }
+        
+        $baseId = $ultimateBaseItem['id'];
+        if (str_starts_with($baseId, 'temp_')) {
+            return null; // Don't number temporary items
         }
         
         $groupNumbers = $this->getRelationshipGroupNumbers();

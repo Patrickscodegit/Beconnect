@@ -44,9 +44,10 @@
                                     <i class="fas fa-cube text-gray-500 mr-2"></i>
                                     Item #{{ $index + 1 }}
                                     @php
-                                        // Get relationship labels once for both header text and badge
+                                        // Get relationship labels and badge
                                         $baseLabel = $this->getRelationshipLabel($index);
                                         $linkedLabel = $this->getLinkedItemLabel($index);
+                                        $badgeLabel = $this->getBadgeLabel($index);
                                         $relationshipNumber = $this->getRelationshipNumber($index);
                                         
                                         // Build labels with numbers if applicable
@@ -74,17 +75,15 @@
                                         </span>
                                     @endif
                                     
-                                    @if($baseLabelDisplay)
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 ml-2">
-                                            <i class="fas fa-layer-group mr-1"></i>{{ ucfirst($baseLabelDisplay) }}
-                                        </span>
-                                    @elseif($linkedLabelDisplay)
+                                    @if($badgeLabel)
                                         @php
-                                            // Extract the relationship type from "Part of [type]"
-                                            $relationshipType = str_replace('Part of ', '', $linkedLabelDisplay);
+                                            // Determine badge color based on badge type
+                                            $isBaseBadge = in_array($badgeLabel, ['base unit', 'base connected unit']);
+                                            $badgeColor = $isBaseBadge ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800';
+                                            $badgeText = ucwords($badgeLabel);
                                         @endphp
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 ml-2">
-                                            <i class="fas fa-layer-group mr-1"></i>{{ ucfirst($relationshipType) }}
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $badgeColor }} ml-2">
+                                            <i class="fas fa-layer-group mr-1"></i>{{ $badgeText }}
                                         </span>
                                     @endif
                                 </h4>
