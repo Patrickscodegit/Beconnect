@@ -195,7 +195,19 @@ class CompositeItemsRelationManager extends RelationManager
                     
                 Tables\Columns\TextColumn::make('pivot.unit_type')
                     ->label('Unit Type')
-                    ->default('—'),
+                    ->default('—')
+                    ->formatStateUsing(function ($state, $record) {
+                        $pivotUnitType = $state;
+                        $childUnitType = $record->unit_type ?? null;
+                        // Treat null, empty string, or the default em dash (—) as "no value"
+                        // The em dash can appear as different characters, so check for common variants
+                        $isEmpty = empty($pivotUnitType) || 
+                                   $pivotUnitType === '—' || 
+                                   $pivotUnitType === '—' || 
+                                   $pivotUnitType === '-' ||
+                                   trim($pivotUnitType) === '';
+                        return !$isEmpty ? $pivotUnitType : ($childUnitType ?: '—');
+                    }),
                     
                 Tables\Columns\TextColumn::make('pivot.default_quantity')
                     ->label('Quantity')
@@ -398,13 +410,17 @@ class CompositeItemsRelationManager extends RelationManager
                         $isRequired = ($childType === 'mandatory');
                         $isConditional = ($childType === 'conditional');
                         
+                        // Get child article to use its unit_type as fallback if form unit_type is not provided
+                        $childArticle = RobawsArticleCache::find($data['child_article_id'] ?? null);
+                        $childArticleUnitType = $childArticle->unit_type ?? null;
+                        
                         // Prepare pivot data
                         $pivotData = [
                             'sort_order' => $data['sort_order'] ?? ($parent->children()->count() + 1),
                             'cost_type' => $data['cost_type'] ?? 'Material',
                             'default_quantity' => $data['default_quantity'] ?? 1.0,
                             'default_cost_price' => $data['default_cost_price'] ?? null,
-                            'unit_type' => $data['unit_type'] ?? null,
+                            'unit_type' => $data['unit_type'] ?? $childArticleUnitType ?? null,
                             'child_type' => $childType,
                             'is_required' => $isRequired,
                             'is_conditional' => $isConditional,
