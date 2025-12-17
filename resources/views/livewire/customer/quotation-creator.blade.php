@@ -490,11 +490,14 @@
                                         €{{ number_format($lmBreakdown['price'], 2) }} = 
                                         <span class="font-semibold text-blue-600">€{{ number_format($lmBreakdown['subtotal'], 2) }}</span>
                                     </span>
-                                @elseif($article->pivot->quantity && $article->pivot->unit_price)
+                                @elseif($article->pivot->unit_price)
+                                    @php
+                                        $displayQty = $articleModel ? $articleModel->display_quantity : ($article->pivot->quantity ?? 1);
+                                    @endphp
                                     <br>
-                                    Qty: {{ $article->pivot->quantity }} × 
+                                    Qty: {{ number_format($displayQty, 2) }} × 
                                     €{{ number_format($article->pivot->unit_price, 2) }} = 
-                                    <span class="font-semibold text-blue-600">€{{ number_format($article->pivot->subtotal ?? ($article->pivot->quantity * $article->pivot->unit_price), 2) }}</span>
+                                    <span class="font-semibold text-blue-600">€{{ number_format($article->pivot->subtotal ?? ($displayQty * $article->pivot->unit_price), 2) }}</span>
                                 @endif
                             </p>
                         </div>

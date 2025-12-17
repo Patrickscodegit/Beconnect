@@ -764,6 +764,7 @@ class RobawsArticleCache extends Model
                     return match ($type) {
                         'TRUCK' => ['TRUCK', 'HH', 'LM CARGO'],
                         'TRUCKHEAD' => ['TRUCKHEAD', 'HH', 'LM CARGO'],
+                        'TRAILER' => ['TRAILER', 'HH', 'LM CARGO'],
                         'BUS' => ['BUS', 'HH', 'LM CARGO'],
                         default => [$type],
                     };
@@ -893,10 +894,12 @@ class RobawsArticleCache extends Model
             'big_van' => 'Big Van',
             'truck' => 'Truck',
             'truckhead' => 'Truckhead',
+            'trailer' => 'Trailer',
             'bus' => 'Bus',
             'motorcycle' => 'Motorcycle',
         ];
 
-        return $vehicleMapping[$category] ?? 'Car'; // Default to Car
+        // Return null if category not found (don't default to Car)
+        return $vehicleMapping[$category] ?? null;
     }
 }

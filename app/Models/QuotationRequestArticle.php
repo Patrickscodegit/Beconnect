@@ -486,6 +486,19 @@ class QuotationRequestArticle extends Model
     }
 
     /**
+     * Get the effective/display quantity for this article.
+     * For LM/CBM articles, this calculates the actual quantity from commodity dimensions.
+     * For other articles, returns the stored quantity.
+     * 
+     * @return float
+     */
+    public function getDisplayQuantityAttribute(): float
+    {
+        $calculationService = app(QuantityCalculationService::class);
+        return $calculationService->calculateQuantity($this);
+    }
+
+    /**
      * Auto-add child articles when parent is selected
      */
     public function addChildArticles(): void

@@ -344,11 +344,13 @@ class SmartArticleSelectionService
             'big_van' => ['BIG VAN', 'LM CARGO'],
             'truck' => ['TRUCK', 'HH', 'LM CARGO'],
             'truckhead' => ['TRUCKHEAD', 'HH', 'LM CARGO'],
+            'trailer' => ['TRAILER', 'HH', 'LM CARGO'],
             'bus' => ['BUS', 'HH', 'LM CARGO'],
             'motorcycle' => ['MOTORCYCLE'],
         ];
 
-        return $vehicleMapping[$category] ?? ['CAR'];
+        // Return empty array if category not found (don't default to CAR)
+        return $vehicleMapping[$category] ?? [];
     }
 
     /**

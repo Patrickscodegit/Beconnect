@@ -44,22 +44,23 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
         }
         
         $totalLm = 0;
-        $processedStacks = [];
+        $processedItems = [];
         
         foreach ($commodityItems as $item) {
-            // Skip if this item is part of a stack we've already processed
-            if ($item->isInStack() && !$item->isStackBase()) {
-                continue; // Only process stack bases
+            // Skip if already processed
+            if (in_array($item->id, $processedItems)) {
+                continue;
             }
             
-            // Check if item is in a stack with stack dimensions
-            if ($item->isStackBase() && $item->stack_length_cm && $item->stack_width_cm) {
-                // Use stack dimensions
-                $baseId = $item->getStackGroup();
-                if (in_array($baseId, $processedStacks)) {
-                    continue; // Already processed this stack
-                }
-                $processedStacks[] = $baseId;
+            // Skip if this item is part of a stack and is NOT the base (it points to another item)
+            if ($item->isInStack() && !$item->isStackBase()) {
+                continue; // This item's dimensions are included in the stack base's calculation
+            }
+            
+            // PRIORITY 1: Use stack/overall dimensions if available
+            // This handles both actual stack bases AND items with overall dimensions set
+            if ($item->stack_length_cm && $item->stack_width_cm) {
+                $processedItems[] = $item->id;
                 
                 $lengthM = $item->stack_length_cm / 100;
                 $widthCm = max($item->stack_width_cm, 250); // Minimum width of 250 cm
@@ -71,8 +72,11 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
                 $lmForStack = $lmPerStack * $stackUnitCount;
                 
                 $totalLm += $lmForStack;
-            } elseif ($item->length_cm && $item->width_cm) {
-                // Use individual item dimensions
+            }
+            // PRIORITY 2: Use individual item dimensions
+            elseif ($item->length_cm && $item->width_cm) {
+                $processedItems[] = $item->id;
+                
                 $lengthM = $item->length_cm / 100;
                 $widthCm = max($item->width_cm, 250); // Minimum width of 250 cm
                 $widthM = $widthCm / 100;

@@ -268,11 +268,17 @@
                                         Code: {{ $article->article_code }}
                                     </p>
                                     @if(auth()->user()->pricing_tier_id || $quotationRequest->pricing_tier_id)
+                                        @php
+                                            $articleModel = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotationRequest->id)
+                                                ->where('article_cache_id', $article->id)
+                                                ->first();
+                                            $displayQty = $articleModel ? $articleModel->display_quantity : ($article->pivot->quantity ?? 1);
+                                        @endphp
                                         <p class="text-sm text-gray-700 mt-2">
-                                            Qty: {{ $article->pivot->quantity ?? 1 }} × 
+                                            Qty: {{ number_format($displayQty, 2) }} × 
                                             €{{ number_format($article->pivot->unit_price ?? $article->unit_price, 2) }} = 
                                             <span class="font-semibold text-blue-600">
-                                                €{{ number_format(($article->pivot->quantity ?? 1) * ($article->pivot->unit_price ?? $article->unit_price), 2) }}
+                                                €{{ number_format($article->pivot->subtotal ?? ($displayQty * ($article->pivot->unit_price ?? $article->unit_price)), 2) }}
                                             </span>
                                         </p>
                                     @endif
