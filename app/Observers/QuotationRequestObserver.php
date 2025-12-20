@@ -202,18 +202,23 @@ class QuotationRequestObserver
      */
     protected function addAdminArticleForQuotation(QuotationRequest $quotationRequest): void
     {
-        // Get admin articles
-        $adminArticles = \App\Models\RobawsArticleCache::whereIn('id', [14, 15, 16, 17, 20])
-            ->get()
-            ->keyBy(function ($article) {
-                if ($article->unit_price == 75) return 'admin_75';
-                if ($article->unit_price == 100) return 'admin_100';
-                if ($article->unit_price == 110) return 'admin_110';
-                if ($article->unit_price == 115) return 'admin_115';
-                if ($article->unit_price == 125) return 'admin_125';
-                return null;
-            })
-            ->filter();
+        // Find admin articles dynamically (works in both local and production)
+        $admin75 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 75')->where('unit_price', 75)->first();
+        $admin100 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 100')->where('unit_price', 100)->first();
+        $admin110 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 110')->where('unit_price', 110)->first();
+        $admin115 = \App\Models\RobawsArticleCache::where('article_name', 'Admin')->where('unit_price', 115)->first();
+        $admin125 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 125')->where('unit_price', 125)->first();
+        
+        $adminArticles = collect();
+        if ($admin75) $adminArticles->put('admin_75', $admin75);
+        if ($admin100) $adminArticles->put('admin_100', $admin100);
+        if ($admin110) $adminArticles->put('admin_110', $admin110);
+        if ($admin115) $adminArticles->put('admin_115', $admin115);
+        if ($admin125) $adminArticles->put('admin_125', $admin125);
+        
+        // #region agent log
+        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'B', 'location' => 'QuotationRequestObserver.php:206', 'message' => 'Admin articles lookup in observer', 'data' => ['admin75_id' => $admin75?->id, 'admin100_id' => $admin100?->id, 'admin110_id' => $admin110?->id, 'admin115_id' => $admin115?->id, 'admin125_id' => $admin125?->id, 'quotation_id' => $quotationRequest->id, 'pod' => $quotationRequest->pod], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+        // #endregion
 
         if ($adminArticles->isEmpty()) {
             Log::warning('No admin articles found', [

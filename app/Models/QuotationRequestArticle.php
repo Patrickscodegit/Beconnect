@@ -532,13 +532,33 @@ class QuotationRequestArticle extends Model
             ])->toArray(),
         ]);
         
+        // #region agent log
+        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'D', 'location' => 'QuotationRequestArticle.php:525', 'message' => 'Children loaded from parent', 'data' => ['parent_article_id' => $this->article_cache_id, 'parent_article_name' => $this->articleCache->article_name ?? 'N/A', 'children_count' => $children->count(), 'children_ids' => $children->pluck('id')->toArray(), 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+        // #endregion
+        
         $quotationRequest = $this->quotationRequest;
         $role = $quotationRequest->customer_role;
         
         $conditionMatcher = app(\App\Services\CompositeItems\ConditionMatcherService::class);
         
-        // Admin article IDs: 14 (Admin 115), 15 (Admin 100), 16 (Admin 110), 17 (Admin 125), 20 (Admin 75)
-        $adminArticleIds = [14, 15, 16, 17, 20];
+        // Find admin articles dynamically (works in both local and production)
+        $admin75 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 75')->where('unit_price', 75)->first();
+        $admin100 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 100')->where('unit_price', 100)->first();
+        $admin110 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 110')->where('unit_price', 110)->first();
+        $admin115 = \App\Models\RobawsArticleCache::where('article_name', 'Admin')->where('unit_price', 115)->first();
+        $admin125 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 125')->where('unit_price', 125)->first();
+        
+        $admin75Id = $admin75 ? $admin75->id : null;
+        $admin100Id = $admin100 ? $admin100->id : null;
+        $admin110Id = $admin110 ? $admin110->id : null;
+        $admin115Id = $admin115 ? $admin115->id : null;
+        $admin125Id = $admin125 ? $admin125->id : null;
+        
+        // #region agent log
+        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'A', 'location' => 'QuotationRequestArticle.php:541', 'message' => 'Admin article IDs lookup', 'data' => ['admin75_id' => $admin75Id, 'admin100_id' => $admin100Id, 'admin110_id' => $admin110Id, 'admin115_id' => $admin115Id, 'admin125_id' => $admin125Id, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+        // #endregion
+        
+        $adminArticleIds = array_filter([$admin75Id, $admin100Id, $admin110Id, $admin115Id, $admin125Id]);
         
         // Check if any admin article already exists in the quotation
         $existingAdminArticle = self::where('quotation_request_id', $quotationRequest->id)
@@ -559,13 +579,28 @@ class QuotationRequestArticle extends Model
             }
         }
         
+        // #region agent log
+        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'A', 'location' => 'QuotationRequestArticle.php:560', 'message' => 'Admin children separation', 'data' => ['admin_children_count' => $adminChildren->count(), 'admin_children_ids' => $adminChildren->pluck('id')->toArray(), 'admin_article_ids_lookup' => $adminArticleIds, 'existing_admin_article' => $existingAdminArticle ? $existingAdminArticle->article_cache_id : null, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+        // #endregion
+        
         // Process admin articles first (if no admin article exists yet)
         if (!$existingAdminArticle && $adminChildren->count() > 0) {
             // Sort admin articles by priority: 110, 115, 125, 100, 75
-            $adminPriority = [16 => 1, 14 => 2, 17 => 3, 15 => 4, 20 => 5]; // Lower number = higher priority
+            // Use dynamic IDs for priority mapping
+            $adminPriority = [
+                $admin110Id => 1, // Admin 110 (highest priority)
+                $admin115Id => 2, // Admin 115
+                $admin125Id => 3, // Admin 125
+                $admin100Id => 4, // Admin 100
+                $admin75Id => 5,  // Admin 75 (default, lowest priority)
+            ];
             $adminChildren = $adminChildren->sortBy(function ($child) use ($adminPriority) {
                 return $adminPriority[$child->id] ?? 999;
             });
+            
+            // #region agent log
+            file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'C', 'location' => 'QuotationRequestArticle.php:565', 'message' => 'Admin children processing', 'data' => ['admin_children_count' => $adminChildren->count(), 'admin_priority_map' => $adminPriority, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+            // #endregion
             
             foreach ($adminChildren as $child) {
                 $childType = $child->pivot->child_type ?? 'optional';
@@ -583,6 +618,10 @@ class QuotationRequestArticle extends Model
                     } else {
                         $shouldAdd = $conditionMatcher->matchConditions($conditions, $quotationRequest);
                     }
+                    
+                    // #region agent log
+                    file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'E', 'location' => 'QuotationRequestArticle.php:585', 'message' => 'Admin article condition evaluation', 'data' => ['admin_article_id' => $child->id, 'admin_article_name' => $child->article_name, 'conditions' => $conditions, 'should_add' => $shouldAdd, 'pod' => $quotationRequest->pod, 'commodity_type' => $quotationRequest->commodity_type, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+                    // #endregion
                     
                     if ($shouldAdd) {
                         // Check if this admin article already exists
