@@ -72,16 +72,9 @@ class ScheduleController extends Controller
                           ->orderBy('ets_pol')
                           ->paginate(50);
 
-        // Get POL and POD ports separately
-        // Define port roles for flexibility (ports can be both POL and POD)
-        $polPortCodes = ['ANR', 'ZEE', 'FLU']; // Current POL ports
-        $podPortCodes = ['ABJ', 'CKY', 'COO', 'DKR', 'DAR', 'DLA', 'DUR', 'ELS', 'LOS', 'LFW', 'MBA', 'PNR', 'PLZ', 'WVB']; // Current POD ports
-        
-        // Future-ready: To add Antwerp as POD, simply add 'ANR' to $podPortCodes array
-        // Example: $podPortCodes = ['ABJ', 'CKY', 'COO', 'DKR', 'DAR', 'DLA', 'DUR', 'ELS', 'LOS', 'LFW', 'MBA', 'PNR', 'PLZ', 'WVB', 'ANR'];
-        
-        $polPorts = Port::whereIn('code', $polPortCodes)->orderBy('name')->get();
-        $podPorts = Port::whereIn('code', $podPortCodes)->orderBy('name')->get();
+        // Get POL and POD ports - use dynamic scopes to show only ports with active schedules
+        $polPorts = Port::europeanOrigins()->orderBy('name')->get();
+        $podPorts = Port::withActivePodSchedules()->orderBy('name')->get();
         $carriers = ShippingCarrier::orderBy('name')->get();
 
         // Get filter values for form
@@ -360,7 +353,18 @@ class ScheduleController extends Controller
 
             // Temporary: Run synchronously until Horizon is configured
             // UpdateShippingSchedulesJob::dispatch($syncLog->id);
-            UpdateShippingSchedulesJob::dispatchSync($syncLog->id);
+            try {
+                UpdateShippingSchedulesJob::dispatchSync($syncLog->id);
+            } catch (\Exception $jobException) {
+                // Update sync log with error
+                $syncLog->update([
+                    'status' => 'failed',
+                    'completed_at' => now(),
+                    'error_message' => $jobException->getMessage()
+                ]);
+                
+                throw $jobException; // Re-throw to be caught by outer catch
+            }
 
             Log::info('Manual schedule sync triggered', [
                 'sync_log_id' => $syncLog->id,
@@ -379,9 +383,11 @@ class ScheduleController extends Controller
                 'trace' => $e->getTraceAsString()
             ]);
 
+            // Ensure we always return JSON, never HTML
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to start sync: ' . $e->getMessage()
+                'message' => 'Failed to start sync: ' . $e->getMessage(),
+                'error_type' => get_class($e)
             ], 500);
         }
     }

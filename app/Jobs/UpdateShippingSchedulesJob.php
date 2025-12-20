@@ -41,60 +41,93 @@ class UpdateShippingSchedulesJob implements ShouldQueue
             $syncLog = ScheduleSyncLog::find($this->syncLogId);
         }
 
-        Log::info('Starting AI-POWERED shipping schedule update', [
-            'sync_log_id' => $this->syncLogId
-        ]);
-        
-        // Initialize AI services for dynamic validation and parsing
-        $aiValidator = new AIScheduleValidationService(new OpenAIService());
-        $pipeline = new ScheduleExtractionPipeline($aiValidator);
-        
-        // Use REAL DATA extraction strategies only - no mock data!
-        $pipeline->addStrategy(new RealSallaumScheduleExtractionStrategy()); // West Africa specialist
-        $pipeline->addStrategy(new RealNmtScheduleExtractionStrategy());
-        $pipeline->addStrategy(new RealGrimaldiScheduleExtractionStrategy());
-        $pipeline->addStrategy(new RealWalleniusWilhelmsenScheduleExtractionStrategy());
-        
-        // Add AI parsing strategy if enabled
-        // TEMPORARILY DISABLED: AI parsing hits rate limits and returns 0 schedules
-        // Re-enable after optimizing API calls
-        if (false && config('schedule_extraction.use_ai_parsing', false)) {
-            $pipeline->addStrategy(new AIScheduleExtractionStrategy(new OpenAIService()));
-            Log::info('AI parsing strategy enabled for dynamic schedule extraction');
-        }
-        
-        Log::info('Registered AI-POWERED schedule extraction strategies (no hardcoded data)');
-        
-        $portCombinations = $this->getActivePortCombinations();
-        $totalSchedulesUpdated = 0;
-        $carriersProcessed = 0;
-        
-        foreach ($portCombinations as $combination) {
-            $result = $this->updateSchedulesForRoute($pipeline, $combination);
-            $totalSchedulesUpdated += $result['schedules'];
-            $carriersProcessed += $result['carriers'];
-        }
-        
-        // Update sync log if provided
-        if ($syncLog) {
-            $syncLog->update([
-                'status' => 'success',
-                'schedules_updated' => $totalSchedulesUpdated,
-                'carriers_processed' => $carriersProcessed,
-                'completed_at' => now(),
-                'details' => array_merge($syncLog->details ?? [], [
-                    'routes_processed' => count($portCombinations),
-                    'total_schedules' => $totalSchedulesUpdated
-                ])
+        try {
+            Log::info('Starting AI-POWERED shipping schedule update', [
+                'sync_log_id' => $this->syncLogId
             ]);
+            
+            // Initialize AI services for dynamic validation and parsing
+            $aiValidator = new AIScheduleValidationService(new OpenAIService());
+            $pipeline = new ScheduleExtractionPipeline($aiValidator);
+            
+            // Use REAL DATA extraction strategies only - no mock data!
+            $pipeline->addStrategy(new RealSallaumScheduleExtractionStrategy()); // West Africa specialist
+            $pipeline->addStrategy(new RealNmtScheduleExtractionStrategy());
+            $pipeline->addStrategy(new RealGrimaldiScheduleExtractionStrategy());
+            $pipeline->addStrategy(new RealWalleniusWilhelmsenScheduleExtractionStrategy());
+            
+            // Add AI parsing strategy if enabled
+            // TEMPORARILY DISABLED: AI parsing hits rate limits and returns 0 schedules
+            // Re-enable after optimizing API calls
+            if (false && config('schedule_extraction.use_ai_parsing', false)) {
+                $pipeline->addStrategy(new AIScheduleExtractionStrategy(new OpenAIService()));
+                Log::info('AI parsing strategy enabled for dynamic schedule extraction');
+            }
+            
+            Log::info('Registered AI-POWERED schedule extraction strategies (no hardcoded data)');
+            
+            $portCombinations = $this->getActivePortCombinations();
+            $totalSchedulesUpdated = 0;
+            $carriersProcessed = 0;
+            
+            foreach ($portCombinations as $combination) {
+                try {
+                    $result = $this->updateSchedulesForRoute($pipeline, $combination);
+                    $totalSchedulesUpdated += $result['schedules'];
+                    $carriersProcessed += $result['carriers'];
+                } catch (\Exception $routeException) {
+                    Log::error('Failed to process route', [
+                        'pol' => $combination['pol'],
+                        'pod' => $combination['pod'],
+                        'error' => $routeException->getMessage()
+                    ]);
+                    // Continue with next route
+                }
+            }
+            
+            // Update sync log if provided
+            if ($syncLog) {
+                $syncLog->update([
+                    'status' => 'success',
+                    'schedules_updated' => $totalSchedulesUpdated,
+                    'carriers_processed' => $carriersProcessed,
+                    'completed_at' => now(),
+                    'details' => array_merge($syncLog->details ?? [], [
+                        'routes_processed' => count($portCombinations),
+                        'total_schedules' => $totalSchedulesUpdated
+                    ])
+                ]);
+            }
+            
+            Log::info('Scheduled shipping schedule update completed', [
+                'routes_processed' => count($portCombinations),
+                'total_schedules_updated' => $totalSchedulesUpdated,
+                'carriers_processed' => $carriersProcessed,
+                'sync_log_id' => $this->syncLogId
+            ]);
+        } catch (\Exception $e) {
+            // Update sync log with error
+            if ($syncLog) {
+                $syncLog->update([
+                    'status' => 'failed',
+                    'completed_at' => now(),
+                    'error_message' => $e->getMessage(),
+                    'details' => array_merge($syncLog->details ?? [], [
+                        'exception' => get_class($e),
+                        'trace' => $e->getTraceAsString()
+                    ])
+                ]);
+            }
+
+            Log::error('Schedule update job failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'sync_log_id' => $this->syncLogId
+            ]);
+
+            // Re-throw to be caught by the controller
+            throw $e;
         }
-        
-        Log::info('Scheduled shipping schedule update completed', [
-            'routes_processed' => count($portCombinations),
-            'total_schedules_updated' => $totalSchedulesUpdated,
-            'carriers_processed' => $carriersProcessed,
-            'sync_log_id' => $this->syncLogId
-        ]);
     }
 
     private function updateSchedulesForRoute(ScheduleExtractionPipeline $pipeline, array $combination): array
