@@ -276,7 +276,10 @@ class CompositeItemsRelationManager extends RelationManager
                             ->label('Child Article')
                             ->options(function () {
                                 // #region agent log
-                                file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['id' => 'log_' . time() . '_' . uniqid(), 'timestamp' => time() * 1000, 'location' => 'CompositeItemsRelationManager.php:277', 'message' => 'child_article_id options() called', 'data' => ['hypothesisId' => 'A'], 'sessionId' => 'debug-session', 'runId' => 'run1']) . "\n", FILE_APPEND);
+                                $logPath = base_path('.cursor/debug.log');
+                                if (file_exists(dirname($logPath)) || is_dir(dirname($logPath))) {
+                                    @file_put_contents($logPath, json_encode(['id' => 'log_' . time() . '_' . uniqid(), 'timestamp' => time() * 1000, 'location' => 'CompositeItemsRelationManager.php:277', 'message' => 'child_article_id options() called', 'data' => ['hypothesisId' => 'A'], 'sessionId' => 'debug-session', 'runId' => 'run1']) . "\n", FILE_APPEND | LOCK_EX);
+                                }
                                 // #endregion
                                 $parent = $this->getOwnerRecord();
                                 $excludeIds = $parent->children()->pluck('robaws_articles_cache.id')->toArray();
@@ -455,7 +458,10 @@ class CompositeItemsRelationManager extends RelationManager
                     ])
                     ->action(function (array $data) {
                         // #region agent log
-                        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['id' => 'log_' . time() . '_' . uniqid(), 'timestamp' => time() * 1000, 'location' => 'CompositeItemsRelationManager.php:405', 'message' => 'attach action called', 'data' => ['formData' => $data, 'hypothesisId' => 'D'], 'sessionId' => 'debug-session', 'runId' => 'run1']) . "\n", FILE_APPEND);
+                        $logPath = base_path('.cursor/debug.log');
+                        if (file_exists(dirname($logPath)) || is_dir(dirname($logPath))) {
+                            @file_put_contents($logPath, json_encode(['id' => 'log_' . time() . '_' . uniqid(), 'timestamp' => time() * 1000, 'location' => 'CompositeItemsRelationManager.php:405', 'message' => 'attach action called', 'data' => ['formData' => $data, 'hypothesisId' => 'D'], 'sessionId' => 'debug-session', 'runId' => 'run1']) . "\n", FILE_APPEND | LOCK_EX);
+                        }
                         // #endregion
                         $parent = $this->getOwnerRecord();
                         
@@ -468,7 +474,10 @@ class CompositeItemsRelationManager extends RelationManager
                         $childArticle = RobawsArticleCache::find($data['child_article_id'] ?? null);
                         $childArticleUnitType = $childArticle->unit_type ?? null;
                         // #region agent log
-                        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['id' => 'log_' . time() . '_' . uniqid(), 'timestamp' => time() * 1000, 'location' => 'CompositeItemsRelationManager.php:416', 'message' => 'Child article unit_type retrieved', 'data' => ['formUnitType' => $data['unit_type'] ?? null, 'childArticleUnitType' => $childArticleUnitType, 'hypothesisId' => 'D'], 'sessionId' => 'debug-session', 'runId' => 'run1']) . "\n", FILE_APPEND);
+                        $logPath = base_path('.cursor/debug.log');
+                        if (file_exists(dirname($logPath)) || is_dir(dirname($logPath))) {
+                            @file_put_contents($logPath, json_encode(['id' => 'log_' . time() . '_' . uniqid(), 'timestamp' => time() * 1000, 'location' => 'CompositeItemsRelationManager.php:416', 'message' => 'Child article unit_type retrieved', 'data' => ['formUnitType' => $data['unit_type'] ?? null, 'childArticleUnitType' => $childArticleUnitType, 'hypothesisId' => 'D'], 'sessionId' => 'debug-session', 'runId' => 'run1']) . "\n", FILE_APPEND | LOCK_EX);
+                        }
                         // #endregion
                         
                         // Prepare pivot data
