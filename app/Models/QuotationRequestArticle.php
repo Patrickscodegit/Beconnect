@@ -537,7 +537,102 @@ class QuotationRequestArticle extends Model
         
         $conditionMatcher = app(\App\Services\CompositeItems\ConditionMatcherService::class);
         
+        // Admin article IDs: 14 (Admin 115), 15 (Admin 100), 16 (Admin 110), 17 (Admin 125), 20 (Admin 75)
+        $adminArticleIds = [14, 15, 16, 17, 20];
+        
+        // Check if any admin article already exists in the quotation
+        $existingAdminArticle = self::where('quotation_request_id', $quotationRequest->id)
+            ->whereIn('article_cache_id', $adminArticleIds)
+            ->first();
+        
+        $adminArticleAdded = false;
+        
+        // Separate admin articles from other children for priority-based evaluation
+        $adminChildren = collect();
+        $otherChildren = collect();
+        
         foreach ($children as $child) {
+            if (in_array($child->id, $adminArticleIds)) {
+                $adminChildren->push($child);
+            } else {
+                $otherChildren->push($child);
+            }
+        }
+        
+        // Process admin articles first (if no admin article exists yet)
+        if (!$existingAdminArticle && $adminChildren->count() > 0) {
+            // Sort admin articles by priority: 110, 115, 125, 100, 75
+            $adminPriority = [16 => 1, 14 => 2, 17 => 3, 15 => 4, 20 => 5]; // Lower number = higher priority
+            $adminChildren = $adminChildren->sortBy(function ($child) use ($adminPriority) {
+                return $adminPriority[$child->id] ?? 999;
+            });
+            
+            foreach ($adminChildren as $child) {
+                $childType = $child->pivot->child_type ?? 'optional';
+                
+                if ($childType === 'conditional') {
+                    $conditions = is_string($child->pivot->conditions) 
+                        ? json_decode($child->pivot->conditions, true) 
+                        : $child->pivot->conditions;
+                    
+                    // Special handling for Admin 75 (empty conditions = default)
+                    $shouldAdd = false;
+                    if (empty($conditions)) {
+                        // Admin 75 (default) - only add if no other admin article matched
+                        $shouldAdd = !$adminArticleAdded;
+                    } else {
+                        $shouldAdd = $conditionMatcher->matchConditions($conditions, $quotationRequest);
+                    }
+                    
+                    if ($shouldAdd) {
+                        // Check if this admin article already exists
+                        $exists = self::where('quotation_request_id', $quotationRequest->id)
+                            ->where('article_cache_id', $child->id)
+                            ->exists();
+                        
+                        if (!$exists) {
+                            try {
+                                // Force quantity = 1 for admin articles
+                                $quantity = 1;
+                                
+                                $created = self::create([
+                                    'quotation_request_id' => $quotationRequest->id,
+                                    'article_cache_id' => $child->id,
+                                    'parent_article_id' => $this->article_cache_id,
+                                    'item_type' => 'child',
+                                    'quantity' => $quantity,
+                                    'unit_type' => $child->pivot->unit_type ?? $child->unit_type ?? 'unit',
+                                    'unit_price' => $child->pivot->default_cost_price ?? $child->unit_price,
+                                    'selling_price' => $child->getPriceForRole($role ?: 'default'),
+                                    'currency' => $child->currency,
+                                ]);
+                                
+                                $adminArticleAdded = true;
+                                \Log::info('Admin article added', [
+                                    'admin_article_id' => $child->id,
+                                    'admin_article_name' => $child->article_name,
+                                    'quotation_request_article_id' => $created->id,
+                                ]);
+                                
+                                // Only add one admin article per quotation
+                                break;
+                            } catch (\Exception $e) {
+                                \Log::error('Failed to create admin article', [
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString(),
+                                ]);
+                            }
+                        } else {
+                            $adminArticleAdded = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Process other (non-admin) children
+        foreach ($otherChildren as $child) {
             $childType = $child->pivot->child_type ?? 'optional';
             $shouldAdd = false;
             
