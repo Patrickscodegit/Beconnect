@@ -237,6 +237,7 @@ class ProspectQuotationController extends Controller
             'pod' => 'required|string|max:255',
             'por' => 'nullable|string|max:255',
             'fdest' => 'nullable|string|max:255',
+            'in_transit_to' => 'nullable|string|max:255',
             
             // Service Information
             'simple_service_type' => 'required|string|in:' . implode(',', array_keys(config('quotation.simple_service_types', []))),
@@ -306,6 +307,7 @@ class ProspectQuotationController extends Controller
             'pod' => $request->pod,
             'por' => $request->por,
             'fdest' => $request->fdest,
+            'in_transit_to' => $request->in_transit_to,
             'routing' => [
                 'por' => $request->por,
                 'pol' => $request->pol,

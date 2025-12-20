@@ -131,6 +131,17 @@
                                 <p class="text-xs text-gray-500">FDEST</p>
                             </div>
                         @endif
+                        
+                        @if($quotationRequest->in_transit_to)
+                            <div class="flex-1 h-1 bg-gray-300 rounded"></div>
+                            <div class="text-center">
+                                <div class="bg-purple-100 rounded-full w-16 h-16 flex items-center justify-center mb-2">
+                                    <i class="fas fa-exchange-alt text-purple-600"></i>
+                                </div>
+                                <p class="text-sm font-medium text-gray-900">{{ $quotationRequest->in_transit_to }}</p>
+                                <p class="text-xs text-gray-500">In Transit To</p>
+                            </div>
+                        @endif
                     </div>
                 </div>
                 

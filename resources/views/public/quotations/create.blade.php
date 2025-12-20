@@ -214,6 +214,22 @@
                                 <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
                             @enderror
                         </div>
+                        
+                        <div>
+                            <label for="in_transit_to" class="block text-sm font-medium text-gray-700 mb-2">
+                                In Transit To
+                            </label>
+                            <input type="text" id="in_transit_to" name="in_transit_to"
+                                   value="{{ old('in_transit_to', $prefill['in_transit_to'] ?? '') }}"
+                                   class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                                   placeholder="e.g., Another Country">
+                            <p class="text-xs text-gray-500 mt-1">
+                                <i class="fas fa-info-circle"></i> If shipment is in transit to another country, specify destination
+                            </p>
+                            @error('in_transit_to')
+                                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
+                            @enderror
+                        </div>
                     </div>
                 </div>
 

@@ -211,6 +211,9 @@
                                     @if($quotationRequest->fdest)
                                         → {{ $quotationRequest->fdest }}
                                     @endif
+                                    @if($quotationRequest->in_transit_to)
+                                        → (In Transit To: {{ $quotationRequest->in_transit_to }})
+                                    @endif
                                 </dd>
                             </div>
                             <div>
