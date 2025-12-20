@@ -167,18 +167,10 @@ class QuotationRequestObserver
         
         $adminArticleIds = array_filter([$admin75Id, $admin100Id, $admin110Id, $admin115Id, $admin125Id]);
         
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'F', 'location' => 'QuotationRequestObserver.php:153', 'message' => 'ensureAdminArticleExists - checking for existing', 'data' => ['admin_article_ids' => $adminArticleIds, 'quotation_id' => $quotationRequest->id, 'pod' => $quotationRequest->pod], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
-        // #endregion
-        
         // Check if any admin article exists
         $existingAdminArticle = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotationRequest->id)
             ->whereIn('article_cache_id', $adminArticleIds)
             ->first();
-        
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'F', 'location' => 'QuotationRequestObserver.php:175', 'message' => 'ensureAdminArticleExists - existing admin found', 'data' => ['existing_admin_id' => $existingAdminArticle ? $existingAdminArticle->article_cache_id : null, 'existing_admin_name' => $existingAdminArticle ? $existingAdminArticle->articleCache->article_name ?? 'N/A' : null, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
-        // #endregion
         
         // If POD changed, we may need to update the admin article
         $podChanged = $quotationRequest->wasChanged('pod');
@@ -248,19 +240,12 @@ class QuotationRequestObserver
             ->first();
         
         if ($existingAdmin) {
-            // #region agent log
-            @file_put_contents(base_path('.cursor/debug.log'), json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'I', 'location' => 'QuotationRequestObserver.php:240', 'message' => 'Observer skipping - admin already exists', 'data' => ['existing_admin_id' => $existingAdmin->article_cache_id, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
-            // #endregion
             Log::info('Admin article already exists, skipping observer addition', [
                 'quotation_id' => $quotationRequest->id,
                 'existing_admin_id' => $existingAdmin->article_cache_id,
             ]);
             return; // Admin article already exists, don't add another
         }
-        
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'B', 'location' => 'QuotationRequestObserver.php:250', 'message' => 'Admin articles lookup in observer', 'data' => ['admin75_id' => $admin75Id, 'admin100_id' => $admin100Id, 'admin110_id' => $admin110Id, 'admin115_id' => $admin115Id, 'admin125_id' => $admin125Id, 'quotation_id' => $quotationRequest->id, 'pod' => $quotationRequest->pod], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
-        // #endregion
 
         if (!$admin75Id && !$admin100Id && !$admin110Id && !$admin115Id && !$admin125Id) {
             Log::warning('No admin articles found', [
@@ -304,10 +289,6 @@ class QuotationRequestObserver
             } else {
                 $shouldAdd = $conditionMatcher->matchConditions($conditions, $quotationRequest);
             }
-            
-            // #region agent log
-            @file_put_contents(base_path('.cursor/debug.log'), json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'G', 'location' => 'QuotationRequestObserver.php:285', 'message' => 'Observer admin article evaluation', 'data' => ['admin_key' => $adminKey, 'admin_id' => $adminId, 'conditions' => $conditions, 'should_add' => $shouldAdd, 'pod' => $quotationRequest->pod, 'commodity_type' => $quotationRequest->commodity_type, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
-            // #endregion
 
             if ($shouldAdd) {
                 $adminArticle = \App\Models\RobawsArticleCache::find($adminId);
@@ -320,10 +301,6 @@ class QuotationRequestObserver
                 $exists = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotationRequest->id)
                     ->whereIn('article_cache_id', $allAdminIds)
                     ->exists();
-                
-                // #region agent log
-                @file_put_contents(base_path('.cursor/debug.log'), json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'H', 'location' => 'QuotationRequestObserver.php:295', 'message' => 'Observer checking for existing admin', 'data' => ['admin_id_to_add' => $adminId, 'all_admin_ids' => $allAdminIds, 'exists' => $exists, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
-                // #endregion
 
                 if (!$exists) {
                     \App\Models\QuotationRequestArticle::create([
