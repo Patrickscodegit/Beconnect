@@ -583,6 +583,10 @@ class QuotationRequestArticle extends Model
         @file_put_contents(base_path('.cursor/debug.log'), json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'A', 'location' => 'QuotationRequestArticle.php:560', 'message' => 'Admin children separation', 'data' => ['admin_children_count' => $adminChildren->count(), 'admin_children_ids' => $adminChildren->pluck('id')->toArray(), 'admin_article_ids_lookup' => $adminArticleIds, 'existing_admin_article' => $existingAdminArticle ? $existingAdminArticle->article_cache_id : null, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
         // #endregion
         
+        // #region agent log
+        @file_put_contents(base_path('.cursor/debug.log'), json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'J', 'location' => 'QuotationRequestArticle.php:586', 'message' => 'About to process admin articles', 'data' => ['existing_admin_article' => $existingAdminArticle ? $existingAdminArticle->article_cache_id : null, 'admin_children_count' => $adminChildren->count(), 'parent_article_id' => $this->article_cache_id, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+        // #endregion
+        
         // Process admin articles first (if no admin article exists yet)
         if (!$existingAdminArticle && $adminChildren->count() > 0) {
             // Sort admin articles by priority: 110, 115, 125, 100, 75
@@ -624,10 +628,16 @@ class QuotationRequestArticle extends Model
                     // #endregion
                     
                     if ($shouldAdd) {
-                        // Check if this admin article already exists
+                        // Check if ANY admin article already exists (not just this specific one)
+                        // This prevents multiple admin articles when multiple parent articles are added
+                        $allAdminIds = array_filter([$admin75Id, $admin100Id, $admin110Id, $admin115Id, $admin125Id]);
                         $exists = self::where('quotation_request_id', $quotationRequest->id)
-                            ->where('article_cache_id', $child->id)
+                            ->whereIn('article_cache_id', $allAdminIds)
                             ->exists();
+                        
+                        // #region agent log
+                        @file_put_contents(base_path('.cursor/debug.log'), json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'K', 'location' => 'QuotationRequestArticle.php:630', 'message' => 'Checking if any admin exists before adding', 'data' => ['admin_id_to_add' => $child->id, 'admin_name' => $child->article_name, 'all_admin_ids' => $allAdminIds, 'exists' => $exists, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+                        // #endregion
                         
                         if (!$exists) {
                             try {
