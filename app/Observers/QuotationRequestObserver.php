@@ -217,7 +217,7 @@ class QuotationRequestObserver
         if ($admin125) $adminArticles->put('admin_125', $admin125);
         
         // #region agent log
-        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'B', 'location' => 'QuotationRequestObserver.php:206', 'message' => 'Admin articles lookup in observer', 'data' => ['admin75_id' => $admin75?->id, 'admin100_id' => $admin100?->id, 'admin110_id' => $admin110?->id, 'admin115_id' => $admin115?->id, 'admin125_id' => $admin125?->id, 'quotation_id' => $quotationRequest->id, 'pod' => $quotationRequest->pod], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+        @file_put_contents(base_path('.cursor/debug.log'), json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'B', 'location' => 'QuotationRequestObserver.php:206', 'message' => 'Admin articles lookup in observer', 'data' => ['admin75_id' => $admin75?->id, 'admin100_id' => $admin100?->id, 'admin110_id' => $admin110?->id, 'admin115_id' => $admin115?->id, 'admin125_id' => $admin125?->id, 'quotation_id' => $quotationRequest->id, 'pod' => $quotationRequest->pod], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
         // #endregion
 
         if ($adminArticles->isEmpty()) {

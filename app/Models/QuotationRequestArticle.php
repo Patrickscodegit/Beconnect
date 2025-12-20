@@ -532,11 +532,11 @@ class QuotationRequestArticle extends Model
             ])->toArray(),
         ]);
         
-        // #region agent log
-        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'D', 'location' => 'QuotationRequestArticle.php:525', 'message' => 'Children loaded from parent', 'data' => ['parent_article_id' => $this->article_cache_id, 'parent_article_name' => $this->articleCache->article_name ?? 'N/A', 'children_count' => $children->count(), 'children_ids' => $children->pluck('id')->toArray(), 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
-        // #endregion
-        
         $quotationRequest = $this->quotationRequest;
+        
+        // #region agent log
+        @file_put_contents(base_path('.cursor/debug.log'), json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'D', 'location' => 'QuotationRequestArticle.php:525', 'message' => 'Children loaded from parent', 'data' => ['parent_article_id' => $this->article_cache_id, 'parent_article_name' => $this->articleCache->article_name ?? 'N/A', 'children_count' => $children->count(), 'children_ids' => $children->pluck('id')->toArray(), 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+        // #endregion
         $role = $quotationRequest->customer_role;
         
         $conditionMatcher = app(\App\Services\CompositeItems\ConditionMatcherService::class);
@@ -555,7 +555,7 @@ class QuotationRequestArticle extends Model
         $admin125Id = $admin125 ? $admin125->id : null;
         
         // #region agent log
-        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'A', 'location' => 'QuotationRequestArticle.php:541', 'message' => 'Admin article IDs lookup', 'data' => ['admin75_id' => $admin75Id, 'admin100_id' => $admin100Id, 'admin110_id' => $admin110Id, 'admin115_id' => $admin115Id, 'admin125_id' => $admin125Id, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+        @file_put_contents(base_path('.cursor/debug.log'), json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'A', 'location' => 'QuotationRequestArticle.php:541', 'message' => 'Admin article IDs lookup', 'data' => ['admin75_id' => $admin75Id, 'admin100_id' => $admin100Id, 'admin110_id' => $admin110Id, 'admin115_id' => $admin115Id, 'admin125_id' => $admin125Id, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
         // #endregion
         
         $adminArticleIds = array_filter([$admin75Id, $admin100Id, $admin110Id, $admin115Id, $admin125Id]);
@@ -580,7 +580,7 @@ class QuotationRequestArticle extends Model
         }
         
         // #region agent log
-        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'A', 'location' => 'QuotationRequestArticle.php:560', 'message' => 'Admin children separation', 'data' => ['admin_children_count' => $adminChildren->count(), 'admin_children_ids' => $adminChildren->pluck('id')->toArray(), 'admin_article_ids_lookup' => $adminArticleIds, 'existing_admin_article' => $existingAdminArticle ? $existingAdminArticle->article_cache_id : null, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+        @file_put_contents(base_path('.cursor/debug.log'), json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'A', 'location' => 'QuotationRequestArticle.php:560', 'message' => 'Admin children separation', 'data' => ['admin_children_count' => $adminChildren->count(), 'admin_children_ids' => $adminChildren->pluck('id')->toArray(), 'admin_article_ids_lookup' => $adminArticleIds, 'existing_admin_article' => $existingAdminArticle ? $existingAdminArticle->article_cache_id : null, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
         // #endregion
         
         // Process admin articles first (if no admin article exists yet)
@@ -599,7 +599,7 @@ class QuotationRequestArticle extends Model
             });
             
             // #region agent log
-            file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'C', 'location' => 'QuotationRequestArticle.php:565', 'message' => 'Admin children processing', 'data' => ['admin_children_count' => $adminChildren->count(), 'admin_priority_map' => $adminPriority, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+            @file_put_contents(base_path('.cursor/debug.log'), json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'C', 'location' => 'QuotationRequestArticle.php:565', 'message' => 'Admin children processing', 'data' => ['admin_children_count' => $adminChildren->count(), 'admin_priority_map' => $adminPriority, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
             // #endregion
             
             foreach ($adminChildren as $child) {
@@ -620,7 +620,7 @@ class QuotationRequestArticle extends Model
                     }
                     
                     // #region agent log
-                    file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'E', 'location' => 'QuotationRequestArticle.php:585', 'message' => 'Admin article condition evaluation', 'data' => ['admin_article_id' => $child->id, 'admin_article_name' => $child->article_name, 'conditions' => $conditions, 'should_add' => $shouldAdd, 'pod' => $quotationRequest->pod, 'commodity_type' => $quotationRequest->commodity_type, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+                    @file_put_contents(base_path('.cursor/debug.log'), json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'E', 'location' => 'QuotationRequestArticle.php:585', 'message' => 'Admin article condition evaluation', 'data' => ['admin_article_id' => $child->id, 'admin_article_name' => $child->article_name, 'conditions' => $conditions, 'should_add' => $shouldAdd, 'pod' => $quotationRequest->pod, 'commodity_type' => $quotationRequest->commodity_type, 'quotation_id' => $quotationRequest->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
                     // #endregion
                     
                     if ($shouldAdd) {
