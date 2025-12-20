@@ -275,12 +275,6 @@ class CompositeItemsRelationManager extends RelationManager
                         Forms\Components\Select::make('child_article_id')
                             ->label('Child Article')
                             ->options(function () {
-                                // #region agent log
-                                $logPath = base_path('.cursor/debug.log');
-                                if (file_exists(dirname($logPath)) || is_dir(dirname($logPath))) {
-                                    @file_put_contents($logPath, json_encode(['id' => 'log_' . time() . '_' . uniqid(), 'timestamp' => time() * 1000, 'location' => 'CompositeItemsRelationManager.php:277', 'message' => 'child_article_id options() called', 'data' => ['hypothesisId' => 'A'], 'sessionId' => 'debug-session', 'runId' => 'run1']) . "\n", FILE_APPEND | LOCK_EX);
-                                }
-                                // #endregion
                                 $parent = $this->getOwnerRecord();
                                 $excludeIds = $parent->children()->pluck('robaws_articles_cache.id')->toArray();
                                 
@@ -314,20 +308,9 @@ class CompositeItemsRelationManager extends RelationManager
                             ->required()
                             ->live(onBlur: false)
                             ->afterStateUpdated(function ($state, Forms\Set $set) {
-                                // #region agent log
-                                $logPath = base_path('.cursor/debug.log');
-                                if (file_exists(dirname($logPath)) || is_dir(dirname($logPath))) {
-                                    file_put_contents($logPath, json_encode(['id' => 'log_' . time() . '_' . uniqid(), 'timestamp' => time() * 1000, 'location' => 'CompositeItemsRelationManager.php:313', 'message' => 'child_article_id afterStateUpdated called', 'data' => ['selectedId' => $state, 'env' => app()->environment(), 'hypothesisId' => 'B'], 'sessionId' => 'debug-session', 'runId' => 'run1']) . "\n", FILE_APPEND | LOCK_EX);
-                                }
-                                // #endregion
                                 if ($state) {
                                     $childArticle = RobawsArticleCache::find($state);
                                     $unitType = $childArticle->unit_type ?? null;
-                                    // #region agent log
-                                    if (file_exists(dirname($logPath)) || is_dir(dirname($logPath))) {
-                                        file_put_contents($logPath, json_encode(['id' => 'log_' . time() . '_' . uniqid(), 'timestamp' => time() * 1000, 'location' => 'CompositeItemsRelationManager.php:320', 'message' => 'Setting unit_type from child article', 'data' => ['articleId' => $state, 'unitType' => $unitType, 'articleCode' => $childArticle->article_code ?? null, 'env' => app()->environment(), 'hypothesisId' => 'B'], 'sessionId' => 'debug-session', 'runId' => 'run1']) . "\n", FILE_APPEND | LOCK_EX);
-                                    }
-                                    // #endregion
                                     if ($unitType) {
                                         $set('unit_type', $unitType);
                                     } else {
@@ -408,22 +391,10 @@ class CompositeItemsRelationManager extends RelationManager
                             ->label('Unit Type')
                             ->maxLength(50)
                             ->default(function (Forms\Get $get) {
-                                // #region agent log
-                                $logPath = base_path('.cursor/debug.log');
                                 $childArticleId = $get('child_article_id');
-                                if (file_exists(dirname($logPath)) || is_dir(dirname($logPath))) {
-                                    file_put_contents($logPath, json_encode(['id' => 'log_' . time() . '_' . uniqid(), 'timestamp' => time() * 1000, 'location' => 'CompositeItemsRelationManager.php:393', 'message' => 'unit_type default() called in attach form', 'data' => ['childArticleId' => $childArticleId, 'env' => app()->environment(), 'hypothesisId' => 'C'], 'sessionId' => 'debug-session', 'runId' => 'run1']) . "\n", FILE_APPEND | LOCK_EX);
-                                }
-                                // #endregion
                                 if ($childArticleId) {
                                     $childArticle = RobawsArticleCache::find($childArticleId);
-                                    $unitType = $childArticle->unit_type ?? null;
-                                    // #region agent log
-                                    if (file_exists(dirname($logPath)) || is_dir(dirname($logPath))) {
-                                        file_put_contents($logPath, json_encode(['id' => 'log_' . time() . '_' . uniqid(), 'timestamp' => time() * 1000, 'location' => 'CompositeItemsRelationManager.php:400', 'message' => 'unit_type default() returning value in attach form', 'data' => ['unitType' => $unitType, 'env' => app()->environment(), 'hypothesisId' => 'C'], 'sessionId' => 'debug-session', 'runId' => 'run1']) . "\n", FILE_APPEND | LOCK_EX);
-                                    }
-                                    // #endregion
-                                    return $unitType;
+                                    return $childArticle->unit_type ?? null;
                                 }
                                 return null;
                             })
@@ -457,12 +428,6 @@ class CompositeItemsRelationManager extends RelationManager
                             ->rows(4),
                     ])
                     ->action(function (array $data) {
-                        // #region agent log
-                        $logPath = base_path('.cursor/debug.log');
-                        if (file_exists(dirname($logPath)) || is_dir(dirname($logPath))) {
-                            @file_put_contents($logPath, json_encode(['id' => 'log_' . time() . '_' . uniqid(), 'timestamp' => time() * 1000, 'location' => 'CompositeItemsRelationManager.php:405', 'message' => 'attach action called', 'data' => ['formData' => $data, 'hypothesisId' => 'D'], 'sessionId' => 'debug-session', 'runId' => 'run1']) . "\n", FILE_APPEND | LOCK_EX);
-                        }
-                        // #endregion
                         $parent = $this->getOwnerRecord();
                         
                         // Ensure child_type is set
@@ -473,12 +438,6 @@ class CompositeItemsRelationManager extends RelationManager
                         // Get child article to use its unit_type as fallback if form unit_type is not provided
                         $childArticle = RobawsArticleCache::find($data['child_article_id'] ?? null);
                         $childArticleUnitType = $childArticle->unit_type ?? null;
-                        // #region agent log
-                        $logPath = base_path('.cursor/debug.log');
-                        if (file_exists(dirname($logPath)) || is_dir(dirname($logPath))) {
-                            @file_put_contents($logPath, json_encode(['id' => 'log_' . time() . '_' . uniqid(), 'timestamp' => time() * 1000, 'location' => 'CompositeItemsRelationManager.php:416', 'message' => 'Child article unit_type retrieved', 'data' => ['formUnitType' => $data['unit_type'] ?? null, 'childArticleUnitType' => $childArticleUnitType, 'hypothesisId' => 'D'], 'sessionId' => 'debug-session', 'runId' => 'run1']) . "\n", FILE_APPEND | LOCK_EX);
-                        }
-                        // #endregion
                         
                         // Prepare pivot data
                         $pivotData = [
