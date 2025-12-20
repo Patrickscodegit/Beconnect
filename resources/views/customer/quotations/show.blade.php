@@ -98,6 +98,12 @@
                             <dd class="mt-1 text-sm text-gray-900">{{ $quotationRequest->fdest }}</dd>
                         </div>
                     @endif
+                    @if($quotationRequest->in_transit_to)
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">In Transit To</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ $quotationRequest->in_transit_to }}</dd>
+                        </div>
+                    @endif
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Service Type</dt>
                         <dd class="mt-1 text-sm text-gray-900">

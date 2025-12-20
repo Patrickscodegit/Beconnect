@@ -72,6 +72,22 @@
         </div>
     </div>
 
+    {{-- In Transit To --}}
+    <div class="mt-4">
+        <div class="flex-1">
+            <x-filament::input.wrapper>
+                <x-filament::input
+                    type="text"
+                    wire:model.live="data.in_transit_to"
+                    placeholder="In Transit To (optional)"
+                />
+            </x-filament::input.wrapper>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                In Transit To (optional) - If shipment is in transit to another country, specify destination
+            </p>
+        </div>
+    </div>
+
     {{-- Helper Text --}}
     <div class="rounded-lg bg-info-50 p-3 dark:bg-info-950">
         <p class="text-xs text-info-700 dark:text-info-300">

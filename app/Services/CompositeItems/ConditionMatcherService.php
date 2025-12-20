@@ -45,6 +45,11 @@ class ConditionMatcherService
             return false;
         }
 
+        if (isset($conditions['in_transit_to_empty']) && 
+            !$this->matchInTransitTo($conditions['in_transit_to_empty'], $quotation)) {
+            return false;
+        }
+
         // All conditions matched
         return true;
     }
@@ -174,8 +179,15 @@ class ConditionMatcherService
             
             if (!empty($quotationPod)) {
                 $matched = false;
+                // Extract port code from POD if it's in format "City (CODE), Country"
+                $quotationPodCode = $this->extractPortCode($quotationPod);
+                
                 foreach ($pods as $pod) {
-                    if (strtoupper(trim($pod)) === $quotationPod) {
+                    $podUpper = strtoupper(trim($pod));
+                    // Check exact match or if POD contains the code
+                    if ($podUpper === $quotationPod || 
+                        $podUpper === $quotationPodCode ||
+                        str_contains($quotationPod, $podUpper)) {
                         $matched = true;
                         break;
                     }
@@ -252,6 +264,40 @@ class ConditionMatcherService
         }
 
         return false;
+    }
+
+    /**
+     * Match in_transit_to field
+     *
+     * @param bool $shouldBeEmpty If true, only match when in_transit_to is empty
+     * @param QuotationRequest $quotation
+     * @return bool
+     */
+    public function matchInTransitTo(bool $shouldBeEmpty, QuotationRequest $quotation): bool
+    {
+        $inTransitTo = trim($quotation->in_transit_to ?? '');
+        $isEmpty = empty($inTransitTo);
+        
+        // If condition requires empty, return true only if it's actually empty
+        return $shouldBeEmpty === $isEmpty;
+    }
+
+    /**
+     * Extract port code from POD string
+     * Examples: "Dakar (DKR), Senegal" -> "DKR", "DKR" -> "DKR"
+     *
+     * @param string $podString
+     * @return string
+     */
+    private function extractPortCode(string $podString): string
+    {
+        // Try to extract code from format "City (CODE), Country"
+        if (preg_match('/\(([A-Z0-9]+)\)/', $podString, $matches)) {
+            return strtoupper(trim($matches[1]));
+        }
+        
+        // If no parentheses, return the string itself (might already be a code)
+        return strtoupper(trim($podString));
     }
 
     /**

@@ -147,6 +147,21 @@
                            placeholder="e.g., Bamako"
                            @disabled($portsDisabled)>
                 </div>
+
+                {{-- In Transit To (Optional) --}}
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        In Transit To <span class="text-gray-400 text-xs">(Optional)</span>
+                    </label>
+                    <input type="text"
+                           wire:model.debounce.500ms="in_transit_to"
+                           class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                           placeholder="e.g., Another Country"
+                           @disabled($portsDisabled)>
+                    <p class="text-xs text-gray-500 mt-1">
+                        <i class="fas fa-info-circle"></i> If shipment is in transit to another country, specify destination
+                    </p>
+                </div>
             </div>
         </div>
     </div>

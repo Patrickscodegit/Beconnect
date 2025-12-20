@@ -280,6 +280,8 @@ class ViewQuotationRequest extends ViewRecord
                             ->label('Port of Discharge (POD)'),
                         Infolists\Components\TextEntry::make('fdest')
                             ->label('Final Destination (FDEST)'),
+                        Infolists\Components\TextEntry::make('in_transit_to')
+                            ->label('In Transit To'),
                         Infolists\Components\TextEntry::make('commodity_type')
                             ->formatStateUsing(fn (?string $state): string => $state ? str_replace('_', ' ', ucfirst($state)) : 'N/A'),
                         Infolists\Components\TextEntry::make('cargo_description')

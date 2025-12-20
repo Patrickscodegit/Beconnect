@@ -38,6 +38,7 @@ class QuotationRequest extends Model
         'pol',
         'pod',
         'fdest',
+        'in_transit_to',
         'cargo_details',
         'cargo_description',
         'commodity_type', // Legacy field (for backward compatibility)

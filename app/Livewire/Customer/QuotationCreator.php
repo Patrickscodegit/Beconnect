@@ -25,6 +25,7 @@ class QuotationCreator extends Component
     public $pod = '';
     public $por = '';
     public $fdest = '';
+    public $in_transit_to = '';
     public $simple_service_type = 'SEA_RORO';
     public $service_type = 'RORO_EXPORT';
     public $commodity_type = '';
@@ -168,6 +169,7 @@ class QuotationCreator extends Component
                     'pod' => '',
                     'fdest' => '',
                 ],
+                'in_transit_to' => '',
                 'cargo_details' => [], // Will be populated with commodity items
             ]);
             
@@ -223,6 +225,7 @@ class QuotationCreator extends Component
         $this->pod = $quotation->pod ?? $routing['pod'] ?? '';
         $this->por = $quotation->por ?? $routing['por'] ?? '';
         $this->fdest = $quotation->fdest ?? $routing['fdest'] ?? '';
+        $this->in_transit_to = $quotation->in_transit_to ?? '';
         $this->service_type = $quotation->service_type ?? 'RORO_EXPORT';
         $this->simple_service_type = $quotation->simple_service_type ?? 'SEA_RORO';
         $this->commodity_type = $quotation->commodity_type ?? '';
@@ -300,6 +303,7 @@ class QuotationCreator extends Component
                 'pod' => $this->pod,
                 'por' => $this->por,
                 'fdest' => $this->fdest,
+                'in_transit_to' => $this->in_transit_to,
                 'routing' => [
                     'por' => $this->por,
                     'pol' => $this->pol,
@@ -982,6 +986,7 @@ class QuotationCreator extends Component
         $this->pod = '';
         $this->por = '';
         $this->fdest = '';
+        $this->in_transit_to = '';
         $this->selected_schedule_id = null;
     }
 
