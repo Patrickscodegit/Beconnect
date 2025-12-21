@@ -354,6 +354,15 @@ class QuotationRequestResource extends Resource
                             ->maxLength(100)
                             ->columnSpan(1),
                             
+                        Forms\Components\Select::make('in_transit_to')
+                            ->label('In Transit To')
+                            ->options(fn() => \App\Services\Countries\CountryService::getCountryOptions())
+                            ->searchable()
+                            ->placeholder('Select country (optional)')
+                            ->nullable()
+                            ->helperText('If shipment is in transit to another country, specify destination')
+                            ->columnSpan(1),
+                            
                         Forms\Components\Select::make('commodity_type')
                             ->options([
                                 'cars' => 'Cars',

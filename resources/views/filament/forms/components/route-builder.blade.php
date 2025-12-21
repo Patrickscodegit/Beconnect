@@ -76,11 +76,15 @@
     <div class="mt-4">
         <div class="flex-1">
             <x-filament::input.wrapper>
-                <x-filament::input
-                    type="text"
+                <select
                     wire:model.live="data.in_transit_to"
-                    placeholder="In Transit To (optional)"
-                />
+                    class="fi-input block w-full rounded-lg border-none bg-white px-3 py-2 text-base text-gray-950 outline-none transition duration-75 focus:ring-2 focus:ring-primary-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:[-webkit-text-fill-color:theme(colors.gray.500)] disabled:placeholder:[-webkit-text-fill-color:theme(colors.gray.400)] dark:bg-white/5 dark:text-white dark:focus:ring-primary-400 dark:disabled:bg-transparent dark:disabled:text-gray-400 sm:text-sm sm:leading-6"
+                >
+                    <option value="">Select country...</option>
+                    @foreach(\App\Services\Countries\CountryService::getCountryOptions() as $value => $label)
+                        <option value="{{ $value }}">{{ $label }}</option>
+                    @endforeach
+                </select>
             </x-filament::input.wrapper>
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 In Transit To (optional) - If shipment is in transit to another country, specify destination

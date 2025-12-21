@@ -10,6 +10,7 @@
 .env.production
 .env.local
 .env.testing
+forge-production.env
 .phpunit.result.cache
 Homestead.json
 Homestead.yaml

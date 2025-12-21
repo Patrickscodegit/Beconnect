@@ -148,4 +148,15 @@ return [
         ],
     ],
 
+    'grimaldi' => [
+        'base_url' => env('GRIMALDI_API_BASE_URL', 'https://www.grimaldi-eservice.com/EServiceAPI_BETA/v2'),
+        'base_url_beta' => env('GRIMALDI_BASE_URL_BETA', 'https://www.grimaldi-eservice.com/EServiceAPI_BETA/v2'),
+        'base_url_prod' => env('GRIMALDI_BASE_URL_PROD', 'https://www.grimaldi-eservice.com/EServiceAPI/v2'),
+        'user_id' => env('GRIMALDI_USER_ID'),
+        'user_secret' => env('GRIMALDI_USER_SECRET'),
+        'tp_id' => env('GRIMALDI_TP_ID', 'BELGACO'),
+        'timeout' => env('GRIMALDI_API_TIMEOUT', 30),
+        'voyage_probe' => env('GRIMALDI_VOYAGE_PROBE', 'GHA0323'), // Voyage number for capabilities probe
+    ],
+
 ];

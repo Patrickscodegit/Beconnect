@@ -303,11 +303,16 @@ class ConditionMatcherService
             return false;
         }
         
+        // Normalize quotation value using CountryService
+        $normalizedQuotationValue = \App\Services\Countries\CountryService::normalizeCountryName($quotationInTransitTo);
+        
         // Case-insensitive matching
-        $quotationInTransitToUpper = strtoupper($quotationInTransitTo);
+        $quotationInTransitToUpper = strtoupper($normalizedQuotationValue ?? $quotationInTransitTo);
         
         foreach ($valueList as $value) {
-            $valueUpper = strtoupper(trim($value));
+            // Normalize condition value as well
+            $normalizedValue = \App\Services\Countries\CountryService::normalizeCountryName($value);
+            $valueUpper = strtoupper(trim($normalizedValue ?? $value));
             
             // Exact match
             if ($valueUpper === $quotationInTransitToUpper) {

@@ -29,8 +29,44 @@ class ScheduleExtractionPipeline
         
         foreach ($this->strategies as $carrierCode => $strategy) {
             try {
+                // #region agent log
+                @file_put_contents(base_path('.cursor/debug.log'), json_encode([
+                    'timestamp' => time() * 1000,
+                    'location' => 'ScheduleExtractionPipeline.php:30',
+                    'message' => 'Checking strategy support',
+                    'data' => ['carrier' => $carrierCode, 'pol' => $pol, 'pod' => $pod],
+                    'sessionId' => 'debug-session',
+                    'runId' => 'run1',
+                    'hypothesisId' => 'C'
+                ]) . "\n", FILE_APPEND);
+                // #endregion
+                
                 if ($strategy->supports($pol, $pod)) {
+                    // #region agent log
+                    @file_put_contents(base_path('.cursor/debug.log'), json_encode([
+                        'timestamp' => time() * 1000,
+                        'location' => 'ScheduleExtractionPipeline.php:33',
+                        'message' => 'Strategy supports route, extracting',
+                        'data' => ['carrier' => $carrierCode, 'pol' => $pol, 'pod' => $pod],
+                        'sessionId' => 'debug-session',
+                        'runId' => 'run1',
+                        'hypothesisId' => 'D'
+                    ]) . "\n", FILE_APPEND);
+                    // #endregion
+                    
                     $schedules = $strategy->extractSchedules($pol, $pod);
+                    
+                    // #region agent log
+                    @file_put_contents(base_path('.cursor/debug.log'), json_encode([
+                        'timestamp' => time() * 1000,
+                        'location' => 'ScheduleExtractionPipeline.php:36',
+                        'message' => 'Schedules extracted',
+                        'data' => ['carrier' => $carrierCode, 'pol' => $pol, 'pod' => $pod, 'count' => count($schedules), 'is_array' => is_array($schedules)],
+                        'sessionId' => 'debug-session',
+                        'runId' => 'run1',
+                        'hypothesisId' => 'D'
+                    ]) . "\n", FILE_APPEND);
+                    // #endregion
                     
                     // If schedules are nested by carrier code, flatten them
                     if (is_array($schedules) && !empty($schedules)) {
@@ -53,6 +89,18 @@ class ScheduleExtractionPipeline
                         'pod' => $pod,
                         'schedules_found' => count($schedules)
                     ]);
+                } else {
+                    // #region agent log
+                    @file_put_contents(base_path('.cursor/debug.log'), json_encode([
+                        'timestamp' => time() * 1000,
+                        'location' => 'ScheduleExtractionPipeline.php:32',
+                        'message' => 'Strategy does not support route',
+                        'data' => ['carrier' => $carrierCode, 'pol' => $pol, 'pod' => $pod],
+                        'sessionId' => 'debug-session',
+                        'runId' => 'run1',
+                        'hypothesisId' => 'C'
+                    ]) . "\n", FILE_APPEND);
+                    // #endregion
                 }
             } catch (\Exception $e) {
                 Log::error("Schedule extraction failed for {$carrierCode}", [
