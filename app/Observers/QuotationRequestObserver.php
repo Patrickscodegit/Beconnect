@@ -5,6 +5,7 @@ namespace App\Observers;
 use App\Models\QuotationRequest;
 use App\Services\Pricing\VatResolverInterface;
 use App\Services\Pricing\QuotationVatService;
+use App\Services\Waivers\WaiverService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
@@ -13,6 +14,7 @@ class QuotationRequestObserver
     public function __construct(
         private readonly VatResolverInterface $vatResolver,
         private readonly QuotationVatService $quotationVatService,
+        private readonly WaiverService $waiverService,
     ) {}
 
     /**
@@ -91,6 +93,14 @@ class QuotationRequestObserver
 
         // Ensure admin article exists (handle POD changes and missing admin articles)
         $this->ensureAdminArticleExists($quotationRequest);
+        
+        // Re-evaluate conditional child articles when POD or in_transit_to changes
+        // This handles port-specific waivers (e.g., Dakar) that use database attachments
+        $this->reevaluateConditionalChildArticles($quotationRequest);
+        
+        // Process hinterland waivers when POD or in_transit_to changes
+        // This handles hinterland destination waivers (e.g., Burkina Faso) that use quotation logic
+        $this->processHinterlandWaivers($quotationRequest);
     }
 
     /**
@@ -212,6 +222,195 @@ class QuotationRequestObserver
         }
     }
 
+
+    /**
+     * Re-evaluate conditional child articles when POD or in_transit_to changes
+     * Removes waivers that no longer match conditions and adds waivers that now match
+     */
+    protected function reevaluateConditionalChildArticles(QuotationRequest $quotationRequest): void
+    {
+        $podChanged = $quotationRequest->wasChanged('pod');
+        $inTransitToChanged = $quotationRequest->wasChanged('in_transit_to');
+        
+        // Only proceed if POD or in_transit_to changed
+        if (!$podChanged && !$inTransitToChanged) {
+            return;
+        }
+        
+        try {
+            Log::info('Re-evaluating conditional child articles', [
+                'quotation_id' => $quotationRequest->id,
+                'pod_changed' => $podChanged,
+                'in_transit_to_changed' => $inTransitToChanged,
+                'old_pod' => $podChanged ? $quotationRequest->getOriginal('pod') : null,
+                'new_pod' => $podChanged ? $quotationRequest->pod : null,
+                'old_in_transit_to' => $inTransitToChanged ? $quotationRequest->getOriginal('in_transit_to') : null,
+                'new_in_transit_to' => $inTransitToChanged ? $quotationRequest->in_transit_to : null,
+            ]);
+            
+            // Get all parent articles in this quotation
+            $parentArticles = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotationRequest->id)
+                ->where('item_type', 'parent')
+                ->get();
+            
+            if ($parentArticles->isEmpty()) {
+                return;
+            }
+            
+            $conditionMatcher = app(\App\Services\CompositeItems\ConditionMatcherService::class);
+            
+            // Process each parent article
+            foreach ($parentArticles as $parentArticle) {
+                try {
+                    // Get all conditional child articles for this parent
+                    if (!$parentArticle->articleCache || !$parentArticle->articleCache->relationLoaded('children')) {
+                        $parentArticle->load('articleCache.children');
+                    }
+                    
+                    $children = $parentArticle->articleCache->children ?? collect();
+                    
+                    // Find existing conditional child articles in quotation
+                    $existingChildArticles = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotationRequest->id)
+                        ->where('parent_article_id', $parentArticle->article_cache_id)
+                        ->where('item_type', 'child')
+                        ->with('articleCache')
+                        ->get();
+                    
+                    // Re-evaluate each conditional child
+                    foreach ($children as $child) {
+                        $childType = $child->pivot->child_type ?? 'optional';
+                        
+                        // Only process conditional children
+                        if ($childType !== 'conditional') {
+                            continue;
+                        }
+                        
+                        // Parse conditions
+                        $conditionsRaw = $child->pivot->conditions ?? null;
+                        $conditions = is_string($conditionsRaw) 
+                            ? json_decode($conditionsRaw, true) 
+                            : $conditionsRaw;
+                        
+                        if (json_last_error() !== JSON_ERROR_NONE || empty($conditions)) {
+                            Log::warning('Invalid conditions JSON for conditional child', [
+                                'quotation_id' => $quotationRequest->id,
+                                'parent_id' => $parentArticle->article_cache_id,
+                                'child_id' => $child->id,
+                                'json_error' => json_last_error_msg(),
+                            ]);
+                            continue;
+                        }
+                        
+                        // Check if conditions match
+                        $shouldExist = $conditionMatcher->matchConditions($conditions, $quotationRequest);
+                        
+                        // Find if this child article already exists in quotation
+                        $existingChild = $existingChildArticles->firstWhere('article_cache_id', $child->id);
+                        
+                        if ($shouldExist && !$existingChild) {
+                            // Conditions match but article doesn't exist - add it
+                            try {
+                                $role = $quotationRequest->customer_role;
+                                $quantity = (int) ($child->pivot->default_quantity ?? 1);
+                                
+                                \App\Models\QuotationRequestArticle::create([
+                                    'quotation_request_id' => $quotationRequest->id,
+                                    'article_cache_id' => $child->id,
+                                    'parent_article_id' => $parentArticle->article_cache_id,
+                                    'item_type' => 'child',
+                                    'quantity' => $quantity,
+                                    'unit_type' => $child->pivot->unit_type ?? $child->unit_type ?? 'unit',
+                                    'unit_price' => $child->pivot->default_cost_price ?? $child->unit_price,
+                                    'selling_price' => $child->getPriceForRole($role ?: 'default'),
+                                    'currency' => $child->currency,
+                                ]);
+                                
+                                Log::info('Added conditional child article after re-evaluation', [
+                                    'quotation_id' => $quotationRequest->id,
+                                    'parent_id' => $parentArticle->article_cache_id,
+                                    'child_id' => $child->id,
+                                    'child_name' => $child->article_name,
+                                ]);
+                            } catch (\Exception $e) {
+                                Log::error('Failed to add conditional child article after re-evaluation', [
+                                    'quotation_id' => $quotationRequest->id,
+                                    'parent_id' => $parentArticle->article_cache_id,
+                                    'child_id' => $child->id,
+                                    'error' => $e->getMessage(),
+                                ]);
+                            }
+                        } elseif (!$shouldExist && $existingChild) {
+                            // Conditions don't match but article exists - remove it
+                            try {
+                                $existingChild->delete();
+                                
+                                Log::info('Removed conditional child article after re-evaluation', [
+                                    'quotation_id' => $quotationRequest->id,
+                                    'parent_id' => $parentArticle->article_cache_id,
+                                    'child_id' => $child->id,
+                                    'child_name' => $child->article_name,
+                                ]);
+                            } catch (\Exception $e) {
+                                Log::error('Failed to remove conditional child article after re-evaluation', [
+                                    'quotation_id' => $quotationRequest->id,
+                                    'parent_id' => $parentArticle->article_cache_id,
+                                    'child_id' => $child->id,
+                                    'error' => $e->getMessage(),
+                                ]);
+                            }
+                        }
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Error re-evaluating conditional child articles for parent', [
+                        'quotation_id' => $quotationRequest->id,
+                        'parent_article_id' => $parentArticle->id,
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
+                }
+            }
+        } catch (\Exception $e) {
+            Log::error('Error in reevaluateConditionalChildArticles', [
+                'quotation_id' => $quotationRequest->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            // Don't throw - allow quotation to save even if re-evaluation fails
+        }
+    }
+
+    /**
+     * Process hinterland waivers when POD or in_transit_to changes
+     * Hinterland waivers are handled by WaiverService using quotation logic
+     * (not database attachments like port-specific waivers)
+     * 
+     * Processes when POD or in_transit_to changes, or when these fields are set
+     * (for new quotations where wasChanged might not detect initial values)
+     */
+    protected function processHinterlandWaivers(QuotationRequest $quotationRequest): void
+    {
+        $podChanged = $quotationRequest->wasChanged('pod');
+        $inTransitToChanged = $quotationRequest->wasChanged('in_transit_to');
+        $hasInTransitTo = !empty($quotationRequest->in_transit_to);
+        $hasPod = !empty($quotationRequest->pod);
+        
+        // Process if POD or in_transit_to changed, or if they are set
+        // (handles both changes and initial saves with these fields set)
+        if (!$podChanged && !$inTransitToChanged && !$hasInTransitTo && !$hasPod) {
+            return;
+        }
+        
+        try {
+            $this->waiverService->processHinterlandWaivers($quotationRequest);
+        } catch (\Exception $e) {
+            Log::error('Error processing hinterland waivers', [
+                'quotation_id' => $quotationRequest->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            // Don't throw - allow quotation to save even if waiver processing fails
+        }
+    }
 
     /**
      * Check if a column exists in a table

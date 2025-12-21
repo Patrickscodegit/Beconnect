@@ -50,6 +50,11 @@ class ConditionMatcherService
             return false;
         }
 
+        if (isset($conditions['in_transit_to']) && 
+            !$this->matchInTransitToValue($conditions['in_transit_to'], $quotation)) {
+            return false;
+        }
+
         // All conditions matched
         return true;
     }
@@ -280,6 +285,43 @@ class ConditionMatcherService
         
         // If condition requires empty, return true only if it's actually empty
         return $shouldBeEmpty === $isEmpty;
+    }
+
+    /**
+     * Match in_transit_to field against specific values
+     *
+     * @param array|string $values Array of values to match (e.g., ["Burkina Faso", "BFA"])
+     * @param QuotationRequest $quotation
+     * @return bool
+     */
+    public function matchInTransitToValue(array|string $values, QuotationRequest $quotation): bool
+    {
+        $valueList = is_array($values) ? $values : [$values];
+        $quotationInTransitTo = trim($quotation->in_transit_to ?? '');
+        
+        if (empty($quotationInTransitTo)) {
+            return false;
+        }
+        
+        // Case-insensitive matching
+        $quotationInTransitToUpper = strtoupper($quotationInTransitTo);
+        
+        foreach ($valueList as $value) {
+            $valueUpper = strtoupper(trim($value));
+            
+            // Exact match
+            if ($valueUpper === $quotationInTransitToUpper) {
+                return true;
+            }
+            
+            // Partial match (e.g., "Burkina Faso" matches "Burkina Faso (BFA)")
+            if (str_contains($quotationInTransitToUpper, $valueUpper) || 
+                str_contains($valueUpper, $quotationInTransitToUpper)) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     /**

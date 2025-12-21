@@ -1,0 +1,31 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::table('robaws_articles_cache', function (Blueprint $table) {
+            $table->boolean('is_hinterland_waiver')->default(false)->after('is_surcharge');
+            $table->index('is_hinterland_waiver');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('robaws_articles_cache', function (Blueprint $table) {
+            $table->dropIndex(['is_hinterland_waiver']);
+            $table->dropColumn('is_hinterland_waiver');
+        });
+    }
+};
+

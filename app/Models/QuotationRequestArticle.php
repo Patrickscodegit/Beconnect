@@ -508,6 +508,15 @@ class QuotationRequestArticle extends Model
             $this->load('articleCache');
         }
         
+        // Validate articleCache exists
+        if (!$this->articleCache) {
+            \Log::error('addChildArticles called but articleCache not found', [
+                'quotation_request_id' => $this->quotation_request_id,
+                'article_cache_id' => $this->article_cache_id,
+            ]);
+            return;
+        }
+        
         \Log::info('addChildArticles called', [
             'quotation_request_id' => $this->quotation_request_id,
             'article_cache_id' => $this->article_cache_id,
@@ -521,7 +530,7 @@ class QuotationRequestArticle extends Model
             $this->articleCache->load('children');
         }
         
-        $children = $this->articleCache->children;
+        $children = $this->articleCache->children ?? collect();
         \Log::info('Children found', [
             'count' => $children->count(),
             'children' => $children->map(fn($c) => [
@@ -656,15 +665,54 @@ class QuotationRequestArticle extends Model
                 \Log::info('Child is mandatory - will add');
             } elseif ($childType === 'conditional') {
                 // Add conditional items only if conditions match
-                $conditions = is_string($child->pivot->conditions) 
-                    ? json_decode($child->pivot->conditions, true) 
-                    : $child->pivot->conditions;
-                
-                $shouldAdd = $conditionMatcher->matchConditions($conditions, $quotationRequest);
-                \Log::info('Child is conditional', [
-                    'conditions' => $conditions,
-                    'should_add' => $shouldAdd,
-                ]);
+                try {
+                    $conditions = is_string($child->pivot->conditions) 
+                        ? json_decode($child->pivot->conditions, true) 
+                        : $child->pivot->conditions;
+                    
+                    // Validate JSON was parsed correctly
+                    if (is_string($child->pivot->conditions) && json_last_error() !== JSON_ERROR_NONE) {
+                        throw new \InvalidArgumentException('Invalid conditions JSON: ' . json_last_error_msg());
+                    }
+                    
+                    // Validate conditions is an array
+                    if (!is_array($conditions) || empty($conditions)) {
+                        \Log::warning('Invalid conditions structure for conditional child', [
+                            'child_id' => $child->id,
+                            'child_name' => $child->article_name,
+                            'conditions' => $child->pivot->conditions,
+                        ]);
+                        continue;
+                    }
+                    
+                    // Match conditions
+                    try {
+                        $shouldAdd = $conditionMatcher->matchConditions($conditions, $quotationRequest);
+                    } catch (\Exception $e) {
+                        \Log::error('Error matching conditions for conditional child', [
+                            'child_id' => $child->id,
+                            'child_name' => $child->article_name,
+                            'conditions' => $conditions,
+                            'error' => $e->getMessage(),
+                            'trace' => $e->getTraceAsString(),
+                        ]);
+                        // Default to not adding if condition matching fails
+                        $shouldAdd = false;
+                    }
+                    
+                    \Log::info('Child is conditional', [
+                        'conditions' => $conditions,
+                        'should_add' => $shouldAdd,
+                    ]);
+                } catch (\Exception $e) {
+                    \Log::error('Failed to parse conditions for conditional child', [
+                        'child_id' => $child->id,
+                        'child_name' => $child->article_name,
+                        'conditions_raw' => $child->pivot->conditions ?? null,
+                        'error' => $e->getMessage(),
+                    ]);
+                    continue; // Skip this child and continue with others
+                }
             } else {
                 \Log::info('Child is optional - will not auto-add');
             }
@@ -699,8 +747,34 @@ class QuotationRequestArticle extends Model
                 
                 if (!$exists) {
                     try {
+                        // Validate child article still exists
+                        if (!$child || !$child->id) {
+                            \Log::warning('Child article not found or invalid', [
+                                'child_id' => $child->id ?? null,
+                                'parent_article_id' => $this->article_cache_id,
+                            ]);
+                            continue;
+                        }
+                        
                         // Ensure quantity is an integer (default_quantity might be decimal)
-                        $quantity = (int) ($child->pivot->default_quantity ?? $this->quantity);
+                        $quantity = (int) ($child->pivot->default_quantity ?? $this->quantity ?? 1);
+                        
+                        // Get selling price with error handling
+                        $sellingPrice = null;
+                        try {
+                            $sellingPrice = $child->getPriceForRole($role ?: 'default');
+                        } catch (\Exception $e) {
+                            \Log::warning('Failed to get selling price for child article, using unit_price', [
+                                'child_id' => $child->id,
+                                'error' => $e->getMessage(),
+                            ]);
+                            $sellingPrice = $child->pivot->default_cost_price ?? $child->unit_price ?? 0;
+                        }
+                        
+                        // Ensure we have a valid selling price
+                        if ($sellingPrice === null || $sellingPrice === 0) {
+                            $sellingPrice = $child->pivot->default_cost_price ?? $child->unit_price ?? 0;
+                        }
                         
                         $created = self::create([
                             'quotation_request_id' => $quotationRequest->id,
@@ -709,18 +783,25 @@ class QuotationRequestArticle extends Model
                             'item_type' => 'child',
                             'quantity' => $quantity,
                             'unit_type' => $child->pivot->unit_type ?? $child->unit_type ?? 'unit',
-                            'unit_price' => $child->pivot->default_cost_price ?? $child->unit_price,
-                            'selling_price' => $child->getPriceForRole($role ?: 'default'),
-                            'currency' => $child->currency,
+                            'unit_price' => $child->pivot->default_cost_price ?? $child->unit_price ?? 0,
+                            'selling_price' => $sellingPrice,
+                            'currency' => $child->currency ?? 'EUR',
                         ]);
                         \Log::info('Child article created successfully', [
                             'quotation_request_article_id' => $created->id,
+                            'child_id' => $child->id,
+                            'child_name' => $child->article_name,
                         ]);
                     } catch (\Exception $e) {
                         \Log::error('Failed to create child article', [
+                            'quotation_request_id' => $quotationRequest->id,
+                            'child_id' => $child->id ?? null,
+                            'child_name' => $child->article_name ?? 'N/A',
+                            'parent_article_id' => $this->article_cache_id,
                             'error' => $e->getMessage(),
                             'trace' => $e->getTraceAsString(),
                         ]);
+                        // Continue processing other children
                     }
                 }
             }
