@@ -148,7 +148,8 @@ class QuotationRequestObserver
 
     /**
      * Ensure an admin article exists for the quotation
-     * Handles POD changes and missing admin articles
+     * Handles POD changes - removes old admin article when POD changes
+     * The correct admin article will be added by addChildArticles() when parent articles are processed
      */
     protected function ensureAdminArticleExists(QuotationRequest $quotationRequest): void
     {
@@ -159,24 +160,24 @@ class QuotationRequestObserver
         $admin115 = \App\Models\RobawsArticleCache::where('article_name', 'Admin')->where('unit_price', 115)->first();
         $admin125 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 125')->where('unit_price', 125)->first();
         
-        $admin75Id = $admin75 ? $admin75->id : null;
-        $admin100Id = $admin100 ? $admin100->id : null;
-        $admin110Id = $admin110 ? $admin110->id : null;
-        $admin115Id = $admin115 ? $admin115->id : null;
-        $admin125Id = $admin125 ? $admin125->id : null;
-        
-        $adminArticleIds = array_filter([$admin75Id, $admin100Id, $admin110Id, $admin115Id, $admin125Id]);
+        $adminArticleIds = array_filter([
+            $admin75 ? $admin75->id : null,
+            $admin100 ? $admin100->id : null,
+            $admin110 ? $admin110->id : null,
+            $admin115 ? $admin115->id : null,
+            $admin125 ? $admin125->id : null,
+        ]);
         
         // Check if any admin article exists
         $existingAdminArticle = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotationRequest->id)
             ->whereIn('article_cache_id', $adminArticleIds)
             ->first();
         
-        // If POD changed, we may need to update the admin article
+        // If POD changed, remove old admin article
+        // The correct admin article will be added by addChildArticles() when parent articles are processed
         $podChanged = $quotationRequest->wasChanged('pod');
         
         if ($podChanged && $existingAdminArticle) {
-            // POD changed - remove old admin article and let it be re-added with correct one
             try {
                 $existingAdminArticle->delete();
                 Log::info('Removed admin article due to POD change', [
@@ -185,7 +186,23 @@ class QuotationRequestObserver
                     'new_pod' => $quotationRequest->pod,
                     'removed_admin_id' => $existingAdminArticle->article_cache_id,
                 ]);
-                $existingAdminArticle = null; // Reset to trigger re-addition
+                
+                // Re-trigger addChildArticles() for all parent articles to add correct admin article
+                $parentArticles = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotationRequest->id)
+                    ->where('item_type', 'parent')
+                    ->get();
+                
+                foreach ($parentArticles as $parentArticle) {
+                    try {
+                        $parentArticle->addChildArticles();
+                    } catch (\Exception $e) {
+                        Log::error('Error re-adding child articles after POD change', [
+                            'quotation_id' => $quotationRequest->id,
+                            'parent_article_id' => $parentArticle->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                }
             } catch (\Exception $e) {
                 Log::error('Error removing admin article on POD change', [
                     'quotation_id' => $quotationRequest->id,
@@ -193,141 +210,8 @@ class QuotationRequestObserver
                 ]);
             }
         }
-        
-        // If no admin article exists, add the appropriate one
-        if (!$existingAdminArticle) {
-            try {
-                $this->addAdminArticleForQuotation($quotationRequest);
-            } catch (\Exception $e) {
-                Log::error('Error ensuring admin article exists', [
-                    'quotation_id' => $quotationRequest->id,
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString(),
-                ]);
-                // Don't throw - allow quotation to save even if admin article addition fails
-            }
-        }
     }
 
-    /**
-     * Add the appropriate admin article based on POD and commodity type
-     */
-    protected function addAdminArticleForQuotation(QuotationRequest $quotationRequest): void
-    {
-        // Find admin articles dynamically (works in both local and production)
-        $admin75 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 75')->where('unit_price', 75)->first();
-        $admin100 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 100')->where('unit_price', 100)->first();
-        $admin110 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 110')->where('unit_price', 110)->first();
-        $admin115 = \App\Models\RobawsArticleCache::where('article_name', 'Admin')->where('unit_price', 115)->first();
-        $admin125 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 125')->where('unit_price', 125)->first();
-        
-        $admin75Id = $admin75 ? $admin75->id : null;
-        $admin100Id = $admin100 ? $admin100->id : null;
-        $admin110Id = $admin110 ? $admin110->id : null;
-        $admin115Id = $admin115 ? $admin115->id : null;
-        $admin125Id = $admin125 ? $admin125->id : null;
-        
-        $admin75Id = $admin75 ? $admin75->id : null;
-        $admin100Id = $admin100 ? $admin100->id : null;
-        $admin110Id = $admin110 ? $admin110->id : null;
-        $admin115Id = $admin115 ? $admin115->id : null;
-        $admin125Id = $admin125 ? $admin125->id : null;
-        
-        // Check if ANY admin article already exists (added by addChildArticles or previous observer call)
-        $allAdminIds = array_filter([$admin75Id, $admin100Id, $admin110Id, $admin115Id, $admin125Id]);
-        $existingAdmin = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotationRequest->id)
-            ->whereIn('article_cache_id', $allAdminIds)
-            ->first();
-        
-        if ($existingAdmin) {
-            Log::info('Admin article already exists, skipping observer addition', [
-                'quotation_id' => $quotationRequest->id,
-                'existing_admin_id' => $existingAdmin->article_cache_id,
-            ]);
-            return; // Admin article already exists, don't add another
-        }
-
-        if (!$admin75Id && !$admin100Id && !$admin110Id && !$admin115Id && !$admin125Id) {
-            Log::warning('No admin articles found', [
-                'quotation_id' => $quotationRequest->id,
-            ]);
-            return;
-        }
-
-        $conditionMatcher = app(\App\Services\CompositeItems\ConditionMatcherService::class);
-        $role = $quotationRequest->customer_role ?: 'default';
-
-        // Priority order: 110, 115, 125, 100, 75
-        $adminPriority = [
-            'admin_110' => ['id' => $admin110Id, 'conditions' => ['route' => ['pod' => ['PNR']]]],
-            'admin_115' => ['id' => $admin115Id, 'conditions' => ['route' => ['pod' => ['LAD']]]],
-            'admin_125' => ['id' => $admin125Id, 'conditions' => ['route' => ['pod' => ['FNA']]]],
-            'admin_100' => ['id' => $admin100Id, 'conditions' => ['route' => ['pod' => ['DKR']], 'commodity' => ['LM Cargo']]],
-            'admin_75' => ['id' => $admin75Id, 'conditions' => []], // Default
-        ];
-
-        // Find first parent article to use as parent_article_id
-        $firstParentArticle = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotationRequest->id)
-            ->where('item_type', 'parent')
-            ->first();
-
-        $parentArticleId = $firstParentArticle ? $firstParentArticle->article_cache_id : null;
-
-        // Evaluate conditions in priority order
-        foreach ($adminPriority as $adminKey => $adminData) {
-            $adminId = $adminData['id'];
-            $conditions = $adminData['conditions'];
-
-            if (!$adminId) {
-                continue;
-            }
-
-            $shouldAdd = false;
-            if (empty($conditions)) {
-                // Admin 75 (default) - always add if no other matched
-                $shouldAdd = true;
-            } else {
-                $shouldAdd = $conditionMatcher->matchConditions($conditions, $quotationRequest);
-            }
-
-            if ($shouldAdd) {
-                $adminArticle = \App\Models\RobawsArticleCache::find($adminId);
-                if (!$adminArticle) {
-                    continue;
-                }
-
-                // Check if already exists using dynamic admin article IDs
-                $allAdminIds = array_filter([$admin75Id, $admin100Id, $admin110Id, $admin115Id, $admin125Id]);
-                $exists = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotationRequest->id)
-                    ->whereIn('article_cache_id', $allAdminIds)
-                    ->exists();
-
-                if (!$exists) {
-                    \App\Models\QuotationRequestArticle::create([
-                        'quotation_request_id' => $quotationRequest->id,
-                        'article_cache_id' => $adminId,
-                        'parent_article_id' => $parentArticleId,
-                        'item_type' => 'child',
-                        'quantity' => 1, // Always 1 for admin articles
-                        'unit_type' => $adminArticle->unit_type ?? 'unit',
-                        'unit_price' => $adminArticle->unit_price,
-                        'selling_price' => $adminArticle->getPriceForRole($role),
-                        'currency' => $adminArticle->currency,
-                    ]);
-
-                    Log::info('Added admin article to quotation', [
-                        'quotation_id' => $quotationRequest->id,
-                        'admin_article_id' => $adminId,
-                        'admin_article_name' => $adminArticle->article_name,
-                        'pod' => $quotationRequest->pod,
-                    ]);
-                }
-
-                // Only add one admin article
-                break;
-            }
-        }
-    }
 
     /**
      * Check if a column exists in a table

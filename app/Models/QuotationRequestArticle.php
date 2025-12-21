@@ -537,29 +537,22 @@ class QuotationRequestArticle extends Model
         
         $conditionMatcher = app(\App\Services\CompositeItems\ConditionMatcherService::class);
         
-        // Find admin articles dynamically (works in both local and production)
+        // Find admin articles dynamically to identify them
         $admin75 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 75')->where('unit_price', 75)->first();
         $admin100 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 100')->where('unit_price', 100)->first();
         $admin110 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 110')->where('unit_price', 110)->first();
         $admin115 = \App\Models\RobawsArticleCache::where('article_name', 'Admin')->where('unit_price', 115)->first();
         $admin125 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 125')->where('unit_price', 125)->first();
         
-        $admin75Id = $admin75 ? $admin75->id : null;
-        $admin100Id = $admin100 ? $admin100->id : null;
-        $admin110Id = $admin110 ? $admin110->id : null;
-        $admin115Id = $admin115 ? $admin115->id : null;
-        $admin125Id = $admin125 ? $admin125->id : null;
+        $adminArticleIds = array_filter([
+            $admin75 ? $admin75->id : null,
+            $admin100 ? $admin100->id : null,
+            $admin110 ? $admin110->id : null,
+            $admin115 ? $admin115->id : null,
+            $admin125 ? $admin125->id : null,
+        ]);
         
-        $adminArticleIds = array_filter([$admin75Id, $admin100Id, $admin110Id, $admin115Id, $admin125Id]);
-        
-        // Check if any admin article already exists in the quotation
-        $existingAdminArticle = self::where('quotation_request_id', $quotationRequest->id)
-            ->whereIn('article_cache_id', $adminArticleIds)
-            ->first();
-        
-        $adminArticleAdded = false;
-        
-        // Separate admin articles from other children for priority-based evaluation
+        // Separate admin articles from other children
         $adminChildren = collect();
         $otherChildren = collect();
         
@@ -571,84 +564,77 @@ class QuotationRequestArticle extends Model
             }
         }
         
-        // Process admin articles first (if no admin article exists yet)
-        if (!$existingAdminArticle && $adminChildren->count() > 0) {
-            // Sort admin articles by priority: 110, 115, 125, 100, 75
-            // Use dynamic IDs for priority mapping
-            $adminPriority = [
-                $admin110Id => 1, // Admin 110 (highest priority)
-                $admin115Id => 2, // Admin 115
-                $admin125Id => 3, // Admin 125
-                $admin100Id => 4, // Admin 100
-                $admin75Id => 5,  // Admin 75 (default, lowest priority)
-            ];
-            $adminChildren = $adminChildren->sortBy(function ($child) use ($adminPriority) {
-                return $adminPriority[$child->id] ?? 999;
-            });
+        // Process admin articles: Check POD match, then add the attached admin article
+        if ($adminChildren->count() > 0) {
+            // Check POD match between parent and quotation (100% match required)
+            $parentPodCode = $this->extractPodCode($this->articleCache);
+            $quotationPodCode = $this->extractPodCodeFromQuotation($quotationRequest);
             
-            foreach ($adminChildren as $child) {
-                $childType = $child->pivot->child_type ?? 'optional';
+            // Only process admin article if POD matches
+            if ($parentPodCode && $quotationPodCode && strtoupper(trim($parentPodCode)) === strtoupper(trim($quotationPodCode))) {
+                // Get the admin article attached to this parent (should be only one)
+                $adminChild = $adminChildren->first();
                 
-                if ($childType === 'conditional') {
-                    $conditions = is_string($child->pivot->conditions) 
-                        ? json_decode($child->pivot->conditions, true) 
-                        : $child->pivot->conditions;
+                if ($adminChild) {
+                    // Check for generic "per shipment" deduplication
+                    $childUnitType = strtoupper(trim($adminChild->pivot->unit_type ?? $adminChild->unit_type ?? ''));
+                    $isPerShipment = in_array($childUnitType, ['SHIPM.', 'SHIPM', 'SHIPMENT']);
                     
-                    // Special handling for Admin 75 (empty conditions = default)
-                    $shouldAdd = false;
-                    if (empty($conditions)) {
-                        // Admin 75 (default) - only add if no other admin article matched
-                        $shouldAdd = !$adminArticleAdded;
-                    } else {
-                        $shouldAdd = $conditionMatcher->matchConditions($conditions, $quotationRequest);
+                    // If "per shipment", check if any "per shipment" article already exists
+                    $exists = false;
+                    if ($isPerShipment) {
+                        $exists = self::where('quotation_request_id', $quotationRequest->id)
+                            ->where(function ($query) {
+                                $query->whereRaw('UPPER(TRIM(unit_type)) = ?', ['SHIPM.'])
+                                      ->orWhereRaw('UPPER(TRIM(unit_type)) = ?', ['SHIPM'])
+                                      ->orWhereRaw('UPPER(TRIM(unit_type)) = ?', ['SHIPMENT']);
+                            })
+                            ->exists();
                     }
                     
-                    if ($shouldAdd) {
-                        // Check if ANY admin article already exists (not just this specific one)
-                        // This prevents multiple admin articles when multiple parent articles are added
-                        $allAdminIds = array_filter([$admin75Id, $admin100Id, $admin110Id, $admin115Id, $admin125Id]);
-                        $exists = self::where('quotation_request_id', $quotationRequest->id)
-                            ->whereIn('article_cache_id', $allAdminIds)
-                            ->exists();
-                        
-                        if (!$exists) {
-                            try {
-                                // Force quantity = 1 for admin articles
-                                $quantity = 1;
-                                
-                                $created = self::create([
-                                    'quotation_request_id' => $quotationRequest->id,
-                                    'article_cache_id' => $child->id,
-                                    'parent_article_id' => $this->article_cache_id,
-                                    'item_type' => 'child',
-                                    'quantity' => $quantity,
-                                    'unit_type' => $child->pivot->unit_type ?? $child->unit_type ?? 'unit',
-                                    'unit_price' => $child->pivot->default_cost_price ?? $child->unit_price,
-                                    'selling_price' => $child->getPriceForRole($role ?: 'default'),
-                                    'currency' => $child->currency,
-                                ]);
-                                
-                                $adminArticleAdded = true;
-                                \Log::info('Admin article added', [
-                                    'admin_article_id' => $child->id,
-                                    'admin_article_name' => $child->article_name,
-                                    'quotation_request_article_id' => $created->id,
-                                ]);
-                                
-                                // Only add one admin article per quotation
-                                break;
-                            } catch (\Exception $e) {
-                                \Log::error('Failed to create admin article', [
-                                    'error' => $e->getMessage(),
-                                    'trace' => $e->getTraceAsString(),
-                                ]);
-                            }
-                        } else {
-                            $adminArticleAdded = true;
-                            break;
+                    if (!$exists) {
+                        try {
+                            $quantity = 1; // Per shipment = quantity 1
+                            
+                            $created = self::create([
+                                'quotation_request_id' => $quotationRequest->id,
+                                'article_cache_id' => $adminChild->id,
+                                'parent_article_id' => $this->article_cache_id,
+                                'item_type' => 'child',
+                                'quantity' => $quantity,
+                                'unit_type' => $adminChild->pivot->unit_type ?? $adminChild->unit_type ?? 'unit',
+                                'unit_price' => $adminChild->pivot->default_cost_price ?? $adminChild->unit_price,
+                                'selling_price' => $adminChild->getPriceForRole($role ?: 'default'),
+                                'currency' => $adminChild->currency,
+                            ]);
+                            
+                            \Log::info('Admin article added (POD matched)', [
+                                'admin_article_id' => $adminChild->id,
+                                'admin_article_name' => $adminChild->article_name,
+                                'parent_pod' => $parentPodCode,
+                                'quotation_pod' => $quotationPodCode,
+                                'quotation_request_article_id' => $created->id,
+                            ]);
+                        } catch (\Exception $e) {
+                            \Log::error('Failed to create admin article', [
+                                'error' => $e->getMessage(),
+                                'trace' => $e->getTraceAsString(),
+                            ]);
                         }
+                    } else {
+                        \Log::info('Admin article skipped (per shipment article already exists)', [
+                            'admin_article_id' => $adminChild->id,
+                            'parent_pod' => $parentPodCode,
+                            'quotation_pod' => $quotationPodCode,
+                        ]);
                     }
                 }
+            } else {
+                \Log::info('Admin article skipped (POD mismatch)', [
+                    'parent_pod' => $parentPodCode,
+                    'quotation_pod' => $quotationPodCode,
+                    'parent_article_id' => $this->article_cache_id,
+                ]);
             }
         }
         
@@ -684,14 +670,31 @@ class QuotationRequestArticle extends Model
             }
             
             if ($shouldAdd) {
-                // Check if child article is not already added
-                $exists = self::where('quotation_request_id', $quotationRequest->id)
-                    ->where('article_cache_id', $child->id)
-                    ->where('parent_article_id', $this->article_cache_id)
-                    ->exists();
+                // Check for "per shipment" deduplication (generic check)
+                $childUnitType = strtoupper(trim($child->pivot->unit_type ?? $child->unit_type ?? ''));
+                $isPerShipment = in_array($childUnitType, ['SHIPM.', 'SHIPM', 'SHIPMENT']);
+                
+                $exists = false;
+                if ($isPerShipment) {
+                    // Check if any "per shipment" article already exists in quotation
+                    $exists = self::where('quotation_request_id', $quotationRequest->id)
+                        ->where(function ($query) {
+                            $query->whereRaw('UPPER(TRIM(unit_type)) = ?', ['SHIPM.'])
+                                  ->orWhereRaw('UPPER(TRIM(unit_type)) = ?', ['SHIPM'])
+                                  ->orWhereRaw('UPPER(TRIM(unit_type)) = ?', ['SHIPMENT']);
+                        })
+                        ->exists();
+                } else {
+                    // For non-per-shipment articles, check if same article already added to this parent
+                    $exists = self::where('quotation_request_id', $quotationRequest->id)
+                        ->where('article_cache_id', $child->id)
+                        ->where('parent_article_id', $this->article_cache_id)
+                        ->exists();
+                }
                 
                 \Log::info('Checking if child already exists', [
                     'exists' => $exists,
+                    'is_per_shipment' => $isPerShipment,
                 ]);
                 
                 if (!$exists) {
@@ -839,6 +842,52 @@ class QuotationRequestArticle extends Model
             ->first();
             
         return $child && ($child->pivot->child_type ?? 'optional') === 'conditional';
+    }
+
+    /**
+     * Extract POD code from parent article
+     * Checks pod_code first, then pod field, then article_name
+     */
+    private function extractPodCode(RobawsArticleCache $article): ?string
+    {
+        // Try pod_code first
+        if (!empty($article->pod_code)) {
+            return strtoupper(trim($article->pod_code));
+        }
+        
+        // Try pod field (may contain "City (CODE), Country")
+        if (!empty($article->pod)) {
+            // Extract code from format "City (CODE), Country"
+            if (preg_match('/\(([A-Z0-9]+)\)/', $article->pod, $matches)) {
+                return strtoupper(trim($matches[1]));
+            }
+            // If no parentheses, might already be a code
+            return strtoupper(trim($article->pod));
+        }
+        
+        // Try extracting from article_name (last resort)
+        // This would use ArticleNameParser, but for now return null
+        // The migration should have populated pod_code, so this is unlikely
+        return null;
+    }
+
+    /**
+     * Extract POD code from quotation request
+     * Checks pod field (may contain "City (CODE), Country")
+     */
+    private function extractPodCodeFromQuotation(QuotationRequest $quotation): ?string
+    {
+        if (empty($quotation->pod)) {
+            return null;
+        }
+        
+        // Extract code from format "City (CODE), Country"
+        if (preg_match('/\(([A-Z0-9]+)\)/', $quotation->pod, $matches)) {
+            return strtoupper(trim($matches[1]));
+        }
+        
+        // If no parentheses, might already be a code
+        return strtoupper(trim($quotation->pod));
     }
 }
 
