@@ -170,6 +170,23 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
                         }
                     }
                     
+                    // #region agent log
+                    @file_put_contents(base_path('.cursor/debug.log'), json_encode([
+                        'sessionId' => 'debug-session',
+                        'runId' => 'silver-sun-extraction',
+                        'hypothesisId' => 'A',
+                        'location' => __FILE__ . ':' . __LINE__,
+                        'message' => 'Vessels and voyages parsed',
+                        'data' => [
+                            'vessels' => $vessels,
+                            'voyageNumbers' => $voyageNumbers,
+                            'silverSunIndex' => array_search('Silver Sun', $vessels),
+                            'silverSunVoyage' => $voyageNumbers[array_search('Silver Sun', $vessels)] ?? null,
+                        ],
+                        'timestamp' => time() * 1000
+                    ]) . "\n", FILE_APPEND);
+                    // #endregion
+                    
                     // Ensure voyage numbers array matches vessels array length
                     while (count($voyageNumbers) < count($vessels)) {
                         $voyageNumbers[] = null;
@@ -234,21 +251,49 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
                                 // Find ALL cells in this row that have the voyage number in their headers attribute
                                 // The headers attribute contains the voyage code (e.g., "26PA01-date")
                                 $allCells = $xpath->query('.//td | .//th', $row);
+                                $cellsChecked = 0;
+                                $cellsMatched = 0;
                                 foreach ($allCells as $cell) {
                                     $cellHtml = $dom->saveHTML($cell);
+                                    $cellsChecked++;
                                     // Check if this cell belongs to this vessel/voyage by checking headers attribute
-                                    // Headers format: "...26PA01-date..." or "...26PA01-vessel..."
-                                    if (preg_match('/headers=["\'][^"\']*' . preg_quote($voyageNo, '/') . '[^"\']*["\']/i', $cellHtml)) {
-                                        // Extract ALL dates from this cell (may contain multiple dates)
+                                    // Headers format: "...26PA01-date..." - must have voyage number followed by "-date"
+                                    // This ensures we only match cells that are actually date cells for this voyage
+                                    // Not cells that just happen to have the voyage in nested structure
+                                    $hasVoyageDateInHeaders = preg_match('/headers=["\'][^"\']*' . preg_quote($voyageNo, '/') . '-date[^"\']*["\']/i', $cellHtml);
+                                    if ($hasVoyageDateInHeaders) {
+                                        // Also verify the cell actually contains a date (not just nested empty cells)
                                         $allDates = $this->extractAllDatesFromCell($cellHtml);
-                                        foreach ($allDates as $dateText) {
-                                            $parsedDate = $this->parseDate($dateText);
-                                            if ($parsedDate) {
-                                                $antwerpDates[] = $parsedDate;
+                                        if (!empty($allDates)) {
+                                            $cellsMatched++;
+                                            foreach ($allDates as $dateText) {
+                                                $parsedDate = $this->parseDate($dateText);
+                                                if ($parsedDate) {
+                                                    $antwerpDates[] = $parsedDate;
+                                                }
                                             }
                                         }
                                     }
                                 }
+                                
+                                // #region agent log
+                                @file_put_contents(base_path('.cursor/debug.log'), json_encode([
+                                    'sessionId' => 'debug-session',
+                                    'runId' => 'silver-sun-extraction',
+                                    'hypothesisId' => 'B',
+                                    'location' => __FILE__ . ':' . __LINE__,
+                                    'message' => 'Antwerp dates extraction',
+                                    'data' => [
+                                        'vesselName' => $vesselName,
+                                        'voyageNo' => $voyageNo,
+                                        'cellsChecked' => $cellsChecked,
+                                        'cellsMatched' => $cellsMatched,
+                                        'antwerpDates' => $antwerpDates,
+                                    ],
+                                    'timestamp' => time() * 1000
+                                ]) . "\n", FILE_APPEND);
+                                // #endregion
+                                
                                 break; // Only process Antwerp
                             }
                         }
