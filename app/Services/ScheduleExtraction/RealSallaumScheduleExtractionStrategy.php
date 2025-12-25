@@ -222,23 +222,30 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
                         }
                         
                         // Extract ALL dates from Antwerp row (focus on ANR only as per user requirement)
-                        // A cell may contain multiple dates - extract all of them
+                        // The table may have MULTIPLE cells for the same vessel (one per date)
+                        // We need to find ALL cells that have this voyage number in their headers
                         $antwerpDates = [];
                         $antwerpRowIndex = null;
                         foreach ($polRowIndices as $rowIndex => $polCodeInRow) {
                             if ($polCodeInRow === 'ANR') {
                                 $antwerpRowIndex = $rowIndex;
                                 $row = $rows->item($rowIndex);
-                                $cells = $xpath->query('.//td | .//th', $row);
-                                if ($cells->length > $colIndex) {
-                                    $cell = $cells->item($colIndex);
+                                
+                                // Find ALL cells in this row that have the voyage number in their headers attribute
+                                // The headers attribute contains the voyage code (e.g., "26PA01-date")
+                                $allCells = $xpath->query('.//td | .//th', $row);
+                                foreach ($allCells as $cell) {
                                     $cellHtml = $dom->saveHTML($cell);
-                                    // Extract ALL dates from the cell (may contain multiple dates)
-                                    $allDates = $this->extractAllDatesFromCell($cellHtml);
-                                    foreach ($allDates as $dateText) {
-                                        $parsedDate = $this->parseDate($dateText);
-                                        if ($parsedDate) {
-                                            $antwerpDates[] = $parsedDate;
+                                    // Check if this cell belongs to this vessel/voyage by checking headers attribute
+                                    // Headers format: "...26PA01-date..." or "...26PA01-vessel..."
+                                    if (preg_match('/headers=["\'][^"\']*' . preg_quote($voyageNo, '/') . '[^"\']*["\']/i', $cellHtml)) {
+                                        // Extract ALL dates from this cell (may contain multiple dates)
+                                        $allDates = $this->extractAllDatesFromCell($cellHtml);
+                                        foreach ($allDates as $dateText) {
+                                            $parsedDate = $this->parseDate($dateText);
+                                            if ($parsedDate) {
+                                                $antwerpDates[] = $parsedDate;
+                                            }
                                         }
                                     }
                                 }
@@ -247,9 +254,10 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
                         }
                         
                         // Use only the EARLIEST Antwerp date for this vessel/voyage
-                        // This prevents duplicates when a cell contains multiple dates
+                        // This prevents duplicates when multiple cells exist for the same vessel
                         $polDate = null;
                         if (!empty($antwerpDates)) {
+                            $antwerpDates = array_unique($antwerpDates); // Remove duplicates
                             sort($antwerpDates); // Sort chronologically
                             $polDate = $antwerpDates[0]; // Use earliest date
                         }
@@ -259,18 +267,29 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
                         }
                         
                         // Extract ALL POD dates from this column
+                        // Use headers attribute to find cells belonging to this vessel/voyage
                         $podDatesByCode = [];
                         foreach ($podRowIndices as $rowIndex => $podCodeInRow) {
                             $row = $rows->item($rowIndex);
-                            $cells = $xpath->query('.//td | .//th', $row);
-                            if ($cells->length > $colIndex) {
-                                $cell = $cells->item($colIndex);
+                            $allCells = $xpath->query('.//td | .//th', $row);
+                            
+                            // Find cells that have this voyage number in headers
+                            foreach ($allCells as $cell) {
                                 $cellHtml = $dom->saveHTML($cell);
-                                $dateText = $this->extractDateFromCell($cellHtml);
-                                if ($dateText) {
-                                    $parsedPodDate = $this->parseDate($dateText);
-                                    if ($parsedPodDate) {
-                                        $podDatesByCode[$podCodeInRow] = $parsedPodDate;
+                                // Check if this cell belongs to this vessel/voyage
+                                if (preg_match('/headers=["\'][^"\']*' . preg_quote($voyageNo, '/') . '[^"\']*["\']/i', $cellHtml)) {
+                                    $dateText = $this->extractDateFromCell($cellHtml);
+                                    if ($dateText) {
+                                        $parsedPodDate = $this->parseDate($dateText);
+                                        if ($parsedPodDate) {
+                                            // If multiple dates found for same POD, use the one that makes sense transit-wise
+                                            // (closest to POL date but after it)
+                                            if (!isset($podDatesByCode[$podCodeInRow]) || 
+                                                abs(strtotime($parsedPodDate) - strtotime($polDate)) < 
+                                                abs(strtotime($podDatesByCode[$podCodeInRow]) - strtotime($polDate))) {
+                                                $podDatesByCode[$podCodeInRow] = $parsedPodDate;
+                                            }
+                                        }
                                     }
                                 }
                             }
