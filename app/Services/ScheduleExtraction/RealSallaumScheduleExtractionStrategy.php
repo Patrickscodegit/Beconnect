@@ -221,19 +221,41 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
                             continue;
                         }
                         
-                        // Extract ALL POL dates from this column
-                        $polDatesByCode = [];
+                        // Extract ALL dates from Antwerp row (focus on ANR only as per user requirement)
+                        // A cell may contain multiple dates - extract all of them
+                        $antwerpDates = [];
+                        $antwerpRowIndex = null;
                         foreach ($polRowIndices as $rowIndex => $polCodeInRow) {
-                            $row = $rows->item($rowIndex);
-                            $cells = $xpath->query('.//td | .//th', $row);
-                            if ($cells->length > $colIndex) {
-                                $cell = $cells->item($colIndex);
-                                $cellHtml = $dom->saveHTML($cell);
-                                $dateText = $this->extractDateFromCell($cellHtml);
-                                if ($dateText) {
-                                    $polDatesByCode[$polCodeInRow] = $dateText;
+                            if ($polCodeInRow === 'ANR') {
+                                $antwerpRowIndex = $rowIndex;
+                                $row = $rows->item($rowIndex);
+                                $cells = $xpath->query('.//td | .//th', $row);
+                                if ($cells->length > $colIndex) {
+                                    $cell = $cells->item($colIndex);
+                                    $cellHtml = $dom->saveHTML($cell);
+                                    // Extract ALL dates from the cell (may contain multiple dates)
+                                    $allDates = $this->extractAllDatesFromCell($cellHtml);
+                                    foreach ($allDates as $dateText) {
+                                        $parsedDate = $this->parseDate($dateText);
+                                        if ($parsedDate) {
+                                            $antwerpDates[] = $parsedDate;
+                                        }
+                                    }
                                 }
+                                break; // Only process Antwerp
                             }
+                        }
+                        
+                        // Use only the EARLIEST Antwerp date for this vessel/voyage
+                        // This prevents duplicates when a cell contains multiple dates
+                        $polDate = null;
+                        if (!empty($antwerpDates)) {
+                            sort($antwerpDates); // Sort chronologically
+                            $polDate = $antwerpDates[0]; // Use earliest date
+                        }
+                        
+                        if (!$polDate) {
+                            continue; // Skip if no Antwerp date found
                         }
                         
                         // Extract ALL POD dates from this column
@@ -246,47 +268,43 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
                                 $cellHtml = $dom->saveHTML($cell);
                                 $dateText = $this->extractDateFromCell($cellHtml);
                                 if ($dateText) {
-                                    $podDatesByCode[$podCodeInRow] = $dateText;
+                                    $parsedPodDate = $this->parseDate($dateText);
+                                    if ($parsedPodDate) {
+                                        $podDatesByCode[$podCodeInRow] = $parsedPodDate;
+                                    }
                                 }
                             }
                         }
                         
-                        // Create schedules for ALL valid POL/POD combinations found in this column
-                        foreach ($polDatesByCode as $polCodeInRow => $polDate) {
-                            foreach ($podDatesByCode as $podCodeInRow => $podDate) {
-                                $parsedPolDate = $this->parseDate($polDate);
-                                $parsedPodDate = $this->parseDate($podDate);
+                        // Create schedules using the SINGLE Antwerp date with each POD
+                        foreach ($podDatesByCode as $podCodeInRow => $parsedPodDate) {
+                            // Calculate transit days
+                            $transitDays = (strtotime($parsedPodDate) - strtotime($polDate)) / (60 * 60 * 24);
 
-                                if ($parsedPolDate && $parsedPodDate) {
-                                    // Calculate transit days
-                                    $transitDays = (strtotime($parsedPodDate) - strtotime($parsedPolDate)) / (60 * 60 * 24);
-
-                                    // Sanity check: transit time should be positive and reasonable
-                                    if ($transitDays > 0 && $transitDays <= 50) {
-                                        $scheduleData = [
-                                            'pol_code' => $polCodeInRow,
-                                            'pod_code' => $podCodeInRow,
-                                            'carrier_code' => 'SALLAUM',
-                                            'carrier_name' => 'Sallaum Lines',
-                                            'service_type' => 'RORO',
-                                            'service_name' => "Europe to Africa",
-                                            'vessel_name' => $vesselName,
-                                            'voyage_number' => $voyageNo,
-                                            'ets_pol' => $parsedPolDate,
-                                            'eta_pod' => $parsedPodDate,
-                                            'frequency_per_week' => 1.0,
-                                            'frequency_per_month' => 4.0,
-                                            'transit_days' => (int) $transitDays,
-                                            'next_sailing_date' => $parsedPolDate,
-                                            'data_source' => 'website_table',
-                                            'source_url' => 'https://sallaumlines.com/schedules/europe-to-west-and-south-africa/'
-                                        ];
-                                        
-                                        // Validate before adding
-                                        if ($this->validateScheduleData($scheduleData)) {
-                                            $allSchedules[] = $scheduleData;
-                                        }
-                                    }
+                            // Sanity check: transit time should be positive and reasonable
+                            if ($transitDays > 0 && $transitDays <= 50) {
+                                $scheduleData = [
+                                    'pol_code' => 'ANR', // Always Antwerp
+                                    'pod_code' => $podCodeInRow,
+                                    'carrier_code' => 'SALLAUM',
+                                    'carrier_name' => 'Sallaum Lines',
+                                    'service_type' => 'RORO',
+                                    'service_name' => "Europe to Africa",
+                                    'vessel_name' => $vesselName,
+                                    'voyage_number' => $voyageNo,
+                                    'ets_pol' => $polDate,
+                                    'eta_pod' => $parsedPodDate,
+                                    'frequency_per_week' => 1.0,
+                                    'frequency_per_month' => 4.0,
+                                    'transit_days' => (int) $transitDays,
+                                    'next_sailing_date' => $polDate,
+                                    'data_source' => 'website_table',
+                                    'source_url' => 'https://sallaumlines.com/schedules/europe-to-west-and-south-africa/'
+                                ];
+                                
+                                // Validate before adding
+                                if ($this->validateScheduleData($scheduleData)) {
+                                    $allSchedules[] = $scheduleData;
                                 }
                             }
                         }
@@ -324,7 +342,7 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
     
     protected function extractDateFromCell(string $cellHtml): ?string
     {
-        // Extract date from cell HTML, handling complex nested structure
+        // Extract FIRST date from cell HTML, handling complex nested structure
         // NEW FORMAT: <div class="number"><strong><span class="number-style">DD</span></strong></div> MONTH YEAR
         // OLD FORMAT: <strong>DD</strong> MONTH YEAR
         
@@ -366,6 +384,46 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
         }
         
         return null;
+    }
+    
+    /**
+     * Extract ALL dates from a cell that may contain multiple dates
+     * Used for Antwerp row which may have multiple sailing dates
+     */
+    protected function extractAllDatesFromCell(string $cellHtml): array
+    {
+        $dates = [];
+        
+        // Extract all day numbers from <span class="number-style"> tags
+        preg_match_all('/<span[^>]*class="number-style"[^>]*>(\d+)<\/span>/i', $cellHtml, $dayMatches);
+        $days = $dayMatches[1] ?? [];
+        
+        // Extract month and year (should be same for all dates in the cell)
+        $monthYear = null;
+        $months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        foreach ($months as $month) {
+            if (stripos($cellHtml, $month) !== false) {
+                if (preg_match('/' . $month . '\s*(\d{4})/i', $cellHtml, $yearMatch)) {
+                    $monthYear = $month . ' ' . $yearMatch[1];
+                    break;
+                }
+            }
+        }
+        
+        // If we found days and month/year, create date strings
+        if (!empty($days) && $monthYear) {
+            foreach ($days as $day) {
+                $dates[] = $day . ' ' . $monthYear;
+            }
+        } else {
+            // Fallback: try to extract dates using the single date method
+            $singleDate = $this->extractDateFromCell($cellHtml);
+            if ($singleDate) {
+                $dates[] = $singleDate;
+            }
+        }
+        
+        return $dates;
     }
     
     protected function parseDate(string $dateString): ?string
