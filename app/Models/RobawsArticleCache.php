@@ -732,10 +732,19 @@ class RobawsArticleCache extends Model
             $schedule = $quotation->selectedSchedule;
             if ($schedule->carrier) {
                 $query->where(function ($q) use ($schedule, $useIlike) {
+                    $carrierName = $schedule->carrier->name;
+                    // Extract base carrier name (e.g., "Grimaldi" from "Grimaldi GNET")
+                    // This handles cases where article has "GRIMALDI LINES" but carrier is "Grimaldi GNET"
+                    $baseCarrierName = explode(' ', $carrierName)[0]; // Get first word
+                    
                     if ($useIlike) {
-                        $q->where('shipping_line', 'ILIKE', '%' . $schedule->carrier->name . '%');
+                        // Try exact match first, then fall back to base name
+                        $q->where('shipping_line', 'ILIKE', '%' . $carrierName . '%')
+                          ->orWhere('shipping_line', 'ILIKE', '%' . $baseCarrierName . '%');
                     } else {
-                        $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%' . strtolower($schedule->carrier->name) . '%']);
+                        // Try exact match first, then fall back to base name
+                        $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%' . strtolower($carrierName) . '%'])
+                          ->orWhereRaw('LOWER(shipping_line) LIKE ?', ['%' . strtolower($baseCarrierName) . '%']);
                     }
                 });
             }
