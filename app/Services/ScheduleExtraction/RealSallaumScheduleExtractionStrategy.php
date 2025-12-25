@@ -333,6 +333,29 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
             
             Log::info("Sallaum Lines: Extracted " . count($allSchedules) . " total schedules from table");
             
+            // Deduplicate: For each vessel/voyage/POD combination, keep only the one with earliest ETS
+            $deduplicated = [];
+            foreach ($allSchedules as $schedule) {
+                $key = ($schedule['vessel_name'] ?? '') . '_' . 
+                       ($schedule['voyage_number'] ?? '') . '_' . 
+                       ($schedule['pol_code'] ?? '') . '_' . 
+                       ($schedule['pod_code'] ?? '');
+                
+                if (!isset($deduplicated[$key])) {
+                    $deduplicated[$key] = $schedule;
+                } else {
+                    // Keep the one with earliest ETS date
+                    $existingEts = strtotime($deduplicated[$key]['ets_pol'] ?? '9999-12-31');
+                    $newEts = strtotime($schedule['ets_pol'] ?? '9999-12-31');
+                    if ($newEts < $existingEts) {
+                        $deduplicated[$key] = $schedule;
+                    }
+                }
+            }
+            $allSchedules = array_values($deduplicated);
+            
+            Log::info("Sallaum Lines: After deduplication: " . count($allSchedules) . " schedules");
+            
         } catch (\Exception $e) {
             Log::error("Sallaum Lines: Failed to parse schedule table: " . $e->getMessage(), [
                 'exception' => $e->getMessage(),
