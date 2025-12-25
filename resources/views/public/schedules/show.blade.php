@@ -164,10 +164,19 @@
                     <dt class="text-sm font-medium text-gray-500">Specialization</dt>
                     <dd class="mt-1">
                         <div class="flex flex-wrap gap-2">
-                            @foreach($schedule->carrier->specialization as $spec)
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                    {{ $spec }}
-                                </span>
+                            @php
+                                $spec = is_array($schedule->carrier->specialization) 
+                                    ? $schedule->carrier->specialization 
+                                    : (is_string($schedule->carrier->specialization) 
+                                        ? json_decode($schedule->carrier->specialization, true) 
+                                        : []);
+                            @endphp
+                            @foreach($spec as $key => $value)
+                                @if($value === true)
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                        {{ str_replace('_', ' ', $key) }}
+                                    </span>
+                                @endif
                             @endforeach
                         </div>
                     </dd>

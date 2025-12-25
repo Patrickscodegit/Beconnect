@@ -176,7 +176,7 @@ class ShippingCarrierSeeder extends Seeder
                 'website_url' => 'https://www.grimaldi.com/schedules',
                 'service_types' => json_encode(['RORO']),
                 'specialization' => json_encode([
-                    'mediterranean_routes' => true,
+                    'africa_routes' => true,
                     'vehicle_transportation' => true
                 ]),
                 'service_level' => 'Standard'
