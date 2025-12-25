@@ -319,8 +319,8 @@ class QuotationRequest extends Model
             return config("quotation.customer_role_margins.{$this->customer_role}", 15.00);
         }
         
-        // Default: 15% markup
-        return 15.00;
+        // Default: 0% markup (temporarily disabled, will review later)
+        return 0.00;
     }
     
     /**

@@ -76,12 +76,12 @@
         },
         
         getRoleMargin(role) {
-            // Profit margins from config
+            // All margins set to 0 (temporarily disabled, will review later)
             const margins = {
-                'RORO': 15,
-                'POV': 20,
-                'CONSIGNEE': 10,
-                'FORWARDER': 12
+                'RORO': 0,
+                'POV': 0,
+                'CONSIGNEE': 0,
+                'FORWARDER': 0
             };
             return margins[role] || 0;
         },

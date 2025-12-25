@@ -28,10 +28,10 @@ return [
     */
 
     'profit_margins' => [
-        'default' => env('QUOTATION_DEFAULT_MARGIN', 15), // 15% default margin
+        'default' => 0, // 0% default margin (temporarily disabled, will review later)
 
         'by_role' => [
-            'RORO' => 10,
+            'RORO' => 0,
             'POV' => 0,
             'CONSIGNEE' => 0,
             'FORWARDER' => 0,
