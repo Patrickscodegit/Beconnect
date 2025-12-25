@@ -195,6 +195,23 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
                     Log::info("Sallaum Lines: Found " . count($vessels) . " vessels", ['vessels' => $vessels]);
                     Log::info("Sallaum Lines: Found " . count($voyageNumbers) . " voyage numbers", ['voyages' => $voyageNumbers]);
                     
+                    // #region agent log
+                    @file_put_contents(base_path('.cursor/debug.log'), json_encode([
+                        'sessionId' => 'debug-session',
+                        'runId' => 'silver-sun-extraction',
+                        'hypothesisId' => 'A',
+                        'location' => __FILE__ . ':' . __LINE__,
+                        'message' => 'Vessels and voyages parsed',
+                        'data' => [
+                            'vessels' => $vessels,
+                            'voyageNumbers' => $voyageNumbers,
+                            'silverSunIndex' => array_search('Silver Sun', $vessels),
+                            'silverSunVoyage' => $voyageNumbers[array_search('Silver Sun', $vessels)] ?? null,
+                        ],
+                        'timestamp' => time() * 1000
+                    ]) . "\n", FILE_APPEND);
+                    // #endregion
+                    
                     // Build port name to row index mapping for ALL POLs and PODs
                     $polRowIndices = []; // Row index => POL code
                     $podRowIndices = []; // Row index => POD code
@@ -251,11 +268,8 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
                                 // Find ALL cells in this row that have the voyage number in their headers attribute
                                 // The headers attribute contains the voyage code (e.g., "26PA01-date")
                                 $allCells = $xpath->query('.//td | .//th', $row);
-                                $cellsChecked = 0;
-                                $cellsMatched = 0;
                                 foreach ($allCells as $cell) {
                                     $cellHtml = $dom->saveHTML($cell);
-                                    $cellsChecked++;
                                     // Check if this cell belongs to this vessel/voyage by checking headers attribute
                                     // Headers format: "...26PA01-date..." - must have voyage number followed by "-date"
                                     // This ensures we only match cells that are actually date cells for this voyage
@@ -265,7 +279,6 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
                                         // Also verify the cell actually contains a date (not just nested empty cells)
                                         $allDates = $this->extractAllDatesFromCell($cellHtml);
                                         if (!empty($allDates)) {
-                                            $cellsMatched++;
                                             foreach ($allDates as $dateText) {
                                                 $parsedDate = $this->parseDate($dateText);
                                                 if ($parsedDate) {
@@ -275,24 +288,6 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
                                         }
                                     }
                                 }
-                                
-                                // #region agent log
-                                @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                                    'sessionId' => 'debug-session',
-                                    'runId' => 'silver-sun-extraction',
-                                    'hypothesisId' => 'B',
-                                    'location' => __FILE__ . ':' . __LINE__,
-                                    'message' => 'Antwerp dates extraction',
-                                    'data' => [
-                                        'vesselName' => $vesselName,
-                                        'voyageNo' => $voyageNo,
-                                        'cellsChecked' => $cellsChecked,
-                                        'cellsMatched' => $cellsMatched,
-                                        'antwerpDates' => $antwerpDates,
-                                    ],
-                                    'timestamp' => time() * 1000
-                                ]) . "\n", FILE_APPEND);
-                                // #endregion
                                 
                                 break; // Only process Antwerp
                             }
