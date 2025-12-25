@@ -13,8 +13,8 @@ class GrimaldiApiClient
     private const TOKEN_VALIDITY_SECONDS = 840; // 14 minutes (1 minute buffer before 15-minute expiry)
     
     private string $baseUrl;
-    private string $userId;
-    private string $userSecret;
+    private ?string $userId;
+    private ?string $userSecret;
     private string $tpId;
     private int $timeout;
     private ?string $apiPrefix = null; // Cached API prefix ('/api' or '')
@@ -24,8 +24,8 @@ class GrimaldiApiClient
     public function __construct()
     {
         $this->baseUrl = config('services.grimaldi.base_url', 'https://www.grimaldi-eservice.com/EServiceAPI_BETA/v2');
-        $this->userId = config('services.grimaldi.user_id', '');
-        $this->userSecret = config('services.grimaldi.user_secret', '');
+        $this->userId = config('services.grimaldi.user_id') ?: null;
+        $this->userSecret = config('services.grimaldi.user_secret') ?: null;
         $this->tpId = config('services.grimaldi.tp_id', 'BELGACO');
         // Reduced timeout to prevent sync from hanging (10 seconds instead of 30)
         $this->timeout = config('services.grimaldi.timeout', 10);
@@ -38,6 +38,15 @@ class GrimaldiApiClient
      */
     public function getSecurityToken(): ?string
     {
+        // Check if credentials are configured
+        if (empty($this->userId) || empty($this->userSecret)) {
+            Log::error('Grimaldi API credentials not configured', [
+                'user_id_set' => !empty($this->userId),
+                'user_secret_set' => !empty($this->userSecret),
+            ]);
+            return null;
+        }
+
         // Check if we have a valid cached token
         if ($this->isTokenValid()) {
             return $this->token;
