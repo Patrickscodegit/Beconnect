@@ -2,7 +2,7 @@
 
 namespace App\Services\CarrierRules;
 
-use App\Models\CarrierTransformRule;
+use App\Services\CarrierRules\CarrierRuleResolver;
 
 /**
  * Single source of truth for LM/chargeable measure calculation.
@@ -13,6 +13,10 @@ use App\Models\CarrierTransformRule;
  */
 class ChargeableMeasureService
 {
+    public function __construct(
+        private CarrierRuleResolver $resolver
+    ) {}
+
     /**
      * Compute chargeable LM with carrier-aware transforms
      * 
@@ -37,46 +41,15 @@ class ChargeableMeasureService
         // 1. Compute base ISO LM: (L_m × max(W_m, 2.5)) / 2.5
         $baseLm = ($lengthCm / 100 * max($widthCm / 100, 2.5)) / 2.5;
         
-        // 2. Check for transform rules (OVERWIDTH_LM_RECALC)
-        // For now, query directly - will use CarrierRuleResolver when available
-        $transformRules = CarrierTransformRule::where('carrier_id', $carrierId)
-            ->where('is_active', true)
-            ->where(function ($q) {
-                $q->whereNull('effective_from')
-                  ->orWhere('effective_from', '<=', now());
-            })
-            ->where(function ($q) {
-                $q->whereNull('effective_to')
-                  ->orWhere('effective_to', '>=', now());
-            })
-            ->when($portId, function ($q) use ($portId) {
-                $q->where(function ($query) use ($portId) {
-                    $query->whereNull('port_id')
-                          ->orWhere('port_id', $portId);
-                });
-            })
-            ->when($vehicleCategory, function ($q) use ($vehicleCategory) {
-                $q->where(function ($query) use ($vehicleCategory) {
-                    $query->whereNull('vehicle_category')
-                          ->orWhere('vehicle_category', $vehicleCategory);
-                });
-            })
-            ->when($vesselName, function ($q) use ($vesselName) {
-                $q->where(function ($query) use ($vesselName) {
-                    $query->whereNull('vessel_name')
-                          ->orWhere('vessel_name', $vesselName);
-                });
-            })
-            ->when($vesselClass, function ($q) use ($vesselClass) {
-                $q->where(function ($query) use ($vesselClass) {
-                    $query->whereNull('vessel_class')
-                          ->orWhere('vessel_class', $vesselClass);
-                });
-            })
-            ->orderBy('priority', 'desc')
-            ->orderBy('effective_from', 'desc')
-            ->orderBy('id', 'desc')
-            ->get();
+        // 2. Check for transform rules (OVERWIDTH_LM_RECALC) using resolver
+        $transformRules = $this->resolver->resolveTransformRules(
+            $carrierId,
+            $portId,
+            $vehicleCategory,
+            null, // category_group_id - not used for transforms in this context
+            $vesselName,
+            $vesselClass
+        );
         
         $chargeableLm = $baseLm;
         $appliedTransformRuleId = null;
