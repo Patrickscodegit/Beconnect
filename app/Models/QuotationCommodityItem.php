@@ -530,6 +530,18 @@ class QuotationCommodityItem extends Model
         });
 
         static::saved(function ($item) {
+            // Process through carrier rules engine if schedule/carrier is available
+            try {
+                $integrationService = app(\App\Services\CarrierRules\CarrierRuleIntegrationService::class);
+                $integrationService->processCommodityItem($item);
+            } catch (\Exception $e) {
+                \Log::error('QuotationCommodityItem: Error processing carrier rules', [
+                    'item_id' => $item->id,
+                    'error' => $e->getMessage(),
+                ]);
+                // Continue with other processing even if carrier rules fail
+            }
+
             // Sync bidirectional relationships at database level
             // When Item A is set to "Connected to Item B", automatically set Item B to "Connected to Item A"
             if ($item->related_item_id && in_array($item->relationship_type, ['connected_to', 'loaded_with'])) {
