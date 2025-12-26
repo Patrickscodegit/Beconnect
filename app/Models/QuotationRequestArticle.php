@@ -430,11 +430,25 @@ class QuotationRequestArticle extends Model
         if (!$quotationRequest->relationLoaded('commodityItems')) {
             $quotationRequest->load('commodityItems');
         }
+        
+        // Load schedule with carrier for carrier-aware calculations
+        if (!$quotationRequest->relationLoaded('selectedSchedule')) {
+            $quotationRequest->load('selectedSchedule.carrier');
+        }
 
         $commodityItems = $quotationRequest->commodityItems;
         if ($commodityItems->isEmpty()) {
             return null;
         }
+
+        $service = app(\App\Services\CarrierRules\ChargeableMeasureService::class);
+        $schedule = $quotationRequest->selectedSchedule;
+        
+        // Get carrier context from schedule
+        $carrierId = $schedule?->carrier_id;
+        $portId = $schedule?->pod_port_id;
+        $vesselName = $schedule?->vessel_name;
+        $vesselClass = $schedule?->vessel_class;
 
         $lmPerItem = 0;
         $totalQuantity = 0;
@@ -442,12 +456,18 @@ class QuotationRequestArticle extends Model
 
         foreach ($commodityItems as $item) {
             if ($item->length_cm && $item->width_cm) {
-                // Calculate LM per item: (length_m × max(width_m, 2.5)) / 2.5
-                // Width has a minimum of 250 cm (2.5m) for LM calculations
-                $lengthM = $item->length_cm / 100;
-                $widthCm = max($item->width_cm, 250); // Minimum width of 250 cm
-                $widthM = $widthCm / 100;
-                $itemLmPerItem = ($lengthM * $widthM) / 2.5;
+                // Use ChargeableMeasureService for carrier-aware LM calculation
+                $result = $service->computeChargeableLm(
+                    $item->length_cm,
+                    $item->width_cm,
+                    $carrierId,
+                    $portId,
+                    $item->category,
+                    $vesselName,
+                    $vesselClass
+                );
+                
+                $itemLmPerItem = $result->chargeableLm;
                 
                 $itemQuantity = $item->quantity ?? 1;
                 $itemTotalLm = $itemLmPerItem * $itemQuantity;

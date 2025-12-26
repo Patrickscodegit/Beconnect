@@ -3,23 +3,13 @@
 namespace App\Services\Quotation\Calculators;
 
 use App\Models\QuotationRequestArticle;
+use App\Services\CarrierRules\ChargeableMeasureService;
 
 class LmQuantityCalculator implements QuantityCalculatorInterface
 {
     /**
-     * Calculate LM quantity: Sum of [quantity × (length × width) / 2.5] for all commodity items
-     * 
-     * Formula per commodity item (converting cm to meters):
-     * - Width has a minimum of 250 cm (2.5m) for LM calculations
-     * - LM per item = (length_cm / 100 × max(width_cm, 250) / 100) / 2.5 = (length_m × max(width_m, 2.5)) / 2.5
-     * - Or equivalently: (length_cm × max(width_cm, 250)) / 25,000
-     * - LM for item line = LM per item × item quantity
-     * - Total LM = Sum of all item lines
-     * 
-     * Example:
-     * - 3 trucks, each 500cm × 200cm (width treated as 250cm minimum)
-     * - LM per truck = (500 / 100 × 250 / 100) / 2.5 = (5 × 2.5) / 2.5 = 5 LM
-     * - Total LM = 5 × 3 = 15 LM
+     * Calculate LM quantity: Sum of [quantity × chargeable LM] for all commodity items
+     * Uses ChargeableMeasureService for carrier-aware LM calculations.
      * 
      * @param QuotationRequestArticle $article
      * @return float
@@ -37,11 +27,25 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
             $quotationRequest->load('commodityItems');
         }
         
+        // Load schedule with carrier for carrier-aware calculations
+        if (!$quotationRequest->relationLoaded('selectedSchedule')) {
+            $quotationRequest->load('selectedSchedule.carrier');
+        }
+        
         $commodityItems = $quotationRequest->commodityItems;
         
         if ($commodityItems->isEmpty()) {
             return (float) $article->quantity; // Fallback if no items
         }
+        
+        $service = app(ChargeableMeasureService::class);
+        $schedule = $quotationRequest->selectedSchedule;
+        
+        // Get carrier context from schedule
+        $carrierId = $schedule?->carrier_id;
+        $portId = $schedule?->pod_port_id;
+        $vesselName = $schedule?->vessel_name;
+        $vesselClass = $schedule?->vessel_class;
         
         $totalLm = 0;
         $processedItems = [];
@@ -58,14 +62,20 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
             }
             
             // PRIORITY 1: Use stack/overall dimensions if available
-            // This handles both actual stack bases AND items with overall dimensions set
             if ($item->stack_length_cm && $item->stack_width_cm) {
                 $processedItems[] = $item->id;
                 
-                $lengthM = $item->stack_length_cm / 100;
-                $widthCm = max($item->stack_width_cm, 250); // Minimum width of 250 cm
-                $widthM = $widthCm / 100;
-                $lmPerStack = ($lengthM * $widthM) / 2.5;
+                $result = $service->computeChargeableLm(
+                    $item->stack_length_cm,
+                    $item->stack_width_cm,
+                    $carrierId,
+                    $portId,
+                    $item->category,
+                    $vesselName,
+                    $vesselClass
+                );
+                
+                $lmPerStack = $result->chargeableLm;
                 
                 // Multiply by stack unit count (number of units in the stack)
                 $stackUnitCount = $item->stack_unit_count ?? $item->getStackUnitCount() ?? 1;
@@ -77,10 +87,17 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
             elseif ($item->length_cm && $item->width_cm) {
                 $processedItems[] = $item->id;
                 
-                $lengthM = $item->length_cm / 100;
-                $widthCm = max($item->width_cm, 250); // Minimum width of 250 cm
-                $widthM = $widthCm / 100;
-                $lmPerItem = ($lengthM * $widthM) / 2.5;
+                $result = $service->computeChargeableLm(
+                    $item->length_cm,
+                    $item->width_cm,
+                    $carrierId,
+                    $portId,
+                    $item->category,
+                    $vesselName,
+                    $vesselClass
+                );
+                
+                $lmPerItem = $result->chargeableLm;
                 
                 // Multiply by item quantity (e.g., 3 trucks with same dimensions)
                 $itemQuantity = $item->quantity ?? 1;

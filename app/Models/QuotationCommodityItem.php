@@ -274,18 +274,44 @@ class QuotationCommodityItem extends Model
     }
 
     /**
-     * Calculate stack LM from stack dimensions.
-     * Formula: (stack_length_m × max(stack_width_m, 2.5)) / 2.5
+     * Calculate stack LM from stack dimensions using ChargeableMeasureService.
+     * Uses carrier-aware transforms if schedule/carrier is available.
      */
     public function calculateStackLm(): float
     {
-        if ($this->stack_length_cm && $this->stack_width_cm) {
-            $lengthM = $this->stack_length_cm / 100;
-            $widthCm = max($this->stack_width_cm, 250); // Minimum width of 250 cm
-            $widthM = $widthCm / 100;
-            return ($lengthM * $widthM) / 2.5;
+        if (!$this->stack_length_cm || !$this->stack_width_cm) {
+            return 0;
         }
-        return 0;
+
+        $service = app(\App\Services\CarrierRules\ChargeableMeasureService::class);
+        
+        // Try to get carrier context from quotation request
+        $carrierId = null;
+        $portId = null;
+        $vesselName = null;
+        $vesselClass = null;
+        
+        if ($this->quotationRequest) {
+            $schedule = $this->quotationRequest->selectedSchedule;
+            if ($schedule) {
+                $carrierId = $schedule->carrier_id ?? null;
+                $portId = $schedule->pod_port_id ?? null;
+                $vesselName = $schedule->vessel_name;
+                $vesselClass = $schedule->vessel_class;
+            }
+        }
+        
+        $result = $service->computeChargeableLm(
+            $this->stack_length_cm,
+            $this->stack_width_cm,
+            $carrierId,
+            $portId,
+            $this->category,
+            $vesselName,
+            $vesselClass
+        );
+        
+        return $result->chargeableLm;
     }
 
     /**
@@ -310,19 +336,50 @@ class QuotationCommodityItem extends Model
     }
 
     /**
-     * Calculate LM (Linear Meter) from dimensions: (length_m × width_m) / 2.5
-     * Converts cm to meters: (length_cm / 100 × max(width_cm, 250) / 100) / 2.5
-     * Width has a minimum of 250 cm (2.5m) for LM calculations
+     * Calculate LM (Linear Meter) from dimensions using ChargeableMeasureService.
+     * Uses carrier-aware transforms if schedule/carrier is available, otherwise falls back to base ISO LM.
      */
     public function calculateLm(): float
     {
-        if ($this->length_cm && $this->width_cm) {
-            $lengthM = $this->length_cm / 100;
-            $widthCm = max($this->width_cm, 250); // Minimum width of 250 cm
-            $widthM = $widthCm / 100;
-            return ($lengthM * $widthM) / 2.5;
+        if (!$this->length_cm || !$this->width_cm) {
+            return 0;
         }
-        return 0;
+
+        $service = app(\App\Services\CarrierRules\ChargeableMeasureService::class);
+        
+        // Try to get carrier context from quotation request
+        $carrierId = null;
+        $portId = null;
+        $vesselName = null;
+        $vesselClass = null;
+        
+        if ($this->quotationRequest) {
+            $schedule = $this->quotationRequest->selectedSchedule;
+            if ($schedule) {
+                $carrierId = $schedule->carrier_id ?? null;
+                $portId = $schedule->pod_port_id ?? null;
+                $vesselName = $schedule->vessel_name;
+                $vesselClass = $schedule->vessel_class;
+            }
+        }
+        
+        $result = $service->computeChargeableLm(
+            $this->length_cm,
+            $this->width_cm,
+            $carrierId,
+            $portId,
+            $this->category, // vehicle category
+            $vesselName,
+            $vesselClass
+        );
+        
+        // Store chargeable LM and meta for future reference
+        $this->chargeable_lm = $result->chargeableLm;
+        if (!empty($result->meta)) {
+            $this->carrier_rule_meta = array_merge($this->carrier_rule_meta ?? [], $result->meta);
+        }
+        
+        return $result->chargeableLm;
     }
 
     /**

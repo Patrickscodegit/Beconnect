@@ -18,11 +18,25 @@ class ChargeableMeasureService
     ) {}
 
     /**
+     * Calculate base ISO LM without carrier transforms (fallback)
+     * Formula: (length_m × max(width_m, 2.5)) / 2.5
+     */
+    public function calculateBaseLm(float $lengthCm, float $widthCm): float
+    {
+        if ($lengthCm <= 0 || $widthCm <= 0) {
+            return 0;
+        }
+        $lengthM = $lengthCm / 100;
+        $widthM = max($widthCm / 100, 2.5); // Minimum width of 2.5m
+        return ($lengthM * $widthM) / 2.5;
+    }
+
+    /**
      * Compute chargeable LM with carrier-aware transforms
      * 
      * @param float $lengthCm
      * @param float $widthCm
-     * @param int $carrierId
+     * @param ?int $carrierId If null, returns base ISO LM only
      * @param ?int $portId
      * @param ?string $vehicleCategory
      * @param ?string $vesselName
@@ -32,16 +46,26 @@ class ChargeableMeasureService
     public function computeChargeableLm(
         float $lengthCm,
         float $widthCm,
-        int $carrierId,
+        ?int $carrierId = null,
         ?int $portId = null,
         ?string $vehicleCategory = null,
         ?string $vesselName = null,
         ?string $vesselClass = null
     ): ChargeableMeasureDTO {
         // 1. Compute base ISO LM: (L_m × max(W_m, 2.5)) / 2.5
-        $baseLm = ($lengthCm / 100 * max($widthCm / 100, 2.5)) / 2.5;
+        $baseLm = $this->calculateBaseLm($lengthCm, $widthCm);
         
-        // 2. Check for transform rules (OVERWIDTH_LM_RECALC) using resolver
+        // 2. If no carrier context, return base LM only
+        if (!$carrierId) {
+            return new ChargeableMeasureDTO(
+                baseLm: $baseLm,
+                chargeableLm: $baseLm,
+                appliedTransformRuleId: null,
+                meta: []
+            );
+        }
+        
+        // 3. Check for transform rules (OVERWIDTH_LM_RECALC) using resolver
         $transformRules = $this->resolver->resolveTransformRules(
             $carrierId,
             $portId,

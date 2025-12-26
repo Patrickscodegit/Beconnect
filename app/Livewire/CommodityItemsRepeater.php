@@ -243,21 +243,21 @@ class CommodityItemsRepeater extends Component
         $width = floatval($item['width_cm'] ?? 0);
         
         if ($length > 0 && $width > 0) {
+            // Use ChargeableMeasureService for base ISO LM calculation
+            // Note: No carrier context available in Livewire component, so using base ISO only
+            $service = app(\App\Services\CarrierRules\ChargeableMeasureService::class);
+            
             if ($this->unitSystem === 'us') {
-                // Calculate LM from inches: (length_in / 12 × width_in / 12) / 2.5
-                // Convert 250 cm minimum to inches: 250 / 2.54 = 98.425 inches
-                $lengthM = $length / 12 / 0.3048; // Convert inches to meters
-                $widthInches = max($width, 250 / 2.54); // Minimum width of 250 cm (98.425 inches)
-                $widthM = $widthInches / 12 / 0.3048;
-                $lm = ($lengthM * $widthM) / 2.5;
+                // Convert inches to cm first
+                $lengthCm = $length * 2.54;
+                $widthCm = $width * 2.54;
+                
+                // Calculate base ISO LM (no carrier transforms in Livewire context)
+                $lm = $service->calculateBaseLm($lengthCm, $widthCm);
                 $item['lm'] = round($lm, 4);
             } else {
-                // Calculate LM from cm: (length_cm / 100 × max(width_cm, 250) / 100) / 2.5
-                // Width has a minimum of 250 cm (2.5m) for LM calculations
-                $lengthM = $length / 100;
-                $widthCm = max($width, 250); // Minimum width of 250 cm
-                $widthM = $widthCm / 100;
-                $lm = ($lengthM * $widthM) / 2.5;
+                // Calculate base ISO LM (no carrier transforms in Livewire context)
+                $lm = $service->calculateBaseLm($length, $width);
                 $item['lm'] = round($lm, 4);
             }
         } else {
