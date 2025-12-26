@@ -19,6 +19,7 @@ class ShippingCarrier extends Model
         'service_types',
         'service_level',
         'is_active',
+        'internal_comments',
     ];
 
     protected $casts = [

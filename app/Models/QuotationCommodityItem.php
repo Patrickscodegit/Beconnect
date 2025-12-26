@@ -53,6 +53,8 @@ class QuotationCommodityItem extends Model
         'stack_cbm',
         'stack_lm',
         'stack_unit_count',
+        'chargeable_lm',
+        'carrier_rule_meta',
     ];
 
     protected $casts = [
@@ -65,6 +67,8 @@ class QuotationCommodityItem extends Model
         'height_cm' => 'decimal:2',
         'cbm' => 'decimal:4',
         'lm' => 'decimal:4',
+        'chargeable_lm' => 'decimal:4',
+        'carrier_rule_meta' => 'array',
         'weight_kg' => 'decimal:2',
         'bruto_weight_kg' => 'decimal:2',
         'netto_weight_kg' => 'decimal:2',
