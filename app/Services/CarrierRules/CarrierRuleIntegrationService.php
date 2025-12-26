@@ -108,11 +108,24 @@ class CarrierRuleIntegrationService
         QuotationCommodityItem $item
     ): void {
         foreach ($quoteLineDrafts as $draft) {
-            // Check if article already exists for this quotation
-            $existingArticle = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
-                ->where('article_cache_id', $draft['article_id'])
-                ->whereJsonContains('notes', $draft['meta']['event_code'] ?? '')
-                ->first();
+            // Check if article already exists for this quotation with same event code
+            $eventCode = $draft['meta']['event_code'] ?? null;
+            $existingArticle = null;
+            
+            if ($eventCode) {
+                $existingArticle = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+                    ->where('article_cache_id', $draft['article_id'])
+                    ->where(function ($query) use ($eventCode) {
+                        $query->whereJsonContains('notes->event_code', $eventCode)
+                            ->orWhere('notes', 'like', '%' . $eventCode . '%');
+                    })
+                    ->first();
+            } else {
+                // Fallback: check by article ID only
+                $existingArticle = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+                    ->where('article_cache_id', $draft['article_id'])
+                    ->first();
+            }
 
             if ($existingArticle) {
                 // Update quantity if needed
