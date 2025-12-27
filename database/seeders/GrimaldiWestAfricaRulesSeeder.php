@@ -180,45 +180,39 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
     private function createClassificationBands(ShippingCarrier $carrier, array $ports): void
     {
         $bands = [
-            // Cars: CBM < 15, height < 200cm
+            // Cars: up to 13 cbm and/or max. height 1.70m (170cm)
             [
                 'outcome_vehicle_category' => 'car',
-                'max_cbm' => 15,
-                'max_height_cm' => 200,
-                'rule_logic' => 'AND',
+                'max_cbm' => 13,
+                'max_height_cm' => 170,
+                'rule_logic' => 'OR', // Document says "and/or"
                 'priority' => 10,
             ],
-            // Small Vans: CBM 15-25, height 200-250cm
+            // Small Vans: from 13 to 18 cbm and/or max. height 2.10m (210cm)
             [
                 'outcome_vehicle_category' => 'small_van',
-                'min_cbm' => 15,
-                'max_cbm' => 25,
-                'max_height_cm' => 250,
-                'rule_logic' => 'AND',
+                'min_cbm' => 13,
+                'max_cbm' => 18,
+                'max_height_cm' => 210,
+                'rule_logic' => 'OR', // Document says "and/or"
                 'priority' => 9,
             ],
-            // Big Vans: CBM 25-40, height 250-300cm
+            // Big Vans: from 18 to 28 cbm and/or max. height 2.60m (260cm)
             [
                 'outcome_vehicle_category' => 'big_van',
-                'min_cbm' => 25,
-                'max_cbm' => 40,
-                'max_height_cm' => 300,
-                'rule_logic' => 'AND',
+                'min_cbm' => 18,
+                'max_cbm' => 28,
+                'max_height_cm' => 260,
+                'rule_logic' => 'OR', // Document says "and/or"
                 'priority' => 8,
             ],
-            // LM Cargo: CBM > 40, height > 300cm
+            // LM Roro: over 28 cbm
+            // Note: Width and weight limits are in acceptance rules, not classification bands
             [
                 'outcome_vehicle_category' => 'truck',
-                'min_cbm' => 40,
+                'min_cbm' => 28,
                 'rule_logic' => 'OR',
                 'priority' => 7,
-            ],
-            // High & Heavy: CBM > 60 OR height > 400cm
-            [
-                'outcome_vehicle_category' => 'high_and_heavy',
-                'min_cbm' => 60,
-                'rule_logic' => 'OR',
-                'priority' => 6,
             ],
         ];
 
@@ -244,63 +238,57 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
     {
         // Global acceptance rules
         $globalRules = [
-            // Cars
+            // Cars: up to 13 cbm and/or max. height 1.70m
             [
                 'vehicle_category' => 'car',
                 'max_length_cm' => 600,
                 'max_width_cm' => 250,
-                'max_height_cm' => 200,
+                'max_height_cm' => 170, // Document: 1.70m
+                'max_cbm' => 13,
                 'max_weight_kg' => 3500,
-                'must_be_empty' => false,
-                'must_be_self_propelled' => true,
+                'must_be_empty' => true, // Document: "All Cars, Small vans and Big vans must be delivered empty"
+                'must_be_self_propelled' => true, // Document: "Units have to be self-propelled"
                 'allow_accessories' => 'UNRESTRICTED',
                 'priority' => 10,
             ],
-            // Small Vans
+            // Small Vans: max. height 2.10m, max CBM 18
             [
                 'vehicle_category' => 'small_van',
                 'max_length_cm' => 600,
                 'max_width_cm' => 250,
-                'max_height_cm' => 250,
+                'max_height_cm' => 210, // Document: 2.10m
+                'max_cbm' => 18,
                 'max_weight_kg' => 4500,
+                'must_be_empty' => true, // Document: "All Cars, Small vans and Big vans must be delivered empty"
                 'must_be_self_propelled' => true,
                 'priority' => 9,
             ],
-            // Big Vans
+            // Big Vans: max. height 2.60m, max CBM 28
             [
                 'vehicle_category' => 'big_van',
                 'max_length_cm' => 700,
                 'max_width_cm' => 260,
-                'max_height_cm' => 300,
+                'max_height_cm' => 260, // Document: 2.60m
+                'max_cbm' => 28,
                 'max_weight_kg' => 7500,
+                'must_be_empty' => true, // Document: "All Cars, Small vans and Big vans must be delivered empty"
                 'must_be_self_propelled' => true,
                 'priority' => 8,
             ],
-            // LM Cargo (via group)
+            // LM Roro: max. width 2.60m, max. height 4.40m, max. Weight 65mt
             [
                 'category_group_id' => $categoryGroups['LM_CARGO']->id,
                 'max_length_cm' => 1600,
-                'max_width_cm' => 300,
-                'max_height_cm' => 450,
-                'max_weight_kg' => 35000,
+                'max_width_cm' => 260, // Document: 2.60m
+                'max_height_cm' => 440, // Document: 4.40m (hard limit)
+                'max_weight_kg' => 65000, // Document: 65mt
                 'must_be_self_propelled' => true,
-                'soft_max_height_cm' => 500,
+                'soft_max_height_cm' => 440, // Document: "Max height 4.40m: without surcharge - upon request"
                 'soft_height_requires_approval' => true,
-                'priority' => 7,
-            ],
-            // High & Heavy
-            [
-                'category_group_id' => $categoryGroups['HH']->id,
-                'max_length_cm' => 2000,
-                'max_width_cm' => 350,
-                'max_height_cm' => 500,
-                'max_weight_kg' => 50000,
-                'must_be_self_propelled' => true,
-                'soft_max_height_cm' => 600,
-                'soft_height_requires_approval' => true,
-                'soft_max_weight_kg' => 60000,
+                'soft_max_weight_kg' => 65000, // Document: "Max weight 65tons: without surcharge - upon request"
                 'soft_weight_requires_approval' => true,
-                'priority' => 6,
+                'notes' => 'Trucks can be loaded with fully assembled, and empty, vehicles',
+                'priority' => 7,
             ],
         ];
 
@@ -319,25 +307,8 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
             );
         }
 
-        // Conakry-specific rules (stricter weight limits)
-        if (isset($ports['CKY'])) {
-            CarrierAcceptanceRule::updateOrCreate(
-                [
-                    'carrier_id' => $carrier->id,
-                    'port_id' => $ports['CKY']->id,
-                    'category_group_id' => $categoryGroups['LM_CARGO']->id,
-                ],
-                [
-                    'max_weight_kg' => 25000, // Lower limit for Conakry
-                    'soft_max_weight_kg' => 30000,
-                    'soft_weight_requires_approval' => true,
-                    'notes' => 'Conakry has stricter weight limits due to port infrastructure',
-                    'priority' => 15, // Higher priority than global
-                    'effective_from' => now()->subYear(),
-                    'is_active' => true,
-                ]
-            );
-        }
+        // Conakry-specific rules (weight tier surcharge applies, but no stricter acceptance limits in document)
+        // Note: Conakry weight surcharge is handled via surcharge rules, not acceptance limits
     }
 
     /**
@@ -407,6 +378,7 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
         );
 
         // 2. Conakry weight tier surcharge
+        // Document: <10t = €120, <20t = €155, +20t = €155 + €11/t above 20t
         if (isset($ports['CKY'])) {
             CarrierSurchargeRule::updateOrCreate(
                 [
@@ -419,11 +391,11 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
                     'calc_mode' => 'WEIGHT_TIER',
                     'params' => [
                         'tiers' => [
-                            ['max_kg' => 10000, 'amount' => 120],
-                            ['max_kg' => 15000, 'amount' => 180],
-                            ['max_kg' => 20000, 'amount' => 250],
-                            ['max_kg' => 25000, 'amount' => 350],
-                            ['max_kg' => null, 'amount' => 500], // Above 25t
+                            ['max_kg' => 10000, 'amount' => 120], // <10t = €120
+                            ['max_kg' => 20000, 'amount' => 155], // <20t = €155
+                            // For >20t: base €155 + €11/t above 20t
+                            // This is handled by using min_kg with per_ton_over
+                            ['min_kg' => 20000, 'amount' => 155, 'per_ton_over' => 11],
                         ],
                     ],
                     'priority' => 15,
@@ -451,6 +423,7 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
         );
 
         // 4. Tank inspection surcharge (per tank)
+        // Document: Tank trucks/trailers: mandatory inspection on terminal - Eur 220/tank
         CarrierSurchargeRule::updateOrCreate(
             [
                 'carrier_id' => $carrier->id,
@@ -461,59 +434,15 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
             [
                 'name' => 'Tank Inspection Surcharge',
                 'calc_mode' => 'PER_TANK',
-                'params' => ['amount' => 200],
+                'params' => ['amount' => 220], // Document: Eur 220/tank
                 'priority' => 10,
                 'effective_from' => now()->subYear(),
                 'is_active' => true,
             ]
         );
 
-        // 5. Overwidth step blocks surcharge (alternative to LM recalculation)
-        // Example: per 25cm block over 250cm, applied per LM
-        CarrierSurchargeRule::updateOrCreate(
-            [
-                'carrier_id' => $carrier->id,
-                'port_id' => null,
-                'event_code' => 'OVERWIDTH_STEP_BLOCKS',
-            ],
-            [
-                'name' => 'Overwidth Step Blocks Surcharge',
-                'calc_mode' => 'WIDTH_STEP_BLOCKS',
-                'params' => [
-                    'trigger_width_gt_cm' => 260,
-                    'threshold_cm' => 250,
-                    'block_cm' => 25,
-                    'rounding' => 'CEIL',
-                    'qty_basis' => 'LM',
-                    'amount_per_block' => 50, // €50 per block per LM
-                    'exclusive_group' => 'OVERWIDTH', // Don't apply if OVERWIDTH_LM_RECALC is used
-                ],
-                'priority' => 5, // Lower priority than transform rule
-                'effective_from' => now()->subYear(),
-                'is_active' => true,
-            ]
-        );
-
-        // 6. Overwidth LM basis surcharge (alternative: surcharge per LM when overwidth)
-        CarrierSurchargeRule::updateOrCreate(
-            [
-                'carrier_id' => $carrier->id,
-                'port_id' => null,
-                'event_code' => 'OVERWIDTH_LM_BASIS',
-            ],
-            [
-                'name' => 'Overwidth LM Basis Surcharge',
-                'calc_mode' => 'WIDTH_LM_BASIS',
-                'params' => [
-                    'trigger_width_gt_cm' => 260,
-                    'amount_per_lm' => 25, // €25 per LM when overwidth
-                    'exclusive_group' => 'OVERWIDTH',
-                ],
-                'priority' => 4,
-                'effective_from' => now()->subYear(),
-                'is_active' => true,
-            ]
-        );
+        // Note: Overwidth is handled via transform rule (LM recalculation), not surcharge rules
+        // Document: "Overwidth: as from 2.60m pro rata line meter (L X W / 2.5 m) this is the new length to calculate all charges"
     }
 
     /**
@@ -527,13 +456,11 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
             'CONAKRY_WEIGHT_TIER' => 'Conakry Weight Surcharge',
             'TOWING' => 'Towing Surcharge',
             'TANK_INSPECTION' => 'Tank Inspection',
-            'OVERWIDTH_STEP_BLOCKS' => 'Overwidth Surcharge',
-            'OVERWIDTH_LM_BASIS' => 'Overwidth LM Surcharge',
         ];
 
         foreach ($articleMappings as $eventCode => $articleName) {
             // Try to find article by name (case-insensitive, partial match)
-            $article = RobawsArticleCache::whereRaw('LOWER(name) LIKE ?', ['%' . strtolower($articleName) . '%'])
+            $article = RobawsArticleCache::whereRaw('LOWER(article_name) LIKE ?', ['%' . strtolower($articleName) . '%'])
                 ->whereRaw('LOWER(shipping_line) LIKE ?', ['%grimaldi%'])
                 ->first();
 
@@ -569,38 +496,177 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
             'CONAKRY_WEIGHT_TIER' => 'WEIGHT_TIER',
             'TOWING' => 'PER_UNIT',
             'TANK_INSPECTION' => 'PER_TANK',
-            'OVERWIDTH_STEP_BLOCKS' => 'WIDTH_STEP_BLOCKS',
-            'OVERWIDTH_LM_BASIS' => 'WIDTH_LM_BASIS',
             default => 'FLAT',
         };
     }
 
     /**
      * Create clauses
+     * Based on official Grimaldi rate sheet document
      */
     private function createClauses(ShippingCarrier $carrier, array $ports): void
     {
         $clauses = [
+            // Operational Clauses
             [
                 'clause_type' => 'OPERATIONAL',
-                'text' => 'All vehicles must be empty of personal belongings and cargo unless otherwise agreed in writing.',
+                'text' => 'Subject to final operational acceptance.',
             ],
             [
                 'clause_type' => 'OPERATIONAL',
-                'text' => 'Non-self-propelled vehicles require prior approval and may be subject to additional handling charges.',
-            ],
-            [
-                'clause_type' => 'LEGAL',
-                'text' => 'Carrier\'s liability is limited in accordance with the applicable international conventions and national laws.',
+                'text' => 'Subject to vessel and space availability and schedules.',
             ],
             [
                 'clause_type' => 'OPERATIONAL',
-                'text' => 'Overwidth cargo (width > 260cm) will be charged based on recalculated LM = (Length × Width) / 2.5m.',
+                'text' => 'Units 30 days free on terminal for export, after parking costs will occur.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Rolling units will be loaded as per FIFO procedure.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Upon shipment Grimaldi\'s bill of lading conditions/terms shall apply.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Units have to be self-propelled and comply with the cargo modalities of the Port of Antwerp.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Tariff only valid for used cargo (brand new - always upon request).',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Conditions subject to acceptance by carrier and official authorities (arms/ammunition regulation).',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'For unpacked, second-hand units, Carrier is not responsible for dents, bends, scratches, etc.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Warning: Personal effects in vehicles are not covered by carrier\'s insurance. Shipper/consignee responsible for any loss or damage.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'All Cars, Small vans and Big vans must be delivered empty.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Trucks can be loaded with fully assembled, and empty, vehicles.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Merchants responsible for missing/wrong/incorrect information regarding measures.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'For complicated shipments, transport manual or method statement should be provided.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Rolling units on wooden wheels subject to approval.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Towable units must be equipped with suitable towing hook, ring or bracket.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Shipper responsible to supply Operating Instructions.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Carrier not responsible to load non-starting drivable units.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'All roro to be fully operational and in good working order.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'If cargo breaks down on route, shipper/consignee responsible to have unit fixed.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'All rolling units must have adequate, identifiable lashing points.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Piggy-back (nested) rolling units must be presented properly secured.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Rolling units with ground clearance < 30cm require details and drawings in advance.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Cargo to comply with all regulations at port of loading and discharge.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'If cargo differs or does not comply, shipper/consignee remain liable for additional costs.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Overwidth: as from 2.60m pro rata line meter (L X W / 2.5 m) this is the new length to calculate all charges.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Max height 4.40m: without surcharge - upon request.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Max weight 65tons: without surcharge - upon request.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'text' => 'Tank trucks/trailers: mandatory inspection on terminal - Eur 220/tank.',
             ],
             [
                 'clause_type' => 'OPERATIONAL',
                 'port_id' => $ports['CKY']->id ?? null,
-                'text' => 'Conakry: Weight restrictions apply. Cargo exceeding 25,000kg requires prior approval and may incur additional charges.',
+                'text' => 'Conakry: Weight tier surcharge applies. <10t = €120, <20t = €155, +20t = €155 + €11/t above 20t.',
+            ],
+            [
+                'clause_type' => 'OPERATIONAL',
+                'port_id' => $ports['CKY']->id ?? null,
+                'text' => 'Conakry: All waivers are for shippers account except Conakry, this will be provided by Grimaldi.',
+            ],
+
+            // Legal Clauses
+            [
+                'clause_type' => 'LEGAL',
+                'text' => 'Subject to all surcharges (also BAF) valid at time of shipment (VATOS).',
+            ],
+            [
+                'clause_type' => 'LEGAL',
+                'text' => 'All destinations under liner terms with exception of Casablanca and Douala which are Free Out.',
+            ],
+            [
+                'clause_type' => 'LEGAL',
+                'text' => 'No fac our rates are net rates.',
+            ],
+            [
+                'clause_type' => 'LEGAL',
+                'text' => 'All offers subject to revision until engagement.',
+            ],
+            [
+                'clause_type' => 'LEGAL',
+                'text' => 'Rates and Conditions based on dimensions and weights supplied by shippers.',
+            ],
+            [
+                'clause_type' => 'LEGAL',
+                'text' => 'Carrier reserves right to revise quotation if dimensions/weights change.',
+            ],
+            [
+                'clause_type' => 'LEGAL',
+                'text' => 'Exclusive customs formalities.',
+            ],
+            [
+                'clause_type' => 'LIABILITY',
+                'text' => 'Carrier\'s liability is limited in accordance with the applicable international conventions and national laws.',
             ],
         ];
 
@@ -608,11 +674,13 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
             $portId = $clauseData['port_id'] ?? null;
             unset($clauseData['port_id']);
 
+            // Use text as unique identifier along with carrier, port, and type
             CarrierClause::updateOrCreate(
                 [
                     'carrier_id' => $carrier->id,
                     'port_id' => $portId,
                     'clause_type' => $clauseData['clause_type'],
+                    'text' => $clauseData['text'], // Use text as part of unique key
                 ],
                 array_merge($clauseData, [
                     'effective_from' => now()->subYear(),

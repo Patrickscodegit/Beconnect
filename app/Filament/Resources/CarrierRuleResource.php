@@ -72,6 +72,11 @@ class CarrierRuleResource extends Resource
                             ->schema([
                                 Forms\Components\Repeater::make('categoryGroups')
                                     ->relationship('categoryGroups')
+                                    ->addable()
+                                    ->deletable()
+                                    ->reorderable()
+                                    ->cloneable()
+                                    ->collapsible()
                                     ->schema([
                                         Forms\Components\TextInput::make('code')
                                             ->label('Group Code')
@@ -79,74 +84,76 @@ class CarrierRuleResource extends Resource
                                             ->maxLength(50)
                                             ->placeholder('e.g., CARS, LM_CARGO')
                                             ->helperText('Unique code for this group (uppercase, underscores)')
-                                            ->columnSpan(1),
+                                            ->columnSpan(1)
+                                            ->disabled(fn ($context) => $context === 'view'),
 
                                         Forms\Components\TextInput::make('display_name')
                                             ->label('Display Name')
                                             ->required()
                                             ->maxLength(255)
                                             ->placeholder('e.g., Cars, LM Cargo')
-                                            ->columnSpan(1),
+                                            ->columnSpan(1)
+                                            ->disabled(fn ($context) => $context === 'view'),
 
                                         Forms\Components\TagsInput::make('aliases')
                                             ->label('Aliases')
                                             ->placeholder('Add alias and press Enter')
                                             ->helperText('Alternative names for this group (e.g., "LM", "High & Heavy")')
-                                            ->columnSpanFull(),
+                                            ->columnSpanFull()
+                                            ->disabled(fn ($context) => $context === 'view'),
 
-                                        Forms\Components\Select::make('priority')
+                                        Forms\Components\TextInput::make('priority')
                                             ->label('Priority')
                                             ->required()
                                             ->numeric()
                                             ->default(0)
                                             ->helperText('Higher priority = checked first')
-                                            ->columnSpan(1),
+                                            ->columnSpan(1)
+                                            ->disabled(fn ($context) => $context === 'view'),
 
                                         Forms\Components\DatePicker::make('effective_from')
                                             ->label('Effective From')
                                             ->helperText('Rule becomes active on this date')
-                                            ->columnSpan(1),
+                                            ->columnSpan(1)
+                                            ->disabled(fn ($context) => $context === 'view'),
 
                                         Forms\Components\DatePicker::make('effective_to')
                                             ->label('Effective To')
                                             ->helperText('Rule expires on this date (optional)')
-                                            ->columnSpan(1),
+                                            ->columnSpan(1)
+                                            ->disabled(fn ($context) => $context === 'view'),
 
                                         Forms\Components\Toggle::make('is_active')
                                             ->label('Active')
                                             ->default(true)
-                                            ->columnSpan(1),
+                                            ->columnSpan(1)
+                                            ->disabled(fn ($context) => $context === 'view'),
 
-                                        Forms\Components\Repeater::make('members')
-                                            ->relationship('members')
-                                            ->schema([
-                                                Forms\Components\Select::make('vehicle_category')
-                                                    ->label('Vehicle Category')
-                                                    ->required()
-                                                    ->options(function () {
-                                                        $categories = config('quotation.commodity_types.vehicles.categories', []);
-                                                        return $categories;
-                                                    })
-                                                    ->searchable()
-                                                    ->columnSpan(1),
-
-                                                Forms\Components\Toggle::make('is_active')
-                                                    ->label('Active')
-                                                    ->default(true)
-                                                    ->columnSpan(1),
-                                            ])
-                                            ->label('Group Members')
-                                            ->defaultItems(1)
-                                            ->minItems(1)
-                                            ->itemLabel(fn (array $state): ?string => $state['vehicle_category'] ?? null)
-                                            ->columnSpanFull(),
+                                        Forms\Components\CheckboxList::make('member_categories')
+                                            ->label('Vehicle Categories')
+                                            ->options(function () {
+                                                $categories = config('quotation.commodity_types.vehicles.categories', []);
+                                                return $categories;
+                                            })
+                                            ->columns(2)
+                                            ->searchable()
+                                            ->bulkToggleable()
+                                            ->gridDirection('row')
+                                            ->helperText('Select one or more vehicle categories that belong to this group')
+                                            ->columnSpanFull()
+                                            ->disabled(fn ($context) => $context === 'view')
+                                            ->dehydrated(true) // Keep in form data for processing
+                                            ->afterStateHydrated(function ($component, $state, $record) {
+                                                // If state is empty/null and we have a record, load from members relationship
+                                                if (empty($state) && $record && isset($record->id)) {
+                                                    $memberCategories = $record->members()->pluck('vehicle_category')->toArray();
+                                                    $component->state($memberCategories);
+                                                }
+                                            }),
                                     ])
                                     ->label('Category Groups')
                                     ->defaultItems(0)
                                     ->itemLabel(fn (array $state): ?string => $state['display_name'] ?? 'New Group')
-                                    ->collapsible()
-                                    ->cloneable()
-                                    ->reorderable()
                                     ->columnSpanFull(),
                             ]),
 
@@ -158,25 +165,78 @@ class CarrierRuleResource extends Resource
                                 Forms\Components\Repeater::make('classificationBands')
                                     ->relationship('classificationBands')
                                     ->schema([
-                                        Forms\Components\Select::make('port_id')
-                                            ->label('Port (POD)')
-                                            ->relationship('port', 'name')
+                                        Forms\Components\Select::make('port_ids')
+                                            ->label('Ports (POD)')
+                                            ->options(function () {
+                                                return \App\Models\Port::orderBy('name')
+                                                    ->get()
+                                                    ->mapWithKeys(function ($port) {
+                                                        return [$port->id => $port->formatFull()];
+                                                    });
+                                            })
                                             ->searchable()
+                                            ->multiple()
                                             ->preload()
-                                            ->helperText('Leave empty for global rule')
+                                            ->helperText('Select one or more ports. Leave empty for global rule.')
                                             ->columnSpan(1),
 
-                                        Forms\Components\TextInput::make('vessel_name')
-                                            ->label('Vessel Name')
-                                            ->maxLength(100)
-                                            ->helperText('Optional: specific vessel')
+                                        Forms\Components\Hidden::make('port_id')
+                                            ->dehydrated(false),
+
+                                        Forms\Components\Select::make('vessel_names')
+                                            ->label('Vessel Names')
+                                            ->options(function ($get) {
+                                                try {
+                                                    $carrierId = $get('../../../../id');
+                                                    
+                                                    if (!$carrierId) {
+                                                        return [];
+                                                    }
+                                                    
+                                                    return \App\Models\ShippingSchedule::where('carrier_id', $carrierId)
+                                                        ->whereNotNull('vessel_name')
+                                                        ->distinct()
+                                                        ->orderBy('vessel_name')
+                                                        ->pluck('vessel_name', 'vessel_name');
+                                                } catch (\Throwable $e) {
+                                                    return [];
+                                                }
+                                            })
+                                            ->multiple()
+                                            ->helperText('Select one or more vessel names. Leave empty for all vessels.')
                                             ->columnSpan(1),
 
-                                        Forms\Components\TextInput::make('vessel_class')
-                                            ->label('Vessel Class')
-                                            ->maxLength(50)
-                                            ->helperText('Optional: vessel class')
-                                            ->columnSpan(1),
+                                        Forms\Components\Hidden::make('vessel_name')
+                                            ->dehydrated(false),
+
+                                        Forms\Components\CheckboxList::make('vessel_classes')
+                                            ->label('Vessel Classes')
+                                            ->options(function ($get) {
+                                                try {
+                                                    $carrierId = $get('../../../../id');
+                                                    
+                                                    if (!$carrierId) {
+                                                        return [];
+                                                    }
+                                                    
+                                                    return \App\Models\ShippingSchedule::where('carrier_id', $carrierId)
+                                                        ->whereNotNull('vessel_class')
+                                                        ->distinct()
+                                                        ->orderBy('vessel_class')
+                                                        ->pluck('vessel_class', 'vessel_class');
+                                                } catch (\Throwable $e) {
+                                                    return [];
+                                                }
+                                            })
+                                            ->searchable()
+                                            ->bulkToggleable()
+                                            ->gridDirection('row')
+                                            ->helperText('Select one or more vessel classes. Leave empty for all vessel classes.')
+                                            ->columnSpan(1)
+                                            ->dehydrated(true),
+
+                                        Forms\Components\Hidden::make('vessel_class')
+                                            ->dehydrated(false),
 
                                         Forms\Components\Select::make('outcome_vehicle_category')
                                             ->label('Result Category')
@@ -219,7 +279,7 @@ class CarrierRuleResource extends Resource
                                             ->default('OR')
                                             ->columnSpan(1),
 
-                                        Forms\Components\Select::make('priority')
+                                        Forms\Components\TextInput::make('priority')
                                             ->label('Priority')
                                             ->required()
                                             ->numeric()
@@ -255,44 +315,140 @@ class CarrierRuleResource extends Resource
                             ->schema([
                                 Forms\Components\Repeater::make('acceptanceRules')
                                     ->relationship('acceptanceRules')
+                                    ->mutateRelationshipDataBeforeSaveUsing(function (array $data): array {
+                                        // Normalize: if category_group_id set => vehicle_categories = null
+                                        if (!empty($data['category_group_id'])) {
+                                            $data['vehicle_categories'] = null;
+                                        }
+                                        // Normalize: if vehicle_categories non-empty => category_group_id = null
+                                        if (!empty($data['vehicle_categories'])) {
+                                            $data['category_group_id'] = null;
+                                        }
+                                        return $data;
+                                    })
                                     ->schema([
-                                        Forms\Components\Select::make('port_id')
-                                            ->label('Port (POD)')
-                                            ->relationship('port', 'name')
-                                            ->searchable()
-                                            ->preload()
-                                            ->helperText('Leave empty for global rule')
-                                            ->columnSpan(1),
-
-                                        Forms\Components\Select::make('vehicle_category')
-                                            ->label('Vehicle Category')
+                                        Forms\Components\Select::make('port_ids')
+                                            ->label('Ports (POD)')
                                             ->options(function () {
-                                                $categories = config('quotation.commodity_types.vehicles.categories', []);
-                                                return $categories;
+                                                return \App\Models\Port::orderBy('name')
+                                                    ->get()
+                                                    ->mapWithKeys(function ($port) {
+                                                        return [$port->id => $port->formatFull()];
+                                                    });
                                             })
                                             ->searchable()
-                                            ->helperText('Exact category match')
+                                            ->multiple()
+                                            ->preload()
+                                            ->helperText('Select one or more ports. Leave empty for global rule.')
                                             ->columnSpan(1),
+
+                                        Forms\Components\Hidden::make('port_id')
+                                            ->dehydrated(false),
+
+                                        Forms\Components\Select::make('vehicle_categories')
+                                            ->label('Vehicle Categories')
+                                            ->options(function () {
+                                                return config('quotation.commodity_types.vehicles.categories', []);
+                                            })
+                                            ->searchable()
+                                            ->multiple()
+                                            ->preload()
+                                            ->helperText('Select one or more vehicle categories. Leave empty for all categories. Note: If Category Group is selected, this field should be empty.')
+                                            ->columnSpan(1)
+                                            ->disabled(fn ($get) => !empty($get('category_group_id'))),
+
+                                        Forms\Components\Hidden::make('vehicle_category')
+                                            ->dehydrated(false),
 
                                         Forms\Components\Select::make('category_group_id')
                                             ->label('Category Group')
-                                            ->relationship('categoryGroup', 'display_name', fn ($query, $get, $record) => 
-                                                $query->where('carrier_id', $record?->id ?? $get('../../../../id'))
-                                            )
+                                            ->options(function (Forms\Get $get) {
+                                                try {
+                                                    $carrierId = $get('../../../../id');
+                                                    
+                                                    if (!$carrierId) {
+                                                        return [];
+                                                    }
+                                                    
+                                                    return \App\Models\CarrierCategoryGroup::where('carrier_id', $carrierId)
+                                                        ->orderBy('display_name')
+                                                        ->pluck('display_name', 'id')
+                                                        ->toArray();
+                                                } catch (\Throwable $e) {
+                                                    \Log::error('Category group options error: ' . $e->getMessage());
+                                                    return [];
+                                                }
+                                            })
+                                            ->getOptionLabelUsing(function ($value) {
+                                                if (!$value) {
+                                                    return null;
+                                                }
+                                                try {
+                                                    $group = \App\Models\CarrierCategoryGroup::find($value);
+                                                    return $group ? $group->display_name : null;
+                                                } catch (\Throwable $e) {
+                                                    return null;
+                                                }
+                                            })
+                                            ->helperText('OR use a category group. Note: If Vehicle Categories are selected, this field should be empty.')
+                                            ->columnSpan(1)
+                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')))
+                                            ->reactive(),
+
+                                        Forms\Components\Select::make('vessel_names')
+                                            ->label('Vessel Names')
+                                            ->options(function ($get) {
+                                                try {
+                                                    $carrierId = $get('../../../../id');
+                                                    
+                                                    if (!$carrierId) {
+                                                        return [];
+                                                    }
+                                                    
+                                                    return \App\Models\ShippingSchedule::where('carrier_id', $carrierId)
+                                                        ->whereNotNull('vessel_name')
+                                                        ->distinct()
+                                                        ->orderBy('vessel_name')
+                                                        ->pluck('vessel_name', 'vessel_name');
+                                                } catch (\Throwable $e) {
+                                                    return [];
+                                                }
+                                            })
+                                            ->multiple()
+                                            ->helperText('Select one or more vessel names. Leave empty for all vessels.')
+                                            ->columnSpan(1),
+
+                                        Forms\Components\Hidden::make('vessel_name')
+                                            ->dehydrated(false),
+
+                                        Forms\Components\CheckboxList::make('vessel_classes')
+                                            ->label('Vessel Classes')
+                                            ->options(function ($get) {
+                                                try {
+                                                    $carrierId = $get('../../../../id');
+                                                    
+                                                    if (!$carrierId) {
+                                                        return [];
+                                                    }
+                                                    
+                                                    return \App\Models\ShippingSchedule::where('carrier_id', $carrierId)
+                                                        ->whereNotNull('vessel_class')
+                                                        ->distinct()
+                                                        ->orderBy('vessel_class')
+                                                        ->pluck('vessel_class', 'vessel_class');
+                                                } catch (\Throwable $e) {
+                                                    return [];
+                                                }
+                                            })
                                             ->searchable()
-                                            ->preload()
-                                            ->helperText('OR use a category group')
-                                            ->columnSpan(1),
+                                            ->bulkToggleable()
+                                            ->gridDirection('row')
+                                            ->helperText('Select one or more vessel classes. Leave empty for all vessel classes.')
+                                            ->columnSpan(1)
+                                            ->dehydrated(true),
 
-                                        Forms\Components\TextInput::make('vessel_name')
-                                            ->label('Vessel Name')
-                                            ->maxLength(100)
-                                            ->columnSpan(1),
-
-                                        Forms\Components\TextInput::make('vessel_class')
-                                            ->label('Vessel Class')
-                                            ->maxLength(50)
-                                            ->columnSpan(1),
+                                        Forms\Components\Hidden::make('vessel_class')
+                                            ->dehydrated(false),
 
                                         Forms\Components\Section::make('Dimension Limits')
                                             ->schema([
@@ -416,7 +572,7 @@ class CarrierRuleResource extends Resource
                                             ->rows(2)
                                             ->columnSpanFull(),
 
-                                        Forms\Components\Select::make('priority')
+                                        Forms\Components\TextInput::make('priority')
                                             ->label('Priority')
                                             ->required()
                                             ->numeric()
@@ -438,9 +594,18 @@ class CarrierRuleResource extends Resource
                                     ])
                                     ->label('Acceptance Rules')
                                     ->defaultItems(0)
-                                    ->itemLabel(fn (array $state): ?string => 
-                                        ($state['vehicle_category'] ?? $state['category_group_id'] ?? 'Global') . ' Rule'
-                                    )
+                                    ->itemLabel(function (array $state): ?string {
+                                        if (!empty($state['vehicle_category'])) {
+                                            return $state['vehicle_category'] . ' Rule';
+                                        }
+                                        
+                                        if (!empty($state['category_group_id'])) {
+                                            $group = \App\Models\CarrierCategoryGroup::find($state['category_group_id']);
+                                            return ($group ? $group->display_name : 'Group #' . $state['category_group_id']) . ' Rule';
+                                        }
+                                        
+                                        return 'Global Rule';
+                                    })
                                     ->collapsible()
                                     ->cloneable()
                                     ->reorderable()
@@ -454,41 +619,138 @@ class CarrierRuleResource extends Resource
                             ->schema([
                                 Forms\Components\Repeater::make('transformRules')
                                     ->relationship('transformRules')
+                                    ->mutateRelationshipDataBeforeSaveUsing(function (array $data): array {
+                                        if (!empty($data['category_group_id'])) {
+                                            $data['vehicle_categories'] = null;
+                                        }
+                                        if (!empty($data['vehicle_categories'])) {
+                                            $data['category_group_id'] = null;
+                                        }
+                                        return $data;
+                                    })
                                     ->schema([
-                                        Forms\Components\Select::make('port_id')
-                                            ->label('Port (POD)')
-                                            ->relationship('port', 'name')
-                                            ->searchable()
-                                            ->preload()
-                                            ->columnSpan(1),
-
-                                        Forms\Components\Select::make('vehicle_category')
-                                            ->label('Vehicle Category')
+                                        Forms\Components\Select::make('port_ids')
+                                            ->label('Ports (POD)')
                                             ->options(function () {
-                                                $categories = config('quotation.commodity_types.vehicles.categories', []);
-                                                return $categories;
+                                                return \App\Models\Port::orderBy('name')
+                                                    ->get()
+                                                    ->mapWithKeys(function ($port) {
+                                                        return [$port->id => $port->formatFull()];
+                                                    });
                                             })
                                             ->searchable()
+                                            ->multiple()
+                                            ->preload()
+                                            ->helperText('Select one or more ports. Leave empty for global rule.')
                                             ->columnSpan(1),
+
+                                        Forms\Components\Hidden::make('port_id')
+                                            ->dehydrated(false),
+
+                                        Forms\Components\Select::make('vehicle_categories')
+                                            ->label('Vehicle Categories')
+                                            ->options(function () {
+                                                return config('quotation.commodity_types.vehicles.categories', []);
+                                            })
+                                            ->searchable()
+                                            ->multiple()
+                                            ->preload()
+                                            ->helperText('Select one or more vehicle categories. Leave empty for all categories. Note: If Category Group is selected, this field should be empty.')
+                                            ->columnSpan(1)
+                                            ->disabled(fn ($get) => !empty($get('category_group_id'))),
+
+                                        Forms\Components\Hidden::make('vehicle_category')
+                                            ->dehydrated(false),
 
                                         Forms\Components\Select::make('category_group_id')
                                             ->label('Category Group')
-                                            ->relationship('categoryGroup', 'display_name', fn ($query, $get, $record) => 
-                                                $query->where('carrier_id', $record?->id ?? $get('../../../../id'))
-                                            )
+                                            ->options(function (Forms\Get $get) {
+                                                try {
+                                                    $carrierId = $get('../../../../id');
+                                                    
+                                                    if (!$carrierId) {
+                                                        return [];
+                                                    }
+                                                    
+                                                    return \App\Models\CarrierCategoryGroup::where('carrier_id', $carrierId)
+                                                        ->orderBy('display_name')
+                                                        ->pluck('display_name', 'id')
+                                                        ->toArray();
+                                                } catch (\Throwable $e) {
+                                                    \Log::error('Category group options error: ' . $e->getMessage());
+                                                    return [];
+                                                }
+                                            })
+                                            ->getOptionLabelUsing(function ($value) {
+                                                if (!$value) {
+                                                    return null;
+                                                }
+                                                try {
+                                                    $group = \App\Models\CarrierCategoryGroup::find($value);
+                                                    return $group ? $group->display_name : null;
+                                                } catch (\Throwable $e) {
+                                                    return null;
+                                                }
+                                            })
+                                            ->helperText('OR use a category group. Note: If Vehicle Categories are selected, this field should be empty.')
+                                            ->columnSpan(1)
+                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')))
+                                            ->reactive(),
+
+                                        Forms\Components\Select::make('vessel_names')
+                                            ->label('Vessel Names')
+                                            ->options(function ($get) {
+                                                try {
+                                                    $carrierId = $get('../../../../id');
+                                                    
+                                                    if (!$carrierId) {
+                                                        return [];
+                                                    }
+                                                    
+                                                    return \App\Models\ShippingSchedule::where('carrier_id', $carrierId)
+                                                        ->whereNotNull('vessel_name')
+                                                        ->distinct()
+                                                        ->orderBy('vessel_name')
+                                                        ->pluck('vessel_name', 'vessel_name');
+                                                } catch (\Throwable $e) {
+                                                    return [];
+                                                }
+                                            })
+                                            ->multiple()
+                                            ->helperText('Select one or more vessel names. Leave empty for all vessels.')
+                                            ->columnSpan(1),
+
+                                        Forms\Components\Hidden::make('vessel_name')
+                                            ->dehydrated(false),
+
+                                        Forms\Components\CheckboxList::make('vessel_classes')
+                                            ->label('Vessel Classes')
+                                            ->options(function ($get) {
+                                                try {
+                                                    $carrierId = $get('../../../../id');
+                                                    
+                                                    if (!$carrierId) {
+                                                        return [];
+                                                    }
+                                                    
+                                                    return \App\Models\ShippingSchedule::where('carrier_id', $carrierId)
+                                                        ->whereNotNull('vessel_class')
+                                                        ->distinct()
+                                                        ->orderBy('vessel_class')
+                                                        ->pluck('vessel_class', 'vessel_class');
+                                                } catch (\Throwable $e) {
+                                                    return [];
+                                                }
+                                            })
                                             ->searchable()
-                                            ->preload()
-                                            ->columnSpan(1),
+                                            ->bulkToggleable()
+                                            ->gridDirection('row')
+                                            ->helperText('Select one or more vessel classes. Leave empty for all vessel classes.')
+                                            ->columnSpan(1)
+                                            ->dehydrated(true),
 
-                                        Forms\Components\TextInput::make('vessel_name')
-                                            ->label('Vessel Name')
-                                            ->maxLength(100)
-                                            ->columnSpan(1),
-
-                                        Forms\Components\TextInput::make('vessel_class')
-                                            ->label('Vessel Class')
-                                            ->maxLength(50)
-                                            ->columnSpan(1),
+                                        Forms\Components\Hidden::make('vessel_class')
+                                            ->dehydrated(false),
 
                                         Forms\Components\Select::make('transform_code')
                                             ->label('Transform Type')
@@ -523,7 +785,7 @@ class CarrierRuleResource extends Resource
                                             ->columns(2)
                                             ->columnSpanFull(),
 
-                                        Forms\Components\Select::make('priority')
+                                        Forms\Components\TextInput::make('priority')
                                             ->label('Priority')
                                             ->required()
                                             ->numeric()
@@ -561,41 +823,138 @@ class CarrierRuleResource extends Resource
                             ->schema([
                                 Forms\Components\Repeater::make('surchargeRules')
                                     ->relationship('surchargeRules')
+                                    ->mutateRelationshipDataBeforeSaveUsing(function (array $data): array {
+                                        if (!empty($data['category_group_id'])) {
+                                            $data['vehicle_categories'] = null;
+                                        }
+                                        if (!empty($data['vehicle_categories'])) {
+                                            $data['category_group_id'] = null;
+                                        }
+                                        return $data;
+                                    })
                                     ->schema([
-                                        Forms\Components\Select::make('port_id')
-                                            ->label('Port (POD)')
-                                            ->relationship('port', 'name')
-                                            ->searchable()
-                                            ->preload()
-                                            ->columnSpan(1),
-
-                                        Forms\Components\Select::make('vehicle_category')
-                                            ->label('Vehicle Category')
+                                        Forms\Components\Select::make('port_ids')
+                                            ->label('Ports (POD)')
                                             ->options(function () {
-                                                $categories = config('quotation.commodity_types.vehicles.categories', []);
-                                                return $categories;
+                                                return \App\Models\Port::orderBy('name')
+                                                    ->get()
+                                                    ->mapWithKeys(function ($port) {
+                                                        return [$port->id => $port->formatFull()];
+                                                    });
                                             })
                                             ->searchable()
+                                            ->multiple()
+                                            ->preload()
+                                            ->helperText('Select one or more ports. Leave empty for global rule.')
                                             ->columnSpan(1),
+
+                                        Forms\Components\Hidden::make('port_id')
+                                            ->dehydrated(false),
+
+                                        Forms\Components\Select::make('vehicle_categories')
+                                            ->label('Vehicle Categories')
+                                            ->options(function () {
+                                                return config('quotation.commodity_types.vehicles.categories', []);
+                                            })
+                                            ->searchable()
+                                            ->multiple()
+                                            ->preload()
+                                            ->helperText('Select one or more vehicle categories. Leave empty for all categories. Note: If Category Group is selected, this field should be empty.')
+                                            ->columnSpan(1)
+                                            ->disabled(fn ($get) => !empty($get('category_group_id'))),
+
+                                        Forms\Components\Hidden::make('vehicle_category')
+                                            ->dehydrated(false),
 
                                         Forms\Components\Select::make('category_group_id')
                                             ->label('Category Group')
-                                            ->relationship('categoryGroup', 'display_name', fn ($query, $get, $record) => 
-                                                $query->where('carrier_id', $record?->id ?? $get('../../../../id'))
-                                            )
+                                            ->options(function (Forms\Get $get) {
+                                                try {
+                                                    $carrierId = $get('../../../../id');
+                                                    
+                                                    if (!$carrierId) {
+                                                        return [];
+                                                    }
+                                                    
+                                                    return \App\Models\CarrierCategoryGroup::where('carrier_id', $carrierId)
+                                                        ->orderBy('display_name')
+                                                        ->pluck('display_name', 'id')
+                                                        ->toArray();
+                                                } catch (\Throwable $e) {
+                                                    \Log::error('Category group options error: ' . $e->getMessage());
+                                                    return [];
+                                                }
+                                            })
+                                            ->getOptionLabelUsing(function ($value) {
+                                                if (!$value) {
+                                                    return null;
+                                                }
+                                                try {
+                                                    $group = \App\Models\CarrierCategoryGroup::find($value);
+                                                    return $group ? $group->display_name : null;
+                                                } catch (\Throwable $e) {
+                                                    return null;
+                                                }
+                                            })
+                                            ->helperText('OR use a category group. Note: If Vehicle Categories are selected, this field should be empty.')
+                                            ->columnSpan(1)
+                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')))
+                                            ->reactive(),
+
+                                        Forms\Components\Select::make('vessel_names')
+                                            ->label('Vessel Names')
+                                            ->options(function ($get) {
+                                                try {
+                                                    $carrierId = $get('../../../../id');
+                                                    
+                                                    if (!$carrierId) {
+                                                        return [];
+                                                    }
+                                                    
+                                                    return \App\Models\ShippingSchedule::where('carrier_id', $carrierId)
+                                                        ->whereNotNull('vessel_name')
+                                                        ->distinct()
+                                                        ->orderBy('vessel_name')
+                                                        ->pluck('vessel_name', 'vessel_name');
+                                                } catch (\Throwable $e) {
+                                                    return [];
+                                                }
+                                            })
+                                            ->multiple()
+                                            ->helperText('Select one or more vessel names. Leave empty for all vessels.')
+                                            ->columnSpan(1),
+
+                                        Forms\Components\Hidden::make('vessel_name')
+                                            ->dehydrated(false),
+
+                                        Forms\Components\CheckboxList::make('vessel_classes')
+                                            ->label('Vessel Classes')
+                                            ->options(function ($get) {
+                                                try {
+                                                    $carrierId = $get('../../../../id');
+                                                    
+                                                    if (!$carrierId) {
+                                                        return [];
+                                                    }
+                                                    
+                                                    return \App\Models\ShippingSchedule::where('carrier_id', $carrierId)
+                                                        ->whereNotNull('vessel_class')
+                                                        ->distinct()
+                                                        ->orderBy('vessel_class')
+                                                        ->pluck('vessel_class', 'vessel_class');
+                                                } catch (\Throwable $e) {
+                                                    return [];
+                                                }
+                                            })
                                             ->searchable()
-                                            ->preload()
-                                            ->columnSpan(1),
+                                            ->bulkToggleable()
+                                            ->gridDirection('row')
+                                            ->helperText('Select one or more vessel classes. Leave empty for all vessel classes.')
+                                            ->columnSpan(1)
+                                            ->dehydrated(true),
 
-                                        Forms\Components\TextInput::make('vessel_name')
-                                            ->label('Vessel Name')
-                                            ->maxLength(100)
-                                            ->columnSpan(1),
-
-                                        Forms\Components\TextInput::make('vessel_class')
-                                            ->label('Vessel Class')
-                                            ->maxLength(50)
-                                            ->columnSpan(1),
+                                        Forms\Components\Hidden::make('vessel_class')
+                                            ->dehydrated(false),
 
                                         Forms\Components\TextInput::make('event_code')
                                             ->label('Event Code')
@@ -768,7 +1127,7 @@ class CarrierRuleResource extends Resource
                                             })
                                             ->columnSpanFull(),
 
-                                        Forms\Components\Select::make('priority')
+                                        Forms\Components\TextInput::make('priority')
                                             ->label('Priority')
                                             ->required()
                                             ->numeric()
@@ -804,41 +1163,138 @@ class CarrierRuleResource extends Resource
                             ->schema([
                                 Forms\Components\Repeater::make('surchargeArticleMaps')
                                     ->relationship('surchargeArticleMaps')
+                                    ->mutateRelationshipDataBeforeSaveUsing(function (array $data): array {
+                                        if (!empty($data['category_group_id'])) {
+                                            $data['vehicle_categories'] = null;
+                                        }
+                                        if (!empty($data['vehicle_categories'])) {
+                                            $data['category_group_id'] = null;
+                                        }
+                                        return $data;
+                                    })
                                     ->schema([
-                                        Forms\Components\Select::make('port_id')
-                                            ->label('Port (POD)')
-                                            ->relationship('port', 'name')
-                                            ->searchable()
-                                            ->preload()
-                                            ->columnSpan(1),
-
-                                        Forms\Components\Select::make('vehicle_category')
-                                            ->label('Vehicle Category')
+                                        Forms\Components\Select::make('port_ids')
+                                            ->label('Ports (POD)')
                                             ->options(function () {
-                                                $categories = config('quotation.commodity_types.vehicles.categories', []);
-                                                return $categories;
+                                                return \App\Models\Port::orderBy('name')
+                                                    ->get()
+                                                    ->mapWithKeys(function ($port) {
+                                                        return [$port->id => $port->formatFull()];
+                                                    });
                                             })
                                             ->searchable()
+                                            ->multiple()
+                                            ->preload()
+                                            ->helperText('Select one or more ports. Leave empty for global rule.')
                                             ->columnSpan(1),
+
+                                        Forms\Components\Hidden::make('port_id')
+                                            ->dehydrated(false),
+
+                                        Forms\Components\Select::make('vehicle_categories')
+                                            ->label('Vehicle Categories')
+                                            ->options(function () {
+                                                return config('quotation.commodity_types.vehicles.categories', []);
+                                            })
+                                            ->searchable()
+                                            ->multiple()
+                                            ->preload()
+                                            ->helperText('Select one or more vehicle categories. Leave empty for all categories. Note: If Category Group is selected, this field should be empty.')
+                                            ->columnSpan(1)
+                                            ->disabled(fn ($get) => !empty($get('category_group_id'))),
+
+                                        Forms\Components\Hidden::make('vehicle_category')
+                                            ->dehydrated(false),
 
                                         Forms\Components\Select::make('category_group_id')
                                             ->label('Category Group')
-                                            ->relationship('categoryGroup', 'display_name', fn ($query, $get, $record) => 
-                                                $query->where('carrier_id', $record?->id ?? $get('../../../../id'))
-                                            )
+                                            ->options(function (Forms\Get $get) {
+                                                try {
+                                                    $carrierId = $get('../../../../id');
+                                                    
+                                                    if (!$carrierId) {
+                                                        return [];
+                                                    }
+                                                    
+                                                    return \App\Models\CarrierCategoryGroup::where('carrier_id', $carrierId)
+                                                        ->orderBy('display_name')
+                                                        ->pluck('display_name', 'id')
+                                                        ->toArray();
+                                                } catch (\Throwable $e) {
+                                                    \Log::error('Category group options error: ' . $e->getMessage());
+                                                    return [];
+                                                }
+                                            })
+                                            ->getOptionLabelUsing(function ($value) {
+                                                if (!$value) {
+                                                    return null;
+                                                }
+                                                try {
+                                                    $group = \App\Models\CarrierCategoryGroup::find($value);
+                                                    return $group ? $group->display_name : null;
+                                                } catch (\Throwable $e) {
+                                                    return null;
+                                                }
+                                            })
+                                            ->helperText('OR use a category group. Note: If Vehicle Categories are selected, this field should be empty.')
+                                            ->columnSpan(1)
+                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')))
+                                            ->reactive(),
+
+                                        Forms\Components\Select::make('vessel_names')
+                                            ->label('Vessel Names')
+                                            ->options(function ($get) {
+                                                try {
+                                                    $carrierId = $get('../../../../id');
+                                                    
+                                                    if (!$carrierId) {
+                                                        return [];
+                                                    }
+                                                    
+                                                    return \App\Models\ShippingSchedule::where('carrier_id', $carrierId)
+                                                        ->whereNotNull('vessel_name')
+                                                        ->distinct()
+                                                        ->orderBy('vessel_name')
+                                                        ->pluck('vessel_name', 'vessel_name');
+                                                } catch (\Throwable $e) {
+                                                    return [];
+                                                }
+                                            })
+                                            ->multiple()
+                                            ->helperText('Select one or more vessel names. Leave empty for all vessels.')
+                                            ->columnSpan(1),
+
+                                        Forms\Components\Hidden::make('vessel_name')
+                                            ->dehydrated(false),
+
+                                        Forms\Components\CheckboxList::make('vessel_classes')
+                                            ->label('Vessel Classes')
+                                            ->options(function ($get) {
+                                                try {
+                                                    $carrierId = $get('../../../../id');
+                                                    
+                                                    if (!$carrierId) {
+                                                        return [];
+                                                    }
+                                                    
+                                                    return \App\Models\ShippingSchedule::where('carrier_id', $carrierId)
+                                                        ->whereNotNull('vessel_class')
+                                                        ->distinct()
+                                                        ->orderBy('vessel_class')
+                                                        ->pluck('vessel_class', 'vessel_class');
+                                                } catch (\Throwable $e) {
+                                                    return [];
+                                                }
+                                            })
                                             ->searchable()
-                                            ->preload()
-                                            ->columnSpan(1),
+                                            ->bulkToggleable()
+                                            ->gridDirection('row')
+                                            ->helperText('Select one or more vessel classes. Leave empty for all vessel classes.')
+                                            ->columnSpan(1)
+                                            ->dehydrated(true),
 
-                                        Forms\Components\TextInput::make('vessel_name')
-                                            ->label('Vessel Name')
-                                            ->maxLength(100)
-                                            ->columnSpan(1),
-
-                                        Forms\Components\TextInput::make('vessel_class')
-                                            ->label('Vessel Class')
-                                            ->maxLength(50)
-                                            ->columnSpan(1),
+                                        Forms\Components\Hidden::make('vessel_class')
+                                            ->dehydrated(false),
 
                                         Forms\Components\TextInput::make('event_code')
                                             ->label('Event Code')
@@ -849,7 +1305,7 @@ class CarrierRuleResource extends Resource
 
                                         Forms\Components\Select::make('article_id')
                                             ->label('Robaws Article')
-                                            ->relationship('article', 'name')
+                                            ->relationship('article', 'article_name')
                                             ->searchable()
                                             ->preload()
                                             ->required()
@@ -981,12 +1437,11 @@ class CarrierRuleResource extends Resource
                                     ->schema([
                                         Forms\Components\Select::make('simulator_port_id')
                                             ->label('Port of Discharge (POD)')
-                                            ->relationship('port', 'name', fn ($query) => 
-                                                $query->where('type', 'pod')
-                                            )
-                                            ->getOptionLabelFromRecordUsing(fn ($record) => $record->name)
-                                            ->searchable()
-                                            ->preload()
+                                            ->options(function () {
+                                                return \App\Models\Port::where('type', 'pod')
+                                                    ->orderBy('name')
+                                                    ->pluck('name', 'id');
+                                            })
                                             ->searchable()
                                             ->preload()
                                             ->columnSpan(1),
@@ -1082,13 +1537,9 @@ class CarrierRuleResource extends Resource
                                             ->columns(4)
                                             ->columnSpanFull(),
 
-                                        Forms\Components\Action::make('run_simulator')
-                                            ->label('Run Simulation')
-                                            ->icon('heroicon-o-play')
-                                            ->color('primary')
-                                            ->action(function (Forms\Get $get) {
-                                                // This will be handled by the page component
-                                            })
+                                        Forms\Components\Placeholder::make('simulator_note')
+                                            ->label('')
+                                            ->content('Note: Simulator functionality will be implemented in the page component.')
                                             ->columnSpanFull(),
                                     ])
                                     ->columns(2)

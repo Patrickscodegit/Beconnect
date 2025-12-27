@@ -2,19 +2,23 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasMultiScopeMatches;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CarrierClassificationBand extends Model
 {
-    use HasFactory;
+    use HasFactory, HasMultiScopeMatches;
 
     protected $fillable = [
         'carrier_id',
         'port_id',
+        'port_ids',
         'vessel_name',
+        'vessel_names',
         'vessel_class',
+        'vessel_classes',
         'outcome_vehicle_category',
         'min_cbm',
         'max_cbm',
@@ -27,6 +31,9 @@ class CarrierClassificationBand extends Model
     ];
 
     protected $casts = [
+        'port_ids' => 'array',
+        'vessel_names' => 'array',
+        'vessel_classes' => 'array',
         'min_cbm' => 'decimal:4',
         'max_cbm' => 'decimal:4',
         'max_height_cm' => 'decimal:2',
@@ -34,6 +41,29 @@ class CarrierClassificationBand extends Model
         'effective_to' => 'date',
         'is_active' => 'boolean',
     ];
+
+    /**
+     * Normalize empty arrays to NULL before saving
+     */
+    protected static function booted(): void
+    {
+        static::saving(function ($model) {
+            foreach (['port_ids', 'vessel_names', 'vessel_classes'] as $field) {
+                if (isset($model->attributes[$field])) {
+                    $value = $model->attributes[$field];
+                    // If it's a JSON string (after cast encoding), decode it first
+                    if (is_string($value)) {
+                        $decoded = json_decode($value, true);
+                        if (empty($decoded)) {
+                            $model->attributes[$field] = null;
+                        }
+                    } elseif (empty($value)) {
+                        $model->attributes[$field] = null;
+                    }
+                }
+            }
+        });
+    }
 
     public function carrier(): BelongsTo
     {

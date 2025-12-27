@@ -483,6 +483,7 @@ class QuotationCommodityItem extends Model
             'big_van' => ['BIG VAN', 'LM CARGO'],
             'truck' => ['TRUCK', 'HH', 'LM CARGO'],
             'truckhead' => ['TRUCKHEAD', 'HH', 'LM CARGO'],
+            'trailer' => ['TRAILER', 'TRUCK', 'HH', 'LM CARGO'],
             'bus' => ['BUS', 'HH', 'LM CARGO'],
             'motorcycle' => ['MOTORCYCLE'],
         ];

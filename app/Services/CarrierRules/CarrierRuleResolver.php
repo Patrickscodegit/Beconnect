@@ -40,13 +40,36 @@ class CarrierRuleResolver
         $bands = CarrierClassificationBand::where('carrier_id', $carrierId)
             ->active()
             ->where(function ($q) use ($portId) {
-                $q->whereNull('port_id')->orWhere('port_id', $portId);
+                // Global rule: both legacy and array are NULL
+                $q->where(function ($q2) {
+                    $q2->whereNull('port_id')->whereNull('port_ids');
+                });
+                
+                // If input known, match legacy OR array
+                if ($portId !== null) {
+                    $q->orWhere('port_id', $portId)
+                      ->orWhereJsonContains('port_ids', $portId);
+                }
             })
             ->where(function ($q) use ($vesselName) {
-                $q->whereNull('vessel_name')->orWhere('vessel_name', $vesselName);
+                $q->where(function ($q2) {
+                    $q2->whereNull('vessel_name')->whereNull('vessel_names');
+                });
+                
+                if ($vesselName !== null) {
+                    $q->orWhere('vessel_name', $vesselName)
+                      ->orWhereJsonContains('vessel_names', $vesselName);
+                }
             })
             ->where(function ($q) use ($vesselClass) {
-                $q->whereNull('vessel_class')->orWhere('vessel_class', $vesselClass);
+                $q->where(function ($q2) {
+                    $q2->whereNull('vessel_class')->whereNull('vessel_classes');
+                });
+                
+                if ($vesselClass !== null) {
+                    $q->orWhere('vessel_class', $vesselClass)
+                      ->orWhereJsonContains('vessel_classes', $vesselClass);
+                }
             })
             ->get()
             ->filter(fn($band) => $band->matches($cbm, $heightCm));
@@ -72,19 +95,52 @@ class CarrierRuleResolver
         $rules = CarrierAcceptanceRule::where('carrier_id', $carrierId)
             ->active()
             ->where(function ($q) use ($portId) {
-                $q->whereNull('port_id')->orWhere('port_id', $portId);
+                // Global rule: both legacy and array are NULL
+                $q->where(function ($q2) {
+                    $q2->whereNull('port_id')->whereNull('port_ids');
+                });
+                
+                // If input known, match legacy OR array
+                if ($portId !== null) {
+                    $q->orWhere('port_id', $portId)
+                      ->orWhereJsonContains('port_ids', $portId);
+                }
             })
             ->where(function ($q) use ($vehicleCategory) {
-                $q->whereNull('vehicle_category')->orWhere('vehicle_category', $vehicleCategory);
+                $q->where(function ($q2) {
+                    $q2->whereNull('vehicle_category')->whereNull('vehicle_categories');
+                });
+                
+                if ($vehicleCategory !== null) {
+                    $q->orWhere('vehicle_category', $vehicleCategory)
+                      ->orWhereJsonContains('vehicle_categories', $vehicleCategory);
+                }
             })
-            ->where(function ($q) use ($categoryGroupId) {
-                $q->whereNull('category_group_id')->orWhere('category_group_id', $categoryGroupId);
+            ->where(function($q) use ($categoryGroupId) {
+                $q->whereNull('category_group_id');
+                if ($categoryGroupId !== null) {
+                    $q->orWhere('category_group_id', $categoryGroupId);
+                }
             })
             ->where(function ($q) use ($vesselName) {
-                $q->whereNull('vessel_name')->orWhere('vessel_name', $vesselName);
+                $q->where(function ($q2) {
+                    $q2->whereNull('vessel_name')->whereNull('vessel_names');
+                });
+                
+                if ($vesselName !== null) {
+                    $q->orWhere('vessel_name', $vesselName)
+                      ->orWhereJsonContains('vessel_names', $vesselName);
+                }
             })
             ->where(function ($q) use ($vesselClass) {
-                $q->whereNull('vessel_class')->orWhere('vessel_class', $vesselClass);
+                $q->where(function ($q2) {
+                    $q2->whereNull('vessel_class')->whereNull('vessel_classes');
+                });
+                
+                if ($vesselClass !== null) {
+                    $q->orWhere('vessel_class', $vesselClass)
+                      ->orWhereJsonContains('vessel_classes', $vesselClass);
+                }
             })
             ->get();
 
@@ -109,19 +165,51 @@ class CarrierRuleResolver
         return CarrierTransformRule::where('carrier_id', $carrierId)
             ->active()
             ->where(function ($q) use ($portId) {
-                $q->whereNull('port_id')->orWhere('port_id', $portId);
+                $q->where(function ($q2) {
+                    $q2->whereNull('port_id')->whereNull('port_ids');
+                });
+                
+                if ($portId !== null) {
+                    $q->orWhere('port_id', $portId)
+                      ->orWhereJsonContains('port_ids', (string)$portId)
+                      ->orWhereJsonContains('port_ids', (int)$portId);
+                }
             })
             ->where(function ($q) use ($vehicleCategory) {
-                $q->whereNull('vehicle_category')->orWhere('vehicle_category', $vehicleCategory);
+                $q->where(function ($q2) {
+                    $q2->whereNull('vehicle_category')->whereNull('vehicle_categories');
+                });
+                
+                if ($vehicleCategory !== null) {
+                    $q->orWhere('vehicle_category', $vehicleCategory)
+                      ->orWhereJsonContains('vehicle_categories', $vehicleCategory);
+                }
             })
-            ->where(function ($q) use ($categoryGroupId) {
-                $q->whereNull('category_group_id')->orWhere('category_group_id', $categoryGroupId);
+            ->where(function($q) use ($categoryGroupId) {
+                $q->whereNull('category_group_id');
+                if ($categoryGroupId !== null) {
+                    $q->orWhere('category_group_id', $categoryGroupId);
+                }
             })
             ->where(function ($q) use ($vesselName) {
-                $q->whereNull('vessel_name')->orWhere('vessel_name', $vesselName);
+                $q->where(function ($q2) {
+                    $q2->whereNull('vessel_name')->whereNull('vessel_names');
+                });
+                
+                if ($vesselName !== null) {
+                    $q->orWhere('vessel_name', $vesselName)
+                      ->orWhereJsonContains('vessel_names', $vesselName);
+                }
             })
             ->where(function ($q) use ($vesselClass) {
-                $q->whereNull('vessel_class')->orWhere('vessel_class', $vesselClass);
+                $q->where(function ($q2) {
+                    $q2->whereNull('vessel_class')->whereNull('vessel_classes');
+                });
+                
+                if ($vesselClass !== null) {
+                    $q->orWhere('vessel_class', $vesselClass)
+                      ->orWhereJsonContains('vessel_classes', $vesselClass);
+                }
             })
             ->orderBy('priority', 'desc')
             ->orderBy('effective_from', 'desc')
@@ -143,19 +231,51 @@ class CarrierRuleResolver
         return CarrierSurchargeRule::where('carrier_id', $carrierId)
             ->active()
             ->where(function ($q) use ($portId) {
-                $q->whereNull('port_id')->orWhere('port_id', $portId);
+                $q->where(function ($q2) {
+                    $q2->whereNull('port_id')->whereNull('port_ids');
+                });
+                
+                if ($portId !== null) {
+                    $q->orWhere('port_id', $portId)
+                      ->orWhereJsonContains('port_ids', (string)$portId)
+                      ->orWhereJsonContains('port_ids', (int)$portId);
+                }
             })
             ->where(function ($q) use ($vehicleCategory) {
-                $q->whereNull('vehicle_category')->orWhere('vehicle_category', $vehicleCategory);
+                $q->where(function ($q2) {
+                    $q2->whereNull('vehicle_category')->whereNull('vehicle_categories');
+                });
+                
+                if ($vehicleCategory !== null) {
+                    $q->orWhere('vehicle_category', $vehicleCategory)
+                      ->orWhereJsonContains('vehicle_categories', $vehicleCategory);
+                }
             })
-            ->where(function ($q) use ($categoryGroupId) {
-                $q->whereNull('category_group_id')->orWhere('category_group_id', $categoryGroupId);
+            ->where(function($q) use ($categoryGroupId) {
+                $q->whereNull('category_group_id');
+                if ($categoryGroupId !== null) {
+                    $q->orWhere('category_group_id', $categoryGroupId);
+                }
             })
             ->where(function ($q) use ($vesselName) {
-                $q->whereNull('vessel_name')->orWhere('vessel_name', $vesselName);
+                $q->where(function ($q2) {
+                    $q2->whereNull('vessel_name')->whereNull('vessel_names');
+                });
+                
+                if ($vesselName !== null) {
+                    $q->orWhere('vessel_name', $vesselName)
+                      ->orWhereJsonContains('vessel_names', $vesselName);
+                }
             })
             ->where(function ($q) use ($vesselClass) {
-                $q->whereNull('vessel_class')->orWhere('vessel_class', $vesselClass);
+                $q->where(function ($q2) {
+                    $q2->whereNull('vessel_class')->whereNull('vessel_classes');
+                });
+                
+                if ($vesselClass !== null) {
+                    $q->orWhere('vessel_class', $vesselClass)
+                      ->orWhereJsonContains('vessel_classes', $vesselClass);
+                }
             })
             ->orderBy('priority', 'desc')
             ->orderBy('effective_from', 'desc')
@@ -179,19 +299,51 @@ class CarrierRuleResolver
             ->where('event_code', $eventCode)
             ->active()
             ->where(function ($q) use ($portId) {
-                $q->whereNull('port_id')->orWhere('port_id', $portId);
+                $q->where(function ($q2) {
+                    $q2->whereNull('port_id')->whereNull('port_ids');
+                });
+                
+                if ($portId !== null) {
+                    $q->orWhere('port_id', $portId)
+                      ->orWhereJsonContains('port_ids', (string)$portId)
+                      ->orWhereJsonContains('port_ids', (int)$portId);
+                }
             })
             ->where(function ($q) use ($vehicleCategory) {
-                $q->whereNull('vehicle_category')->orWhere('vehicle_category', $vehicleCategory);
+                $q->where(function ($q2) {
+                    $q2->whereNull('vehicle_category')->whereNull('vehicle_categories');
+                });
+                
+                if ($vehicleCategory !== null) {
+                    $q->orWhere('vehicle_category', $vehicleCategory)
+                      ->orWhereJsonContains('vehicle_categories', $vehicleCategory);
+                }
             })
-            ->where(function ($q) use ($categoryGroupId) {
-                $q->whereNull('category_group_id')->orWhere('category_group_id', $categoryGroupId);
+            ->where(function($q) use ($categoryGroupId) {
+                $q->whereNull('category_group_id');
+                if ($categoryGroupId !== null) {
+                    $q->orWhere('category_group_id', $categoryGroupId);
+                }
             })
             ->where(function ($q) use ($vesselName) {
-                $q->whereNull('vessel_name')->orWhere('vessel_name', $vesselName);
+                $q->where(function ($q2) {
+                    $q2->whereNull('vessel_name')->whereNull('vessel_names');
+                });
+                
+                if ($vesselName !== null) {
+                    $q->orWhere('vessel_name', $vesselName)
+                      ->orWhereJsonContains('vessel_names', $vesselName);
+                }
             })
             ->where(function ($q) use ($vesselClass) {
-                $q->whereNull('vessel_class')->orWhere('vessel_class', $vesselClass);
+                $q->where(function ($q2) {
+                    $q2->whereNull('vessel_class')->whereNull('vessel_classes');
+                });
+                
+                if ($vesselClass !== null) {
+                    $q->orWhere('vessel_class', $vesselClass)
+                      ->orWhereJsonContains('vessel_classes', $vesselClass);
+                }
             })
             ->get();
 
@@ -204,6 +356,7 @@ class CarrierRuleResolver
 
     /**
      * Select most specific rule from collection using specificity scoring
+     * MICRO-FIX: Only score when rule is scoped
      */
     private function selectMostSpecific(
         Collection $rules,
@@ -215,44 +368,47 @@ class CarrierRuleResolver
     ) {
         return $rules->map(function ($rule) use ($portId, $vesselName, $vesselClass, $vehicleCategory, $categoryGroupId) {
             $score = 0;
-
-            // +10: Exact vessel name match
-            if ($vesselName && $rule->vessel_name === $vesselName) {
+            
+            // +10: Vessel name match (only if rule is vessel-name scoped AND matches)
+            if ($vesselName && method_exists($rule, 'isVesselNameScoped') && $rule->isVesselNameScoped() && $rule->matchesVesselName($vesselName)) {
                 $score += 10;
             }
-
-            // +8: Exact POD match
-            if ($portId && $rule->port_id === $portId) {
+            
+            // +8: Port match (only if rule is port-scoped AND matches)
+            if ($portId && method_exists($rule, 'isPortScoped') && $rule->isPortScoped() && $rule->matchesPort($portId)) {
                 $score += 8;
             }
-
-            // +6: Vessel class match
-            if ($vesselClass && $rule->vessel_class === $vesselClass) {
+            
+            // +6: Vessel class match (only if rule is vessel-class scoped AND matches)
+            if ($vesselClass && method_exists($rule, 'isVesselClassScoped') && $rule->isVesselClassScoped() && $rule->matchesVesselClass($vesselClass)) {
                 $score += 6;
             }
-
-            // +2: Exact vehicle category match
-            if ($vehicleCategory && $rule->vehicle_category === $vehicleCategory) {
+            
+            // +2: Vehicle category match (only if rule is category-scoped AND matches)
+            if ($vehicleCategory && method_exists($rule, 'isCategoryScoped') && $rule->isCategoryScoped() && $rule->matchesVehicleCategory($vehicleCategory)) {
                 $score += 2;
             }
-
+            
             // +1: Category group match
-            if ($categoryGroupId && $rule->category_group_id === $categoryGroupId) {
+            if ($categoryGroupId && isset($rule->category_group_id) && (int)$rule->category_group_id === (int)$categoryGroupId) {
                 $score += 1;
             }
-
+            
+            // Effective sort key with NULL LAST (micro-fix: use timestamp)
+            $effectiveTs = $rule->effective_from ? $rule->effective_from->timestamp : -1;
+            
             return [
                 'rule' => $rule,
                 'score' => $score,
                 'priority' => $rule->priority ?? 0,
-                'effective_from' => $rule->effective_from,
+                'effective_ts' => $effectiveTs,
                 'id' => $rule->id,
             ];
         })
         ->sortBy([
             ['score', 'desc'],
             ['priority', 'desc'],
-            ['effective_from', 'desc'],
+            ['effective_ts', 'desc'],
             ['id', 'desc'],
         ])
         ->first()['rule'] ?? null;

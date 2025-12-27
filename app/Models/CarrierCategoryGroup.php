@@ -36,12 +36,12 @@ class CarrierCategoryGroup extends Model
 
     public function members(): HasMany
     {
-        return $this->hasMany(CarrierCategoryGroupMember::class);
+        return $this->hasMany(CarrierCategoryGroupMember::class, 'carrier_category_group_id');
     }
 
     public function activeMembers(): HasMany
     {
-        return $this->members()->where('is_active', true);
+        return $this->hasMany(CarrierCategoryGroupMember::class, 'carrier_category_group_id')->where('is_active', true);
     }
 
     public function scopeActive($query)

@@ -77,8 +77,11 @@ class CarrierRuleIntegrationService
             // Save item with rule results (use saveQuietly to avoid triggering saved event again)
             $item->saveQuietly();
 
-            // Auto-add surcharge articles from quoteLineDrafts
-            $this->addSurchargeArticles($quotation, $result->quoteLineDrafts, $item);
+            // Sync surcharge articles: remove old ones no longer applicable, add/update new ones
+            $this->syncSurchargeArticles($quotation, $result->quoteLineDrafts, $item);
+            
+            // Remove articles that no longer match any commodity items (non-carrier-rule articles)
+            $this->removeNonMatchingArticles($quotation);
 
             Log::info('CarrierRuleIntegration: Processed commodity item', [
                 'item_id' => $item->id,
@@ -97,6 +100,59 @@ class CarrierRuleIntegrationService
                 'trace' => $e->getTraceAsString(),
             ]);
         }
+    }
+
+    /**
+     * Sync surcharge articles: remove old ones no longer applicable, add/update new ones
+     */
+    private function syncSurchargeArticles(
+        QuotationRequest $quotation,
+        array $quoteLineDrafts,
+        QuotationCommodityItem $item
+    ): void {
+        // Get all existing carrier rule articles linked to this commodity item
+        $existingArticles = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+            ->where(function ($query) use ($item) {
+                $query->whereJsonContains('notes->commodity_item_id', $item->id)
+                    ->orWhere('notes', 'like', '%"commodity_item_id":' . $item->id . '%');
+            })
+            ->where(function ($query) {
+                $query->whereJsonContains('notes->carrier_rule_applied', true)
+                    ->orWhere('notes', 'like', '%"carrier_rule_applied":true%');
+            })
+            ->get();
+
+        // Build a map of new drafts by event_code for quick lookup
+        $newDraftsByEventCode = [];
+        foreach ($quoteLineDrafts as $draft) {
+            $eventCode = $draft['meta']['event_code'] ?? null;
+            if ($eventCode) {
+                $newDraftsByEventCode[$eventCode] = $draft;
+            }
+        }
+
+        // Remove articles that are no longer applicable
+        foreach ($existingArticles as $existingArticle) {
+            $notes = json_decode($existingArticle->notes ?? '{}', true);
+            $eventCode = $notes['event_code'] ?? null;
+            $linkedItemId = $notes['commodity_item_id'] ?? null;
+
+            // Remove if:
+            // 1. Linked to this commodity item AND
+            // 2. Event code is not in the new drafts (no longer applicable)
+            if ($linkedItemId == $item->id && $eventCode && !isset($newDraftsByEventCode[$eventCode])) {
+                Log::info('CarrierRuleIntegration: Removing no longer applicable article', [
+                    'quotation_id' => $quotation->id,
+                    'article_id' => $existingArticle->id,
+                    'event_code' => $eventCode,
+                    'commodity_item_id' => $item->id,
+                ]);
+                $existingArticle->delete();
+            }
+        }
+
+        // Add/update articles from new drafts
+        $this->addSurchargeArticles($quotation, $quoteLineDrafts, $item);
     }
 
     /**
@@ -128,11 +184,21 @@ class CarrierRuleIntegrationService
             }
 
             if ($existingArticle) {
-                // Update quantity if needed
+                // Update quantity and notes if needed
                 if ($draft['qty'] > 0) {
                     $existingArticle->quantity = $draft['qty'];
-                    $existingArticle->save();
                 }
+                
+                // Update notes to ensure commodity_item_id is set
+                $notes = json_decode($existingArticle->notes ?? '{}', true);
+                $notes['carrier_rule_applied'] = true;
+                $notes['event_code'] = $draft['meta']['event_code'] ?? null;
+                $notes['reason'] = $draft['meta']['reason'] ?? null;
+                $notes['matched_rule_id'] = $draft['meta']['matched_rule_id'] ?? null;
+                $notes['commodity_item_id'] = $item->id;
+                $existingArticle->notes = json_encode($notes);
+                
+                $existingArticle->save();
                 continue;
             }
 
@@ -194,6 +260,55 @@ class CarrierRuleIntegrationService
         // Recalculate quotation totals
         $quotation->calculateTotals();
         $quotation->save();
+    }
+
+    /**
+     * Remove articles that no longer match any commodity items
+     * This is called when commodity item categories change
+     */
+    private function removeNonMatchingArticles(QuotationRequest $quotation): void
+    {
+        // Get all commodity items for this quotation
+        $commodityItems = $quotation->commodityItems;
+        if ($commodityItems->isEmpty()) {
+            return; // No commodity items, nothing to check
+        }
+
+        // Get all articles that are NOT carrier rule-based
+        // Exclude articles that have carrier_rule_applied:true in their notes
+        $articles = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+            ->where(function ($query) {
+                // Articles where notes is null OR notes doesn't contain carrier_rule_applied:true
+                $query->whereNull('notes')
+                    ->orWhere('notes', 'not like', '%"carrier_rule_applied":true%')
+                    ->orWhere('notes', 'not like', "%'carrier_rule_applied':true%");
+            })
+            ->with('articleCache')
+            ->get();
+
+        foreach ($articles as $articleRecord) {
+            $article = $articleRecord->articleCache;
+            if (!$article || !$article->commodity_type) {
+                continue; // Skip articles without commodity type
+            }
+
+            // Check if this article matches any commodity items
+            $matchingItems = QuotationCommodityItem::findMatchingCommodityItems(
+                $commodityItems,
+                $article->commodity_type
+            );
+
+            // If no matching items, remove the article
+            if ($matchingItems->isEmpty()) {
+                Log::info('CarrierRuleIntegration: Removing article that no longer matches commodity items', [
+                    'quotation_id' => $quotation->id,
+                    'article_id' => $articleRecord->id,
+                    'article_name' => $article->article_name,
+                    'commodity_type' => $article->commodity_type,
+                ]);
+                $articleRecord->delete();
+            }
+        }
     }
 }
 

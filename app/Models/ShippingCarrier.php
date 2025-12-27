@@ -43,5 +43,39 @@ class ShippingCarrier extends Model
         return in_array($serviceType, $this->service_types ?? []);
     }
 
+    // Carrier Rules relationships
+    public function categoryGroups(): HasMany
+    {
+        return $this->hasMany(CarrierCategoryGroup::class, 'carrier_id');
+    }
 
+    public function classificationBands(): HasMany
+    {
+        return $this->hasMany(CarrierClassificationBand::class, 'carrier_id');
+    }
+
+    public function acceptanceRules(): HasMany
+    {
+        return $this->hasMany(CarrierAcceptanceRule::class, 'carrier_id');
+    }
+
+    public function transformRules(): HasMany
+    {
+        return $this->hasMany(CarrierTransformRule::class, 'carrier_id');
+    }
+
+    public function surchargeRules(): HasMany
+    {
+        return $this->hasMany(CarrierSurchargeRule::class, 'carrier_id');
+    }
+
+    public function surchargeArticleMaps(): HasMany
+    {
+        return $this->hasMany(CarrierSurchargeArticleMap::class, 'carrier_id');
+    }
+
+    public function clauses(): HasMany
+    {
+        return $this->hasMany(CarrierClause::class, 'carrier_id');
+    }
 }

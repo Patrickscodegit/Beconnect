@@ -22,7 +22,7 @@ class CarrierCategoryGroupMember extends Model
 
     public function categoryGroup(): BelongsTo
     {
-        return $this->belongsTo(CarrierCategoryGroup::class);
+        return $this->belongsTo(CarrierCategoryGroup::class, 'carrier_category_group_id');
     }
 
     public function scopeActive($query)
