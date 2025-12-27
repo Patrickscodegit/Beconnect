@@ -111,14 +111,12 @@ class CarrierRuleIntegrationService
         QuotationCommodityItem $item
     ): void {
         // Get all existing carrier rule articles linked to this commodity item
+        // Note: notes column is TEXT, not JSONB, so we use LIKE patterns instead of JSON operators
         $existingArticles = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
-            ->where(function ($query) use ($item) {
-                $query->whereJsonContains('notes->commodity_item_id', $item->id)
-                    ->orWhere('notes', 'like', '%"commodity_item_id":' . $item->id . '%');
-            })
+            ->where('notes', 'like', '%"commodity_item_id":' . $item->id . '%')
             ->where(function ($query) {
-                $query->whereJsonContains('notes->carrier_rule_applied', true)
-                    ->orWhere('notes', 'like', '%"carrier_rule_applied":true%');
+                $query->where('notes', 'like', '%"carrier_rule_applied":true%')
+                    ->orWhere('notes', 'like', "%'carrier_rule_applied':true%");
             })
             ->get();
 
@@ -169,12 +167,10 @@ class CarrierRuleIntegrationService
             $existingArticle = null;
             
             if ($eventCode) {
+                // Note: notes column is TEXT, not JSONB, so we use LIKE patterns instead of JSON operators
                 $existingArticle = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
                     ->where('article_cache_id', $draft['article_id'])
-                    ->where(function ($query) use ($eventCode) {
-                        $query->whereJsonContains('notes->event_code', $eventCode)
-                            ->orWhere('notes', 'like', '%' . $eventCode . '%');
-                    })
+                    ->where('notes', 'like', '%"event_code":"' . $eventCode . '"%')
                     ->first();
             } else {
                 // Fallback: check by article ID only
