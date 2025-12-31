@@ -61,6 +61,8 @@ class CarrierRuleIntegrationService
 
             // Store chargeable LM and meta
             $item->chargeable_lm = $result->chargeableMeasure->chargeableLm;
+            // Also update the lm field so the UI displays the correct value
+            $item->lm = $result->chargeableMeasure->chargeableLm;
             $item->carrier_rule_meta = [
                 'classified_category' => $result->classifiedVehicleCategory,
                 'matched_category_group' => $result->matchedCategoryGroup,
@@ -259,10 +261,10 @@ class CarrierRuleIntegrationService
     }
 
     /**
-     * Remove articles that no longer match any commodity items
-     * This is called when commodity item categories change
+     * Public method to remove articles that no longer match
+     * Can be called from observers or other services when POD changes
      */
-    private function removeNonMatchingArticles(QuotationRequest $quotation): void
+    public function removeNonMatchingArticles(QuotationRequest $quotation): void
     {
         // Get all commodity items for this quotation
         $commodityItems = $quotation->commodityItems;
@@ -282,25 +284,131 @@ class CarrierRuleIntegrationService
             ->with('articleCache')
             ->get();
 
+        // Extract POD code from quotation's POD for matching
+        $quotationPodCode = null;
+        $quotationPodName = null;
+        if (!empty($quotation->pod)) {
+            // Extract code from format "City (CODE), Country"
+            if (preg_match('/\(([A-Z0-9]+)\)/', $quotation->pod, $matches)) {
+                $quotationPodCode = strtoupper(trim($matches[1]));
+            }
+            // Extract name (everything before comma or parentheses)
+            $podParts = preg_split('/[,(]/', $quotation->pod);
+            $quotationPodName = trim($podParts[0] ?? '');
+        }
+
+        // Get carrier rule mappings to check if articles are explicitly mapped (Freight Mapping)
+        $carrierRuleMappedArticleIds = [];
+        if ($quotation->selected_schedule_id && $quotation->selectedSchedule) {
+            $schedule = $quotation->selectedSchedule;
+            if ($schedule->carrier) {
+                $carrierId = $schedule->carrier->id;
+                $podPortId = $schedule->pod_id;
+                $vesselName = $schedule->vessel_name;
+                $vesselClass = $schedule->vessel_class;
+                
+                // Get vehicle category and category group from first commodity item
+                $vehicleCategory = null;
+                $categoryGroupId = null;
+                if ($commodityItems->isNotEmpty()) {
+                    $firstItem = $commodityItems->first();
+                    $vehicleCategory = $firstItem->category ?? null;
+                    
+                    if ($vehicleCategory) {
+                        $member = \App\Models\CarrierCategoryGroupMember::whereHas('categoryGroup', function ($q) use ($carrierId) {
+                            $q->where('carrier_id', $carrierId)->where('is_active', true);
+                        })
+                        ->where('vehicle_category', $vehicleCategory)
+                        ->where('is_active', true)
+                        ->first();
+                        $categoryGroupId = $member?->carrier_category_group_id;
+                    }
+                }
+                
+                // Check if this article is mapped via carrier rules (Freight Mapping)
+                $resolver = app(\App\Services\CarrierRules\CarrierRuleResolver::class);
+                $mappings = $resolver->resolveArticleMappings(
+                    $carrierId,
+                    $podPortId,
+                    $vehicleCategory,
+                    $categoryGroupId,
+                    $vesselName,
+                    $vesselClass
+                );
+                $carrierRuleMappedArticleIds = $mappings->pluck('article_id')->unique()->toArray();
+            }
+        }
+
         foreach ($articles as $articleRecord) {
             $article = $articleRecord->articleCache;
-            if (!$article || !$article->commodity_type) {
-                continue; // Skip articles without commodity type
+            if (!$article) {
+                continue; // Skip articles without cache
             }
 
-            // Check if this article matches any commodity items
-            $matchingItems = QuotationCommodityItem::findMatchingCommodityItems(
-                $commodityItems,
-                $article->commodity_type
-            );
+            $shouldRemove = false;
+            $removalReason = '';
 
-            // If no matching items, remove the article
-            if ($matchingItems->isEmpty()) {
-                Log::info('CarrierRuleIntegration: Removing article that no longer matches commodity items', [
+            // Check 0: If article is mapped via carrier rules (Freight Mapping), don't remove it
+            // It's explicitly allowed regardless of commodity type matching
+            if (in_array($article->id, $carrierRuleMappedArticleIds)) {
+                continue; // Skip removal check for carrier rule mapped articles
+            }
+
+            // Check 1: Article must have matching commodity type
+            if ($article->commodity_type) {
+                $matchingItems = QuotationCommodityItem::findMatchingCommodityItems(
+                    $commodityItems,
+                    $article->commodity_type
+                );
+
+                // If no matching items, remove the article
+                if ($matchingItems->isEmpty()) {
+                    $shouldRemove = true;
+                    $removalReason = 'no matching commodity items';
+                }
+            }
+
+            // Check 2: Article POD must match quotation POD (if article has POD)
+            if (!$shouldRemove && !empty($article->pod) && !empty($quotation->pod)) {
+                $articlePodCode = null;
+                $articlePodName = null;
+                
+                // Extract code from article POD
+                if (preg_match('/\(([A-Z0-9]+)\)/', $article->pod, $matches)) {
+                    $articlePodCode = strtoupper(trim($matches[1]));
+                }
+                // Extract name from article POD
+                $articlePodParts = preg_split('/[,(]/', $article->pod);
+                $articlePodName = trim($articlePodParts[0] ?? '');
+
+                // Check if PODs match (by code or name)
+                $podMatches = false;
+                if ($quotationPodCode && $articlePodCode) {
+                    $podMatches = ($quotationPodCode === $articlePodCode);
+                } elseif ($quotationPodName && $articlePodName) {
+                    // Case-insensitive name match
+                    $podMatches = (strcasecmp($quotationPodName, $articlePodName) === 0);
+                } elseif ($quotation->pod && $article->pod) {
+                    // Fallback: check if quotation POD is contained in article POD or vice versa
+                    $podMatches = (stripos($article->pod, $quotation->pod) !== false) ||
+                                  (stripos($quotation->pod, $article->pod) !== false);
+                }
+
+                // If POD doesn't match, remove the article
+                if (!$podMatches) {
+                    $shouldRemove = true;
+                    $removalReason = 'POD mismatch: article POD "' . $article->pod . '" does not match quotation POD "' . $quotation->pod . '"';
+                }
+            }
+
+            if ($shouldRemove) {
+                Log::info('CarrierRuleIntegration: Removing article that no longer matches', [
                     'quotation_id' => $quotation->id,
                     'article_id' => $articleRecord->id,
-                    'article_name' => $article->article_name,
-                    'commodity_type' => $article->commodity_type,
+                    'article_name' => $article->article_name ?? 'N/A',
+                    'article_pod' => $article->pod ?? 'N/A',
+                    'quotation_pod' => $quotation->pod ?? 'N/A',
+                    'removal_reason' => $removalReason,
                 ]);
                 $articleRecord->delete();
             }

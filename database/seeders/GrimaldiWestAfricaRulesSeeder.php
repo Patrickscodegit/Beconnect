@@ -3,9 +3,9 @@
 namespace Database\Seeders;
 
 use App\Models\CarrierAcceptanceRule;
+use App\Models\CarrierArticleMapping;
 use App\Models\CarrierCategoryGroup;
 use App\Models\CarrierCategoryGroupMember;
-use App\Models\CarrierClassificationBand;
 use App\Models\CarrierClause;
 use App\Models\CarrierSurchargeArticleMap;
 use App\Models\CarrierSurchargeRule;
@@ -23,7 +23,6 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
      * 
      * This seeder creates comprehensive rules for Grimaldi's West Africa routes including:
      * - Category groups (CARS, SMALL_VANS, BIG_VANS, LM_CARGO, HH)
-     * - Classification bands (CBM/height-based)
      * - Acceptance rules (dimensions, weight, operational flags)
      * - Transform rules (overwidth LM recalculation)
      * - Surcharge rules (tracking, Conakry tiers, towing, tank inspection, overwidth)
@@ -52,25 +51,25 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
         $categoryGroups = $this->createCategoryGroups($carrier);
         $this->command->info("✓ Created " . count($categoryGroups) . " category groups");
 
-        // 2. Create classification bands
-        $this->createClassificationBands($carrier, $westAfricaPorts);
-        $this->command->info("✓ Created classification bands");
-
-        // 3. Create acceptance rules
+        // 2. Create acceptance rules
         $this->createAcceptanceRules($carrier, $westAfricaPorts, $categoryGroups);
         $this->command->info("✓ Created acceptance rules");
 
-        // 4. Create transform rules (overwidth)
+        // 3. Create transform rules (overwidth)
         $this->createTransformRules($carrier, $westAfricaPorts, $categoryGroups);
         $this->command->info("✓ Created transform rules");
 
-        // 5. Create surcharge rules
+        // 4. Create surcharge rules
         $this->createSurchargeRules($carrier, $westAfricaPorts, $categoryGroups);
         $this->command->info("✓ Created surcharge rules");
 
-        // 6. Create article mappings (will create placeholders if articles don't exist)
+        // 5. Create surcharge article mappings (will create placeholders if articles don't exist)
         $this->createArticleMappings($carrier, $westAfricaPorts, $categoryGroups);
-        $this->command->info("✓ Created article mappings");
+        $this->command->info("✓ Created surcharge article mappings");
+
+        // 6. Create freight mappings (ALLOWLIST)
+        $this->createFreightMappings($carrier, $westAfricaPorts, $categoryGroups);
+        $this->command->info("✓ Created freight mappings");
 
         // 7. Create clauses
         $this->createClauses($carrier, $westAfricaPorts);
@@ -172,63 +171,6 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
         }
 
         return $createdGroups;
-    }
-
-    /**
-     * Create classification bands
-     */
-    private function createClassificationBands(ShippingCarrier $carrier, array $ports): void
-    {
-        $bands = [
-            // Cars: up to 13 cbm and/or max. height 1.70m (170cm)
-            [
-                'outcome_vehicle_category' => 'car',
-                'max_cbm' => 13,
-                'max_height_cm' => 170,
-                'rule_logic' => 'OR', // Document says "and/or"
-                'priority' => 10,
-            ],
-            // Small Vans: from 13 to 18 cbm and/or max. height 2.10m (210cm)
-            [
-                'outcome_vehicle_category' => 'small_van',
-                'min_cbm' => 13,
-                'max_cbm' => 18,
-                'max_height_cm' => 210,
-                'rule_logic' => 'OR', // Document says "and/or"
-                'priority' => 9,
-            ],
-            // Big Vans: from 18 to 28 cbm and/or max. height 2.60m (260cm)
-            [
-                'outcome_vehicle_category' => 'big_van',
-                'min_cbm' => 18,
-                'max_cbm' => 28,
-                'max_height_cm' => 260,
-                'rule_logic' => 'OR', // Document says "and/or"
-                'priority' => 8,
-            ],
-            // LM Roro: over 28 cbm
-            // Note: Width and weight limits are in acceptance rules, not classification bands
-            [
-                'outcome_vehicle_category' => 'truck',
-                'min_cbm' => 28,
-                'rule_logic' => 'OR',
-                'priority' => 7,
-            ],
-        ];
-
-        foreach ($bands as $bandData) {
-            CarrierClassificationBand::updateOrCreate(
-                [
-                    'carrier_id' => $carrier->id,
-                    'port_id' => null, // Global rules
-                    'outcome_vehicle_category' => $bandData['outcome_vehicle_category'],
-                ],
-                array_merge($bandData, [
-                    'effective_from' => now()->subYear(),
-                    'is_active' => true,
-                ])
-            );
-        }
     }
 
     /**
@@ -498,6 +440,96 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
             'TANK_INSPECTION' => 'PER_TANK',
             default => 'FLAT',
         };
+    }
+
+    /**
+     * Create freight mappings (ALLOWLIST strategy)
+     * Maps articles to vehicle categories/category groups for article selection
+     */
+    private function createFreightMappings(ShippingCarrier $carrier, array $ports, array $categoryGroups): void
+    {
+        // Get WAF port group if it exists
+        $wafPortGroup = \App\Models\CarrierPortGroup::where('carrier_id', $carrier->id)
+            ->where('code', 'Grimaldi_WAF')
+            ->first();
+        
+        $wafPortGroupIds = $wafPortGroup ? [$wafPortGroup->id] : null;
+
+        // Example: Map Big Van, Car, Small Van articles for Dakar to truckhead/truck/trailer
+        // This allows truckhead to find these articles when no LM Cargo articles exist for Dakar
+        if (isset($ports['DKR'])) {
+            $dakarPortId = $ports['DKR']->id;
+            
+            // Find articles for Dakar
+            $dakarArticles = RobawsArticleCache::where('is_parent_article', true)
+                ->where('is_active', true)
+                ->where(function ($q) {
+                    $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%grimaldi%'])
+                      ->orWhereNull('shipping_line');
+                })
+                ->where(function ($q) use ($dakarPortId) {
+                    $q->whereRaw('LOWER(pod) LIKE ?', ['%dakar%'])
+                      ->orWhereRaw('LOWER(pod) LIKE ?', ['%dkr%']);
+                })
+                ->get();
+
+            foreach ($dakarArticles as $article) {
+                $commodityType = strtoupper(trim($article->commodity_type ?? ''));
+                
+                // Map Big Van, Car, Small Van articles to LM cargo categories (truckhead, truck, trailer)
+                if (in_array($commodityType, ['BIG VAN', 'CAR', 'SMALL VAN'])) {
+                    CarrierArticleMapping::updateOrCreate(
+                        [
+                            'carrier_id' => $carrier->id,
+                            'article_id' => $article->id,
+                        ],
+                        [
+                            'port_ids' => [$dakarPortId],
+                            'port_group_ids' => $wafPortGroupIds,
+                            'vehicle_categories' => ['truckhead', 'truck', 'trailer'],
+                            'priority' => 10,
+                            'effective_from' => now()->subYear(),
+                            'is_active' => true,
+                        ]
+                    );
+                }
+            }
+        }
+
+        // Example: Map LM Cargo articles for Abidjan to truckhead/truck/trailer
+        if (isset($ports['ABJ'])) {
+            $abidjanPortId = $ports['ABJ']->id;
+            
+            $abidjanLmArticles = RobawsArticleCache::where('is_parent_article', true)
+                ->where('is_active', true)
+                ->where(function ($q) {
+                    $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%grimaldi%'])
+                      ->orWhereNull('shipping_line');
+                })
+                ->where(function ($q) use ($abidjanPortId) {
+                    $q->whereRaw('LOWER(pod) LIKE ?', ['%abidjan%'])
+                      ->orWhereRaw('LOWER(pod) LIKE ?', ['%abj%']);
+                })
+                ->whereRaw("UPPER(TRIM(commodity_type)) = ?", ['LM CARGO'])
+                ->get();
+
+            foreach ($abidjanLmArticles as $article) {
+                CarrierArticleMapping::updateOrCreate(
+                    [
+                        'carrier_id' => $carrier->id,
+                        'article_id' => $article->id,
+                    ],
+                    [
+                        'port_ids' => [$abidjanPortId],
+                        'port_group_ids' => $wafPortGroupIds,
+                        'vehicle_categories' => ['truckhead', 'truck', 'trailer'],
+                        'priority' => 10,
+                        'effective_from' => now()->subYear(),
+                        'is_active' => true,
+                    ]
+                );
+            }
+        }
     }
 
     /**

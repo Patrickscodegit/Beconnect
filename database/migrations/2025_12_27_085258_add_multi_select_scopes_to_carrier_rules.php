@@ -15,19 +15,6 @@ return new class extends Migration
         $driver = DB::getDriverName();
         $useJsonb = $driver === 'pgsql';
 
-        // carrier_classification_bands
-        Schema::table('carrier_classification_bands', function (Blueprint $table) use ($useJsonb) {
-            if ($useJsonb) {
-                $table->jsonb('port_ids')->nullable();
-                $table->jsonb('vessel_names')->nullable();
-                $table->jsonb('vessel_classes')->nullable();
-            } else {
-                $table->json('port_ids')->nullable();
-                $table->json('vessel_names')->nullable();
-                $table->json('vessel_classes')->nullable();
-            }
-        });
-
         // carrier_acceptance_rules
         Schema::table('carrier_acceptance_rules', function (Blueprint $table) use ($useJsonb) {
             if ($useJsonb) {
@@ -90,11 +77,6 @@ return new class extends Migration
 
         // Create GIN indexes for PostgreSQL only
         if ($useJsonb) {
-            // carrier_classification_bands
-            DB::statement('CREATE INDEX IF NOT EXISTS carrier_classification_bands_port_ids_gin ON carrier_classification_bands USING GIN (port_ids)');
-            DB::statement('CREATE INDEX IF NOT EXISTS carrier_classification_bands_vessel_names_gin ON carrier_classification_bands USING GIN (vessel_names)');
-            DB::statement('CREATE INDEX IF NOT EXISTS carrier_classification_bands_vessel_classes_gin ON carrier_classification_bands USING GIN (vessel_classes)');
-
             // carrier_acceptance_rules
             DB::statement('CREATE INDEX IF NOT EXISTS carrier_acceptance_rules_port_ids_gin ON carrier_acceptance_rules USING GIN (port_ids)');
             DB::statement('CREATE INDEX IF NOT EXISTS carrier_acceptance_rules_vehicle_categories_gin ON carrier_acceptance_rules USING GIN (vehicle_categories)');
@@ -180,7 +162,6 @@ return new class extends Migration
         };
 
         // Migrate data for all tables
-        $migrateTableData('carrier_classification_bands', false);
         $migrateTableData('carrier_acceptance_rules', true);
         $migrateTableData('carrier_transform_rules', true);
         $migrateTableData('carrier_surcharge_rules', true);
@@ -192,10 +173,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('carrier_classification_bands', function (Blueprint $table) {
-            $table->dropColumn(['port_ids', 'vessel_names', 'vessel_classes']);
-        });
-
         Schema::table('carrier_acceptance_rules', function (Blueprint $table) {
             $table->dropColumn(['port_ids', 'vehicle_categories', 'vessel_names', 'vessel_classes']);
         });
@@ -214,9 +191,6 @@ return new class extends Migration
 
         // Drop GIN indexes for PostgreSQL
         if (DB::getDriverName() === 'pgsql') {
-            DB::statement('DROP INDEX IF EXISTS carrier_classification_bands_port_ids_gin');
-            DB::statement('DROP INDEX IF EXISTS carrier_classification_bands_vessel_names_gin');
-            DB::statement('DROP INDEX IF EXISTS carrier_classification_bands_vessel_classes_gin');
             DB::statement('DROP INDEX IF EXISTS carrier_acceptance_rules_port_ids_gin');
             DB::statement('DROP INDEX IF EXISTS carrier_acceptance_rules_vehicle_categories_gin');
             DB::statement('DROP INDEX IF EXISTS carrier_acceptance_rules_vessel_names_gin');

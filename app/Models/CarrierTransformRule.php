@@ -15,9 +15,11 @@ class CarrierTransformRule extends Model
         'carrier_id',
         'port_id',
         'port_ids',
+        'port_group_ids',
         'vehicle_category',
         'vehicle_categories',
         'category_group_id',
+        'category_group_ids',
         'vessel_name',
         'vessel_names',
         'vessel_class',
@@ -25,6 +27,7 @@ class CarrierTransformRule extends Model
         'transform_code',
         'params',
         'priority',
+        'sort_order',
         'effective_from',
         'effective_to',
         'is_active',
@@ -32,7 +35,9 @@ class CarrierTransformRule extends Model
 
     protected $casts = [
         'port_ids' => 'array',
+        'port_group_ids' => 'array',
         'vehicle_categories' => 'array',
+        'category_group_ids' => 'array',
         'vessel_names' => 'array',
         'vessel_classes' => 'array',
         'params' => 'array',
@@ -47,7 +52,7 @@ class CarrierTransformRule extends Model
     protected static function booted(): void
     {
         static::saving(function ($model) {
-            foreach (['port_ids', 'vehicle_categories', 'vessel_names', 'vessel_classes'] as $field) {
+            foreach (['port_ids', 'port_group_ids', 'vehicle_categories', 'vessel_names', 'vessel_classes', 'category_group_ids'] as $field) {
                 if (isset($model->attributes[$field])) {
                     $value = $model->attributes[$field];
                     // If it's a JSON string (after cast encoding), decode it first
@@ -89,6 +94,8 @@ class CarrierTransformRule extends Model
         }
 
         $triggerWidth = $this->params['trigger_width_gt_cm'] ?? 250;
+        // Use > (not >=) to match user requirement: "> 260 cm" triggers the transform
+        // Widths exactly equal to trigger should use the minimum width calculation
         return $widthCm > $triggerWidth;
     }
 

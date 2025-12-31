@@ -15,9 +15,11 @@ class CarrierSurchargeArticleMap extends Model
         'carrier_id',
         'port_id',
         'port_ids',
+        'port_group_ids',
         'vehicle_category',
         'vehicle_categories',
         'category_group_id',
+        'category_group_ids',
         'vessel_name',
         'vessel_names',
         'vessel_class',
@@ -26,6 +28,7 @@ class CarrierSurchargeArticleMap extends Model
         'article_id',
         'qty_mode',
         'params',
+        'sort_order',
         'effective_from',
         'effective_to',
         'is_active',
@@ -33,7 +36,9 @@ class CarrierSurchargeArticleMap extends Model
 
     protected $casts = [
         'port_ids' => 'array',
+        'port_group_ids' => 'array',
         'vehicle_categories' => 'array',
+        'category_group_ids' => 'array',
         'vessel_names' => 'array',
         'vessel_classes' => 'array',
         'params' => 'array',
@@ -48,7 +53,7 @@ class CarrierSurchargeArticleMap extends Model
     protected static function booted(): void
     {
         static::saving(function ($model) {
-            foreach (['port_ids', 'vehicle_categories', 'vessel_names', 'vessel_classes'] as $field) {
+            foreach (['port_ids', 'port_group_ids', 'vehicle_categories', 'vessel_names', 'vessel_classes', 'category_group_ids'] as $field) {
                 if (isset($model->attributes[$field])) {
                     $value = $model->attributes[$field];
                     // If it's a JSON string (after cast encoding), decode it first

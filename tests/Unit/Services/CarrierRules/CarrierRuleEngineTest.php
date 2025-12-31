@@ -5,7 +5,6 @@ namespace Tests\Unit\Services\CarrierRules;
 use App\Models\CarrierAcceptanceRule;
 use App\Models\CarrierCategoryGroup;
 use App\Models\CarrierCategoryGroupMember;
-use App\Models\CarrierClassificationBand;
 use App\Models\CarrierSurchargeArticleMap;
 use App\Models\CarrierSurchargeRule;
 use App\Models\CarrierTransformRule;
@@ -43,37 +42,6 @@ class CarrierRuleEngineTest extends TestCase
             'country' => 'Côte d\'Ivoire',
             'type' => 'pod',
         ]);
-    }
-
-    /** @test */
-    public function it_classifies_cargo_via_classification_bands()
-    {
-        // Create classification band
-        CarrierClassificationBand::create([
-            'carrier_id' => $this->carrier->id,
-            'outcome_vehicle_category' => 'car',
-            'max_cbm' => 15,
-            'max_height_cm' => 200,
-            'rule_logic' => 'AND',
-            'priority' => 10,
-            'is_active' => true,
-            'effective_from' => now()->subYear(),
-        ]);
-
-        $input = new CargoInputDTO(
-            carrierId: $this->carrier->id,
-            podPortId: null,
-            lengthCm: 450,
-            widthCm: 180,
-            heightCm: 150,
-            cbm: 12.15,
-            weightKg: 1200,
-            unitCount: 1
-        );
-
-        $result = $this->engine->processCargo($input);
-
-        $this->assertEquals('car', $result->classifiedVehicleCategory);
     }
 
     /** @test */

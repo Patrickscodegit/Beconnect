@@ -5,7 +5,6 @@ namespace Tests\Unit\Services\CarrierRules;
 use App\Models\CarrierAcceptanceRule;
 use App\Models\CarrierCategoryGroup;
 use App\Models\CarrierCategoryGroupMember;
-use App\Models\CarrierClassificationBand;
 use App\Models\CarrierSurchargeArticleMap;
 use App\Models\CarrierSurchargeRule;
 use App\Models\CarrierTransformRule;
@@ -42,33 +41,6 @@ class CarrierRuleResolverTest extends TestCase
             'country' => 'Côte d\'Ivoire',
             'type' => 'pod',
         ]);
-    }
-
-    /** @test */
-    public function it_resolves_classification_band_by_cbm_and_height()
-    {
-        // Create classification band: car if CBM < 15
-        CarrierClassificationBand::create([
-            'carrier_id' => $this->carrier->id,
-            'outcome_vehicle_category' => 'car',
-            'max_cbm' => 15,
-            'max_height_cm' => 200,
-            'rule_logic' => 'AND',
-            'priority' => 10,
-            'is_active' => true,
-            'effective_from' => now()->subYear(),
-        ]);
-
-        // Cargo: 12 CBM, 180cm height
-        $band = $this->resolver->resolveClassificationBand(
-            $this->carrier->id,
-            null,
-            12,
-            180
-        );
-
-        $this->assertNotNull($band);
-        $this->assertEquals('car', $band->outcome_vehicle_category);
     }
 
     /** @test */
@@ -169,7 +141,7 @@ class CarrierRuleResolverTest extends TestCase
             'is_active' => true,
         ]);
 
-        // Create acceptance rule for group
+        // Test legacy category_group_id (backward compatibility)
         $groupRule = CarrierAcceptanceRule::create([
             'carrier_id' => $this->carrier->id,
             'category_group_id' => $group->id,
@@ -190,6 +162,100 @@ class CarrierRuleResolverTest extends TestCase
 
         $this->assertNotNull($result);
         $this->assertEquals($groupRule->id, $result->id);
+
+        // Test new category_group_ids array
+        $groupRule2 = CarrierAcceptanceRule::create([
+            'carrier_id' => $this->carrier->id,
+            'category_group_ids' => [$group->id],
+            'max_length_cm' => 1700,
+            'priority' => 10,
+            'is_active' => true,
+            'effective_from' => now()->subYear(),
+        ]);
+
+        $result2 = $this->resolver->resolveAcceptanceRule(
+            $this->carrier->id,
+            null,
+            'truck',
+            $group->id,
+            null,
+            null
+        );
+
+        $this->assertNotNull($result2);
+        // Should match either rule (both match), but selectMostSpecific will pick one
+        $this->assertContains($result2->id, [$groupRule->id, $groupRule2->id]);
+    }
+
+    /** @test */
+    public function it_resolves_multiple_category_groups_acceptance_rule()
+    {
+        // Create two category groups
+        $group1 = CarrierCategoryGroup::create([
+            'carrier_id' => $this->carrier->id,
+            'code' => 'CARS',
+            'display_name' => 'Cars',
+            'priority' => 10,
+            'is_active' => true,
+            'effective_from' => now()->subYear(),
+        ]);
+
+        $group2 = CarrierCategoryGroup::create([
+            'carrier_id' => $this->carrier->id,
+            'code' => 'VANS',
+            'display_name' => 'Vans',
+            'priority' => 10,
+            'is_active' => true,
+            'effective_from' => now()->subYear(),
+        ]);
+
+        CarrierCategoryGroupMember::create([
+            'carrier_category_group_id' => $group1->id,
+            'vehicle_category' => 'car',
+            'is_active' => true,
+        ]);
+
+        CarrierCategoryGroupMember::create([
+            'carrier_category_group_id' => $group2->id,
+            'vehicle_category' => 'small_van',
+            'is_active' => true,
+        ]);
+
+        // Create acceptance rule with multiple category groups
+        $groupRule = CarrierAcceptanceRule::create([
+            'carrier_id' => $this->carrier->id,
+            'category_group_ids' => [$group1->id, $group2->id],
+            'max_length_cm' => 500,
+            'priority' => 10,
+            'is_active' => true,
+            'effective_from' => now()->subYear(),
+        ]);
+
+        // Test with cargo in group1
+        $result1 = $this->resolver->resolveAcceptanceRule(
+            $this->carrier->id,
+            null,
+            'car',
+            $group1->id,
+            null,
+            null
+        );
+
+        $this->assertNotNull($result1);
+        $this->assertEquals($groupRule->id, $result1->id);
+
+        // Test with cargo in group2
+        $result2 = $this->resolver->resolveAcceptanceRule(
+            $this->carrier->id,
+            null,
+            'small_van',
+            $group2->id,
+            null,
+            null
+        );
+
+        $this->assertNotNull($result2);
+        $this->assertEquals($groupRule->id, $result2->id);
     }
 
     /** @test */

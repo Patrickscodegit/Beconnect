@@ -17,6 +17,7 @@ class CarrierCategoryGroup extends Model
         'display_name',
         'aliases',
         'priority',
+        'sort_order',
         'effective_from',
         'effective_to',
         'is_active',
@@ -56,4 +57,5 @@ class CarrierCategoryGroup extends Model
                   ->orWhere('effective_to', '>=', now());
             });
     }
+    
 }

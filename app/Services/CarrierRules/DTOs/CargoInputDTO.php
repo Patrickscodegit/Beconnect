@@ -19,6 +19,7 @@ class CargoInputDTO
         public ?string $commodityType = null, // 'vehicles', 'machinery', etc.
         public ?string $category = null, // 'car', 'truck', etc. (one of 22 keys) - optional for detailed quote
         public ?string $quickBucket = null, // 'CARS', 'SMALL_VANS', etc. - optional for quick quote
+        public ?int $categoryGroupId = null, // Category group ID (for acceptance rules, surcharges, etc.)
         public array $flags = [], // ['tank_truck', 'non_self_propelled', 'stacked', 'piggy_back']
         public ?float $basicFreightAmount = null, // Optional: for percentage-based surcharges
         public ?string $vesselName = null, // Optional: for vessel-specific limits
@@ -35,7 +36,7 @@ class CargoInputDTO
     ): self {
         return new self(
             carrierId: $schedule?->carrier_id ?? 0,
-            podPortId: $pod?->id ?? $schedule?->pod_id,
+            podPortId: $pod?->id ?? $schedule?->pod_id ?? null,
             lengthCm: (float) ($item->stack_length_cm ?? $item->length_cm ?? 0),
             widthCm: (float) ($item->stack_width_cm ?? $item->width_cm ?? 0),
             heightCm: (float) ($item->stack_height_cm ?? $item->height_cm ?? 0),

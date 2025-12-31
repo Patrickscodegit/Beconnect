@@ -5,18 +5,18 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class CarrierClause extends Model
+class CarrierPortGroup extends Model
 {
     use HasFactory;
 
     protected $fillable = [
         'carrier_id',
-        'port_id',
-        'vessel_name',
-        'vessel_class',
-        'clause_type',
-        'text',
+        'code',
+        'display_name',
+        'aliases',
+        'priority',
         'sort_order',
         'effective_from',
         'effective_to',
@@ -24,6 +24,7 @@ class CarrierClause extends Model
     ];
 
     protected $casts = [
+        'aliases' => 'array',
         'effective_from' => 'date',
         'effective_to' => 'date',
         'is_active' => 'boolean',
@@ -34,9 +35,14 @@ class CarrierClause extends Model
         return $this->belongsTo(ShippingCarrier::class);
     }
 
-    public function port(): BelongsTo
+    public function members(): HasMany
     {
-        return $this->belongsTo(Port::class);
+        return $this->hasMany(CarrierPortGroupMember::class, 'carrier_port_group_id');
+    }
+
+    public function activeMembers(): HasMany
+    {
+        return $this->hasMany(CarrierPortGroupMember::class, 'carrier_port_group_id')->where('is_active', true);
     }
 
     public function scopeActive($query)

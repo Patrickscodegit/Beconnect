@@ -94,6 +94,26 @@ class QuotationRequestObserver
         // Ensure admin article exists (handle POD changes and missing admin articles)
         $this->ensureAdminArticleExists($quotationRequest);
         
+        // Remove articles that no longer match POD when POD changes
+        $podChanged = $quotationRequest->wasChanged('pod');
+        if ($podChanged) {
+            try {
+                $integrationService = app(\App\Services\CarrierRules\CarrierRuleIntegrationService::class);
+                $integrationService->removeNonMatchingArticles($quotationRequest);
+                
+                Log::info('Removed non-matching articles due to POD change', [
+                    'quotation_id' => $quotationRequest->id,
+                    'old_pod' => $quotationRequest->getOriginal('pod'),
+                    'new_pod' => $quotationRequest->pod,
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Error removing non-matching articles on POD change', [
+                    'quotation_id' => $quotationRequest->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+        
         // Re-evaluate conditional child articles when POD or in_transit_to changes
         // This handles port-specific waivers (e.g., Dakar) that use database attachments
         $this->reevaluateConditionalChildArticles($quotationRequest);

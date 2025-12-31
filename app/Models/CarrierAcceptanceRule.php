@@ -13,20 +13,29 @@ class CarrierAcceptanceRule extends Model
 
     protected $fillable = [
         'carrier_id',
+        'name',
         'port_id',
         'port_ids',
+        'port_group_ids',
         'vehicle_category',
         'vehicle_categories',
         'category_group_id',
+        'category_group_ids',
         'vessel_name',
         'vessel_names',
         'vessel_class',
         'vessel_classes',
+        'min_length_cm',
+        'min_width_cm',
+        'min_height_cm',
+        'min_cbm',
+        'min_weight_kg',
         'max_length_cm',
         'max_width_cm',
         'max_height_cm',
         'max_cbm',
         'max_weight_kg',
+        'min_is_hard',
         'must_be_empty',
         'must_be_self_propelled',
         'allow_accessories',
@@ -42,6 +51,7 @@ class CarrierAcceptanceRule extends Model
         'waiver_provided_by_carrier',
         'notes',
         'priority',
+        'sort_order',
         'effective_from',
         'effective_to',
         'is_active',
@@ -49,14 +59,22 @@ class CarrierAcceptanceRule extends Model
 
     protected $casts = [
         'port_ids' => 'array',
+        'port_group_ids' => 'array',
         'vehicle_categories' => 'array',
+        'category_group_ids' => 'array',
         'vessel_names' => 'array',
         'vessel_classes' => 'array',
+        'min_length_cm' => 'decimal:2',
+        'min_width_cm' => 'decimal:2',
+        'min_height_cm' => 'decimal:2',
+        'min_cbm' => 'decimal:4',
+        'min_weight_kg' => 'decimal:2',
         'max_length_cm' => 'decimal:2',
         'max_width_cm' => 'decimal:2',
         'max_height_cm' => 'decimal:2',
         'max_cbm' => 'decimal:4',
         'max_weight_kg' => 'decimal:2',
+        'min_is_hard' => 'boolean',
         'soft_max_height_cm' => 'decimal:2',
         'soft_max_weight_kg' => 'decimal:2',
         'must_be_empty' => 'boolean',
@@ -80,7 +98,7 @@ class CarrierAcceptanceRule extends Model
     protected static function booted(): void
     {
         static::saving(function ($model) {
-            foreach (['port_ids', 'vehicle_categories', 'vessel_names', 'vessel_classes'] as $field) {
+            foreach (['port_ids', 'port_group_ids', 'vehicle_categories', 'vessel_names', 'vessel_classes', 'category_group_ids'] as $field) {
                 if (isset($model->attributes[$field])) {
                     $value = $model->attributes[$field];
                     // If it's a JSON string (after cast encoding), decode it first

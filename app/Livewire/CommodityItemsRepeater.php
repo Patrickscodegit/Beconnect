@@ -16,7 +16,10 @@ class CommodityItemsRepeater extends Component
     public $unitSystems;
     public $quotationId; // ID of the quotation to save items to
     
-    protected $listeners = ['serviceTypeUpdated' => 'updateServiceType'];
+    protected $listeners = [
+        'serviceTypeUpdated' => 'updateServiceType',
+        'scheduleChanged' => 'recalculateAllLm',
+    ];
     
     protected $validationAttributes = [
         'items.*.commodity_type' => 'commodity type',
@@ -237,31 +240,233 @@ class CommodityItemsRepeater extends Component
 
     public function calculateLm($index)
     {
+        // #region agent log
+        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'A',
+            'location' => 'CommodityItemsRepeater.php:calculateLm',
+            'message' => 'calculateLm called',
+            'data' => [
+                'index' => $index,
+                'quotationId' => $this->quotationId,
+                'item_length' => $this->items[$index]['length_cm'] ?? null,
+                'item_width' => $this->items[$index]['width_cm'] ?? null,
+                'item_lm_before' => $this->items[$index]['lm'] ?? null,
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
+        
         $item = &$this->items[$index];
         
         $length = floatval($item['length_cm'] ?? 0);
         $width = floatval($item['width_cm'] ?? 0);
         
         if ($length > 0 && $width > 0) {
-            // Use ChargeableMeasureService for base ISO LM calculation
-            // Note: No carrier context available in Livewire component, so using base ISO only
             $service = app(\App\Services\CarrierRules\ChargeableMeasureService::class);
+            
+            // Try to get carrier context from quotation if available
+            $carrierId = null;
+            $portId = null;
+            $vesselName = null;
+            $vesselClass = null;
+            $vehicleCategory = $item['category'] ?? null;
+            
+            if ($this->quotationId) {
+                $quotation = \App\Models\QuotationRequest::with('selectedSchedule')->find($this->quotationId);
+                if ($quotation) {
+                    // Get carrier and vessel info from schedule if available
+                    if ($quotation->selectedSchedule) {
+                        $schedule = $quotation->selectedSchedule;
+                        $carrierId = $schedule->carrier_id ?? null;
+                        $vesselName = $schedule->vessel_name;
+                        $vesselClass = $schedule->vessel_class;
+                    }
+                    
+                    // Get port ID from quotation's POD field (not schedule's pod_id)
+                    // This ensures we use the current POD even if schedule hasn't been updated
+                    $portId = null;
+                    if (!empty($quotation->pod)) {
+                        // Extract port code from POD string (e.g., "Durban (DUR), South Africa" -> "DUR")
+                        if (preg_match('/\(([A-Z0-9]+)\)/', $quotation->pod, $matches)) {
+                            $portCode = strtoupper(trim($matches[1]));
+                            $port = \App\Models\Port::where('code', $portCode)->first();
+                            if ($port) {
+                                $portId = $port->id;
+                            }
+                        }
+                        
+                        // Fallback: if no code found, try to match by name
+                        if (!$portId) {
+                            $podParts = explode(',', $quotation->pod);
+                            $podName = trim($podParts[0]);
+                            $port = \App\Models\Port::where('name', 'LIKE', '%' . $podName . '%')->first();
+                            if ($port) {
+                                $portId = $port->id;
+                            }
+                        }
+                    }
+                    
+                    // If still no portId, fall back to schedule's pod_id
+                    if (!$portId && $quotation->selectedSchedule) {
+                        $portId = $quotation->selectedSchedule->pod_id ?? null;
+                    }
+                }
+            }
+            
+            // #region agent log
+            file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                'sessionId' => 'debug-session',
+                'runId' => 'run1',
+                'hypothesisId' => 'A',
+                'location' => 'CommodityItemsRepeater.php:calculateLm',
+                'message' => 'Carrier context loaded',
+                'data' => [
+                    'carrierId' => $carrierId,
+                    'portId' => $portId,
+                    'vesselName' => $vesselName,
+                    'vehicleCategory' => $vehicleCategory,
+                    'length' => $length,
+                    'width' => $width,
+                ],
+                'timestamp' => time() * 1000
+            ]) . "\n", FILE_APPEND);
+            // #endregion
             
             if ($this->unitSystem === 'us') {
                 // Convert inches to cm first
                 $lengthCm = $length * 2.54;
                 $widthCm = $width * 2.54;
                 
-                // Calculate base ISO LM (no carrier transforms in Livewire context)
-                $lm = $service->calculateBaseLm($lengthCm, $widthCm);
-                $item['lm'] = round($lm, 4);
+                // Use carrier-aware calculation if carrier context is available
+                if ($carrierId) {
+                    $result = $service->computeChargeableLm(
+                        $lengthCm,
+                        $widthCm,
+                        $carrierId,
+                        $portId,
+                        $vehicleCategory,
+                        $vesselName,
+                        $vesselClass
+                    );
+                    $item['lm'] = round($result->chargeableLm, 4);
+                } else {
+                    // Fallback to base ISO LM if no carrier context
+                    $lm = $service->calculateBaseLm($lengthCm, $widthCm);
+                    $item['lm'] = round($lm, 4);
+                }
             } else {
-                // Calculate base ISO LM (no carrier transforms in Livewire context)
-                $lm = $service->calculateBaseLm($length, $width);
-                $item['lm'] = round($lm, 4);
+                // Use carrier-aware calculation if carrier context is available
+                if ($carrierId) {
+                    $result = $service->computeChargeableLm(
+                        $length,
+                        $width,
+                        $carrierId,
+                        $portId,
+                        $vehicleCategory,
+                        $vesselName,
+                        $vesselClass
+                    );
+                    $item['lm'] = round($result->chargeableLm, 4);
+                } else {
+                    // Fallback to base ISO LM if no carrier context
+                    $lm = $service->calculateBaseLm($length, $width);
+                    $item['lm'] = round($lm, 4);
+                }
             }
+            
+            // #region agent log
+            file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                'sessionId' => 'debug-session',
+                'runId' => 'run1',
+                'hypothesisId' => 'A',
+                'location' => 'CommodityItemsRepeater.php:calculateLm',
+                'message' => 'LM calculated',
+                'data' => [
+                    'item_lm_after' => $item['lm'],
+                    'unitSystem' => $this->unitSystem,
+                ],
+                'timestamp' => time() * 1000
+            ]) . "\n", FILE_APPEND);
+            // #endregion
         } else {
             $item['lm'] = '';
+        }
+    }
+
+    /**
+     * Recalculate LM for all items when schedule changes
+     */
+    public function recalculateAllLm()
+    {
+        // #region agent log
+        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'B',
+            'location' => 'CommodityItemsRepeater.php:recalculateAllLm',
+            'message' => 'recalculateAllLm called',
+            'data' => [
+                'items_count' => count($this->items),
+                'quotationId' => $this->quotationId,
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
+        
+        // Refresh quotation to get latest schedule data before recalculating
+        if ($this->quotationId) {
+            $quotation = \App\Models\QuotationRequest::with('selectedSchedule')->find($this->quotationId);
+            if ($quotation && $quotation->selectedSchedule) {
+                // #region agent log
+                file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                    'sessionId' => 'debug-session',
+                    'runId' => 'run1',
+                    'hypothesisId' => 'B',
+                    'location' => 'CommodityItemsRepeater.php:recalculateAllLm',
+                    'message' => 'Current schedule loaded',
+                    'data' => [
+                        'schedule_id' => $quotation->selectedSchedule->id ?? null,
+                        'carrier_id' => $quotation->selectedSchedule->carrier_id ?? null,
+                        'pod_id' => $quotation->selectedSchedule->pod_id ?? null,
+                        'vessel_name' => $quotation->selectedSchedule->vessel_name ?? null,
+                    ],
+                    'timestamp' => time() * 1000
+                ]) . "\n", FILE_APPEND);
+                // #endregion
+            }
+        }
+        
+        foreach ($this->items as $index => $item) {
+            if (!empty($item['length_cm']) && !empty($item['width_cm'])) {
+                $oldLm = $item['lm'] ?? null;
+                $this->calculateLm($index);
+                $newLm = $this->items[$index]['lm'] ?? null;
+                
+                // #region agent log
+                file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                    'sessionId' => 'debug-session',
+                    'runId' => 'run1',
+                    'hypothesisId' => 'B',
+                    'location' => 'CommodityItemsRepeater.php:recalculateAllLm',
+                    'message' => 'LM recalculated for item',
+                    'data' => [
+                        'index' => $index,
+                        'item_id' => $item['id'] ?? null,
+                        'old_lm' => $oldLm,
+                        'new_lm' => $newLm,
+                        'has_database_id' => isset($item['id']) && is_numeric($item['id']),
+                    ],
+                    'timestamp' => time() * 1000
+                ]) . "\n", FILE_APPEND);
+                // #endregion
+                
+                // Save updated LM to database if item has a database ID
+                if (isset($item['id']) && is_numeric($item['id']) && $this->quotationId) {
+                    $this->saveItemToDatabase($index, $this->items[$index]);
+                }
+            }
         }
     }
 

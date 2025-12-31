@@ -446,7 +446,7 @@ class QuotationRequestArticle extends Model
         
         // Get carrier context from schedule
         $carrierId = $schedule?->carrier_id;
-        $portId = $schedule?->pod_port_id;
+        $portId = $schedule?->pod_id; // Fixed: use pod_id instead of pod_port_id
         $vesselName = $schedule?->vessel_name;
         $vesselClass = $schedule?->vessel_class;
 

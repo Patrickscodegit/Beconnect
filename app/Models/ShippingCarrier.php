@@ -46,36 +46,49 @@ class ShippingCarrier extends Model
     // Carrier Rules relationships
     public function categoryGroups(): HasMany
     {
-        return $this->hasMany(CarrierCategoryGroup::class, 'carrier_id');
-    }
-
-    public function classificationBands(): HasMany
-    {
-        return $this->hasMany(CarrierClassificationBand::class, 'carrier_id');
+        return $this->hasMany(CarrierCategoryGroup::class, 'carrier_id')
+            ->orderBy('sort_order');
     }
 
     public function acceptanceRules(): HasMany
     {
-        return $this->hasMany(CarrierAcceptanceRule::class, 'carrier_id');
+        return $this->hasMany(CarrierAcceptanceRule::class, 'carrier_id')
+            ->orderBy('sort_order');
     }
 
     public function transformRules(): HasMany
     {
-        return $this->hasMany(CarrierTransformRule::class, 'carrier_id');
+        return $this->hasMany(CarrierTransformRule::class, 'carrier_id')
+            ->orderBy('sort_order');
     }
 
     public function surchargeRules(): HasMany
     {
-        return $this->hasMany(CarrierSurchargeRule::class, 'carrier_id');
+        return $this->hasMany(CarrierSurchargeRule::class, 'carrier_id')
+            ->orderBy('sort_order');
     }
 
     public function surchargeArticleMaps(): HasMany
     {
-        return $this->hasMany(CarrierSurchargeArticleMap::class, 'carrier_id');
+        return $this->hasMany(CarrierSurchargeArticleMap::class, 'carrier_id')
+            ->orderBy('sort_order');
     }
 
     public function clauses(): HasMany
     {
-        return $this->hasMany(CarrierClause::class, 'carrier_id');
+        return $this->hasMany(CarrierClause::class, 'carrier_id')
+            ->orderBy('sort_order');
+    }
+
+    public function portGroups(): HasMany
+    {
+        return $this->hasMany(CarrierPortGroup::class, 'carrier_id')
+            ->orderBy('sort_order');
+    }
+
+    public function articleMappings(): HasMany
+    {
+        return $this->hasMany(CarrierArticleMapping::class, 'carrier_id')
+            ->orderBy('sort_order');
     }
 }

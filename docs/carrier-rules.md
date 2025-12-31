@@ -4,7 +4,6 @@
 
 The Carrier Rules & Surcharge System is a comprehensive rules engine that automatically applies carrier-specific business logic to quotations. It handles:
 
-- **Cargo Classification**: Automatically classifies cargo into vehicle categories based on CBM/height
 - **Acceptance Validation**: Validates cargo against carrier limits (dimensions, weight, operational rules)
 - **LM Transformations**: Applies carrier-aware LM calculations (e.g., overwidth recalculation)
 - **Surcharge Calculation**: Calculates and applies surcharges (tracking, overwidth, weight tiers, etc.)
@@ -24,11 +23,11 @@ The Carrier Rules & Surcharge System is a comprehensive rules engine that automa
 
 - `carrier_category_groups`: Groups of vehicle categories (e.g., CARS, LM_CARGO, HH)
 - `carrier_category_group_members`: Maps vehicle categories to groups
-- `carrier_classification_bands`: CBM/height-based classification rules
 - `carrier_acceptance_rules`: Dimension/weight limits and operational requirements
 - `carrier_transform_rules`: LM transformation rules (e.g., overwidth recalculation)
 - `carrier_surcharge_rules`: Surcharge calculation rules
 - `carrier_surcharge_article_maps`: Maps surcharge events to Robaws articles
+- `carrier_article_mappings`: Maps articles to vehicle categories/category groups for article selection (ALLOWLIST)
 - `carrier_clauses`: Legal, operational, and liability clauses
 
 ## Rule Precedence System
@@ -41,7 +40,7 @@ Rules are resolved using a **specificity scoring system**. Higher scores win:
 | Port (POD) | +8 | Exact port match |
 | Vessel Class | +6 | Vessel class match |
 | Exact Category | +2 | Exact vehicle category match |
-| Category Group | +1 | Category group membership |
+| Category Group | +1 | Category group membership (matches if cargo's group is in rule's category_group_ids array) |
 
 **Tie-breakers** (when scores are equal):
 1. Higher `priority` value
@@ -79,29 +78,7 @@ Category groups allow you to create "buckets" for quick quotes (e.g., CARS, LM_C
 - Display Name: `LM Cargo`
 - Members: `truck`, `truckhead`, `bus`, `box_truck`
 
-### 2. Classification Bands
-
-Classification bands automatically classify cargo into vehicle categories based on CBM/height.
-
-**Steps:**
-1. Go to **Classification** tab
-2. Click **Add Item**
-3. Fill in:
-   - **Port (POD)**: Optional - leave empty for global rule
-   - **Vessel Name/Class**: Optional - for vessel-specific rules
-   - **Result Category**: Target vehicle category
-   - **Min/Max CBM**: CBM range
-   - **Max Height**: Maximum height in cm
-   - **Rule Logic**: AND (all conditions) or OR (any condition)
-
-**Example:**
-- Result Category: `car`
-- Max CBM: `15`
-- Max Height: `200cm`
-- Logic: `AND`
-- Meaning: Cargo with CBM ≤ 15 AND height ≤ 200cm → classified as "car"
-
-### 3. Acceptance Rules
+### 2. Acceptance Rules
 
 Acceptance rules validate cargo against carrier limits.
 
@@ -110,10 +87,12 @@ Acceptance rules validate cargo against carrier limits.
 2. Click **Add Item**
 3. Fill in:
    - **Port/Vessel**: Optional - for specific routes/vessels
-   - **Vehicle Category** OR **Category Group**: One or both
+   - **Vehicle Categories** OR **Category Groups**: Select one or more (mutually exclusive)
    - **Dimension Limits**: Max length, width, height, CBM, weight
    - **Operational Requirements**: Empty, self-propelled, accessories, etc.
    - **Soft Limits**: "Upon request" limits with approval flags
+
+**Note:** Category Groups can be selected as multiple values. A rule matches if the cargo's category group is in the rule's `category_group_ids` array (OR logic). Legacy `category_group_id` (single value) is still supported for backward compatibility.
 
 **Example:**
 - Vehicle Category: `car`
@@ -123,7 +102,7 @@ Acceptance rules validate cargo against carrier limits.
 - Max Weight: `3500kg`
 - Must Be Self-Propelled: `Yes`
 
-### 4. Transform Rules
+### 3. Transform Rules
 
 Transform rules change the chargeable basis (e.g., LM recalculation for overwidth).
 
@@ -142,7 +121,7 @@ Transform rules change the chargeable basis (e.g., LM recalculation for overwidt
 - Divisor: `250cm`
 - Meaning: When width > 260cm, recalculate LM = (L × W) / 2.5 (no min width)
 
-### 5. Surcharge Rules
+### 4. Surcharge Rules
 
 Surcharge rules calculate surcharge amounts based on various calculation modes.
 
@@ -203,7 +182,7 @@ Surcharge rules calculate surcharge amounts based on various calculation modes.
 - Qty: 2 blocks × 6.912 LM = 13.824
 - Amount: 50 per block
 
-### 6. Article Mapping
+### 5. Article Mapping
 
 Article mappings connect surcharge events to actual Robaws articles.
 
@@ -220,6 +199,62 @@ Article mappings connect surcharge events to actual Robaws articles.
 - Event Code: `TOWING`
 - Article: "Towing Surcharge" (from Robaws)
 - Qty Mode: `PER_UNIT`
+
+### 6. Freight Mapping (ALLOWLIST)
+
+Freight Mapping allows you to explicitly control which articles are shown for specific vehicle categories, routes, and contexts. This uses an **ALLOWLIST strategy**: when mappings exist and match the quotation context, only the mapped articles (plus universal articles with `commodity_type IS NULL`) are shown.
+
+**How it works:**
+
+1. **If mappings exist and match context:**
+   - Only mapped articles are shown (ALLOWLIST)
+   - Universal articles (with `commodity_type IS NULL`) are also included
+   - Commodity type string matching is bypassed
+
+2. **If no mappings exist or none match:**
+   - System falls back to cleaned commodity type matching
+   - Uses existing article commodity types (removed non-existent types like TRUCKHEAD, HH)
+
+**Steps:**
+1. Go to **Freight Mapping** tab
+2. Click **Add Item**
+3. Fill in:
+   - **Article**: Select article from Robaws (only active parent articles shown)
+   - **Ports (POD)**: Optional - select specific ports
+   - **Port Groups**: Optional - select port groups (e.g., WAF, MED)
+   - **Vehicle Categories** OR **Category Groups**: Select one or more (mutually exclusive)
+   - **Vessel Names/Classes**: Optional - for vessel-specific mappings
+   - **Priority**: Higher = checked first
+   - **Effective Dates**: When rule is active
+
+**Important Notes:**
+- **Vehicle Categories and Category Groups are mutually exclusive** - set one or the other, not both
+- **Union behavior**: Multiple matching mappings are combined (all article IDs from all matching mappings are included)
+- **Null input handling**: If port/category/vessel is unknown (null), only global rules (no scope) match
+- **Route-specific**: Same article can map to different categories for different ports
+
+**Example 1: Global Mapping**
+- Article: "Grimaldi(ANR 1333) Dakar Senegal, BIG VAN Seafreight"
+- Vehicle Categories: `truckhead`, `truck`, `trailer`
+- Ports: (empty - global)
+- **Result:** This article shows for truckhead/truck/trailer on all routes
+
+**Example 2: Route-Specific Mapping**
+- Article: "Grimaldi(ANR 1333) Dakar Senegal, BIG VAN Seafreight"
+- Vehicle Categories: `truckhead`, `truck`, `trailer`
+- Port Groups: `Grimaldi_WAF`
+- **Result:** This article shows for truckhead/truck/trailer only on WAF routes
+
+**Example 3: Category Group Mapping**
+- Article: "Grimaldi(ANR 1333) Abidjan Ivory Coast, LM CARGO Seafreight"
+- Category Groups: `LM_CARGO_TRUCKS` (instead of individual vehicle categories)
+- Port Groups: `Grimaldi_WAF`
+- **Result:** This article shows for all categories in the LM_CARGO_TRUCKS group on WAF routes
+
+**Fallback Behavior:**
+If no mappings exist for a carrier, the system uses cleaned commodity type matching:
+- `truckhead` → matches articles with commodity types: `LM Cargo`, `Big Van`, `Car`, `Small Van`, `Truck`, `Bus`
+- Non-existent types (`TRUCKHEAD`, `HH`) are removed from expansions
 
 ### 7. Clauses
 
@@ -256,12 +291,24 @@ Clauses are legal, operational, or liability text that appears in quotations.
 - Trigger Width: `260cm`
 - Divisor: `250cm`
 
-**Cargo:** 600cm × 280cm
+**Complete Calculation Logic:**
 
-**Calculation:**
-- Base LM: (600/100 × 280/100) / 2.5 = 6.72 LM
-- Chargeable LM: (600 × 280) / (250 × 100) = 6.72 LM
-- (Same in this case, but different formula)
+1. **If width ≤ trigger_width_gt_cm (260cm):**
+   - LM = (Length × 250cm) / 250cm
+   - Minimum width of 250cm always applies
+   - Example: 1000cm × 255cm → LM = (1000 × 250) / 250 = 10.0 LM
+
+2. **If width > trigger_width_gt_cm (260cm):**
+   - LM = (Length × Width) / divisor_cm
+   - Actual width is used (no minimum)
+   - Example: 1000cm × 280cm → LM = (1000 × 280) / 250 = 11.2 LM
+
+3. **If no transform rules match for the port:**
+   - Global fallback: LM = (Length × max(Width, 250cm)) / 250cm
+   - Example: 1000cm × 240cm → LM = (1000 × 250) / 250 = 10.0 LM
+   - Example: 1000cm × 300cm → LM = (1000 × 300) / 250 = 12.0 LM
+
+**Note:** The trigger width is dynamically extracted from the first matching transform rule, allowing different thresholds per port group (e.g., MED ports use 255cm, WAF ports use 260cm).
 
 ### Example 3: Conakry Weight Tiers
 
@@ -343,7 +390,7 @@ The system is automatically integrated into the quotation flow:
 ## Best Practices
 
 1. **Start with Global Rules**: Create global rules first, then add port/vessel-specific overrides
-2. **Use Category Groups**: Group similar categories for easier management
+2. **Use Category Groups**: Group similar categories for easier management. You can select multiple category groups per rule - the rule matches if cargo belongs to ANY of the selected groups (OR logic).
 3. **Set Priorities**: Higher priority = checked first (use 10, 20, 30... for clarity)
 4. **Effective Dates**: Use `effective_from` and `effective_to` for rule versioning
 5. **Exclusive Groups**: Use for mutually exclusive surcharges (e.g., overwidth methods)

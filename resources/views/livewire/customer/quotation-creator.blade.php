@@ -193,8 +193,7 @@
             </div>
         @else
             @if($pol && $pod)
-                <select wire:model="selected_schedule_id"
-                        wire:change="$refresh"
+                <select wire:model.live="selected_schedule_id"
                         wire:key="schedule-select-{{ md5($pol) }}-{{ md5($pod) }}"
                         class="form-select w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
                     <option value="">-- Select a Sailing --</option>

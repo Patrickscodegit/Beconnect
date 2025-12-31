@@ -5,7 +5,6 @@ namespace App\Services\CarrierRules;
 use App\Models\CarrierAcceptanceRule;
 use App\Models\CarrierCategoryGroup;
 use App\Models\CarrierCategoryGroupMember;
-use App\Models\CarrierClassificationBand;
 use App\Models\CarrierSurchargeArticleMap;
 use App\Services\CarrierRules\DTOs\CargoInputDTO;
 use App\Services\CarrierRules\DTOs\CarrierRuleResultDTO;
@@ -15,7 +14,7 @@ use Illuminate\Support\Collection;
  * Main engine that processes cargo through all rule types and produces DTO output.
  * 
  * Processing Order:
- * 1. Determine category context (detailed category or classify via bands)
+ * 1. Derive category group membership from vehicle category
  * 2. Resolve acceptance rule and validate limits/operational flags
  * 3. Compute LM via ChargeableMeasureService (base + transforms)
  * 4. Compute surcharge events (with exclusive_group logic)
@@ -34,14 +33,19 @@ class CarrierRuleEngine
      */
     public function processCargo(CargoInputDTO $input): CarrierRuleResultDTO
     {
-        // 1. Determine category context
-        $vehicleCategory = $this->classifyCategory($input);
-        $categoryGroupId = $this->deriveCategoryGroup($input->carrierId, $vehicleCategory);
+        // 1. Get vehicle category from input (users always provide category)
+        $vehicleCategory = $input->category;
 
-        // 2. Resolve acceptance rule and validate
+        // 2. Derive categoryGroupId from vehicle category
+        $categoryGroupId = $input->categoryGroupId;
+        if ($categoryGroupId === null && $vehicleCategory !== null) {
+            $categoryGroupId = $this->deriveCategoryGroup($input->carrierId, $vehicleCategory);
+        }
+
+        // 3. Resolve acceptance rule and validate
         $acceptanceResult = $this->validateAcceptance($input, $vehicleCategory, $categoryGroupId);
 
-        // 3. Compute LM via ChargeableMeasureService
+        // 4. Compute LM via ChargeableMeasureService
         $chargeableMeasure = $this->chargeableMeasureService->computeChargeableLm(
             $input->lengthCm,
             $input->widthCm,
@@ -52,7 +56,7 @@ class CarrierRuleEngine
             $input->vesselClass
         );
 
-        // 4. Compute surcharge events (with exclusive_group logic)
+        // 5. Compute surcharge events (with exclusive_group logic)
         $surchargeEvents = $this->calculateSurchargeEvents(
             $input,
             $vehicleCategory,
@@ -61,7 +65,7 @@ class CarrierRuleEngine
             $acceptanceResult['basicFreight'] ?? null
         );
 
-        // 5. Map events to articles
+        // 6. Map events to articles
         $quoteLineDrafts = $this->mapEventsToArticles(
             $surchargeEvents,
             $input->carrierId,
@@ -78,33 +82,11 @@ class CarrierRuleEngine
             acceptanceStatus: $acceptanceResult['status'],
             violations: $acceptanceResult['violations'],
             approvalsRequired: $acceptanceResult['approvalsRequired'],
+            warnings: $acceptanceResult['warnings'] ?? [],
             chargeableMeasure: $chargeableMeasure,
             surchargeEvents: $surchargeEvents,
             quoteLineDrafts: $quoteLineDrafts,
         );
-    }
-
-    /**
-     * Determine category context
-     */
-    private function classifyCategory(CargoInputDTO $input): ?string
-    {
-        // If detailed category provided => use it
-        if ($input->category) {
-            return $input->category;
-        }
-
-        // Else classify via carrier_classification_bands
-        $band = $this->resolver->resolveClassificationBand(
-            $input->carrierId,
-            $input->podPortId,
-            $input->cbm,
-            $input->heightCm,
-            $input->vesselName,
-            $input->vesselClass
-        );
-
-        return $band?->outcome_vehicle_category;
     }
 
     /**
@@ -164,14 +146,58 @@ class CarrierRuleEngine
                 'status' => 'ALLOWED',
                 'violations' => [],
                 'approvalsRequired' => [],
+                'warnings' => [],
             ];
         }
 
         $violations = [];
+        $warnings = [];
         $approvalsRequired = [];
         $status = 'ALLOWED';
 
-        // Check hard limits
+        // Check minimum limits
+        if ($rule->min_length_cm !== null && $input->lengthCm < $rule->min_length_cm) {
+            if ($rule->min_is_hard) {
+                $violations[] = 'min_length_below';
+                $status = 'NOT_ALLOWED';
+            } else {
+                $warnings[] = 'min_length_below';
+            }
+        }
+        if ($rule->min_width_cm !== null && $input->widthCm < $rule->min_width_cm) {
+            if ($rule->min_is_hard) {
+                $violations[] = 'min_width_below';
+                $status = 'NOT_ALLOWED';
+            } else {
+                $warnings[] = 'min_width_below';
+            }
+        }
+        if ($rule->min_height_cm !== null && $input->heightCm < $rule->min_height_cm) {
+            if ($rule->min_is_hard) {
+                $violations[] = 'min_height_below';
+                $status = 'NOT_ALLOWED';
+            } else {
+                $warnings[] = 'min_height_below';
+            }
+        }
+        if ($rule->min_cbm !== null && $input->cbm < $rule->min_cbm) {
+            if ($rule->min_is_hard) {
+                $violations[] = 'min_cbm_below';
+                $status = 'NOT_ALLOWED';
+            } else {
+                $warnings[] = 'min_cbm_below';
+            }
+        }
+        if ($rule->min_weight_kg !== null && $input->weightKg < $rule->min_weight_kg) {
+            if ($rule->min_is_hard) {
+                $violations[] = 'min_weight_below';
+                $status = 'NOT_ALLOWED';
+            } else {
+                $warnings[] = 'min_weight_below';
+            }
+        }
+
+        // Check hard limits (max)
         if ($rule->max_length_cm && $input->lengthCm > $rule->max_length_cm) {
             $violations[] = 'max_length_exceeded';
             $status = 'NOT_ALLOWED';
@@ -225,6 +251,7 @@ class CarrierRuleEngine
             'status' => $status,
             'violations' => $violations,
             'approvalsRequired' => $approvalsRequired,
+            'warnings' => $warnings,
             'basicFreight' => null, // Will be calculated from articles
         ];
     }

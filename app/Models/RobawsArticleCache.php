@@ -529,6 +529,22 @@ class RobawsArticleCache extends Model
      */
     public function scopeForQuotationContext(Builder $query, \App\Models\QuotationRequest $quotation): Builder
     {
+        // #region agent log
+        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'A',
+            'location' => 'RobawsArticleCache.php:530',
+            'message' => 'scopeForQuotationContext entry',
+            'data' => [
+                'quotation_id' => $quotation->id,
+                'quotation_pol' => $quotation->pol,
+                'quotation_pod' => $quotation->pod,
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
+
         // Use database-agnostic case-insensitive matching
         // PostgreSQL supports ILIKE, SQLite/MySQL use LOWER() with LIKE
         $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
@@ -615,6 +631,23 @@ class RobawsArticleCache extends Model
         if ($quotation->pol && $quotation->pod) {
             $quotationPolCode = $this->extractPortCode($quotation->pol);
             $quotationPodCode = $this->extractPortCode($quotation->pod);
+
+            // #region agent log
+            file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                'sessionId' => 'debug-session',
+                'runId' => 'run1',
+                'hypothesisId' => 'G',
+                'location' => 'RobawsArticleCache.php:617',
+                'message' => 'Port code extraction',
+                'data' => [
+                    'quotation_pol' => $quotation->pol,
+                    'quotation_pod' => $quotation->pod,
+                    'extracted_pol_code' => $quotationPolCode,
+                    'extracted_pod_code' => $quotationPodCode,
+                ],
+                'timestamp' => time() * 1000
+            ]) . "\n", FILE_APPEND);
+            // #endregion
 
             // Require both POL and POD to match exactly
             $query->where(function ($q) use ($quotation, $quotationPolCode, $useIlike) {
@@ -727,7 +760,7 @@ class RobawsArticleCache extends Model
             });
         }
 
-        // Apply shipping line filter if schedule is selected - REQUIRE exact match (NO NULL fallback)
+        // Apply shipping line filter if schedule is selected - Include NULL shipping_line (universal articles)
         if ($quotation->selected_schedule_id && $quotation->selectedSchedule) {
             $schedule = $quotation->selectedSchedule;
             if ($schedule->carrier) {
@@ -738,18 +771,91 @@ class RobawsArticleCache extends Model
                     $baseCarrierName = explode(' ', $carrierName)[0]; // Get first word
                     
                     if ($useIlike) {
-                        // Try exact match first, then fall back to base name
+                        // Try exact match first, then fall back to base name, or NULL (universal articles)
                         $q->where('shipping_line', 'ILIKE', '%' . $carrierName . '%')
-                          ->orWhere('shipping_line', 'ILIKE', '%' . $baseCarrierName . '%');
+                          ->orWhere('shipping_line', 'ILIKE', '%' . $baseCarrierName . '%')
+                          ->orWhereNull('shipping_line');
                     } else {
-                        // Try exact match first, then fall back to base name
+                        // Try exact match first, then fall back to base name, or NULL (universal articles)
                         $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%' . strtolower($carrierName) . '%'])
-                          ->orWhereRaw('LOWER(shipping_line) LIKE ?', ['%' . strtolower($baseCarrierName) . '%']);
+                          ->orWhereRaw('LOWER(shipping_line) LIKE ?', ['%' . strtolower($baseCarrierName) . '%'])
+                          ->orWhereNull('shipping_line');
                     }
                 });
             }
         }
 
+        // PHASE 4: Check for article mappings (ALLOWLIST strategy)
+        $carrierId = null;
+        $podPortId = null;
+        $vehicleCategory = null;
+        $categoryGroupId = null;
+        $vesselName = null;
+        $vesselClass = null;
+
+        // Determine context inputs
+        if ($quotation->selected_schedule_id && $quotation->selectedSchedule) {
+            $schedule = $quotation->selectedSchedule;
+            if ($schedule->carrier) {
+                $carrierId = $schedule->carrier->id;
+            }
+            $vesselName = $schedule->vessel_name;
+            $vesselClass = $schedule->vessel_class;
+            
+            // Get POD port ID from schedule
+            if ($schedule->pod_id) {
+                $podPortId = $schedule->pod_id;
+            }
+        }
+
+        // Get vehicle category and derive category group from commodity items
+        if ($quotation->commodityItems && $quotation->commodityItems->count() > 0) {
+            // Get first commodity item's category (for now - could be enhanced to handle multiple)
+            $firstItem = $quotation->commodityItems->first();
+            $vehicleCategory = $firstItem->category ?? null;
+            
+            // Derive category group ID if vehicle category exists and carrier is known
+            if ($vehicleCategory && $carrierId) {
+                $member = \App\Models\CarrierCategoryGroupMember::whereHas('categoryGroup', function ($q) use ($carrierId) {
+                    $q->where('carrier_id', $carrierId)->where('is_active', true);
+                })
+                ->where('vehicle_category', $vehicleCategory)
+                ->where('is_active', true)
+                ->first();
+                
+                $categoryGroupId = $member?->carrier_category_group_id;
+            }
+        }
+
+        // Call resolver to get article mappings
+        $mappings = collect([]);
+        if ($carrierId) {
+            $resolver = app(\App\Services\CarrierRules\CarrierRuleResolver::class);
+            $mappings = $resolver->resolveArticleMappings(
+                $carrierId,
+                $podPortId,
+                $vehicleCategory,
+                $categoryGroupId,
+                $vesselName,
+                $vesselClass
+            );
+        }
+
+        // If mappings exist, apply ALLOWLIST strategy
+        if ($mappings->isNotEmpty()) {
+            $mappedArticleIds = $mappings->pluck('article_id')->unique()->toArray();
+            
+            // Apply allowlist: only mapped articles + universal articles (commodity_type NULL)
+            $query->where(function ($q) use ($mappedArticleIds) {
+                $q->whereIn('id', $mappedArticleIds)
+                  ->orWhereNull('commodity_type'); // Keep universal articles
+            });
+            
+            // Skip commodity type filtering when mappings exist
+            return $query;
+        }
+
+        // ELSE: Fallback to cleaned commodity type matching
         // Apply commodity type filter - STRICT when selected (NO NULL fallback)
         $commodityTypes = [];
         
@@ -767,16 +873,21 @@ class RobawsArticleCache extends Model
             $commodityTypes = array_merge($commodityTypes, $itemTypes);
         }
         
-        // STRICT filtering when commodity is selected (NO NULL fallback)
+        // Filter by commodity type when selected, but always include universal articles (NULL commodity_type)
         if (!empty($commodityTypes)) {
             $commodityTypes = collect($commodityTypes)
                 ->map(fn ($type) => Str::upper(trim($type)))
                 ->flatMap(function ($type) {
+                    // Map LM cargo types to article commodity types
+                    // TRUCKHEAD, TRUCK, TRAILER, BUS are LM cargo and should also match articles
+                    // that might be used for LM cargo (Big Van, Car, Small Van for some carriers/routes)
+                    // Note: Only use article types that actually exist in database
+                    // 'TRUCKHEAD' and 'HH' don't exist as article commodity types, so removed
                     return match ($type) {
-                        'TRUCK' => ['TRUCK', 'HH', 'LM CARGO'],
-                        'TRUCKHEAD' => ['TRUCKHEAD', 'HH', 'LM CARGO'],
-                        'TRAILER' => ['TRAILER', 'HH', 'LM CARGO'],
-                        'BUS' => ['BUS', 'HH', 'LM CARGO'],
+                        'TRUCK' => ['TRUCK', 'LM CARGO', 'BIG VAN', 'CAR', 'SMALL VAN', 'BUS'],
+                        'TRUCKHEAD' => ['LM CARGO', 'BIG VAN', 'CAR', 'SMALL VAN', 'TRUCK', 'BUS'],
+                        'TRAILER' => ['LM CARGO', 'BIG VAN', 'CAR', 'SMALL VAN', 'TRUCK', 'BUS'],
+                        'BUS' => ['BUS', 'LM CARGO', 'BIG VAN', 'CAR', 'SMALL VAN', 'TRUCK'],
                         default => [$type],
                     };
                 })
@@ -789,11 +900,54 @@ class RobawsArticleCache extends Model
                 'types' => $commodityTypes,
             ]);
 
+            // #region agent log
+            file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                'sessionId' => 'debug-session',
+                'runId' => 'run1',
+                'hypothesisId' => 'C',
+                'location' => 'RobawsArticleCache.php:827',
+                'message' => 'Commodity type filter being applied',
+                'data' => [
+                    'commodity_types' => $commodityTypes,
+                    'commodity_types_count' => count($commodityTypes),
+                ],
+                'timestamp' => time() * 1000
+            ]) . "\n", FILE_APPEND);
+            // #endregion
+
             $placeholders = implode(', ', array_fill(0, count($commodityTypes), '?'));
-            // NO NULL fallback - require exact commodity_type match (case-insensitive with TRIM)
-            $query->whereRaw("UPPER(TRIM(commodity_type)) IN ($placeholders)", $commodityTypes);
+            // Include articles that match the commodity type OR have NULL commodity_type (universal articles)
+            // Strict filtering: only show articles that match the expanded commodity types
+            $query->where(function ($q) use ($commodityTypes, $placeholders) {
+                $q->whereRaw("UPPER(TRIM(commodity_type)) IN ($placeholders)", $commodityTypes)
+                  ->orWhereNull('commodity_type');
+            });
         }
         // If no commodity selected, show all articles (existing behavior)
+
+        // #region agent log
+        $testQuery = clone $query;
+        $testCount = $testQuery->count();
+        
+        // Check if article 230 matches
+        $article230Query = clone $query;
+        $article230Matches = $article230Query->where('id', 230)->exists();
+        
+        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'A',
+            'location' => 'RobawsArticleCache.php:831',
+            'message' => 'scopeForQuotationContext final query count',
+            'data' => [
+                'query_count' => $testCount,
+                'quotation_pol' => $quotation->pol,
+                'quotation_pod' => $quotation->pod,
+                'article_230_matches' => $article230Matches,
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
 
         return $query;
     }

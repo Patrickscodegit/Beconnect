@@ -295,7 +295,7 @@ class QuotationCommodityItem extends Model
             $schedule = $this->quotationRequest->selectedSchedule;
             if ($schedule) {
                 $carrierId = $schedule->carrier_id ?? null;
-                $portId = $schedule->pod_port_id ?? null;
+                $portId = $schedule->pod_id ?? null;
                 $vesselName = $schedule->vessel_name;
                 $vesselClass = $schedule->vessel_class;
             }
@@ -357,7 +357,7 @@ class QuotationCommodityItem extends Model
             $schedule = $this->quotationRequest->selectedSchedule;
             if ($schedule) {
                 $carrierId = $schedule->carrier_id ?? null;
-                $portId = $schedule->pod_port_id ?? null;
+                $portId = $schedule->pod_id ?? null;
                 $vesselName = $schedule->vessel_name;
                 $vesselClass = $schedule->vessel_class;
             }
@@ -486,6 +486,18 @@ class QuotationCommodityItem extends Model
             'trailer' => ['TRAILER', 'TRUCK', 'HH', 'LM CARGO'],
             'bus' => ['BUS', 'HH', 'LM CARGO'],
             'motorcycle' => ['MOTORCYCLE'],
+            // Truck variants that should map to LM CARGO
+            'vacuum_truck' => ['TRUCK', 'HH', 'LM CARGO'],
+            'box_truck' => ['TRUCK', 'HH', 'LM CARGO'],
+            'platform_truck' => ['TRUCK', 'HH', 'LM CARGO'],
+            'tipper_truck' => ['TRUCK', 'HH', 'LM CARGO'],
+            'tank_truck' => ['TRUCK', 'HH', 'LM CARGO'],
+            'refuse_truck' => ['TRUCK', 'HH', 'LM CARGO'],
+            'truck_chassis' => ['TRUCK', 'HH', 'LM CARGO'],
+            'concrete_mixer' => ['TRUCK', 'HH', 'LM CARGO'],
+            'high_and_heavy' => ['HH', 'LM CARGO'],
+            'loaded_truck_trailer' => ['TRUCK', 'HH', 'LM CARGO'],
+            'truck_trailer_combination' => ['TRUCK', 'HH', 'LM CARGO'],
         ];
 
         return $vehicleMapping[$category] ?? ['CAR'];

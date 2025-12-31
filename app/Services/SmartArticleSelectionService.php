@@ -46,8 +46,45 @@ class SmartArticleSelectionService
      */
     protected function calculateSuggestions(QuotationRequest $quotation): Collection
     {
+        // #region agent log
+        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'A',
+            'location' => 'SmartArticleSelectionService.php:47',
+            'message' => 'calculateSuggestions entry',
+            'data' => [
+                'quotation_id' => $quotation->id,
+                'pol' => $quotation->pol,
+                'pod' => $quotation->pod,
+                'selected_schedule_id' => $quotation->selected_schedule_id,
+                'service_type' => $quotation->service_type,
+                'commodity_items_count' => $quotation->commodityItems ? $quotation->commodityItems->count() : 0,
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
+
         // Get base query using the model scope (now requires POL/POD match)
         $articles = RobawsArticleCache::forQuotationContext($quotation)->get();
+
+        // #region agent log
+        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'A',
+            'location' => 'SmartArticleSelectionService.php:51',
+            'message' => 'Articles query result',
+            'data' => [
+                'articles_count' => $articles->count(),
+                'article_ids' => $articles->pluck('id')->toArray(),
+                'article_names' => $articles->pluck('article_name')->toArray(),
+                'article_pols' => $articles->pluck('pol')->toArray(),
+                'article_pods' => $articles->pluck('pod')->toArray(),
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
 
         // NO FALLBACK - only return articles that match POL/POD exactly
         // If no articles match, return empty collection (100% match required)
@@ -57,6 +94,21 @@ class SmartArticleSelectionService
                 'pol' => $quotation->pol,
                 'pod' => $quotation->pod
             ]);
+            
+            // #region agent log
+            file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                'sessionId' => 'debug-session',
+                'runId' => 'run1',
+                'hypothesisId' => 'A',
+                'location' => 'SmartArticleSelectionService.php:62',
+                'message' => 'No articles found - checking total parent articles',
+                'data' => [
+                    'total_parent_articles' => RobawsArticleCache::where('is_parent_article', true)->count(),
+                    'active_parent_articles' => RobawsArticleCache::where('is_parent_article', true)->where('is_active', true)->count(),
+                ],
+                'timestamp' => time() * 1000
+            ]) . "\n", FILE_APPEND);
+            // #endregion
             
             return collect([]);
         }
