@@ -15,6 +15,15 @@ return new class extends Migration
         $driver = Schema::getConnection()->getDriverName();
         $useJsonb = $driver === 'pgsql';
         
+        // Check if table already exists (in case migration was partially run)
+        if (Schema::hasTable('carrier_article_mappings')) {
+            // Table exists, just ensure indexes exist
+            if ($useJsonb) {
+                $this->createGinIndexes();
+            }
+            return;
+        }
+        
         Schema::create('carrier_article_mappings', function (Blueprint $table) use ($useJsonb) {
             $table->id();
             $table->foreignId('carrier_id')->constrained('shipping_carriers')->onDelete('cascade');
@@ -53,6 +62,24 @@ return new class extends Migration
         
         // PostgreSQL GIN indexes for JSONB columns (only for PostgreSQL)
         if ($useJsonb) {
+            $this->createGinIndexes();
+        }
+    }
+
+    /**
+     * Create GIN indexes for JSONB columns
+     */
+    private function createGinIndexes(): void
+    {
+        // Check if columns are jsonb before creating indexes
+        $portIdsType = DB::selectOne("
+            SELECT data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'carrier_article_mappings' 
+            AND column_name = 'port_ids'
+        ");
+
+        if ($portIdsType && $portIdsType->data_type === 'jsonb') {
             DB::statement('CREATE INDEX IF NOT EXISTS carrier_article_mappings_port_ids_gin ON carrier_article_mappings USING GIN (port_ids)');
             DB::statement('CREATE INDEX IF NOT EXISTS carrier_article_mappings_port_group_ids_gin ON carrier_article_mappings USING GIN (port_group_ids)');
             DB::statement('CREATE INDEX IF NOT EXISTS carrier_article_mappings_vehicle_categories_gin ON carrier_article_mappings USING GIN (vehicle_categories)');
