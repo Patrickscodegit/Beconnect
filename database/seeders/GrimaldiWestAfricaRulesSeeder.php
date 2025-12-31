@@ -7,6 +7,8 @@ use App\Models\CarrierArticleMapping;
 use App\Models\CarrierCategoryGroup;
 use App\Models\CarrierCategoryGroupMember;
 use App\Models\CarrierClause;
+use App\Models\CarrierPortGroup;
+use App\Models\CarrierPortGroupMember;
 use App\Models\CarrierSurchargeArticleMap;
 use App\Models\CarrierSurchargeRule;
 use App\Models\CarrierTransformRule;
@@ -47,36 +49,102 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
         $westAfricaPorts = $this->getWestAfricaPorts();
         $this->command->info("✓ Found " . count($westAfricaPorts) . " West Africa ports");
 
-        // 1. Create category groups
+        // 1. Create port groups
+        $portGroups = $this->createPortGroups($carrier);
+        $this->command->info("✓ Created " . count($portGroups) . " port groups");
+
+        // 2. Create category groups
         $categoryGroups = $this->createCategoryGroups($carrier);
         $this->command->info("✓ Created " . count($categoryGroups) . " category groups");
 
-        // 2. Create acceptance rules
+        // 3. Create acceptance rules
         $this->createAcceptanceRules($carrier, $westAfricaPorts, $categoryGroups);
         $this->command->info("✓ Created acceptance rules");
 
-        // 3. Create transform rules (overwidth)
+        // 4. Create transform rules (overwidth)
         $this->createTransformRules($carrier, $westAfricaPorts, $categoryGroups);
         $this->command->info("✓ Created transform rules");
 
-        // 4. Create surcharge rules
+        // 5. Create surcharge rules
         $this->createSurchargeRules($carrier, $westAfricaPorts, $categoryGroups);
         $this->command->info("✓ Created surcharge rules");
 
-        // 5. Create surcharge article mappings (will create placeholders if articles don't exist)
+        // 6. Create surcharge article mappings (will create placeholders if articles don't exist)
         $this->createArticleMappings($carrier, $westAfricaPorts, $categoryGroups);
         $this->command->info("✓ Created surcharge article mappings");
 
-        // 6. Create freight mappings (ALLOWLIST)
+        // 7. Create freight mappings (ALLOWLIST)
         $this->createFreightMappings($carrier, $westAfricaPorts, $categoryGroups);
         $this->command->info("✓ Created freight mappings");
 
-        // 7. Create clauses
+        // 8. Create clauses
         $this->createClauses($carrier, $westAfricaPorts);
         $this->command->info("✓ Created clauses");
 
         $this->command->newLine();
         $this->command->info('✅ Grimaldi West Africa rules seeded successfully!');
+    }
+
+    /**
+     * Create port groups
+     */
+    private function createPortGroups(ShippingCarrier $carrier): array
+    {
+        $groups = [
+            [
+                'code' => 'Grimaldi_WAF',
+                'display_name' => 'Grimaldi WAF',
+                'aliases' => [],
+                'priority' => 0,
+                'sort_order' => 1,
+                'port_codes' => ['CAS', 'CKY', 'COO', 'DKR', 'DLA', 'FNA', 'LOS', 'LBV', 'LFW', 'PNR', 'NKC', 'ABJ'],
+            ],
+            [
+                'code' => 'Grimaldi_MED',
+                'display_name' => 'Grimaldi MED',
+                'aliases' => [],
+                'priority' => 0,
+                'sort_order' => 2,
+                'port_codes' => ['ALG', 'MRS', 'GOA'],
+            ],
+        ];
+
+        $createdGroups = [];
+        foreach ($groups as $groupData) {
+            $portCodes = $groupData['port_codes'];
+            unset($groupData['port_codes']);
+
+            $group = CarrierPortGroup::updateOrCreate(
+                [
+                    'carrier_id' => $carrier->id,
+                    'code' => $groupData['code'],
+                ],
+                array_merge($groupData, [
+                    'effective_from' => now()->subYear(),
+                    'is_active' => true,
+                ])
+            );
+
+            // Create members
+            foreach ($portCodes as $portCode) {
+                $port = Port::where('code', $portCode)->first();
+                if ($port) {
+                    CarrierPortGroupMember::updateOrCreate(
+                        [
+                            'carrier_port_group_id' => $group->id,
+                            'port_id' => $port->id,
+                        ],
+                        ['is_active' => true]
+                    );
+                } else {
+                    $this->command->warn("  ⚠ Port '{$portCode}' not found. Skipping port group member.");
+                }
+            }
+
+            $createdGroups[$groupData['code']] = $group;
+        }
+
+        return $createdGroups;
     }
 
     /**
