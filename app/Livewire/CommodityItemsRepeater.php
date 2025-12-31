@@ -241,7 +241,7 @@ class CommodityItemsRepeater extends Component
     public function calculateLm($index)
     {
         // #region agent log
-        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
             'sessionId' => 'debug-session',
             'runId' => 'run1',
             'hypothesisId' => 'A',
@@ -316,7 +316,7 @@ class CommodityItemsRepeater extends Component
             }
             
             // #region agent log
-            file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
                 'sessionId' => 'debug-session',
                 'runId' => 'run1',
                 'hypothesisId' => 'A',
@@ -377,7 +377,7 @@ class CommodityItemsRepeater extends Component
             }
             
             // #region agent log
-            file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
                 'sessionId' => 'debug-session',
                 'runId' => 'run1',
                 'hypothesisId' => 'A',
@@ -401,7 +401,7 @@ class CommodityItemsRepeater extends Component
     public function recalculateAllLm()
     {
         // #region agent log
-        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
             'sessionId' => 'debug-session',
             'runId' => 'run1',
             'hypothesisId' => 'B',
@@ -420,7 +420,7 @@ class CommodityItemsRepeater extends Component
             $quotation = \App\Models\QuotationRequest::with('selectedSchedule')->find($this->quotationId);
             if ($quotation && $quotation->selectedSchedule) {
                 // #region agent log
-                file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                @file_put_contents(base_path('.cursor/debug.log'), json_encode([
                     'sessionId' => 'debug-session',
                     'runId' => 'run1',
                     'hypothesisId' => 'B',
@@ -445,7 +445,7 @@ class CommodityItemsRepeater extends Component
                 $newLm = $this->items[$index]['lm'] ?? null;
                 
                 // #region agent log
-                file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                @file_put_contents(base_path('.cursor/debug.log'), json_encode([
                     'sessionId' => 'debug-session',
                     'runId' => 'run1',
                     'hypothesisId' => 'B',

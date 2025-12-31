@@ -53,7 +53,7 @@ class SmartArticleSelector extends Component
         $this->quotation = $this->quotation->fresh(['selectedSchedule.carrier', 'commodityItems']);
         
         // #region agent log
-        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
             'sessionId' => 'debug-session',
             'runId' => 'run1',
             'hypothesisId' => 'A',
@@ -84,7 +84,7 @@ class SmartArticleSelector extends Component
             );
             
             // #region agent log
-            file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
                 'sessionId' => 'debug-session',
                 'runId' => 'run1',
                 'hypothesisId' => 'A',

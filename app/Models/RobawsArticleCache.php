@@ -530,7 +530,7 @@ class RobawsArticleCache extends Model
     public function scopeForQuotationContext(Builder $query, \App\Models\QuotationRequest $quotation): Builder
     {
         // #region agent log
-        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
             'sessionId' => 'debug-session',
             'runId' => 'run1',
             'hypothesisId' => 'A',
@@ -633,7 +633,7 @@ class RobawsArticleCache extends Model
             $quotationPodCode = $this->extractPortCode($quotation->pod);
 
             // #region agent log
-            file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
                 'sessionId' => 'debug-session',
                 'runId' => 'run1',
                 'hypothesisId' => 'G',
@@ -901,7 +901,7 @@ class RobawsArticleCache extends Model
             ]);
 
             // #region agent log
-            file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
                 'sessionId' => 'debug-session',
                 'runId' => 'run1',
                 'hypothesisId' => 'C',
@@ -933,7 +933,7 @@ class RobawsArticleCache extends Model
         $article230Query = clone $query;
         $article230Matches = $article230Query->where('id', 230)->exists();
         
-        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
             'sessionId' => 'debug-session',
             'runId' => 'run1',
             'hypothesisId' => 'A',

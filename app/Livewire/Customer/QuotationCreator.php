@@ -267,7 +267,7 @@ class QuotationCreator extends Component
     public function updated($propertyName)
     {
         // #region agent log
-        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
             'sessionId' => 'debug-session',
             'runId' => 'run1',
             'hypothesisId' => 'D',
@@ -289,7 +289,7 @@ class QuotationCreator extends Component
         // Handle schedule change explicitly
         if ($propertyName === 'selected_schedule_id') {
             // #region agent log
-            file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
                 'sessionId' => 'debug-session',
                 'runId' => 'run1',
                 'hypothesisId' => 'D',
@@ -306,7 +306,7 @@ class QuotationCreator extends Component
             $this->dispatch('scheduleChanged');
             
             // #region agent log
-            file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
                 'sessionId' => 'debug-session',
                 'runId' => 'run1',
                 'hypothesisId' => 'D',
@@ -321,7 +321,7 @@ class QuotationCreator extends Component
         // Also dispatch when POD changes (schedule might change when POD changes)
         if ($propertyName === 'pod') {
             // #region agent log
-            file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
                 'sessionId' => 'debug-session',
                 'runId' => 'run1',
                 'hypothesisId' => 'E',
@@ -425,7 +425,7 @@ class QuotationCreator extends Component
     public function updatedSelectedScheduleId($value)
     {
         // #region agent log
-        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
             'sessionId' => 'debug-session',
             'runId' => 'run1',
             'hypothesisId' => 'C',
@@ -450,7 +450,7 @@ class QuotationCreator extends Component
         $this->dispatch('scheduleChanged');
         
         // #region agent log
-        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
             'sessionId' => 'debug-session',
             'runId' => 'run1',
             'hypothesisId' => 'C',
@@ -480,7 +480,7 @@ class QuotationCreator extends Component
                 $this->quotation = $quotation->fresh(['articles']);
                 
                 // #region agent log
-                file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                @file_put_contents(base_path('.cursor/debug.log'), json_encode([
                     'sessionId' => 'debug-session',
                     'runId' => 'run1',
                     'hypothesisId' => 'C',
