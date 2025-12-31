@@ -13,19 +13,30 @@ return new class extends Migration
     public function up(): void
     {
         $driver = Schema::getConnection()->getDriverName();
+        $useJsonb = $driver === 'pgsql';
         
-        Schema::create('carrier_article_mappings', function (Blueprint $table) {
+        Schema::create('carrier_article_mappings', function (Blueprint $table) use ($useJsonb) {
             $table->id();
             $table->foreignId('carrier_id')->constrained('shipping_carriers')->onDelete('cascade');
             $table->foreignId('article_id')->constrained('robaws_articles_cache')->onDelete('cascade');
             
             // Arrays-first design (no legacy single-value columns)
-            $table->json('port_ids')->nullable();
-            $table->json('port_group_ids')->nullable();
-            $table->json('vehicle_categories')->nullable();
-            $table->json('category_group_ids')->nullable();
-            $table->json('vessel_names')->nullable();
-            $table->json('vessel_classes')->nullable();
+            // Use jsonb for PostgreSQL (required for GIN indexes), json for SQLite
+            if ($useJsonb) {
+                $table->jsonb('port_ids')->nullable();
+                $table->jsonb('port_group_ids')->nullable();
+                $table->jsonb('vehicle_categories')->nullable();
+                $table->jsonb('category_group_ids')->nullable();
+                $table->jsonb('vessel_names')->nullable();
+                $table->jsonb('vessel_classes')->nullable();
+            } else {
+                $table->json('port_ids')->nullable();
+                $table->json('port_group_ids')->nullable();
+                $table->json('vehicle_categories')->nullable();
+                $table->json('category_group_ids')->nullable();
+                $table->json('vessel_names')->nullable();
+                $table->json('vessel_classes')->nullable();
+            }
             
             $table->integer('priority')->default(0);
             $table->date('effective_from')->nullable();
@@ -41,7 +52,7 @@ return new class extends Migration
         });
         
         // PostgreSQL GIN indexes for JSONB columns (only for PostgreSQL)
-        if ($driver === 'pgsql') {
+        if ($useJsonb) {
             DB::statement('CREATE INDEX IF NOT EXISTS carrier_article_mappings_port_ids_gin ON carrier_article_mappings USING GIN (port_ids)');
             DB::statement('CREATE INDEX IF NOT EXISTS carrier_article_mappings_port_group_ids_gin ON carrier_article_mappings USING GIN (port_group_ids)');
             DB::statement('CREATE INDEX IF NOT EXISTS carrier_article_mappings_vehicle_categories_gin ON carrier_article_mappings USING GIN (vehicle_categories)');
