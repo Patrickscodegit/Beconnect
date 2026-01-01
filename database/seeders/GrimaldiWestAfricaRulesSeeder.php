@@ -513,6 +513,7 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
     /**
      * Create freight mappings (ALLOWLIST strategy)
      * Maps articles to vehicle categories/category groups for article selection
+     * Creates mappings for all Grimaldi parent articles for all West African ports
      */
     private function createFreightMappings(ShippingCarrier $carrier, array $ports, array $categoryGroups): void
     {
@@ -523,81 +524,110 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
         
         $wafPortGroupIds = $wafPortGroup ? [$wafPortGroup->id] : null;
 
-        // Example: Map Big Van, Car, Small Van articles for Dakar to truckhead/truck/trailer
-        // This allows truckhead to find these articles when no LM Cargo articles exist for Dakar
-        if (isset($ports['DKR'])) {
-            $dakarPortId = $ports['DKR']->id;
-            
-            // Find articles for Dakar
-            $dakarArticles = RobawsArticleCache::where('is_parent_article', true)
+        // Get all ports from WAF port group (not just the ones passed in $ports)
+        $wafPorts = [];
+        if ($wafPortGroup) {
+            $wafPortMembers = $wafPortGroup->activeMembers()->with('port')->get();
+            foreach ($wafPortMembers as $member) {
+                $portCode = $member->port->code;
+                $wafPorts[$portCode] = [
+                    'port' => $member->port,
+                    'port_id' => $member->port->id,
+                    'port_name' => strtolower($member->port->name),
+                    'port_code' => strtolower($portCode),
+                ];
+            }
+        }
+
+        // Get category groups for LM cargo (trucks and trailers)
+        // Try to find LM_CARGO_TRUCKS and LM_CARGO_TRAILERS, or fall back to LM_CARGO
+        $lmCargoGroupId = $categoryGroups['LM_CARGO']->id ?? null;
+        $lmCargoTrucksGroupId = $categoryGroups['LM_CARGO_TRUCKS']->id ?? null;
+        $lmCargoTrailersGroupId = $categoryGroups['LM_CARGO_TRAILERS']->id ?? null;
+        $categoryGroupIds = array_filter([$lmCargoTrucksGroupId, $lmCargoTrailersGroupId, $lmCargoGroupId]);
+
+        $mappedCount = 0;
+
+        // For each West African port, find all Grimaldi parent articles and map them
+        foreach ($wafPorts as $portCode => $portData) {
+            $port = $portData['port'];
+            $portId = $portData['port_id'];
+            $portName = $portData['port_name'];
+            $portCodeLower = $portData['port_code'];
+
+            // Find all Grimaldi parent articles for this port
+            $articles = RobawsArticleCache::where('is_parent_article', true)
                 ->where('is_active', true)
                 ->where(function ($q) {
                     $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%grimaldi%'])
                       ->orWhereNull('shipping_line');
                 })
-                ->where(function ($q) use ($dakarPortId) {
-                    $q->whereRaw('LOWER(pod) LIKE ?', ['%dakar%'])
-                      ->orWhereRaw('LOWER(pod) LIKE ?', ['%dkr%']);
+                ->where(function ($q) use ($portName, $portCodeLower) {
+                    $q->whereRaw('LOWER(pod) LIKE ?', ['%' . $portName . '%'])
+                      ->orWhereRaw('LOWER(pod) LIKE ?', ['%' . $portCodeLower . '%']);
                 })
                 ->get();
 
-            foreach ($dakarArticles as $article) {
+            foreach ($articles as $article) {
                 $commodityType = strtoupper(trim($article->commodity_type ?? ''));
-                
-                // Map Big Van, Car, Small Van articles to LM cargo categories (truckhead, truck, trailer)
-                if (in_array($commodityType, ['BIG VAN', 'CAR', 'SMALL VAN'])) {
+
+                // Map based on commodity type:
+                // - LM Cargo articles → truckhead/truck/trailer (like Abidjan example)
+                // - Big Van, Car, Small Van articles → truckhead/truck/trailer (like Dakar example)
+                // - All other parent articles → also map to truckhead/truck/trailer
+                $shouldMap = in_array($commodityType, ['LM CARGO', 'BIG VAN', 'CAR', 'SMALL VAN', '']) 
+                    || empty($commodityType);
+
+                if ($shouldMap) {
+                    // Generate a name for the mapping based on article name
+                    $mappingName = $this->generateMappingName($article, $port);
+
                     CarrierArticleMapping::updateOrCreate(
                         [
                             'carrier_id' => $carrier->id,
                             'article_id' => $article->id,
                         ],
                         [
-                            'port_ids' => [$dakarPortId],
+                            'name' => $mappingName,
+                            'port_ids' => [$portId],
                             'port_group_ids' => $wafPortGroupIds,
+                            'category_group_ids' => !empty($categoryGroupIds) ? array_values($categoryGroupIds) : null,
                             'vehicle_categories' => ['truckhead', 'truck', 'trailer'],
                             'priority' => 10,
                             'effective_from' => now()->subYear(),
                             'is_active' => true,
                         ]
                     );
+                    $mappedCount++;
                 }
             }
         }
 
-        // Example: Map LM Cargo articles for Abidjan to truckhead/truck/trailer
-        if (isset($ports['ABJ'])) {
-            $abidjanPortId = $ports['ABJ']->id;
-            
-            $abidjanLmArticles = RobawsArticleCache::where('is_parent_article', true)
-                ->where('is_active', true)
-                ->where(function ($q) {
-                    $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%grimaldi%'])
-                      ->orWhereNull('shipping_line');
-                })
-                ->where(function ($q) use ($abidjanPortId) {
-                    $q->whereRaw('LOWER(pod) LIKE ?', ['%abidjan%'])
-                      ->orWhereRaw('LOWER(pod) LIKE ?', ['%abj%']);
-                })
-                ->whereRaw("UPPER(TRIM(commodity_type)) = ?", ['LM CARGO'])
-                ->get();
+        $this->command->info("  ✓ Mapped {$mappedCount} articles to West African ports");
+    }
 
-            foreach ($abidjanLmArticles as $article) {
-                CarrierArticleMapping::updateOrCreate(
-                    [
-                        'carrier_id' => $carrier->id,
-                        'article_id' => $article->id,
-                    ],
-                    [
-                        'port_ids' => [$abidjanPortId],
-                        'port_group_ids' => $wafPortGroupIds,
-                        'vehicle_categories' => ['truckhead', 'truck', 'trailer'],
-                        'priority' => 10,
-                        'effective_from' => now()->subYear(),
-                        'is_active' => true,
-                    ]
-                );
-            }
+    /**
+     * Generate a name for the freight mapping
+     */
+    private function generateMappingName(RobawsArticleCache $article, Port $port): string
+    {
+        $articleName = $article->article_name;
+        $portName = $port->name;
+        $commodityType = $article->commodity_type ?? '';
+
+        // Extract a clean name from the article (remove shipping line prefix if present)
+        $cleanName = preg_replace('/^[^(]*\([^)]+\)\s*/', '', $articleName);
+        $cleanName = trim($cleanName);
+
+        // Build mapping name
+        $name = $portName;
+        if (!empty($commodityType)) {
+            $name .= ' - ' . $commodityType;
+        } else {
+            $name .= ' - ' . $cleanName;
         }
+
+        return $name;
     }
 
     /**
@@ -790,4 +820,5 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
         }
     }
 }
+
 
