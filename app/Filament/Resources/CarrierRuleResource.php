@@ -1738,6 +1738,23 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                             ->label('Freight Mapping')
                             ->icon('heroicon-o-squares-2x2')
                             ->schema([
+                                Forms\Components\Section::make('Actions')
+                                    ->schema([
+                                        Forms\Components\Placeholder::make('sort_info')
+                                            ->label('')
+                                            ->content(new \Illuminate\Support\HtmlString('
+                                                <div class="flex justify-end mb-4">
+                                                    <p class="text-sm text-gray-600 dark:text-gray-400">
+                                                        Use the "Sort Freight Mappings" button in the page header to sort by port name.
+                                                    </p>
+                                                </div>
+                                            '))
+                                            ->columnSpanFull(),
+                                    ])
+                                    ->collapsible()
+                                    ->collapsed()
+                                    ->columnSpanFull(),
+
                                 Forms\Components\Repeater::make('articleMappings')
                                     ->relationship('articleMappings')
                                     ->reorderable('sort_order')
