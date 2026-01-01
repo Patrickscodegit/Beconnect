@@ -1741,10 +1741,19 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                 Forms\Components\Placeholder::make('sort_button')
                                     ->label('')
                                     ->content(new \Illuminate\Support\HtmlString('
-                                        <div class="flex justify-end mb-4" x-data>
+                                        <div class="flex justify-end mb-4">
                                             <button
                                                 type="button"
-                                                @click="$wire.sortArticleMappingsByPort()"
+                                                onclick="(function() {
+                                                    const component = document.querySelector(\'[wire\\:id]\');
+                                                    if (component && window.Livewire) {
+                                                        const componentId = component.getAttribute(\'wire:id\');
+                                                        const livewireComponent = window.Livewire.find(componentId);
+                                                        if (livewireComponent) {
+                                                            livewireComponent.call(\'sortArticleMappingsByPort\');
+                                                        }
+                                                    }
+                                                })()"
                                                 class="inline-flex items-center justify-center gap-x-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition duration-75 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-600 focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-70 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 dark:focus:ring-offset-gray-800"
                                             >
                                                 <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
