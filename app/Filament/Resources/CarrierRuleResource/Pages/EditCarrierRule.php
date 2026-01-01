@@ -138,179 +138,49 @@ class EditCarrierRule extends EditRecord
      * When using ->relationship() on Repeater, the data is saved separately.
      * We need to get it from the form component's state.
      */
+    /**
+     * Get form state data for a given field
+     * Always gets fresh state using reflection to ensure we have the latest order
+     * This is called every time beforeSave() runs to get the current form state
+     */
+    protected function getFormStateData(string $fieldName): ?array
+    {
+        // Always get fresh state using reflection (don't cache, always read current state)
+        try {
+            $formReflection = new \ReflectionClass($this->form);
+            if ($formReflection->hasProperty('state')) {
+                $stateProperty = $formReflection->getProperty('state');
+                $stateProperty->setAccessible(true);
+                // Get fresh state value (not cached)
+                $formState = $stateProperty->getValue($this->form);
+                
+                if (isset($formState[$fieldName]) && is_array($formState[$fieldName])) {
+                    return $formState[$fieldName];
+                }
+            }
+        } catch (\Exception $e) {
+            // Reflection failed, try alternative approach
+        }
+        
+        // Fallback: use data property (but this might be stale)
+        if (isset($this->data[$fieldName]) && is_array($this->data[$fieldName])) {
+            return $this->data[$fieldName];
+        }
+        
+        return null;
+    }
+
     protected function beforeSave(): void
     {
-        // Access the form component's state using reflection
-        // The Repeater data with virtual fields is stored in the form component's state
-        $categoryGroupsData = null;
-        
-        try {
-            // Try to access form component's state property via reflection
-            $formReflection = new \ReflectionClass($this->form);
-            if ($formReflection->hasProperty('state')) {
-                $stateProperty = $formReflection->getProperty('state');
-                $stateProperty->setAccessible(true);
-                $formState = $stateProperty->getValue($this->form);
-                
-                if (isset($formState['categoryGroups'])) {
-                    $categoryGroupsData = $formState['categoryGroups'];
-                }
-            }
-        } catch (\Exception $e) {
-            // Reflection failed, fall through to data property access
-        }
-        
-        // Fallback: Try accessing through component's data property
-        if (!$categoryGroupsData && isset($this->data['categoryGroups'])) {
-            $categoryGroupsData = $this->data['categoryGroups'];
-        }
-        
-        // Capture acceptance rules order
-        $acceptanceRulesData = null;
-        try {
-            $formReflection = new \ReflectionClass($this->form);
-            if ($formReflection->hasProperty('state')) {
-                $stateProperty = $formReflection->getProperty('state');
-                $stateProperty->setAccessible(true);
-                $formState = $stateProperty->getValue($this->form);
-                
-                if (isset($formState['acceptanceRules'])) {
-                    $acceptanceRulesData = $formState['acceptanceRules'];
-                }
-            }
-        } catch (\Exception $e) {
-            // Reflection failed, fall through to data property access
-        }
-        
-        if (!$acceptanceRulesData && isset($this->data['acceptanceRules'])) {
-            $acceptanceRulesData = $this->data['acceptanceRules'];
-        }
-        
-        // Capture transform rules order
-        $transformRulesData = null;
-        try {
-            $formReflection = new \ReflectionClass($this->form);
-            if ($formReflection->hasProperty('state')) {
-                $stateProperty = $formReflection->getProperty('state');
-                $stateProperty->setAccessible(true);
-                $formState = $stateProperty->getValue($this->form);
-                
-                if (isset($formState['transformRules'])) {
-                    $transformRulesData = $formState['transformRules'];
-                }
-            }
-        } catch (\Exception $e) {
-            // Reflection failed, fall through to data property access
-        }
-        
-        if (!$transformRulesData && isset($this->data['transformRules'])) {
-            $transformRulesData = $this->data['transformRules'];
-        }
-        
-        // Capture surcharge rules order
-        $surchargeRulesData = null;
-        try {
-            $formReflection = new \ReflectionClass($this->form);
-            if ($formReflection->hasProperty('state')) {
-                $stateProperty = $formReflection->getProperty('state');
-                $stateProperty->setAccessible(true);
-                $formState = $stateProperty->getValue($this->form);
-                
-                if (isset($formState['surchargeRules'])) {
-                    $surchargeRulesData = $formState['surchargeRules'];
-                }
-            }
-        } catch (\Exception $e) {
-            // Reflection failed, fall through to data property access
-        }
-        
-        if (!$surchargeRulesData && isset($this->data['surchargeRules'])) {
-            $surchargeRulesData = $this->data['surchargeRules'];
-        }
-        
-        // Capture surcharge article maps order
-        $surchargeArticleMapsData = null;
-        try {
-            $formReflection = new \ReflectionClass($this->form);
-            if ($formReflection->hasProperty('state')) {
-                $stateProperty = $formReflection->getProperty('state');
-                $stateProperty->setAccessible(true);
-                $formState = $stateProperty->getValue($this->form);
-                
-                if (isset($formState['surchargeArticleMaps'])) {
-                    $surchargeArticleMapsData = $formState['surchargeArticleMaps'];
-                }
-            }
-        } catch (\Exception $e) {
-            // Reflection failed, fall through to data property access
-        }
-        
-        if (!$surchargeArticleMapsData && isset($this->data['surchargeArticleMaps'])) {
-            $surchargeArticleMapsData = $this->data['surchargeArticleMaps'];
-        }
-        
-        // Capture clauses order
-        $clausesData = null;
-        try {
-            $formReflection = new \ReflectionClass($this->form);
-            if ($formReflection->hasProperty('state')) {
-                $stateProperty = $formReflection->getProperty('state');
-                $stateProperty->setAccessible(true);
-                $formState = $stateProperty->getValue($this->form);
-                
-                if (isset($formState['clauses'])) {
-                    $clausesData = $formState['clauses'];
-                }
-            }
-        } catch (\Exception $e) {
-            // Reflection failed, fall through to data property access
-        }
-        
-        if (!$clausesData && isset($this->data['clauses'])) {
-            $clausesData = $this->data['clauses'];
-        }
-        
-        // Capture article mappings order
-        $articleMappingsData = null;
-        try {
-            $formReflection = new \ReflectionClass($this->form);
-            if ($formReflection->hasProperty('state')) {
-                $stateProperty = $formReflection->getProperty('state');
-                $stateProperty->setAccessible(true);
-                $formState = $stateProperty->getValue($this->form);
-                
-                if (isset($formState['articleMappings'])) {
-                    $articleMappingsData = $formState['articleMappings'];
-                }
-            }
-        } catch (\Exception $e) {
-            // Reflection failed, fall through to data property access
-        }
-        
-        if (!$articleMappingsData && isset($this->data['articleMappings'])) {
-            $articleMappingsData = $this->data['articleMappings'];
-        }
-        
-        // Capture port groups data
-        $portGroupsData = null;
-        try {
-            $formReflection = new \ReflectionClass($this->form);
-            if ($formReflection->hasProperty('state')) {
-                $stateProperty = $formReflection->getProperty('state');
-                $stateProperty->setAccessible(true);
-                $formState = $stateProperty->getValue($this->form);
-                
-                if (isset($formState['portGroups'])) {
-                    $portGroupsData = $formState['portGroups'];
-                }
-            }
-        } catch (\Exception $e) {
-            // Reflection failed, fall through to data property access
-        }
-        
-        if (!$portGroupsData && isset($this->data['portGroups'])) {
-            $portGroupsData = $this->data['portGroups'];
-        }
+        // Get form state data using the helper method (always gets latest state)
+        $categoryGroupsData = $this->getFormStateData('categoryGroups');
+        $acceptanceRulesData = $this->getFormStateData('acceptanceRules');
+        $transformRulesData = $this->getFormStateData('transformRules');
+        $surchargeRulesData = $this->getFormStateData('surchargeRules');
+        $surchargeArticleMapsData = $this->getFormStateData('surchargeArticleMaps');
+        $clausesData = $this->getFormStateData('clauses');
+        $articleMappingsData = $this->getFormStateData('articleMappings');
+        $portGroupsData = $this->getFormStateData('portGroups');
 
         // Store member_categories temporarily in the record for afterSave processing
         if ($categoryGroupsData && is_array($categoryGroupsData)) {
