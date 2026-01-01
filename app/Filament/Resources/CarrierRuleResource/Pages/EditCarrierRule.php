@@ -683,7 +683,7 @@ class EditCarrierRule extends EditRecord
             ->success()
             ->send();
         
-        redirect($this->getResource()::getUrl('edit', ['record' => $this->record]));
+        $this->redirect($this->getResource()::getUrl('edit', ['record' => $this->record]));
     }
 
     /**
