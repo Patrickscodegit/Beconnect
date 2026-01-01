@@ -69,6 +69,11 @@ class EditCarrierRule extends EditRecord
         return [
             Actions\ViewAction::make(),
             Actions\DeleteAction::make(),
+            Actions\Action::make('sortArticleMappingsByPort')
+                ->label('Sort Freight Mappings')
+                ->icon('heroicon-o-arrows-up-down')
+                ->color('gray')
+                ->action('sortArticleMappingsByPort'),
         ];
     }
 
