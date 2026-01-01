@@ -73,7 +73,9 @@ class EditCarrierRule extends EditRecord
                 ->label('Sort Freight Mappings')
                 ->icon('heroicon-o-arrows-up-down')
                 ->color('gray')
-                ->action('sortArticleMappingsByPort'),
+                ->action(function () {
+                    $this->sortArticleMappingsByPort();
+                }),
         ];
     }
 
