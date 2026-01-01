@@ -713,6 +713,11 @@ class EditCarrierRule extends EditRecord
      */
     public function sortArticleMappingsByPort(): void
     {
+        \Log::info('sortArticleMappingsByPort called', [
+            'record_id' => $this->record->id ?? null,
+            'class' => static::class,
+        ]);
+        
         $items = $this->record->articleMappings()->with('article')->orderBy('sort_order')->get();
         
         $sorted = $items->sortBy(function ($item) {
