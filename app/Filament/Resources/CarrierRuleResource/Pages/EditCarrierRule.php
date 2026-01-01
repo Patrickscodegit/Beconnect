@@ -737,9 +737,8 @@ class EditCarrierRule extends EditRecord
             ->success()
             ->send();
         
-        // Refresh the record and reload form data to show the new order
-        $this->record->refresh();
-        $this->fillForm();
+        // Redirect to refresh the form with updated sort order
+        return redirect($this->getResource()::getUrl('edit', ['record' => $this->record]));
     }
 }
 
