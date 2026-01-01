@@ -6,6 +6,7 @@ use App\Filament\Resources\CarrierRuleResource;
 use App\Models\CarrierCategoryGroup;
 use App\Models\CarrierPortGroup;
 use Filament\Actions;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 
 class EditCarrierRule extends EditRecord
@@ -661,6 +662,84 @@ class EditCarrierRule extends EditRecord
             
             $this->memberPortsData = null;
         }
+    }
+
+    /**
+     * Sort category groups alphabetically by display_name
+     */
+    public function sortCategoryGroupsAlphabetically(): void
+    {
+        $items = $this->record->categoryGroups()->orderBy('sort_order')->get();
+        
+        $sorted = $items->sortBy('display_name', SORT_NATURAL | SORT_FLAG_CASE)->values();
+        
+        foreach ($sorted as $index => $item) {
+            $item->sort_order = $index + 1;
+            $item->save();
+        }
+        
+        Notification::make()
+            ->title('Category Groups sorted alphabetically')
+            ->success()
+            ->send();
+        
+        redirect($this->getResource()::getUrl('edit', ['record' => $this->record]));
+    }
+
+    /**
+     * Sort port groups alphabetically by display_name
+     */
+    public function sortPortGroupsAlphabetically(): void
+    {
+        $items = $this->record->portGroups()->orderBy('sort_order')->get();
+        
+        $sorted = $items->sortBy('display_name', SORT_NATURAL | SORT_FLAG_CASE)->values();
+        
+        foreach ($sorted as $index => $item) {
+            $item->sort_order = $index + 1;
+            $item->save();
+        }
+        
+        Notification::make()
+            ->title('Port Groups sorted alphabetically')
+            ->success()
+            ->send();
+        
+        $this->redirect($this->getResource()::getUrl('edit', ['record' => $this->record]));
+    }
+
+    /**
+     * Sort article mappings (freight mappings) alphabetically by port name
+     */
+    public function sortArticleMappingsByPort(): void
+    {
+        $items = $this->record->articleMappings()->with('article')->orderBy('sort_order')->get();
+        
+        $sorted = $items->sortBy(function ($item) {
+            // Get the first port ID from port_ids array
+            $portIds = $item->port_ids ?? [];
+            if (empty($portIds)) {
+                return 'ZZZ'; // Items without ports go to end
+            }
+            
+            // Get the first port name
+            $port = \App\Models\Port::find($portIds[0]);
+            return $port ? $port->name : 'ZZZ';
+        }, SORT_NATURAL | SORT_FLAG_CASE)->values();
+        
+        foreach ($sorted as $index => $item) {
+            $item->sort_order = $index + 1;
+            $item->save();
+        }
+        
+        Notification::make()
+            ->title('Freight Mappings sorted by port name')
+            ->success()
+            ->send();
+        
+        // Refresh the record and reload form data to show the new order
+        $this->record->refresh();
+        $this->fillForm();
     }
 }
 

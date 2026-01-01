@@ -1738,6 +1738,9 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                             ->label('Freight Mapping')
                             ->icon('heroicon-o-squares-2x2')
                             ->schema([
+                                Forms\Components\View::make('filament.forms.sort-freight-mappings-button')
+                                    ->columnSpanFull(),
+
                                 Forms\Components\Repeater::make('articleMappings')
                                     ->relationship('articleMappings')
                                     ->reorderable('sort_order')
