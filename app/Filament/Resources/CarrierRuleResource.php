@@ -1411,7 +1411,6 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                     ->itemLabel(fn (array $state): ?string => $state['name'] ?? 'New Surcharge')
                                     ->collapsible()
                                     ->cloneable()
-                                    ->reorderable()
                                     ->columnSpanFull(),
                             ]),
 
