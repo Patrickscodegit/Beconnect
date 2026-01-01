@@ -733,7 +733,6 @@ class CarrierRuleResource extends Resource
                                     })
                                     ->collapsible()
                                     ->cloneable()
-                                    ->reorderable()
                                     ->columnSpanFull(),
                             ]),
 
