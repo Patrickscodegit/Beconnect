@@ -146,15 +146,17 @@ class EditCarrierRule extends EditRecord
     protected function getFormStateData(string $fieldName): ?array
     {
         // Always get fresh state using reflection (don't cache, always read current state)
+        // Note: We create a new ReflectionClass instance each time to ensure we get the latest state
         try {
             $formReflection = new \ReflectionClass($this->form);
             if ($formReflection->hasProperty('state')) {
                 $stateProperty = $formReflection->getProperty('state');
                 $stateProperty->setAccessible(true);
-                // Get fresh state value (not cached)
+                // Get fresh state value each time (not cached)
                 $formState = $stateProperty->getValue($this->form);
                 
                 if (isset($formState[$fieldName]) && is_array($formState[$fieldName])) {
+                    // Return a copy of the array to avoid any reference issues
                     return $formState[$fieldName];
                 }
             }
@@ -172,6 +174,18 @@ class EditCarrierRule extends EditRecord
 
     protected function beforeSave(): void
     {
+        // #region agent log
+        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
+            'timestamp' => microtime(true),
+            'location' => 'EditCarrierRule::beforeSave()',
+            'message' => 'beforeSave() called',
+            'data' => [],
+            'sessionId' => 'debug-session',
+            'runId' => 'reorder-debug',
+            'hypothesisId' => 'D',
+        ]) . "\n", FILE_APPEND);
+        // #endregion
+        
         // Get form state data using the helper method (always gets latest state)
         $categoryGroupsData = $this->getFormStateData('categoryGroups');
         $acceptanceRulesData = $this->getFormStateData('acceptanceRules');
@@ -222,6 +236,27 @@ class EditCarrierRule extends EditRecord
             $acceptanceRulesOrder = [];
             $orderedRules = array_values($acceptanceRulesData);
             
+            // #region agent log
+            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
+                'timestamp' => microtime(true),
+                'location' => 'EditCarrierRule::beforeSave() - acceptanceRules',
+                'message' => 'Capturing acceptance rules order',
+                'data' => [
+                    'count' => count($orderedRules),
+                    'rules' => array_map(function($rule) {
+                        $ruleArray = is_array($rule) ? $rule : (array) $rule;
+                        return [
+                            'id' => $ruleArray['id'] ?? null,
+                            'existing_sort_order' => $ruleArray['sort_order'] ?? null,
+                        ];
+                    }, $orderedRules),
+                ],
+                'sessionId' => 'debug-session',
+                'runId' => 'reorder-debug',
+                'hypothesisId' => 'A',
+            ]) . "\n", FILE_APPEND);
+            // #endregion
+            
             foreach ($orderedRules as $index => $rule) {
                 $ruleArray = is_array($rule) ? $rule : (array) $rule;
                 if (isset($ruleArray['id'])) {
@@ -231,6 +266,20 @@ class EditCarrierRule extends EditRecord
                     ];
                 }
             }
+            
+            // #region agent log
+            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
+                'timestamp' => microtime(true),
+                'location' => 'EditCarrierRule::beforeSave() - acceptanceRules',
+                'message' => 'Acceptance rules order captured',
+                'data' => [
+                    'order' => $acceptanceRulesOrder,
+                ],
+                'sessionId' => 'debug-session',
+                'runId' => 'reorder-debug',
+                'hypothesisId' => 'A',
+            ]) . "\n", FILE_APPEND);
+            // #endregion
             
             $this->acceptanceRulesOrder = $acceptanceRulesOrder;
         }
@@ -364,6 +413,9 @@ class EditCarrierRule extends EditRecord
         $record = $this->record;
 
         // Update sort_order based on form state order (if reordered)
+        // NOTE: Filament's ->reorderable('sort_order') does NOT automatically update sort_order
+        // when using ->relationship(), so we must handle it manually in afterSave().
+        // The order is captured in beforeSave() based on the array order in form state.
         if ($this->categoryGroupsOrder && is_array($this->categoryGroupsOrder)) {
             foreach ($this->categoryGroupsOrder as $orderData) {
                 $group = CarrierCategoryGroup::find($orderData['id']);
