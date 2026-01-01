@@ -438,9 +438,14 @@ class EditCarrierRule extends EditRecord
         }
         
         // Update acceptance rules sort_order based on form state order
-        if ($this->acceptanceRulesOrder && is_array($this->acceptanceRulesOrder)) {
+        if ($this->acceptanceRulesOrder && is_array($this->acceptanceRulesOrder) && count($this->acceptanceRulesOrder) > 0) {
+            // Load all rules in one query to avoid N+1
+            $ruleIds = array_column($this->acceptanceRulesOrder, 'id');
+            $rules = \App\Models\CarrierAcceptanceRule::whereIn('id', $ruleIds)->get()->keyBy('id');
+            
+            // Batch update only records that actually need updating
             foreach ($this->acceptanceRulesOrder as $orderData) {
-                $rule = \App\Models\CarrierAcceptanceRule::find($orderData['id']);
+                $rule = $rules->get($orderData['id']);
                 if ($rule && $rule->sort_order != $orderData['sort_order']) {
                     $rule->sort_order = $orderData['sort_order'];
                     $rule->save();
@@ -449,9 +454,12 @@ class EditCarrierRule extends EditRecord
         }
         
         // Update transform rules sort_order based on form state order
-        if ($this->transformRulesOrder && is_array($this->transformRulesOrder)) {
+        if ($this->transformRulesOrder && is_array($this->transformRulesOrder) && count($this->transformRulesOrder) > 0) {
+            $ruleIds = array_column($this->transformRulesOrder, 'id');
+            $rules = \App\Models\CarrierTransformRule::whereIn('id', $ruleIds)->get()->keyBy('id');
+            
             foreach ($this->transformRulesOrder as $orderData) {
-                $rule = \App\Models\CarrierTransformRule::find($orderData['id']);
+                $rule = $rules->get($orderData['id']);
                 if ($rule && $rule->sort_order != $orderData['sort_order']) {
                     $rule->sort_order = $orderData['sort_order'];
                     $rule->save();
@@ -460,9 +468,12 @@ class EditCarrierRule extends EditRecord
         }
         
         // Update surcharge rules sort_order based on form state order
-        if ($this->surchargeRulesOrder && is_array($this->surchargeRulesOrder)) {
+        if ($this->surchargeRulesOrder && is_array($this->surchargeRulesOrder) && count($this->surchargeRulesOrder) > 0) {
+            $ruleIds = array_column($this->surchargeRulesOrder, 'id');
+            $rules = \App\Models\CarrierSurchargeRule::whereIn('id', $ruleIds)->get()->keyBy('id');
+            
             foreach ($this->surchargeRulesOrder as $orderData) {
-                $rule = \App\Models\CarrierSurchargeRule::find($orderData['id']);
+                $rule = $rules->get($orderData['id']);
                 if ($rule && $rule->sort_order != $orderData['sort_order']) {
                     $rule->sort_order = $orderData['sort_order'];
                     $rule->save();
@@ -471,9 +482,12 @@ class EditCarrierRule extends EditRecord
         }
         
         // Update surcharge article maps sort_order based on form state order
-        if ($this->surchargeArticleMapsOrder && is_array($this->surchargeArticleMapsOrder)) {
+        if ($this->surchargeArticleMapsOrder && is_array($this->surchargeArticleMapsOrder) && count($this->surchargeArticleMapsOrder) > 0) {
+            $mapIds = array_column($this->surchargeArticleMapsOrder, 'id');
+            $maps = \App\Models\CarrierSurchargeArticleMap::whereIn('id', $mapIds)->get()->keyBy('id');
+            
             foreach ($this->surchargeArticleMapsOrder as $orderData) {
-                $map = \App\Models\CarrierSurchargeArticleMap::find($orderData['id']);
+                $map = $maps->get($orderData['id']);
                 if ($map && $map->sort_order != $orderData['sort_order']) {
                     $map->sort_order = $orderData['sort_order'];
                     $map->save();
@@ -482,9 +496,12 @@ class EditCarrierRule extends EditRecord
         }
         
         // Update clauses sort_order based on form state order
-        if ($this->clausesOrder && is_array($this->clausesOrder)) {
+        if ($this->clausesOrder && is_array($this->clausesOrder) && count($this->clausesOrder) > 0) {
+            $clauseIds = array_column($this->clausesOrder, 'id');
+            $clauses = \App\Models\CarrierClause::whereIn('id', $clauseIds)->get()->keyBy('id');
+            
             foreach ($this->clausesOrder as $orderData) {
-                $clause = \App\Models\CarrierClause::find($orderData['id']);
+                $clause = $clauses->get($orderData['id']);
                 if ($clause && $clause->sort_order != $orderData['sort_order']) {
                     $clause->sort_order = $orderData['sort_order'];
                     $clause->save();
@@ -493,9 +510,12 @@ class EditCarrierRule extends EditRecord
         }
         
         // Update article mappings sort_order based on form state order
-        if ($this->articleMappingsOrder && is_array($this->articleMappingsOrder)) {
+        if ($this->articleMappingsOrder && is_array($this->articleMappingsOrder) && count($this->articleMappingsOrder) > 0) {
+            $mappingIds = array_column($this->articleMappingsOrder, 'id');
+            $mappings = \App\Models\CarrierArticleMapping::whereIn('id', $mappingIds)->get()->keyBy('id');
+            
             foreach ($this->articleMappingsOrder as $orderData) {
-                $mapping = \App\Models\CarrierArticleMapping::find($orderData['id']);
+                $mapping = $mappings->get($orderData['id']);
                 if ($mapping && $mapping->sort_order != $orderData['sort_order']) {
                     $mapping->sort_order = $orderData['sort_order'];
                     $mapping->save();
