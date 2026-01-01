@@ -416,9 +416,13 @@ class EditCarrierRule extends EditRecord
         // NOTE: Filament's ->reorderable('sort_order') does NOT automatically update sort_order
         // when using ->relationship(), so we must handle it manually in afterSave().
         // The order is captured in beforeSave() based on the array order in form state.
-        if ($this->categoryGroupsOrder && is_array($this->categoryGroupsOrder)) {
+        if ($this->categoryGroupsOrder && is_array($this->categoryGroupsOrder) && count($this->categoryGroupsOrder) > 0) {
+            // Load all groups in one query to avoid N+1
+            $groupIds = array_column($this->categoryGroupsOrder, 'id');
+            $groups = CarrierCategoryGroup::whereIn('id', $groupIds)->get()->keyBy('id');
+            
             foreach ($this->categoryGroupsOrder as $orderData) {
-                $group = CarrierCategoryGroup::find($orderData['id']);
+                $group = $groups->get($orderData['id']);
                 if ($group && $group->sort_order != $orderData['sort_order']) {
                     $group->sort_order = $orderData['sort_order'];
                     $group->save();
@@ -427,9 +431,13 @@ class EditCarrierRule extends EditRecord
         }
         
         // Update port groups sort_order based on form state order
-        if ($this->portGroupsOrder && is_array($this->portGroupsOrder)) {
+        if ($this->portGroupsOrder && is_array($this->portGroupsOrder) && count($this->portGroupsOrder) > 0) {
+            // Load all groups in one query to avoid N+1
+            $groupIds = array_column($this->portGroupsOrder, 'id');
+            $groups = CarrierPortGroup::whereIn('id', $groupIds)->get()->keyBy('id');
+            
             foreach ($this->portGroupsOrder as $orderData) {
-                $group = CarrierPortGroup::find($orderData['id']);
+                $group = $groups->get($orderData['id']);
                 if ($group && $group->sort_order != $orderData['sort_order']) {
                     $group->sort_order = $orderData['sort_order'];
                     $group->save();
