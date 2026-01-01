@@ -1026,7 +1026,6 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                     )
                                     ->collapsible()
                                     ->cloneable()
-                                    ->reorderable()
                                     ->columnSpanFull(),
                             ]),
 
