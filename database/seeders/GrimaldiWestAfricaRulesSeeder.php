@@ -560,9 +560,16 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
             // Find all Grimaldi parent articles for this port
             $articles = RobawsArticleCache::where('is_parent_article', true)
                 ->where('is_active', true)
+                ->where('article_code', 'LIKE', 'GANR%') // Only Grimaldi article codes
+                ->whereRaw('LOWER(article_name) NOT LIKE ?', ['%nmt%']) // Exclude NMT articles
                 ->where(function ($q) {
                     $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%grimaldi%'])
-                      ->orWhereNull('shipping_line');
+                      ->orWhere(function ($q2) {
+                          // Allow NULL shipping_line only if article code starts with GANR (Grimaldi pattern)
+                          $q2->whereNull('shipping_line')
+                             ->where('article_code', 'LIKE', 'GANR%')
+                             ->whereRaw('LOWER(article_name) NOT LIKE ?', ['%nmt%']);
+                      });
                 })
                 ->where(function ($q) use ($portName, $portCodeLower) {
                     $q->whereRaw('LOWER(pod) LIKE ?', ['%' . $portName . '%'])

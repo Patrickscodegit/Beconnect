@@ -256,7 +256,12 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
             ->where('is_active', true)
             ->where(function ($q) {
                 $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%grimaldi%'])
-                  ->orWhereNull('shipping_line');
+                  ->orWhere(function ($q2) {
+                      // Allow NULL shipping_line only if article code starts with GANR (Grimaldi pattern)
+                      $q2->whereNull('shipping_line')
+                         ->where('article_code', 'LIKE', 'GANR%')
+                         ->whereRaw('LOWER(article_name) NOT LIKE ?', ['%nmt%']);
+                  });
             })
             ->first();
 
@@ -273,7 +278,12 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 ->where('is_active', true) // Allow non-parent articles too
                 ->where(function ($q) {
                     $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%grimaldi%'])
-                      ->orWhereNull('shipping_line');
+                      ->orWhere(function ($q2) {
+                          // Allow NULL shipping_line only if article code starts with GANR (Grimaldi pattern)
+                          $q2->whereNull('shipping_line')
+                             ->where('article_code', 'LIKE', 'GANR%')
+                             ->whereRaw('LOWER(article_name) NOT LIKE ?', ['%nmt%']);
+                      });
                 })
                 ->first();
 
@@ -295,9 +305,16 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
         $article = RobawsArticleCache::where('is_active', true) // Allow non-parent articles
             ->where(function ($q) {
                 $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%grimaldi%'])
-                  ->orWhereNull('shipping_line');
+                  ->orWhere(function ($q2) {
+                      // Allow NULL shipping_line only if article code starts with GANR (Grimaldi pattern)
+                      $q2->whereNull('shipping_line')
+                         ->where('article_code', 'LIKE', 'GANR%')
+                         ->whereRaw('LOWER(article_name) NOT LIKE ?', ['%nmt%']);
+                  });
             })
             ->where('commodity_type', $commodityType)
+            ->where('article_code', 'LIKE', 'GANR%') // Only Grimaldi article codes
+            ->whereRaw('LOWER(article_name) NOT LIKE ?', ['%nmt%']) // Exclude NMT articles
             ->where(function ($q) use ($portName, $portCode, $altPattern, $suffix) {
                 $q->whereRaw('LOWER(pod) LIKE ?', ['%' . $portName . '%'])
                   ->orWhereRaw('LOWER(pod) LIKE ?', ['%' . $portCode . '%'])
