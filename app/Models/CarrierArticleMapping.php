@@ -6,6 +6,7 @@ use App\Models\Concerns\HasMultiScopeMatches;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CarrierArticleMapping extends Model
 {
@@ -71,6 +72,18 @@ class CarrierArticleMapping extends Model
     public function article(): BelongsTo
     {
         return $this->belongsTo(RobawsArticleCache::class);
+    }
+
+    public function purchaseTariffs(): HasMany
+    {
+        return $this->hasMany(CarrierPurchaseTariff::class)
+            ->orderBy('sort_order', 'asc')
+            ->orderBy('effective_from', 'desc');
+    }
+
+    public function activePurchaseTariff(): ?CarrierPurchaseTariff
+    {
+        return $this->purchaseTariffs()->active()->first();
     }
 
     public function scopeActive($query)

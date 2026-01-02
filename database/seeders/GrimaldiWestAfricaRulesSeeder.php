@@ -539,12 +539,14 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
             }
         }
 
-        // Get category groups for LM cargo (trucks and trailers)
-        // Try to find LM_CARGO_TRUCKS and LM_CARGO_TRAILERS, or fall back to LM_CARGO
+        // Get category groups
+        $carsGroupId = $categoryGroups['CARS']->id ?? null;
+        $smallVansGroupId = $categoryGroups['SMALL_VANS']->id ?? null;
+        $bigVansGroupId = $categoryGroups['BIG_VANS']->id ?? null;
         $lmCargoGroupId = $categoryGroups['LM_CARGO']->id ?? null;
         $lmCargoTrucksGroupId = $categoryGroups['LM_CARGO_TRUCKS']->id ?? null;
         $lmCargoTrailersGroupId = $categoryGroups['LM_CARGO_TRAILERS']->id ?? null;
-        $categoryGroupIds = array_filter([$lmCargoTrucksGroupId, $lmCargoTrailersGroupId, $lmCargoGroupId]);
+        $lmCargoCategoryGroupIds = array_filter([$lmCargoTrucksGroupId, $lmCargoTrailersGroupId, $lmCargoGroupId]);
 
         $mappedCount = 0;
 
@@ -564,7 +566,8 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
                 })
                 ->where(function ($q) use ($portName, $portCodeLower) {
                     $q->whereRaw('LOWER(pod) LIKE ?', ['%' . $portName . '%'])
-                      ->orWhereRaw('LOWER(pod) LIKE ?', ['%' . $portCodeLower . '%']);
+                      ->orWhereRaw('LOWER(pod) LIKE ?', ['%' . $portCodeLower . '%'])
+                      ->orWhereRaw('LOWER(pod_code) LIKE ?', ['%' . $portCodeLower . '%']);
                 })
                 ->get();
 
@@ -572,15 +575,45 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
                 $commodityType = strtoupper(trim($article->commodity_type ?? ''));
 
                 // Map based on commodity type:
-                // - LM Cargo articles → truckhead/truck/trailer (like Abidjan example)
-                // - Big Van, Car, Small Van articles → truckhead/truck/trailer (like Dakar example)
-                // - All other parent articles → also map to truckhead/truck/trailer
-                $shouldMap = in_array($commodityType, ['LM CARGO', 'BIG VAN', 'CAR', 'SMALL VAN', '']) 
+                // - Car articles → car (CARS category group)
+                // - Small Van articles → small_van (SMALL_VANS category group)
+                // - SUV articles → small_van (SMALL_VANS category group)
+                // - Big Van articles → big_van (BIG_VANS category group)
+                // - LM Cargo articles → truck/truckhead/trailer (LM_CARGO category groups)
+                $shouldMap = in_array($commodityType, ['LM CARGO', 'BIG VAN', 'CAR', 'SMALL VAN', 'SUV', '']) 
                     || empty($commodityType);
 
                 if ($shouldMap) {
                     // Generate a name for the mapping based on article name
                     $mappingName = $this->generateMappingName($article, $port);
+
+                    // Determine category groups based on commodity type
+                    // Note: vehicle_categories and category_group_ids are mutually exclusive
+                    // We use category_group_ids since they're more flexible
+                    $categoryGroupIds = null;
+
+                    switch ($commodityType) {
+                        case 'CAR':
+                            $categoryGroupIds = $carsGroupId ? [$carsGroupId] : null;
+                            break;
+                        case 'SMALL VAN':
+                            $categoryGroupIds = $smallVansGroupId ? [$smallVansGroupId] : null;
+                            break;
+                        case 'SUV':
+                            // SUV belongs to Small Van category group
+                            $categoryGroupIds = $smallVansGroupId ? [$smallVansGroupId] : null;
+                            break;
+                        case 'BIG VAN':
+                            $categoryGroupIds = $bigVansGroupId ? [$bigVansGroupId] : null;
+                            break;
+                        case 'LM CARGO':
+                            $categoryGroupIds = !empty($lmCargoCategoryGroupIds) ? array_values($lmCargoCategoryGroupIds) : null;
+                            break;
+                        default:
+                            // Fallback for empty/unknown types - use LM Cargo groups
+                            $categoryGroupIds = !empty($lmCargoCategoryGroupIds) ? array_values($lmCargoCategoryGroupIds) : null;
+                            break;
+                    }
 
                     CarrierArticleMapping::updateOrCreate(
                         [
@@ -591,8 +624,8 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
                             'name' => $mappingName,
                             'port_ids' => [$portId],
                             'port_group_ids' => $wafPortGroupIds,
-                            'category_group_ids' => !empty($categoryGroupIds) ? array_values($categoryGroupIds) : null,
-                            'vehicle_categories' => ['truckhead', 'truck', 'trailer'],
+                            'category_group_ids' => $categoryGroupIds,
+                            'vehicle_categories' => null, // Mutually exclusive with category_group_ids
                             'priority' => 10,
                             'effective_from' => now()->subYear(),
                             'is_active' => true,

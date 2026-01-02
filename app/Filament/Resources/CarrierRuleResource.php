@@ -1952,7 +1952,8 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->preload()
                                             ->helperText('Select one or more vehicle categories. Leave empty for all categories. Note: If Category Group is selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('category_group_ids'))),
+                                            ->disabled(fn ($get) => !empty($get('category_group_ids')))
+                                            ->live(),
 
                                         Forms\Components\Select::make('category_group_ids')
                                             ->label('Category Groups')
@@ -2001,7 +2002,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->helperText('OR use one or more category groups. Note: If Vehicle Categories are selected, this field should be empty.')
                                             ->columnSpan(1)
                                             ->disabled(fn ($get) => !empty($get('vehicle_categories')))
-                                            ->reactive(),
+                                            ->live(),
 
                                         Forms\Components\TagsInput::make('vessel_names')
                                             ->label('Vessel Names')
@@ -2034,25 +2035,86 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->label('Active')
                                             ->default(true)
                                             ->columnSpan(1),
+
+                                        Forms\Components\Section::make('Purchase Tariffs (Base Freight)')
+                                            ->collapsible()
+                                            ->collapsed()
+                                            ->schema([
+                                                Forms\Components\Repeater::make('purchaseTariffs')
+                                                    ->relationship('purchaseTariffs')
+                                                    ->reorderable('sort_order')
+                                                    ->collapsible()
+                                                    ->collapsed()
+                                                    ->schema([
+                                                        Forms\Components\Toggle::make('is_active')
+                                                            ->label('Active')
+                                                            ->default(true)
+                                                            ->columnSpan(1),
+
+                                                        Forms\Components\Select::make('currency')
+                                                            ->label('Currency')
+                                                            ->options([
+                                                                'EUR' => 'EUR',
+                                                                'USD' => 'USD',
+                                                            ])
+                                                            ->default('EUR')
+                                                            ->required()
+                                                            ->columnSpan(1),
+
+                                                        Forms\Components\Select::make('base_freight_unit')
+                                                            ->label('Unit')
+                                                            ->options([
+                                                                'LUMPSUM' => 'LUMPSUM',
+                                                                'LM' => 'LM',
+                                                            ])
+                                                            ->default('LUMPSUM')
+                                                            ->required()
+                                                            ->columnSpan(1),
+
+                                                        Forms\Components\TextInput::make('base_freight_amount')
+                                                            ->label('Base Freight Amount')
+                                                            ->numeric()
+                                                            ->required()
+                                                            ->columnSpan(1),
+
+                                                        Forms\Components\DatePicker::make('effective_from')
+                                                            ->label('Effective From')
+                                                            ->columnSpan(1),
+
+                                                        Forms\Components\DatePicker::make('effective_to')
+                                                            ->label('Effective To')
+                                                            ->columnSpan(1),
+
+                                                        Forms\Components\Select::make('source')
+                                                            ->label('Source')
+                                                            ->options([
+                                                                'excel' => 'Excel',
+                                                                'import' => 'Import',
+                                                                'manual' => 'Manual',
+                                                            ])
+                                                            ->columnSpan(1),
+
+                                                        Forms\Components\Textarea::make('notes')
+                                                            ->label('Notes')
+                                                            ->rows(2)
+                                                            ->columnSpanFull(),
+                                                    ])
+                                                    ->columns(2)
+                                                    ->defaultItems(0),
+                                            ])
+                                            ->columnSpanFull(),
                                     ])
                                     ->label('Freight Mappings')
                                     ->defaultItems(0)
                                     ->itemLabel(function (array $state): ?string {
+                                        // Use the name field directly - no database queries to avoid N+1 and memory issues
                                         if (!empty($state['name'])) {
                                             return $state['name'];
                                         }
                                         
+                                        // Fallback: use article_id if name is not set (should rarely happen)
                                         if (!empty($state['article_id'])) {
-                                            try {
-                                                $article = \App\Models\RobawsArticleCache::find($state['article_id']);
-                                                if ($article) {
-                                                    $shortName = explode(',', $article->article_name ?? '')[0];
-                                                    $shortName = strlen($shortName) > 30 ? substr($shortName, 0, 30) . '...' : $shortName;
-                                                    return $shortName . ' Mapping';
-                                                }
-                                            } catch (\Throwable $e) {
-                                                // Silent fail, fall through to default
-                                            }
+                                            return 'Article #' . $state['article_id'] . ' Mapping';
                                         }
                                         
                                         return 'New Freight Mapping';
