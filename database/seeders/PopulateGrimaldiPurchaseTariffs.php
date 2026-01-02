@@ -19,7 +19,7 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
      * Effective date: 2026-01-01
      */
     private array $pdfData = [
-        'ABJ' => ['CAR' => 580, 'SMALL_VAN' => 710, 'BIG_VAN' => 1260, 'LM' => 450], // Abidjan (ARIDJAN in PDF)
+        'ABJ' => ['CAR' => 560, 'SMALL_VAN' => 710, 'BIG_VAN' => 1260, 'LM' => 450], // Abidjan (ARIDJAN in PDF)
         'FNA' => ['CAR' => 875, 'SMALL_VAN' => 985, 'BIG_VAN' => 1740, 'LM' => 765], // Freetown
         'BJL' => ['CAR' => 675, 'SMALL_VAN' => 1003, 'BIG_VAN' => 2029, 'LM' => 880], // Banjul (SABJUL in PDF)
         'LOS' => ['CAR' => 651, 'SMALL_VAN' => 761, 'BIG_VAN' => 1220, 'LM' => 540], // Lagos
