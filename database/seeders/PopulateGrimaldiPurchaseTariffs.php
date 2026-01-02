@@ -59,6 +59,15 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
         'LM' => 'LM Cargo',
     ];
 
+    /**
+     * Port code to article code pattern mapping
+     * Some ports use different codes in article names (e.g., LFW -> LOM, BJL -> BAN)
+     */
+    private array $portCodeToArticlePattern = [
+        'LFW' => 'LOM', // Lome uses LOM in article codes
+        'BJL' => 'BAN', // Banjul uses BAN in article codes
+    ];
+
     private const EFFECTIVE_DATE = '2026-01-01';
 
     /**
@@ -255,24 +264,54 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
             return $article;
         }
 
+        // Try with alternative article code pattern (e.g., LFW -> LOM, BJL -> BAN)
+        if (isset($this->portCodeToArticlePattern[$port->code])) {
+            $altPattern = $this->portCodeToArticlePattern[$port->code];
+            $altExpectedCode = 'GANR' . $altPattern . $suffix;
+            
+            $article = RobawsArticleCache::where('article_code', $altExpectedCode)
+                ->where('is_active', true) // Allow non-parent articles too
+                ->where(function ($q) {
+                    $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%grimaldi%'])
+                      ->orWhereNull('shipping_line');
+                })
+                ->first();
+
+            if ($article) {
+                return $article;
+            }
+        }
+
         // Fallback: search by description (destination name + category keywords)
         $commodityType = $this->categoryToCommodityType[$category];
         $portName = strtolower($port->name);
         $portCode = strtolower($port->code);
+        
+        // Also try alternative article code pattern in fallback
+        $altPattern = isset($this->portCodeToArticlePattern[$port->code]) 
+            ? strtolower($this->portCodeToArticlePattern[$port->code]) 
+            : null;
 
-        $article = RobawsArticleCache::where('is_parent_article', true)
-            ->where('is_active', true)
+        $article = RobawsArticleCache::where('is_active', true) // Allow non-parent articles
             ->where(function ($q) {
                 $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%grimaldi%'])
                   ->orWhereNull('shipping_line');
             })
             ->where('commodity_type', $commodityType)
-            ->where(function ($q) use ($portName, $portCode) {
+            ->where(function ($q) use ($portName, $portCode, $altPattern, $suffix) {
                 $q->whereRaw('LOWER(pod) LIKE ?', ['%' . $portName . '%'])
                   ->orWhereRaw('LOWER(pod) LIKE ?', ['%' . $portCode . '%'])
                   ->orWhereRaw('LOWER(pod_code) LIKE ?', ['%' . $portCode . '%'])
                   ->orWhereRaw('LOWER(article_name) LIKE ?', ['%' . $portName . '%'])
-                  ->orWhereRaw('LOWER(article_name) LIKE ?', ['%' . $portCode . '%']);
+                  ->orWhereRaw('LOWER(article_name) LIKE ?', ['%' . $portCode . '%'])
+                  ->orWhereRaw('LOWER(article_code) LIKE ?', ['%ganr' . $portCode . '%'])
+                  ->orWhereRaw('LOWER(article_code) LIKE ?', ['%ganr' . $portCode . strtolower($suffix) . '%']);
+                
+                // Also search by alternative pattern
+                if ($altPattern) {
+                    $q->orWhereRaw('LOWER(article_code) LIKE ?', ['%ganr' . $altPattern . '%'])
+                      ->orWhereRaw('LOWER(article_code) LIKE ?', ['%ganr' . $altPattern . strtolower($suffix) . '%']);
+                }
             })
             ->first();
 
