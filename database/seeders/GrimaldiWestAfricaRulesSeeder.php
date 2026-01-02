@@ -471,7 +471,17 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
         foreach ($articleMappings as $eventCode => $articleName) {
             // Try to find article by name (case-insensitive, partial match)
             $article = RobawsArticleCache::whereRaw('LOWER(article_name) LIKE ?', ['%' . strtolower($articleName) . '%'])
-                ->whereRaw('LOWER(shipping_line) LIKE ?', ['%grimaldi%'])
+                ->where('article_code', 'LIKE', 'GANR%') // Only Grimaldi article codes
+                ->whereRaw('LOWER(article_name) NOT LIKE ?', ['%nmt%']) // Exclude NMT articles
+                ->where(function ($q) {
+                    $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%grimaldi%'])
+                      ->orWhere(function ($q2) {
+                          // Allow NULL shipping_line only if article code starts with GANR
+                          $q2->whereNull('shipping_line')
+                             ->where('article_code', 'LIKE', 'GANR%')
+                             ->whereRaw('LOWER(article_name) NOT LIKE ?', ['%nmt%']);
+                      });
+                })
                 ->first();
 
             if (!$article) {
