@@ -3,6 +3,7 @@
 namespace App\Services\Robaws;
 
 use App\Models\Port;
+use App\Services\Ports\PortResolutionService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -14,6 +15,9 @@ use Illuminate\Support\Str;
  */
 class ArticleNameParser
 {
+    public function __construct(
+        private PortResolutionService $portResolver
+    ) {}
     /**
      * Extract Port of Loading (POL) information from article name
      * 
@@ -44,8 +48,13 @@ class ArticleNameParser
             return null;
         }
         
-        // Lookup port details in database
-        $port = Port::where('code', $polCode)->first();
+        // Lookup port details using PortResolutionService
+        $port = $this->portResolver->resolveOne($polCode);
+        
+        // Fallback to old method if resolver fails (backward compatibility)
+        if (!$port) {
+            $port = Port::where('code', $polCode)->first();
+        }
         
         if (!$port) {
             return [
@@ -112,10 +121,21 @@ class ArticleNameParser
             return null;
         }
         
-        // Lookup port details in database
-        $port = Port::where('name', 'LIKE', '%' . $podName . '%')->first();
+        // Lookup port details using PortResolutionService
+        $port = $this->portResolver->resolveOne($podName);
+        
+        // Fallback to old method if resolver fails (backward compatibility)
+        if (!$port) {
+            $port = Port::where('name', 'LIKE', '%' . $podName . '%')->first();
+        }
         
         if (!$port) {
+            // Log for debugging so we can improve aliases
+            Log::debug('POD port not resolved', [
+                'extracted_name' => $podName,
+                'article_name' => $articleName ?? 'N/A'
+            ]);
+            
             // Return extracted name even if port not found in database
             return [
                 'name' => $podName,

@@ -762,10 +762,13 @@ class SimplePdfExtractionStrategy implements ExtractionStrategy
         }
 
         // POD (Port of Discharge) patterns
+        // NOTE: If extracted POD contains combined ports (e.g., "CAS/TFN", "Bata/Malabo"),
+        // they should be resolved using PortResolutionService->resolveManyWithReport() when processing.
+        // This extraction service extracts raw text; resolution happens in downstream services.
         $podPatterns = [
-            '/POD[:\s]*([A-Za-z\s,]+)/i',
-            '/Port\s+of\s+Discharge[:\s]*([A-Za-z\s,]+)/i',
-            '/Discharge\s+Port[:\s]*([A-Za-z\s,]+)/i'
+            '/POD[:\s]*([A-Za-z\s,\/]+)/i',  // Added \/ to capture combined ports like CAS/TFN
+            '/Port\s+of\s+Discharge[:\s]*([A-Za-z\s,\/]+)/i',
+            '/Discharge\s+Port[:\s]*([A-Za-z\s,\/]+)/i'
         ];
 
         foreach ($podPatterns as $pattern) {

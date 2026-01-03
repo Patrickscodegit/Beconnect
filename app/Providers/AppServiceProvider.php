@@ -103,6 +103,9 @@ class AppServiceProvider extends ServiceProvider
         \App\Models\QuotationRequest::observe(\App\Observers\QuotationRequestObserver::class);
         \App\Models\QuotationRequestArticle::observe(\App\Observers\QuotationRequestArticleObserver::class);
         
+        // Port System Observers
+        \App\Models\Port::observe(\App\Observers\PortObserver::class);
+        
         // Configure Filament to display timestamps in Belgium timezone
         $this->configureFilamentTimezone();
     }

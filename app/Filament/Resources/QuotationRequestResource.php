@@ -229,41 +229,37 @@ class QuotationRequestResource extends Resource
                             })
                             ->searchable()
                             ->allowHtml()
-                            ->createOptionUsing(fn (string $value): string => $value)
                             ->getSearchResultsUsing(function (string $search, Forms\Get $get) {
                                 $serviceType = $get('service_type');
                                 
                                 if (in_array($serviceType, ['AIRFREIGHT_EXPORT', 'AIRFREIGHT_IMPORT'])) {
                                     $airports = config('airports', []);
-                                    $results = collect($airports)
+                                    return collect($airports)
                                         ->filter(fn($airport) => 
                                             str_contains(strtolower($airport['name']), strtolower($search)) ||
                                             str_contains(strtolower($airport['code']), strtolower($search))
                                         )
-                                        ->mapWithKeys(fn($airport) => [$airport['name'] => $airport['full_name']]);
-                                    
-                                    // Add custom option at the end for airports
-                                    if (!empty($search)) {
-                                        $results->put($search, "Custom airport: {$search}");
-                                    }
+                                        ->mapWithKeys(fn($airport) => [$airport['name'] => $airport['full_name']])
+                                        ->all();
                                 } else {
-                                    $results = \App\Models\Port::europeanOrigins()
-                                        ->where(function($q) use ($search) {
-                                            $q->where('name', 'like', "%{$search}%")
-                                              ->orWhere('code', 'like', "%{$search}%");
+                                    // Search ports including aliases
+                                    $searchLower = strtolower($search);
+                                    $ports = \App\Models\Port::europeanOrigins()
+                                        ->where(function($q) use ($searchLower) {
+                                            $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                                              ->orWhereRaw('LOWER(code) LIKE ?', ["%{$searchLower}%"]);
+                                        })
+                                        ->orWhereHas('aliases', function($q) use ($searchLower) {
+                                            $q->where('alias_normalized', 'LIKE', "%{$searchLower}%")
+                                              ->where('is_active', true);
                                         })
                                         ->get()
-                                        ->mapWithKeys(fn($port) => [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country]);
+                                        ->unique('id')
+                                        ->mapWithKeys(fn($port) => [$port->name => $port->formatFull()]);
                                     
-                                    // Add custom option at the end for seaports
-                                    if (!empty($search)) {
-                                        $results->put($search, "Custom seaport: {$search}");
-                                    }
+                                    return $ports->all();
                                 }
-                                
-                                return $results->all();
                             })
-                            ->createOptionUsing(fn (string $value): string => $value)
                             ->required()
                             ->live()
                             ->reactive()
@@ -300,41 +296,37 @@ class QuotationRequestResource extends Resource
                             })
                             ->searchable()
                             ->allowHtml()
-                            ->createOptionUsing(fn (string $value): string => $value)
                             ->getSearchResultsUsing(function (string $search, Forms\Get $get) {
                                 $serviceType = $get('service_type');
                                 
                                 if (in_array($serviceType, ['AIRFREIGHT_EXPORT', 'AIRFREIGHT_IMPORT'])) {
                                     $airports = config('airports', []);
-                                    $results = collect($airports)
+                                    return collect($airports)
                                         ->filter(fn($airport) => 
                                             str_contains(strtolower($airport['name']), strtolower($search)) ||
                                             str_contains(strtolower($airport['code']), strtolower($search))
                                         )
-                                        ->mapWithKeys(fn($airport) => [$airport['name'] => $airport['full_name']]);
-                                    
-                                    // Add custom option at the end for airports
-                                    if (!empty($search)) {
-                                        $results->put($search, "Custom airport: {$search}");
-                                    }
+                                        ->mapWithKeys(fn($airport) => [$airport['name'] => $airport['full_name']])
+                                        ->all();
                                 } else {
-                                    $results = \App\Models\Port::withActivePodSchedules()
-                                        ->where(function($q) use ($search) {
-                                            $q->where('name', 'like', "%{$search}%")
-                                              ->orWhere('code', 'like', "%{$search}%");
+                                    // Search ports including aliases
+                                    $searchLower = strtolower($search);
+                                    $ports = \App\Models\Port::withActivePodSchedules()
+                                        ->where(function($q) use ($searchLower) {
+                                            $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                                              ->orWhereRaw('LOWER(code) LIKE ?', ["%{$searchLower}%"]);
+                                        })
+                                        ->orWhereHas('aliases', function($q) use ($searchLower) {
+                                            $q->where('alias_normalized', 'LIKE', "%{$searchLower}%")
+                                              ->where('is_active', true);
                                         })
                                         ->get()
-                                        ->mapWithKeys(fn($port) => [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country]);
+                                        ->unique('id')
+                                        ->mapWithKeys(fn($port) => [$port->name => $port->formatFull()]);
                                     
-                                    // Add custom option at the end for seaports
-                                    if (!empty($search)) {
-                                        $results->put($search, "Custom seaport: {$search}");
-                                    }
+                                    return $ports->all();
                                 }
-                                
-                                return $results->all();
                             })
-                            ->createOptionUsing(fn (string $value): string => $value)
                             ->required()
                             ->live()
                             ->reactive()
@@ -342,9 +334,9 @@ class QuotationRequestResource extends Resource
                             ->helperText(function (Forms\Get $get) {
                                 $serviceType = $get('service_type');
                                 if (in_array($serviceType, ['AIRFREIGHT_EXPORT', 'AIRFREIGHT_IMPORT'])) {
-                                    return 'Select airport or type custom name (press Enter)';
+                                    return 'Select airport from list';
                                 }
-                                return 'Select seaport or type custom name (press Enter)';
+                                return 'Select seaport from list (search includes aliases)';
                             })
                             ->columnSpan(1),
                             

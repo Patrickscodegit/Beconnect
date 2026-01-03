@@ -2,6 +2,11 @@
 
 namespace App\Services;
 
+/**
+ * @deprecated Use App\Services\Ports\PortResolutionService instead
+ * This class is kept for backward compatibility during migration.
+ * All new code should use PortResolutionService for port resolution.
+ */
 class PortCodeMapper
 {
     /**
@@ -100,6 +105,7 @@ class PortCodeMapper
     /**
      * Normalize port string to 3-letter Robaws code
      *
+     * @deprecated Use App\Services\Ports\PortResolutionService::normalizeCode() instead
      * @param string|null $portString
      * @return string|null 3-letter port code
      */

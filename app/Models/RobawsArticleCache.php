@@ -1067,4 +1067,31 @@ class RobawsArticleCache extends Model
         // Return null if category not found (don't default to Car)
         return $vehicleMapping[$category] ?? null;
     }
+
+    /**
+     * Get resolved POD port using PortResolutionService
+     * If pod_code exists -> resolveOne(pod_code)
+     * Else if pod string exists -> resolveOne(pod)
+     * 
+     * @return Port|null
+     */
+    public function getResolvedPodPort(): ?Port
+    {
+        $resolver = app(\App\Services\Ports\PortResolutionService::class);
+        
+        // Try pod_code first
+        if (!empty($this->pod_code)) {
+            $port = $resolver->resolveOne($this->pod_code);
+            if ($port) {
+                return $port;
+            }
+        }
+        
+        // Fallback to pod string
+        if (!empty($this->pod)) {
+            return $resolver->resolveOne($this->pod);
+        }
+        
+        return null;
+    }
 }

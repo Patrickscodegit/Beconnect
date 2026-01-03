@@ -21,7 +21,8 @@ class RobawsArticleProvider
         private RobawsApiClient $robawsClient,
         private ArticleNameParser $parser,
         private ArticleSyncEnhancementService $enhancementService,
-        private RobawsFieldMapper $fieldMapper
+        private RobawsFieldMapper $fieldMapper,
+        private \App\Services\Ports\PortResolutionService $portResolver
     ) {}
 
     /**
@@ -1809,7 +1810,11 @@ class RobawsArticleProvider
             }
             // Get Port model for direction detection
             if ($polData['code']) {
-                $polPort = \App\Models\Port::where('code', $polData['code'])->first();
+                $polPort = $this->portResolver->resolveOne($polData['code']);
+                // Fallback to old method if resolver fails
+                if (!$polPort) {
+                    $polPort = \App\Models\Port::where('code', $polData['code'])->first();
+                }
             }
         }
         
@@ -1819,7 +1824,11 @@ class RobawsArticleProvider
             $metadata['pod_code'] = $this->normalizePortCode($podData['code'] ?? $podData['formatted'] ?? null);
             // Get Port model for direction detection
             if ($podData['name']) {
-                $podPort = \App\Models\Port::where('name', 'LIKE', '%' . $podData['name'] . '%')->first();
+                $podPort = $this->portResolver->resolveOne($podData['name']);
+                // Fallback to old method if resolver fails
+                if (!$podPort) {
+                    $podPort = \App\Models\Port::where('name', 'LIKE', '%' . $podData['name'] . '%')->first();
+                }
             }
         }
         
@@ -1874,7 +1883,11 @@ class RobawsArticleProvider
             }
             // Get Port model for direction detection
             if ($polData['code']) {
-                $polPort = \App\Models\Port::where('code', $polData['code'])->first();
+                $polPort = $this->portResolver->resolveOne($polData['code']);
+                // Fallback to old method if resolver fails
+                if (!$polPort) {
+                    $polPort = \App\Models\Port::where('code', $polData['code'])->first();
+                }
             }
         } else {
             // Fallback to old extraction method if no parentheses code found
@@ -1889,7 +1902,11 @@ class RobawsArticleProvider
             $metadata['pod_code'] = $this->normalizePortCode($podData['code'] ?? $podData['formatted'] ?? null);
             // Get Port model for direction detection
             if ($podData['name']) {
-                $podPort = \App\Models\Port::where('name', 'LIKE', '%' . $podData['name'] . '%')->first();
+                $podPort = $this->portResolver->resolveOne($podData['name']);
+                // Fallback to old method if resolver fails
+                if (!$podPort) {
+                    $podPort = \App\Models\Port::where('name', 'LIKE', '%' . $podData['name'] . '%')->first();
+                }
             }
         }
         
@@ -2218,7 +2235,11 @@ class RobawsArticleProvider
     }
 
     /**
-     * Normalize a port code value to the raw UN/LOCODE (max 5 chars).
+     * Normalize port code using PortResolutionService
+     * Falls back to old behavior if resolution fails (backward compatibility)
+     * 
+     * @param string|null $raw
+     * @return string|null
      */
     private function normalizePortCode(?string $raw): ?string
     {
@@ -2226,6 +2247,21 @@ class RobawsArticleProvider
             return null;
         }
 
+        // Try PortResolutionService first
+        try {
+            $code = $this->portResolver->normalizeCode($raw);
+            if ($code) {
+                return $code;
+            }
+        } catch (\Exception $e) {
+            // Log for debugging but continue with fallback
+            \Log::debug('PortResolutionService failed for port code normalization', [
+                'input' => $raw,
+                'error' => $e->getMessage()
+            ]);
+        }
+
+        // Fallback to old behavior (backward compatibility)
         $clean = trim($raw);
 
         // If the string contains parentheses (e.g. "Antwerp (ANR), Belgium"),

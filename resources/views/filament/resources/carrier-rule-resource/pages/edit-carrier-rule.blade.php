@@ -51,61 +51,189 @@
     <x-filament-panels::page.unsaved-data-changes-alert />
 
     @if($this->focusMappingId)
-        @script
+        <div 
+            x-data='{ 
+                mappingId: {{ $this->focusMappingId ?? 'null' }},
+                init() {
+                    // Try clicking the tab
+                    // Try multiple times with increasing delays to catch tabs after Livewire renders
+                    [100, 300, 500, 1000, 2000].forEach(delay => {
+                        setTimeout(() => this.switchToTab(), delay);
+                    });
+                },
+                switchToTab() {
+                    // Try multiple selectors for Filament tabs
+                    const selectors = [
+                        ".fi-tabs button",
+                        "[role=\"tab\"]",
+                        "button[type=\"button\"]",
+                        ".fi-tabs [role=\"tablist\"] button",
+                        "button.fi-tabs-tab",
+                        "[data-tab]"
+                    ];
+                    
+                    let tabs = [];
+                    for (const selector of selectors) {
+                        tabs = document.querySelectorAll(selector);
+                        if (tabs.length > 0) break;
+                    }
+                    
+                    // Find Freight Mapping tab
+                    let targetTab = null;
+                    for (const tab of tabs) {
+                        const text = tab.textContent?.trim() || "";
+                        const ariaLabel = tab.getAttribute("aria-label") || "";
+                        const dataTab = tab.getAttribute("data-tab") || "";
+                        
+                        if (text.includes("Freight Mapping") || 
+                            ariaLabel.includes("Freight Mapping") ||
+                            dataTab === "article_mappings") {
+                            targetTab = tab;
+                            break;
+                        }
+                    }
+                    
+                    if (targetTab) {
+                        // Try multiple click methods
+                        targetTab.click();
+                        // Also try dispatching a click event
+                        targetTab.dispatchEvent(new MouseEvent("click", {
+                            bubbles: true,
+                            cancelable: true,
+                            view: window
+                        }));
+                        // Also try mousedown + mouseup
+                        targetTab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+                        targetTab.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+                        
+                        setTimeout(() => this.focusMapping(), 800);
+                        return true;
+                    }
+                    
+                    return false;
+                },
+                focusMapping() {
+                    const element = document.querySelector("[data-mapping-id=\"" + this.mappingId + "\"]");
+                    if (element) {
+                        element.scrollIntoView({ behavior: "smooth", block: "center" });
+                        element.classList.add("ring-2", "ring-primary-500", "rounded-md");
+                        setTimeout(() => element.classList.remove("ring-2", "ring-primary-500", "rounded-md"), 3000);
+                    }
+                }
+            }'
+            style="display: none;"
+        ></div>
+    @endif
+    
+    @if($this->focusMappingId)
         <script>
-            document.addEventListener('DOMContentLoaded', function() {
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/d7bc2db0-7e0d-4c45-a5aa-d8d699f437b8', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        sessionId: 'debug-session',
-                        runId: 'run1',
-                        hypothesisId: 'A',
-                        location: 'edit-carrier-rule.blade.php:script',
-                        message: 'Auto-focus script started',
-                        data: {mappingId: {{ $this->focusMappingId }} },
-                        timestamp: Date.now()
-                    })
-                }).catch(() => {});
-                // #endregion
-
-                const mappingId = '{{ $this->focusMappingId }}';
+            function switchToFreightMappingTab() {
+                // Find all tab buttons - try multiple selectors
+                const allTabButtons = document.querySelectorAll('.fi-tabs button, [role="tab"], button[type="button"], .fi-tabs [role="tablist"] button');
                 
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/d7bc2db0-7e0d-4c45-a5aa-d8d699f437b8', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        sessionId: 'debug-session',
-                        runId: 'run1',
-                        hypothesisId: 'A',
-                        location: 'edit-carrier-rule.blade.php:script',
-                        message: 'Looking for element',
-                        data: {mappingId: mappingId, selector: '[data-mapping-id="' + mappingId + '"]' },
-                        timestamp: Date.now()
-                    })
-                }).catch(() => {});
-                // #endregion
+                // Find the "Freight Mapping" tab - prioritize data-tab attribute, then exact text match
+                let tabButton = null;
+                for (const btn of allTabButtons) {
+                    // First check for data-tab attribute (most reliable)
+                    const dataTab = btn.getAttribute('data-tab');
+                    if (dataTab === 'article_mappings') {
+                        tabButton = btn;
+                        break;
+                    }
+                }
+                
+                // If not found by data-tab, try exact text match (exclude "Sort Freight Mappings")
+                if (!tabButton) {
+                    for (const btn of allTabButtons) {
+                        const text = btn.textContent?.trim() || '';
+                        // Match exactly "Freight Mapping" (not "Sort Freight Mappings")
+                        if (text === 'Freight Mapping' || (text.includes('Freight Mapping') && !text.includes('Sort'))) {
+                            // Also check it's actually a tab (has role="tab" or is in .fi-tabs)
+                            const role = btn.getAttribute('role');
+                            const isInTabs = btn.closest('.fi-tabs');
+                            if (role === 'tab' || isInTabs) {
+                                tabButton = btn;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if (tabButton) {
+                    // Try multiple click methods
+                    tabButton.click();
+                    
+                    // Also try dispatching events
+                    tabButton.dispatchEvent(new MouseEvent('click', {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window
+                    }));
+                    
+                    // Try mousedown + mouseup
+                    tabButton.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                    tabButton.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+                    
+                    // If Livewire is available, try setting the tab state directly
+                    if (typeof Livewire !== 'undefined' && typeof $wire !== 'undefined') {
+                        try {
+                            $wire.set('data.carrier_rules_tabs', 'article_mappings');
+                        } catch (e) {
+                            // Silently fail if Livewire is not available
+                        }
+                    }
+                    
+                    return true;
+                }
+                return false;
+            }
+            
+            function initTabSwitch() {
+                
+                // Try immediately
+                if (switchToFreightMappingTab()) {
+                    setTimeout(() => focusMapping(), 500);
+                    return;
+                }
+                
+                // If tabs not found, wait and retry
+                let attempts = 0;
+                const maxAttempts = 10;
+                const checkInterval = setInterval(() => {
+                    attempts++;
+                    if (switchToFreightMappingTab() || attempts >= maxAttempts) {
+                        clearInterval(checkInterval);
+                        if (attempts < maxAttempts) {
+                            setTimeout(() => focusMapping(), 500);
+                        } else {
+                            focusMapping(); // Try to focus anyway
+                        }
+                    }
+                }, 200);
+            }
+            
+            // Try multiple initialization strategies
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initTabSwitch);
+            } else {
+                // DOM already loaded
+                if (typeof Livewire !== 'undefined') {
+                    Livewire.hook('mounted', () => {
+                        setTimeout(initTabSwitch, 100);
+                    });
+                }
+                // Also try immediately
+                setTimeout(initTabSwitch, 100);
+            }
+            
+            // Fallback: try after a delay
+            setTimeout(initTabSwitch, 1000);
+            
+            function focusMapping() {
+                const mappingId = {{ $this->focusMappingId ?? 'null' }};
                 
                 // Find the repeater item with this mapping ID
                 const element = document.querySelector('[data-mapping-id="' + mappingId + '"]');
-                
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/d7bc2db0-7e0d-4c45-a5aa-d8d699f437b8', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        sessionId: 'debug-session',
-                        runId: 'run1',
-                        hypothesisId: 'A',
-                        location: 'edit-carrier-rule.blade.php:script',
-                        message: 'Element found',
-                        data: {elementFound: !!element, elementTag: element ? element.tagName : null },
-                        timestamp: Date.now()
-                    })
-                }).catch(() => {});
-                // #endregion
                 
                 if (element) {
                     // Scroll to element
@@ -116,22 +244,6 @@
                     
                     // Add highlight
                     element.classList.add('ring-2', 'ring-primary-500', 'rounded-md');
-                    
-                    // #region agent log
-                    fetch('http://127.0.0.1:7242/ingest/d7bc2db0-7e0d-4c45-a5aa-d8d699f437b8', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({
-                            sessionId: 'debug-session',
-                            runId: 'run1',
-                            hypothesisId: 'A',
-                            location: 'edit-carrier-rule.blade.php:script',
-                            message: 'Scrolled and highlighted',
-                            data: {},
-                            timestamp: Date.now()
-                        })
-                    }).catch(() => {});
-                    // #endregion
                     
                     // Remove highlight after 3 seconds
                     setTimeout(() => {
@@ -144,43 +256,10 @@
                         const toggle = collapsible.querySelector('[data-collapsible-toggle], .fi-section-header-button');
                         if (toggle && collapsible.classList.contains('collapsed')) {
                             toggle.click();
-                            
-                            // #region agent log
-                            fetch('http://127.0.0.1:7242/ingest/d7bc2db0-7e0d-4c45-a5aa-d8d699f437b8', {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({
-                                    sessionId: 'debug-session',
-                                    runId: 'run1',
-                                    hypothesisId: 'A',
-                                    location: 'edit-carrier-rule.blade.php:script',
-                                    message: 'Expanded collapsed section',
-                                    data: {},
-                                    timestamp: Date.now()
-                                })
-                            }).catch(() => {});
-                            // #endregion
                         }
                     }
-                } else {
-                    // #region agent log
-                    fetch('http://127.0.0.1:7242/ingest/d7bc2db0-7e0d-4c45-a5aa-d8d699f437b8', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({
-                            sessionId: 'debug-session',
-                            runId: 'run1',
-                            hypothesisId: 'A',
-                            location: 'edit-carrier-rule.blade.php:script',
-                            message: 'Element not found',
-                            data: {mappingId: mappingId },
-                            timestamp: Date.now()
-                        })
-                    }).catch(() => {});
-                    // #endregion
                 }
-            });
+            }
         </script>
-        @endscript
     @endif
 </x-filament-panels::page>

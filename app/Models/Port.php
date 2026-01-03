@@ -17,6 +17,11 @@ class Port extends Model
         'region',
         'coordinates',
         'is_active',
+        'unlocode',
+        'country_code',
+        'port_category',
+        'iata_code',
+        'icao_code',
     ];
 
     protected $casts = [
@@ -124,5 +129,72 @@ class Port extends Model
     public function formatFull(): string
     {
         return $this->name . ' (' . $this->code . '), ' . $this->country;
+    }
+
+    /**
+     * Format port in short format: "City (CODE)"
+     * Example: "Antwerp (ANR)"
+     * 
+     * @return string
+     */
+    public function formatShort(): string
+    {
+        return $this->name . ' (' . $this->code . ')';
+    }
+
+    /**
+     * Find port by code (case-insensitive)
+     * 
+     * @param string $code
+     * @return Port|null
+     */
+    public static function findByCodeInsensitive(string $code): ?Port
+    {
+        return static::whereRaw('UPPER(code) = ?', [strtoupper(trim($code))])->first();
+    }
+
+    /**
+     * Find port by name (case-insensitive)
+     * 
+     * @param string $name
+     * @return Port|null
+     */
+    public static function findByNameInsensitive(string $name): ?Port
+    {
+        return static::whereRaw('UPPER(name) = ?', [strtoupper(trim($name))])->first();
+    }
+
+    /**
+     * Relationship to PortAlias
+     */
+    public function aliases(): HasMany
+    {
+        return $this->hasMany(PortAlias::class);
+    }
+
+    /**
+     * Check if this port is referenced by schedules, mappings, or articles.
+     * Uses EXISTS queries for performance.
+     */
+    public function isReferenced(): bool
+    {
+        return \App\Models\ShippingSchedule::where('pol_id', $this->id)->exists()
+            || \App\Models\ShippingSchedule::where('pod_id', $this->id)->exists()
+            || \App\Models\CarrierArticleMapping::whereJsonContains('port_ids', $this->id)->exists()
+            || \App\Models\RobawsArticleCache::where('pod_code', $this->code)->exists();
+    }
+
+    /**
+     * Get summary of which sources reference this port.
+     * Returns array of booleans per source for UI messaging.
+     */
+    public function referenceSummary(): array
+    {
+        return [
+            'schedules' => \App\Models\ShippingSchedule::where('pol_id', $this->id)
+                ->orWhere('pod_id', $this->id)->exists(),
+            'mappings' => \App\Models\CarrierArticleMapping::whereJsonContains('port_ids', $this->id)->exists(),
+            'robaws_cache' => \App\Models\RobawsArticleCache::where('pod_code', $this->code)->exists(),
+        ];
     }
 }

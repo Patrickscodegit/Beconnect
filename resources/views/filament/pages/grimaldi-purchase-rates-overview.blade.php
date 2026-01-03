@@ -403,7 +403,17 @@
                                             <td class="px-3 py-2 text-gray-900 dark:text-gray-100">
                                                 @if($article)
                                                     <div>
-                                                        <div class="font-medium">{{ $article['article_name'] ?? '—' }}</div>
+                                                        @if($articleId)
+                                                            <a 
+                                                                href="{{ \App\Filament\Resources\RobawsArticleResource::getUrl('view', ['record' => $articleId]) }}"
+                                                                class="font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 hover:underline"
+                                                                target="_blank"
+                                                            >
+                                                                {{ $article['article_name'] ?? '—' }}
+                                                            </a>
+                                                        @else
+                                                            <div class="font-medium">{{ $article['article_name'] ?? '—' }}</div>
+                                                        @endif
                                                         <div class="text-xs text-gray-500">{{ $article['article_code'] ?? '' }}</div>
                                                     </div>
                                                 @else

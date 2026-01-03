@@ -657,6 +657,9 @@ class RobawsMapper
         }
 
         // Normalize port names
+        // NOTE: If podValue or polValue contains combined ports (e.g., "CAS/TFN"),
+        // they should be resolved using PortResolutionService->resolveManyWithReport().
+        // This will split and resolve each port separately, never creating combined ports.
         $polValue = $this->normalizePortNames($polValue);
         $podValue = $this->normalizePortNames($podValue);
 

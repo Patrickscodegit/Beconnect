@@ -233,9 +233,28 @@ class CarrierRuleResource extends Resource
                                                     });
                                             })
                                             ->searchable()
+                                            ->getSearchResultsUsing(function (string $search) {
+                                                $searchLower = strtolower($search);
+                                                $ports = \App\Models\Port::where(function($q) use ($searchLower) {
+                                                    $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                                                      ->orWhereRaw('LOWER(code) LIKE ?', ["%{$searchLower}%"]);
+                                                })
+                                                ->orWhereHas('aliases', function($q) use ($searchLower) {
+                                                    $q->where('alias_normalized', 'LIKE', "%{$searchLower}%")
+                                                      ->where('is_active', true);
+                                                })
+                                                ->orderBy('name')
+                                                ->get()
+                                                ->unique('id')
+                                                ->mapWithKeys(function ($port) {
+                                                    return [$port->id => $port->formatFull()];
+                                                });
+                                                
+                                                return $ports->all();
+                                            })
                                             ->multiple()
                                             ->preload()
-                                            ->helperText('Select one or more ports that belong to this group')
+                                            ->helperText('Select one or more ports that belong to this group. Search includes aliases.')
                                             ->columnSpanFull()
                                             ->disabled(fn ($context) => $context === 'view')
                                             ->dehydrated(true) // Keep in form data for processing
@@ -317,9 +336,28 @@ class CarrierRuleResource extends Resource
                                                     });
                                             })
                                             ->searchable()
+                                            ->getSearchResultsUsing(function (string $search) {
+                                                $searchLower = strtolower($search);
+                                                $ports = \App\Models\Port::where(function($q) use ($searchLower) {
+                                                    $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                                                      ->orWhereRaw('LOWER(code) LIKE ?', ["%{$searchLower}%"]);
+                                                })
+                                                ->orWhereHas('aliases', function($q) use ($searchLower) {
+                                                    $q->where('alias_normalized', 'LIKE', "%{$searchLower}%")
+                                                      ->where('is_active', true);
+                                                })
+                                                ->orderBy('name')
+                                                ->get()
+                                                ->unique('id')
+                                                ->mapWithKeys(function ($port) {
+                                                    return [$port->id => $port->formatFull()];
+                                                });
+                                                
+                                                return $ports->all();
+                                            })
                                             ->multiple()
                                             ->preload()
-                                            ->helperText('Select one or more ports. Leave empty for global rule.')
+                                            ->helperText('Select one or more ports. Leave empty for global rule. Search includes aliases.')
                                             ->columnSpan(1),
 
                                         Forms\Components\Select::make('port_group_ids')
@@ -782,9 +820,28 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                                     });
                                             })
                                             ->searchable()
+                                            ->getSearchResultsUsing(function (string $search) {
+                                                $searchLower = strtolower($search);
+                                                $ports = \App\Models\Port::where(function($q) use ($searchLower) {
+                                                    $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                                                      ->orWhereRaw('LOWER(code) LIKE ?', ["%{$searchLower}%"]);
+                                                })
+                                                ->orWhereHas('aliases', function($q) use ($searchLower) {
+                                                    $q->where('alias_normalized', 'LIKE', "%{$searchLower}%")
+                                                      ->where('is_active', true);
+                                                })
+                                                ->orderBy('name')
+                                                ->get()
+                                                ->unique('id')
+                                                ->mapWithKeys(function ($port) {
+                                                    return [$port->id => $port->formatFull()];
+                                                });
+                                                
+                                                return $ports->all();
+                                            })
                                             ->multiple()
                                             ->preload()
-                                            ->helperText('Select one or more ports. Leave empty for global rule.')
+                                            ->helperText('Select one or more ports. Leave empty for global rule. Search includes aliases.')
                                             ->columnSpan(1),
 
                                         Forms\Components\Select::make('port_group_ids')
@@ -1061,9 +1118,28 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                                     });
                                             })
                                             ->searchable()
+                                            ->getSearchResultsUsing(function (string $search) {
+                                                $searchLower = strtolower($search);
+                                                $ports = \App\Models\Port::where(function($q) use ($searchLower) {
+                                                    $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                                                      ->orWhereRaw('LOWER(code) LIKE ?', ["%{$searchLower}%"]);
+                                                })
+                                                ->orWhereHas('aliases', function($q) use ($searchLower) {
+                                                    $q->where('alias_normalized', 'LIKE', "%{$searchLower}%")
+                                                      ->where('is_active', true);
+                                                })
+                                                ->orderBy('name')
+                                                ->get()
+                                                ->unique('id')
+                                                ->mapWithKeys(function ($port) {
+                                                    return [$port->id => $port->formatFull()];
+                                                });
+                                                
+                                                return $ports->all();
+                                            })
                                             ->multiple()
                                             ->preload()
-                                            ->helperText('Select one or more ports. Leave empty for global rule.')
+                                            ->helperText('Select one or more ports. Leave empty for global rule. Search includes aliases.')
                                             ->columnSpan(1),
 
                                         Forms\Components\Select::make('port_group_ids')
@@ -1446,9 +1522,28 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                                     });
                                             })
                                             ->searchable()
+                                            ->getSearchResultsUsing(function (string $search) {
+                                                $searchLower = strtolower($search);
+                                                $ports = \App\Models\Port::where(function($q) use ($searchLower) {
+                                                    $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                                                      ->orWhereRaw('LOWER(code) LIKE ?', ["%{$searchLower}%"]);
+                                                })
+                                                ->orWhereHas('aliases', function($q) use ($searchLower) {
+                                                    $q->where('alias_normalized', 'LIKE', "%{$searchLower}%")
+                                                      ->where('is_active', true);
+                                                })
+                                                ->orderBy('name')
+                                                ->get()
+                                                ->unique('id')
+                                                ->mapWithKeys(function ($port) {
+                                                    return [$port->id => $port->formatFull()];
+                                                });
+                                                
+                                                return $ports->all();
+                                            })
                                             ->multiple()
                                             ->preload()
-                                            ->helperText('Select one or more ports. Leave empty for global rule.')
+                                            ->helperText('Select one or more ports. Leave empty for global rule. Search includes aliases.')
                                             ->columnSpan(1),
 
                                         Forms\Components\Select::make('port_group_ids')
@@ -1756,7 +1851,18 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                     ->columnSpanFull(),
 
                                 Forms\Components\Repeater::make('articleMappings')
-                                    ->relationship('articleMappings')
+                                    ->relationship('articleMappings', modifyQueryUsing: function ($query) {
+                                        $mappingId = request()->query('mapping_id');
+                                        
+                                        if ($mappingId) {
+                                            // Only load the specific mapping when deep linking
+                                            return $query->where('id', $mappingId);
+                                        } else {
+                                            // Load only first 20 mappings to keep memory usage low
+                                            return $query->orderBy('sort_order', 'asc')
+                                                ->limit(20);
+                                        }
+                                    })
                                     ->reorderable('sort_order')
                                     ->collapsible()
                                     ->collapsed()
@@ -1794,7 +1900,6 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                                     ->where('is_active', true);
                                             })
                                             ->searchable()
-                                            ->preload()
                                             ->required()
                                             ->reactive()
                                             ->afterStateUpdated(function (Forms\Set $set, $state, Forms\Get $get) {
@@ -1894,17 +1999,42 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
 
                                         Forms\Components\Select::make('port_ids')
                                             ->label('Ports (POD)')
-                                            ->options(function () {
-                                                return \App\Models\Port::orderBy('name')
+                                            ->searchable()
+                                            ->getSearchResultsUsing(function (string $search) {
+                                                $searchLower = strtolower($search);
+                                                $ports = \App\Models\Port::where(function($q) use ($searchLower) {
+                                                    $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                                                      ->orWhereRaw('LOWER(code) LIKE ?', ["%{$searchLower}%"]);
+                                                })
+                                                ->orWhereHas('aliases', function($q) use ($searchLower) {
+                                                    $q->where('alias_normalized', 'LIKE', "%{$searchLower}%")
+                                                      ->where('is_active', true);
+                                                })
+                                                ->orderBy('name')
+                                                ->limit(50)
+                                                ->get()
+                                                ->unique('id')
+                                                ->mapWithKeys(function ($port) {
+                                                    return [$port->id => $port->formatFull()];
+                                                });
+                                                
+                                                return $ports->all();
+                                            })
+                                            ->getOptionLabelsUsing(function (array $values): array {
+                                                // Only load ports when displaying already-selected values
+                                                if (empty($values)) {
+                                                    return [];
+                                                }
+                                                
+                                                return \App\Models\Port::whereIn('id', $values)
                                                     ->get()
                                                     ->mapWithKeys(function ($port) {
                                                         return [$port->id => $port->formatFull()];
-                                                    });
+                                                    })
+                                                    ->toArray();
                                             })
-                                            ->searchable()
                                             ->multiple()
-                                            ->preload()
-                                            ->helperText('Select one or more ports. Leave empty for global rule.')
+                                            ->helperText('Select one or more ports. Leave empty for global rule. Search includes aliases.')
                                             ->columnSpan(1),
 
                                         Forms\Components\Select::make('port_group_ids')
@@ -1946,7 +2076,6 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                                 }
                                             })
                                             ->multiple()
-                                            ->preload()
                                             ->helperText('Select port groups (e.g., WAF, MED). If both Ports and Port Groups are set, rule matches if either matches.')
                                             ->columnSpan(1),
 
@@ -1957,7 +2086,6 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             })
                                             ->searchable()
                                             ->multiple()
-                                            ->preload()
                                             ->helperText('Select one or more vehicle categories. Leave empty for all categories. Note: If Category Group is selected, this field should be empty.')
                                             ->columnSpan(1)
                                             ->disabled(fn ($get) => !empty($get('category_group_ids')))
@@ -2006,7 +2134,6 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                                 }
                                             })
                                             ->multiple()
-                                            ->preload()
                                             ->helperText('OR use one or more category groups. Note: If Vehicle Categories are selected, this field should be empty.')
                                             ->columnSpan(1)
                                             ->disabled(fn ($get) => !empty($get('vehicle_categories')))

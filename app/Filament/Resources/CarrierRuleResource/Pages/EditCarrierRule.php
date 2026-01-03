@@ -25,116 +25,69 @@ class EditCarrierRule extends EditRecord
      */
     public function mount(int | string $record): void
     {
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'timestamp' => microtime(true),
-            'location' => 'EditCarrierRule::mount() - entry',
-            'message' => 'Mount started',
-            'data' => [
-                'record_id' => $record,
-                'memory_before' => memory_get_usage(true),
-                'memory_peak_before' => memory_get_peak_usage(true),
-            ],
-            'sessionId' => 'debug-session',
-            'runId' => 'memory-debug',
-            'hypothesisId' => 'C',
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-        
-        // Read mapping_id from query parameter for deep linking
-        $this->focusMappingId = (int) request()->query('mapping_id') ?: null;
-        
         parent::mount($record);
         
-        // #region agent log
-        $mappingsCount = 0;
-        $totalTariffs = 0;
-        if ($this->record && $this->record->relationLoaded('articleMappings')) {
-            $mappingsCount = $this->record->articleMappings->count();
-            foreach ($this->record->articleMappings as $mapping) {
-                if ($mapping->relationLoaded('purchaseTariffs')) {
-                    $totalTariffs += $mapping->purchaseTariffs->count();
-                }
+        // Read mapping_id from query parameter for deep linking
+        // In Filament/Livewire, query params might be available after parent::mount()
+        // Try multiple methods to get query parameter
+        $mappingIdParam = request()->input('mapping_id') 
+            ?? request()->get('mapping_id') 
+            ?? request()->query('mapping_id')
+            ?? (isset($_GET['mapping_id']) ? $_GET['mapping_id'] : null);
+        
+        // If still null, try parsing from request URI (handle URL encoding)
+        if (!$mappingIdParam) {
+            $requestUri = urldecode(request()->getRequestUri());
+            if (preg_match('/[?&]mapping_id=(\d+)/', $requestUri, $matches)) {
+                $mappingIdParam = $matches[1];
             }
         }
         
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'timestamp' => microtime(true),
-            'location' => 'EditCarrierRule::mount() - after parent',
-            'message' => 'Mount completed, record loaded',
-            'data' => [
-                'record_id' => $this->record->id ?? null,
-                'memory_after' => memory_get_usage(true),
-                'memory_peak_after' => memory_get_peak_usage(true),
-                'articleMappings_count' => $mappingsCount,
-                'total_purchaseTariffs' => $totalTariffs,
-                'articleMappings_relation_loaded' => $this->record->relationLoaded('articleMappings'),
-            ],
-            'sessionId' => 'debug-session',
-            'runId' => 'memory-debug',
-            'hypothesisId' => 'C',
-        ]) . "\n", FILE_APPEND);
-        // #endregion
+        $this->focusMappingId = $mappingIdParam ? (int) $mappingIdParam : null;
     }
     
     /**
-     * Override to add eager loading for relationships
+     * Override to add conditional eager loading for relationships
      */
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'timestamp' => microtime(true),
-            'location' => 'EditCarrierRule::mutateFormDataBeforeFill()',
-            'message' => 'Before form data fill',
-            'data' => [
-                'memory_before' => memory_get_usage(true),
-                'memory_peak_before' => memory_get_peak_usage(true),
-            ],
-            'sessionId' => 'debug-session',
-            'runId' => 'memory-debug',
-            'hypothesisId' => 'D',
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-        
-        // Eager load articleMappings with purchaseTariffs to avoid N+1 queries
-        // Limit purchaseTariffs to match the form query limit (1 most recent active)
-        // Prefer tariffs with surcharges to show populated data
         if ($this->record) {
-            $this->record->load([
-                'articleMappings' => function ($query) {
-                    $query->with(['purchaseTariffs' => function ($q) {
-                        $q->active()
-                            ->orderByRaw('CASE WHEN baf_amount IS NOT NULL THEN 0 ELSE 1 END') // Prefer tariffs with surcharges
-                            ->orderBy('effective_from', 'desc')
-                            ->orderBy('sort_order', 'asc')
-                            ->limit(1); // Match the form query limit
-                    }]);
-                }
-            ]);
+            // Get mapping_id from query parameter (try multiple methods)
+            $mappingId = request()->input('mapping_id') 
+                ?? request()->get('mapping_id') 
+                ?? request()->query('mapping_id')
+                ?? (isset($_GET['mapping_id']) ? $_GET['mapping_id'] : null);
             
-            // #region agent log
-            $mappingsCount = $this->record->articleMappings->count();
-            $totalTariffs = 0;
-            foreach ($this->record->articleMappings as $mapping) {
-                $totalTariffs += $mapping->purchaseTariffs->count();
+            // If still null, try parsing from request URI
+            if (!$mappingId) {
+                $requestUri = urldecode(request()->getRequestUri());
+                if (preg_match('/[?&]mapping_id=(\d+)/', $requestUri, $matches)) {
+                    $mappingId = $matches[1];
+                }
             }
             
-            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                'timestamp' => microtime(true),
-                'location' => 'EditCarrierRule::mutateFormDataBeforeFill() - after eager load',
-                'message' => 'Eager loaded relationships',
-                'data' => [
-                    'mappings_count' => $mappingsCount,
-                    'total_tariffs' => $totalTariffs,
-                    'memory_after' => memory_get_usage(true),
-                    'memory_peak_after' => memory_get_peak_usage(true),
-                ],
-                'sessionId' => 'debug-session',
-                'runId' => 'memory-debug',
-                'hypothesisId' => 'D',
-            ]) . "\n", FILE_APPEND);
-            // #endregion
+            if ($mappingId) {
+                // Only load the specific mapping when deep linking
+                $this->record->load([
+                    'articleMappings' => function ($query) use ($mappingId) {
+                        $query->where('id', $mappingId);
+                        // Do NOT load purchaseTariffs
+                    }
+                ]);
+                
+                // Set active tab to "Freight Mapping" (article_mappings) when mapping_id is present
+                // Filament Tabs store active tab in form state with the tabs component name as key
+                $data['carrier_rules_tabs'] = 'article_mappings';
+            } else {
+                // Load only first 20 mappings to keep memory usage low
+                $this->record->load([
+                    'articleMappings' => function ($query) {
+                        $query->orderBy('sort_order', 'asc')
+                            ->limit(20);
+                        // Do NOT load purchaseTariffs
+                    }
+                ]);
+            }
         }
         
         return $data;
@@ -212,47 +165,11 @@ class EditCarrierRule extends EditRecord
      */
     protected function mutateFormDataUsing(array $data): array
     {
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'timestamp' => microtime(true),
-            'location' => 'EditCarrierRule::mutateFormDataUsing() - entry',
-            'message' => 'Form data mutation started',
-            'data' => [
-                'memory_before' => memory_get_usage(true),
-                'memory_peak_before' => memory_get_peak_usage(true),
-                'articleMappings_count' => isset($data['articleMappings']) && is_array($data['articleMappings']) ? count($data['articleMappings']) : 0,
-            ],
-            'sessionId' => 'debug-session',
-            'runId' => 'memory-debug',
-            'hypothesisId' => 'A',
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-        
-        // Track purchaseTariffs loading
-        if (isset($data['articleMappings']) && is_array($data['articleMappings'])) {
-            $totalTariffs = 0;
-            foreach ($data['articleMappings'] as $mapping) {
-                if (isset($mapping['purchaseTariffs']) && is_array($mapping['purchaseTariffs'])) {
-                    $totalTariffs += count($mapping['purchaseTariffs']);
-                }
-            }
-            
-            // #region agent log
-            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                'timestamp' => microtime(true),
-                'location' => 'EditCarrierRule::mutateFormDataUsing() - purchaseTariffs',
-                'message' => 'Purchase tariffs loaded in form data',
-                'data' => [
-                    'mappings_count' => count($data['articleMappings']),
-                    'total_tariffs' => $totalTariffs,
-                    'memory_after' => memory_get_usage(true),
-                    'memory_peak_after' => memory_get_peak_usage(true),
-                ],
-                'sessionId' => 'debug-session',
-                'runId' => 'memory-debug',
-                'hypothesisId' => 'B',
-            ]) . "\n", FILE_APPEND);
-            // #endregion
+        // If mapping_id is present, ensure the Freight Mapping tab is active
+        if ($this->focusMappingId) {
+            // Set active tab to "Freight Mapping" (article_mappings)
+            // Try in mutateFormDataUsing as well (runs after form fill)
+            $data['carrier_rules_tabs'] = 'article_mappings';
         }
         
         // For each category group, populate member_categories from members relationship
@@ -352,18 +269,6 @@ class EditCarrierRule extends EditRecord
 
     protected function beforeSave(): void
     {
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'timestamp' => microtime(true),
-            'location' => 'EditCarrierRule::beforeSave()',
-            'message' => 'beforeSave() called',
-            'data' => [],
-            'sessionId' => 'debug-session',
-            'runId' => 'reorder-debug',
-            'hypothesisId' => 'D',
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-        
         // Get form state data using the helper method (always gets latest state)
         $categoryGroupsData = $this->getFormStateData('categoryGroups');
         $acceptanceRulesData = $this->getFormStateData('acceptanceRules');
@@ -414,27 +319,6 @@ class EditCarrierRule extends EditRecord
             $acceptanceRulesOrder = [];
             $orderedRules = array_values($acceptanceRulesData);
             
-            // #region agent log
-            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                'timestamp' => microtime(true),
-                'location' => 'EditCarrierRule::beforeSave() - acceptanceRules',
-                'message' => 'Capturing acceptance rules order',
-                'data' => [
-                    'count' => count($orderedRules),
-                    'rules' => array_map(function($rule) {
-                        $ruleArray = is_array($rule) ? $rule : (array) $rule;
-                        return [
-                            'id' => $ruleArray['id'] ?? null,
-                            'existing_sort_order' => $ruleArray['sort_order'] ?? null,
-                        ];
-                    }, $orderedRules),
-                ],
-                'sessionId' => 'debug-session',
-                'runId' => 'reorder-debug',
-                'hypothesisId' => 'A',
-            ]) . "\n", FILE_APPEND);
-            // #endregion
-            
             foreach ($orderedRules as $index => $rule) {
                 $ruleArray = is_array($rule) ? $rule : (array) $rule;
                 if (isset($ruleArray['id'])) {
@@ -444,20 +328,6 @@ class EditCarrierRule extends EditRecord
                     ];
                 }
             }
-            
-            // #region agent log
-            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                'timestamp' => microtime(true),
-                'location' => 'EditCarrierRule::beforeSave() - acceptanceRules',
-                'message' => 'Acceptance rules order captured',
-                'data' => [
-                    'order' => $acceptanceRulesOrder,
-                ],
-                'sessionId' => 'debug-session',
-                'runId' => 'reorder-debug',
-                'hypothesisId' => 'A',
-            ]) . "\n", FILE_APPEND);
-            // #endregion
             
             $this->acceptanceRulesOrder = $acceptanceRulesOrder;
         }
