@@ -15,19 +15,426 @@ use Carbon\Carbon;
 class PopulateGrimaldiPurchaseTariffs extends Seeder
 {
     /**
-     * Base freight (Seafreight) amounts from PDF, organized by port code and category
+     * Purchase tariffs from PDF, organized by port code and category
+     * Includes base freight and all surcharges
      * Effective date: 2026-01-01
+     * Source: GRIMALDI BELGIUM - Tariff Sheet West Africa - used vehicles (1/01/26)
      */
     private array $pdfData = [
-        'ABJ' => ['CAR' => 560, 'SMALL_VAN' => 710, 'BIG_VAN' => 1260, 'LM' => 450], // Abidjan (ARIDJAN in PDF)
-        'FNA' => ['CAR' => 875, 'SMALL_VAN' => 985, 'BIG_VAN' => 1740, 'LM' => 765], // Freetown
-        'BJL' => ['CAR' => 675, 'SMALL_VAN' => 1003, 'BIG_VAN' => 2029, 'LM' => 880], // Banjul (SABJUL in PDF)
-        'LOS' => ['CAR' => 651, 'SMALL_VAN' => 761, 'BIG_VAN' => 1220, 'LM' => 540], // Lagos
-        'CAS' => ['CAR' => 655, 'SMALL_VAN' => 765, 'BIG_VAN' => 1570, 'LM' => 605], // Casablanca/Tenerife (using CAS for Casablanca)
-        'CKY' => ['CAR' => 555, 'SMALL_VAN' => 735, 'BIG_VAN' => 1420, 'LM' => 450], // Conakry (CORAFRY in PDF)
-        'LFW' => ['CAR' => 565, 'SMALL_VAN' => 645, 'BIG_VAN' => 1330, 'LM' => 465], // Lome (LUNES in PDF)
-        'COO' => ['CAR' => 605, 'SMALL_VAN' => 685, 'BIG_VAN' => 1470, 'LM' => 465], // Cotonou
-        'DKR' => ['CAR' => 525, 'SMALL_VAN' => 635, 'BIG_VAN' => 1320, 'LM' => 460], // Dakar (from PDF)
+        'ABJ' => [ // Abidjan (ARIDJAN in PDF)
+            'CAR' => [
+                'base_freight' => 560,
+                'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => 12,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 2,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'SMALL_VAN' => [
+                'base_freight' => 710,
+                'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => 10,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 0,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'BIG_VAN' => [
+                'base_freight' => 1260,
+                'baf' => ['amount' => 150, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 58.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => 10,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 20,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'LM' => [
+                'base_freight' => 450,
+                'baf' => ['amount' => 75, 'unit' => 'LM'],
+                'ets' => ['amount' => 17.3, 'unit' => 'LM'],
+                'port_additional' => 50,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 20, 'unit' => 'LM'],
+                'measurement_costs' => 25,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+        ],
+        'FNA' => [ // Freetown
+            'CAR' => [
+                'base_freight' => 875,
+                'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => 40,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 5,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'SMALL_VAN' => [
+                'base_freight' => 985,
+                'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => 40,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 0,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'BIG_VAN' => [
+                'base_freight' => 1740,
+                'baf' => ['amount' => 150, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 58.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => 40,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 20,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'LM' => [
+                'base_freight' => 765,
+                'baf' => ['amount' => 75, 'unit' => 'LM'],
+                'ets' => ['amount' => 17.3, 'unit' => 'LM'],
+                'port_additional' => 80,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 20, 'unit' => 'LM'],
+                'measurement_costs' => 25,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+        ],
+        'BJL' => [ // Banjul (SABJUL in PDF)
+            'CAR' => [
+                'base_freight' => 675,
+                'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => 26,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 5,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'SMALL_VAN' => [
+                'base_freight' => 1003,
+                'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => 26,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 0,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'BIG_VAN' => [
+                'base_freight' => 2029,
+                'baf' => ['amount' => 150, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 58.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => 26,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 20,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'LM' => [
+                'base_freight' => 880,
+                'baf' => ['amount' => 75, 'unit' => 'LM'],
+                'ets' => ['amount' => 17.3, 'unit' => 'LM'],
+                'port_additional' => 26,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 20, 'unit' => 'LM'],
+                'measurement_costs' => 25,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+        ],
+        'LOS' => [ // Lagos
+            'CAR' => [
+                'base_freight' => 651,
+                'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => null, // Not in PDF for Lagos
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 0,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'SMALL_VAN' => [
+                'base_freight' => 761,
+                'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => null, // Not in PDF for Lagos
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 0,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'BIG_VAN' => [
+                'base_freight' => 1220,
+                'baf' => ['amount' => 150, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 58.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => null, // Not in PDF for Lagos
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 20,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'LM' => [
+                'base_freight' => 540,
+                'baf' => ['amount' => 75, 'unit' => 'LM'],
+                'ets' => ['amount' => 17.3, 'unit' => 'LM'],
+                'port_additional' => null, // Not in PDF for Lagos
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 20, 'unit' => 'LM'],
+                'measurement_costs' => 25,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+        ],
+        'CAS' => [ // Casablanca (CABARLANCA/TEHERIFE in PDF)
+            'CAR' => [
+                'base_freight' => 655,
+                'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => null, // Not in PDF for Casablanca
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 0,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'SMALL_VAN' => [
+                'base_freight' => 765,
+                'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => null, // Not in PDF for Casablanca
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 0,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'BIG_VAN' => [
+                'base_freight' => 1570,
+                'baf' => ['amount' => 150, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 58.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => null, // Not in PDF for Casablanca
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 20,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'LM' => [
+                'base_freight' => 605,
+                'baf' => ['amount' => 75, 'unit' => 'LM'],
+                'ets' => ['amount' => 17.3, 'unit' => 'LM'],
+                'port_additional' => null, // Not in PDF for Casablanca
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 20, 'unit' => 'LM'],
+                'measurement_costs' => 25,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+        ],
+        'CKY' => [ // Conakry (CONAKRY in PDF) - includes congestion + ICCM
+            'CAR' => [
+                'base_freight' => 555,
+                'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => 52,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 0,
+                'congestion' => ['amount' => 150, 'unit' => 'LUMPSUM'],
+                'iccm' => 67,
+            ],
+            'SMALL_VAN' => [
+                'base_freight' => 735,
+                'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => 80,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 0,
+                'congestion' => ['amount' => 100, 'unit' => 'LUMPSUM'],
+                'iccm' => 67,
+            ],
+            'BIG_VAN' => [
+                'base_freight' => 1420,
+                'baf' => ['amount' => 150, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 58.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => 93,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 20,
+                'congestion' => ['amount' => 200, 'unit' => 'LUMPSUM'],
+                'iccm' => 67,
+            ],
+            'LM' => [
+                'base_freight' => 450,
+                'baf' => ['amount' => 75, 'unit' => 'LM'],
+                'ets' => ['amount' => 17.3, 'unit' => 'LM'],
+                'port_additional' => null, // PDF says "see below" - complex calculation
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 20, 'unit' => 'LM'],
+                'measurement_costs' => 25,
+                'congestion' => ['amount' => 100, 'unit' => 'LM'],
+                'iccm' => 67,
+            ],
+        ],
+        'LFW' => [ // Lome (LUNES in PDF)
+            'CAR' => [
+                'base_freight' => 565,
+                'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => null, // Not in PDF for Lome
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 0,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'SMALL_VAN' => [
+                'base_freight' => 645,
+                'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => null, // Not in PDF for Lome
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 0,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'BIG_VAN' => [
+                'base_freight' => 1330,
+                'baf' => ['amount' => 150, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 58.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => null, // Not in PDF for Lome
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 20,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'LM' => [
+                'base_freight' => 465,
+                'baf' => ['amount' => 75, 'unit' => 'LM'],
+                'ets' => ['amount' => 17.3, 'unit' => 'LM'],
+                'port_additional' => null, // Not in PDF for Lome
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 20, 'unit' => 'LM'],
+                'measurement_costs' => 25,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+        ],
+        'COO' => [ // Cotonou
+            'CAR' => [
+                'base_freight' => 605,
+                'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => null, // Not in PDF for Cotonou
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 0,
+                'congestion' => ['amount' => 150, 'unit' => 'LUMPSUM'], // "Cogn. addit." in PDF
+                'iccm' => null,
+            ],
+            'SMALL_VAN' => [
+                'base_freight' => 685,
+                'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => null, // Not in PDF for Cotonou
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 0,
+                'congestion' => ['amount' => 100, 'unit' => 'LUMPSUM'], // "Cogn. addit." in PDF
+                'iccm' => null,
+            ],
+            'BIG_VAN' => [
+                'base_freight' => 1470,
+                'baf' => ['amount' => 150, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 58.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => null, // Not in PDF for Cotonou
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 20,
+                'congestion' => ['amount' => 200, 'unit' => 'LUMPSUM'], // "Cogn. addit." in PDF
+                'iccm' => null,
+            ],
+            'LM' => [
+                'base_freight' => 465,
+                'baf' => ['amount' => 75, 'unit' => 'LM'],
+                'ets' => ['amount' => 17.3, 'unit' => 'LM'],
+                'port_additional' => null, // Not in PDF for Cotonou
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 20, 'unit' => 'LM'],
+                'measurement_costs' => 25,
+                'congestion' => ['amount' => 100, 'unit' => 'LM'], // "Cogn. addit." in PDF
+                'iccm' => null,
+            ],
+        ],
+        'DKR' => [ // Dakar (not in PDF, keeping placeholder values)
+            'CAR' => [
+                'base_freight' => 525,
+                'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => null,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 0,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'SMALL_VAN' => [
+                'base_freight' => 635,
+                'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => null,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 0,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'BIG_VAN' => [
+                'base_freight' => 1320,
+                'baf' => ['amount' => 150, 'unit' => 'LUMPSUM'],
+                'ets' => ['amount' => 58.0, 'unit' => 'LUMPSUM'],
+                'port_additional' => null,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
+                'measurement_costs' => 0,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+            'LM' => [
+                'base_freight' => 460,
+                'baf' => ['amount' => 75, 'unit' => 'LM'],
+                'ets' => ['amount' => 17.3, 'unit' => 'LM'],
+                'port_additional' => null,
+                'admin_fxe' => 26,
+                'thc' => ['amount' => 20, 'unit' => 'LM'],
+                'measurement_costs' => 0,
+                'congestion' => null,
+                'iccm' => null,
+            ],
+        ],
     ];
 
     /**
@@ -119,9 +526,9 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
             $stats['ports_processed']++;
 
             // Process each category for this port
-            foreach ($categories as $category => $baseFreightAmount) {
-                if ($baseFreightAmount === null) {
-                    continue; // Skip null values
+            foreach ($categories as $category => $categoryData) {
+                if (!is_array($categoryData) || !isset($categoryData['base_freight'])) {
+                    continue; // Skip invalid entries
                 }
 
                 // Find or create mapping
@@ -141,7 +548,7 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 // Deactivate older tariffs
                 $this->deactivateOlderTariffs($mapping);
 
-                // Create or update purchase tariff
+                // Create or update purchase tariff with all surcharges
                 // Use Carbon::parse to ensure consistent date handling for updateOrCreate
                 $tariff = CarrierPurchaseTariff::updateOrCreate(
                     [
@@ -153,19 +560,37 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                         'is_active' => true,
                         'sort_order' => 0,
                         'currency' => 'EUR',
-                        'base_freight_amount' => $baseFreightAmount,
+                        'base_freight_amount' => $categoryData['base_freight'],
                         'base_freight_unit' => $category === 'LM' ? 'LM' : 'LUMPSUM',
+                        'baf_amount' => $categoryData['baf']['amount'] ?? null,
+                        'baf_unit' => $categoryData['baf']['unit'] ?? null,
+                        'ets_amount' => $categoryData['ets']['amount'] ?? null,
+                        'ets_unit' => $categoryData['ets']['unit'] ?? null,
+                        'port_additional_amount' => $categoryData['port_additional'] ?? null,
+                        'port_additional_unit' => $categoryData['port_additional'] ? 'LUMPSUM' : null, // Default to LUMPSUM if amount is set
+                        'admin_fxe_amount' => $categoryData['admin_fxe'] ?? null,
+                        'admin_fxe_unit' => $categoryData['admin_fxe'] ? 'LUMPSUM' : null, // Default to LUMPSUM if amount is set
+                        'thc_amount' => $categoryData['thc']['amount'] ?? null,
+                        'thc_unit' => $categoryData['thc']['unit'] ?? null,
+                        'measurement_costs_amount' => $categoryData['measurement_costs'] ?? null,
+                        'measurement_costs_unit' => $categoryData['measurement_costs'] ? 'LUMPSUM' : null, // Default to LUMPSUM if amount is set
+                        'congestion_surcharge_amount' => $categoryData['congestion']['amount'] ?? null,
+                        'congestion_surcharge_unit' => $categoryData['congestion']['unit'] ?? null,
+                        'iccm_amount' => $categoryData['iccm'] ?? null,
+                        'iccm_unit' => $categoryData['iccm'] ? 'LUMPSUM' : null, // Default to LUMPSUM if amount is set
                         'source' => 'import',
-                        'notes' => 'Grimaldi WAF base freight from PDF, effective 2026-01-01',
+                        'notes' => 'Grimaldi WAF purchase tariffs from PDF, effective 2026-01-01',
                     ]
                 );
 
+                $baseAmount = $categoryData['base_freight'];
+                $unit = $category === 'LM' ? 'LM' : 'EUR';
                 if ($tariff->wasRecentlyCreated) {
                     $stats['tariffs_created']++;
-                    $this->command->info("    ✓ Created tariff: {$category} = {$baseFreightAmount} " . ($category === 'LM' ? 'LM' : 'EUR'));
+                    $this->command->info("    ✓ Created tariff: {$category} = {$baseAmount} {$unit}");
                 } else {
                     $stats['tariffs_updated']++;
-                    $this->command->info("    ✓ Updated tariff: {$category} = {$baseFreightAmount} " . ($category === 'LM' ? 'LM' : 'EUR'));
+                    $this->command->info("    ✓ Updated tariff: {$category} = {$baseAmount} {$unit}");
                 }
             }
         }

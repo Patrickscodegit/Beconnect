@@ -185,4 +185,189 @@ class CarrierPurchaseTariffTest extends TestCase
         $this->assertEquals(3000.00, $tariffs->get(1)->base_freight_amount); // sort_order 1, effective_from -3 days (more recent)
         $this->assertEquals(1000.00, $tariffs->get(2)->base_freight_amount); // sort_order 2
     }
+
+    /** @test */
+    public function it_casts_surcharge_amounts_correctly()
+    {
+        $tariff = CarrierPurchaseTariff::create([
+            'carrier_article_mapping_id' => $this->mapping->id,
+            'base_freight_amount' => 1000.00,
+            'baf_amount' => 75.50,
+            'ets_amount' => 29.75,
+            'port_additional_amount' => 12.25,
+            'admin_fxe_amount' => 26.00,
+            'thc_amount' => 10.50,
+            'measurement_costs_amount' => 2.33,
+            'congestion_surcharge_amount' => 150.99,
+            'iccm_amount' => 67.00,
+        ]);
+
+        $tariff->refresh();
+
+        $this->assertIsFloat($tariff->baf_amount);
+        $this->assertEquals(75.50, $tariff->baf_amount);
+        $this->assertIsFloat($tariff->ets_amount);
+        $this->assertEquals(29.75, $tariff->ets_amount);
+        $this->assertIsFloat($tariff->port_additional_amount);
+        $this->assertEquals(12.25, $tariff->port_additional_amount);
+        $this->assertIsFloat($tariff->admin_fxe_amount);
+        $this->assertEquals(26.00, $tariff->admin_fxe_amount);
+        $this->assertIsFloat($tariff->thc_amount);
+        $this->assertEquals(10.50, $tariff->thc_amount);
+        $this->assertIsFloat($tariff->measurement_costs_amount);
+        $this->assertEquals(2.33, $tariff->measurement_costs_amount);
+        $this->assertIsFloat($tariff->congestion_surcharge_amount);
+        $this->assertEquals(150.99, $tariff->congestion_surcharge_amount);
+        $this->assertIsFloat($tariff->iccm_amount);
+        $this->assertEquals(67.00, $tariff->iccm_amount);
+    }
+
+    /** @test */
+    public function surcharges_total_sums_all_surcharges_correctly()
+    {
+        $tariff = CarrierPurchaseTariff::create([
+            'carrier_article_mapping_id' => $this->mapping->id,
+            'base_freight_amount' => 1000.00,
+            'baf_amount' => 75.00,
+            'ets_amount' => 29.00,
+            'port_additional_amount' => 12.00,
+            'admin_fxe_amount' => 26.00,
+            'thc_amount' => 10.00,
+            'measurement_costs_amount' => 2.00,
+            'congestion_surcharge_amount' => 150.00,
+            'iccm_amount' => 67.00,
+        ]);
+
+        $expectedTotal = 75.00 + 29.00 + 12.00 + 26.00 + 10.00 + 2.00 + 150.00 + 67.00;
+        $this->assertEquals($expectedTotal, $tariff->surcharges_total);
+    }
+
+    /** @test */
+    public function surcharges_total_treats_null_as_zero()
+    {
+        $tariff = CarrierPurchaseTariff::create([
+            'carrier_article_mapping_id' => $this->mapping->id,
+            'base_freight_amount' => 1000.00,
+            'baf_amount' => 75.00,
+            'ets_amount' => null,
+            'port_additional_amount' => 12.00,
+            'admin_fxe_amount' => null,
+            'thc_amount' => 10.00,
+            'measurement_costs_amount' => null,
+            'congestion_surcharge_amount' => null,
+            'iccm_amount' => null,
+        ]);
+
+        $expectedTotal = 75.00 + 12.00 + 10.00; // Only non-null values
+        $this->assertEquals($expectedTotal, $tariff->surcharges_total);
+    }
+
+    /** @test */
+    public function surcharges_total_returns_zero_when_all_null()
+    {
+        $tariff = CarrierPurchaseTariff::create([
+            'carrier_article_mapping_id' => $this->mapping->id,
+            'base_freight_amount' => 1000.00,
+            'baf_amount' => null,
+            'ets_amount' => null,
+            'port_additional_amount' => null,
+            'admin_fxe_amount' => null,
+            'thc_amount' => null,
+            'measurement_costs_amount' => null,
+            'congestion_surcharge_amount' => null,
+            'iccm_amount' => null,
+        ]);
+
+        $this->assertEquals(0.0, $tariff->surcharges_total);
+    }
+
+    /** @test */
+    public function surcharges_total_rounds_to_two_decimals()
+    {
+        $tariff = CarrierPurchaseTariff::create([
+            'carrier_article_mapping_id' => $this->mapping->id,
+            'base_freight_amount' => 1000.00,
+            'baf_amount' => 75.333,
+            'ets_amount' => 29.666,
+            'port_additional_amount' => 12.111,
+        ]);
+
+        // Should round to 2 decimals: 75.33 + 29.67 + 12.11 = 117.11
+        $this->assertEquals(117.11, $tariff->surcharges_total);
+    }
+
+    /** @test */
+    public function total_purchase_cost_includes_base_freight_and_surcharges()
+    {
+        $tariff = CarrierPurchaseTariff::create([
+            'carrier_article_mapping_id' => $this->mapping->id,
+            'base_freight_amount' => 1000.00,
+            'baf_amount' => 75.00,
+            'ets_amount' => 29.00,
+            'port_additional_amount' => 12.00,
+            'admin_fxe_amount' => 26.00,
+        ]);
+
+        $expectedTotal = 1000.00 + 75.00 + 29.00 + 12.00 + 26.00;
+        $this->assertEquals($expectedTotal, $tariff->total_purchase_cost);
+    }
+
+    /** @test */
+    public function total_purchase_cost_equals_base_freight_when_no_surcharges()
+    {
+        $tariff = CarrierPurchaseTariff::create([
+            'carrier_article_mapping_id' => $this->mapping->id,
+            'base_freight_amount' => 1000.00,
+            'baf_amount' => null,
+            'ets_amount' => null,
+        ]);
+
+        $this->assertEquals(1000.00, $tariff->total_purchase_cost);
+    }
+
+    /** @test */
+    public function has_surcharges_returns_true_when_any_surcharge_is_set()
+    {
+        $tariff = CarrierPurchaseTariff::create([
+            'carrier_article_mapping_id' => $this->mapping->id,
+            'base_freight_amount' => 1000.00,
+            'baf_amount' => 75.00,
+            'ets_amount' => null,
+        ]);
+
+        $this->assertTrue($tariff->hasSurcharges());
+    }
+
+    /** @test */
+    public function has_surcharges_returns_false_when_all_surcharges_are_null()
+    {
+        $tariff = CarrierPurchaseTariff::create([
+            'carrier_article_mapping_id' => $this->mapping->id,
+            'base_freight_amount' => 1000.00,
+            'baf_amount' => null,
+            'ets_amount' => null,
+            'port_additional_amount' => null,
+            'admin_fxe_amount' => null,
+            'thc_amount' => null,
+            'measurement_costs_amount' => null,
+            'congestion_surcharge_amount' => null,
+            'iccm_amount' => null,
+        ]);
+
+        $this->assertFalse($tariff->hasSurcharges());
+    }
+
+    /** @test */
+    public function has_surcharges_returns_false_when_all_surcharges_are_zero()
+    {
+        $tariff = CarrierPurchaseTariff::create([
+            'carrier_article_mapping_id' => $this->mapping->id,
+            'base_freight_amount' => 1000.00,
+            'baf_amount' => 0,
+            'ets_amount' => 0,
+            'port_additional_amount' => 0,
+        ]);
+
+        $this->assertFalse($tariff->hasSurcharges());
+    }
 }

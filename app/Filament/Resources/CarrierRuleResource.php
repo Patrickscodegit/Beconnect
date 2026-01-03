@@ -1779,6 +1779,14 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                         return $data;
                                     })
                                     ->schema([
+                                        // Anchor for deep linking - renders data-mapping-id attribute
+                                        Forms\Components\Placeholder::make('mapping_anchor')
+                                            ->content('')
+                                            ->extraAttributes(fn ($record) => $record?->id ? ['data-mapping-id' => (string) $record->id] : [])
+                                            ->dehydrated(false)
+                                            ->columnSpanFull()
+                                            ->hiddenLabel(),
+
                                         Forms\Components\Select::make('article_id')
                                             ->label('Article')
                                             ->relationship('article', 'article_name', function ($query) {
@@ -2036,15 +2044,25 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->default(true)
                                             ->columnSpan(1),
 
-                                        Forms\Components\Section::make('Purchase Tariffs (Base Freight)')
+                                        Forms\Components\Section::make('Purchase Tariffs')
                                             ->collapsible()
                                             ->collapsed()
                                             ->schema([
                                                 Forms\Components\Repeater::make('purchaseTariffs')
-                                                    ->relationship('purchaseTariffs')
+                                                    ->relationship('purchaseTariffs', modifyQueryUsing: function ($query) {
+                                                        // Only load the single most recent active tariff to minimize memory usage
+                                                        // Prefer tariffs with surcharges (non-null baf_amount) to show populated data
+                                                        // This prevents loading all historical tariffs which can be hundreds per mapping
+                                                        return $query->active()
+                                                            ->orderByRaw('CASE WHEN baf_amount IS NOT NULL THEN 0 ELSE 1 END') // Prefer tariffs with surcharges
+                                                            ->orderBy('effective_from', 'desc')
+                                                            ->orderBy('sort_order', 'asc')
+                                                            ->limit(1); // Only 1 tariff per mapping to prevent memory exhaustion
+                                                    })
                                                     ->reorderable('sort_order')
                                                     ->collapsible()
                                                     ->collapsed()
+                                                    ->defaultItems(0)
                                                     ->schema([
                                                         Forms\Components\Toggle::make('is_active')
                                                             ->label('Active')
@@ -2097,6 +2115,124 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                                         Forms\Components\Textarea::make('notes')
                                                             ->label('Notes')
                                                             ->rows(2)
+                                                            ->columnSpanFull(),
+
+                                                        // Purchase Surcharges Section
+                                                        Forms\Components\Section::make('Purchase Surcharges')
+                                                            ->collapsible()
+                                                            ->collapsed()
+                                                            ->schema([
+                                                                // Standard Surcharges
+                                                                Forms\Components\TextInput::make('baf_amount')
+                                                                    ->label('BAF Amount')
+                                                                    ->numeric()
+                                                                    ->columnSpan(1),
+                                                                Forms\Components\Select::make('baf_unit')
+                                                                    ->label('BAF Unit')
+                                                                    ->options([
+                                                                        'LUMPSUM' => 'LUMPSUM',
+                                                                        'LM' => 'LM',
+                                                                    ])
+                                                                    ->default('LUMPSUM')
+                                                                    ->columnSpan(1),
+
+                                                                Forms\Components\TextInput::make('ets_amount')
+                                                                    ->label('ETS Amount')
+                                                                    ->numeric()
+                                                                    ->columnSpan(1),
+                                                                Forms\Components\Select::make('ets_unit')
+                                                                    ->label('ETS Unit')
+                                                                    ->options([
+                                                                        'LUMPSUM' => 'LUMPSUM',
+                                                                        'LM' => 'LM',
+                                                                    ])
+                                                                    ->default('LUMPSUM')
+                                                                    ->columnSpan(1),
+
+                                                                Forms\Components\TextInput::make('port_additional_amount')
+                                                                    ->label('Port Additional')
+                                                                    ->numeric()
+                                                                    ->columnSpan(1),
+                                                                Forms\Components\Select::make('port_additional_unit')
+                                                                    ->label('Port Additional Unit')
+                                                                    ->options([
+                                                                        'LUMPSUM' => 'LUMPSUM',
+                                                                        'LM' => 'LM',
+                                                                    ])
+                                                                    ->default('LUMPSUM')
+                                                                    ->columnSpan(1),
+
+                                                                Forms\Components\TextInput::make('admin_fxe_amount')
+                                                                    ->label('Admin Fxe')
+                                                                    ->numeric()
+                                                                    ->columnSpan(1),
+                                                                Forms\Components\Select::make('admin_fxe_unit')
+                                                                    ->label('Admin Fxe Unit')
+                                                                    ->options([
+                                                                        'LUMPSUM' => 'LUMPSUM',
+                                                                        'LM' => 'LM',
+                                                                    ])
+                                                                    ->default('LUMPSUM')
+                                                                    ->columnSpan(1),
+
+                                                                Forms\Components\TextInput::make('thc_amount')
+                                                                    ->label('THC (Terminal Handling Charge)')
+                                                                    ->numeric()
+                                                                    ->columnSpan(1),
+                                                                Forms\Components\Select::make('thc_unit')
+                                                                    ->label('THC Unit')
+                                                                    ->options([
+                                                                        'LUMPSUM' => 'LUMPSUM',
+                                                                        'LM' => 'LM',
+                                                                    ])
+                                                                    ->default('LUMPSUM')
+                                                                    ->columnSpan(1),
+
+                                                                Forms\Components\TextInput::make('measurement_costs_amount')
+                                                                    ->label('Measurement Costs')
+                                                                    ->numeric()
+                                                                    ->columnSpan(1),
+                                                                Forms\Components\Select::make('measurement_costs_unit')
+                                                                    ->label('Measurement Costs Unit')
+                                                                    ->options([
+                                                                        'LUMPSUM' => 'LUMPSUM',
+                                                                        'LM' => 'LM',
+                                                                    ])
+                                                                    ->default('LUMPSUM')
+                                                                    ->columnSpan(1),
+
+                                                                // Port-Specific Surcharges
+                                                                Forms\Components\TextInput::make('congestion_surcharge_amount')
+                                                                    ->label('Congestion Surcharge')
+                                                                    ->numeric()
+                                                                    ->helperText('Conakry only')
+                                                                    ->columnSpan(1),
+                                                                Forms\Components\Select::make('congestion_surcharge_unit')
+                                                                    ->label('Congestion Unit')
+                                                                    ->options([
+                                                                        'LUMPSUM' => 'LUMPSUM',
+                                                                        'LM' => 'LM',
+                                                                    ])
+                                                                    ->default('LUMPSUM')
+                                                                    ->helperText('Conakry only')
+                                                                    ->columnSpan(1),
+
+                                                                Forms\Components\TextInput::make('iccm_amount')
+                                                                    ->label('ICCM')
+                                                                    ->numeric()
+                                                                    ->helperText('Conakry only (often 67 EUR)')
+                                                                    ->columnSpan(1),
+                                                                Forms\Components\Select::make('iccm_unit')
+                                                                    ->label('ICCM Unit')
+                                                                    ->options([
+                                                                        'LUMPSUM' => 'LUMPSUM',
+                                                                        'LM' => 'LM',
+                                                                    ])
+                                                                    ->default('LUMPSUM')
+                                                                    ->helperText('Conakry only (often 67 EUR)')
+                                                                    ->columnSpan(1),
+                                                            ])
+                                                            ->columns(2)
                                                             ->columnSpanFull(),
                                                     ])
                                                     ->columns(2)
