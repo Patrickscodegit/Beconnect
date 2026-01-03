@@ -212,27 +212,43 @@
                                         
                                         // Calculate total using original + dirty overrides
                                         $total = 0.0;
-                                        $totalFields = [
-                                            'base_freight_amount',
-                                            'baf_amount',
-                                            'ets_amount',
-                                            'port_additional_amount',
-                                            'admin_fxe_amount',
-                                            'thc_amount',
-                                            'measurement_costs_amount',
-                                            'congestion_surcharge_amount',
-                                            'iccm_amount',
+                                        
+                                        // Field to unit field mapping
+                                        $fieldToUnitField = [
+                                            'base_freight_amount' => 'base_freight_unit',
+                                            'baf_amount' => 'baf_unit',
+                                            'ets_amount' => 'ets_unit',
+                                            'port_additional_amount' => 'port_additional_unit',
+                                            'admin_fxe_amount' => 'admin_fxe_unit',
+                                            'thc_amount' => 'thc_unit',
+                                            'measurement_costs_amount' => 'measurement_costs_unit',
+                                            'congestion_surcharge_amount' => 'congestion_surcharge_unit',
+                                            'iccm_amount' => 'iccm_unit',
                                         ];
                                         
-                                        foreach ($totalFields as $totalField) {
+                                        foreach ($fieldToUnitField as $amountField => $unitField) {
                                             $value = null;
                                             
                                             // Check dirty first, then original
-                                            if ($tariffId && isset($this->dirty[$tariffId][$totalField])) {
-                                                $dirtyValue = $this->dirty[$tariffId][$totalField];
+                                            if ($tariffId && isset($this->dirty[$tariffId][$amountField])) {
+                                                $dirtyValue = $this->dirty[$tariffId][$amountField];
                                                 $value = $this->normalizeNumeric($dirtyValue);
                                             } elseif ($tariff) {
-                                                $value = (float) ($tariff->getAttribute($totalField) ?? 0);
+                                                $value = (float) ($tariff->getAttribute($amountField) ?? 0);
+                                            }
+                                            
+                                            // For RORO/LM category, only include fields with unit='LM'
+                                            if ($category === 'LM') {
+                                                // Get unit value
+                                                $unitValue = null;
+                                                if ($tariff) {
+                                                    $unitValue = $tariff->getAttribute($unitField);
+                                                }
+                                                
+                                                // Only include if unit is 'LM'
+                                                if ($unitValue !== 'LM') {
+                                                    continue;
+                                                }
                                             }
                                             
                                             if ($value !== null && $value >= 0) {
@@ -240,7 +256,12 @@
                                             }
                                         }
                                         
-                                        $formattedTotal = $total > 0 ? number_format($total, 2, ',', '') . ' €' : '—';
+                                        // Format total: for LM category, show in LM; otherwise show in EUR
+                                        if ($category === 'LM' && $total > 0) {
+                                            $formattedTotal = number_format($total, 1, ',', '') . ' LM';
+                                        } else {
+                                            $formattedTotal = $total > 0 ? number_format($total, 2, ',', '') . ' €' : '—';
+                                        }
                                     @endphp
                                     
                                     <td class="px-3 py-2 text-center font-bold text-gray-900 dark:text-gray-100">
@@ -308,30 +329,49 @@
                                             if ($tariff) {
                                                 // Calculate with dirty overrides
                                                 $total = 0.0;
-                                                $totalFields = [
-                                                    'base_freight_amount',
-                                                    'baf_amount',
-                                                    'ets_amount',
-                                                    'port_additional_amount',
-                                                    'admin_fxe_amount',
-                                                    'thc_amount',
-                                                    'measurement_costs_amount',
-                                                    'congestion_surcharge_amount',
-                                                    'iccm_amount',
+                                                
+                                                // Field to unit field mapping
+                                                $fieldToUnitField = [
+                                                    'base_freight_amount' => 'base_freight_unit',
+                                                    'baf_amount' => 'baf_unit',
+                                                    'ets_amount' => 'ets_unit',
+                                                    'port_additional_amount' => 'port_additional_unit',
+                                                    'admin_fxe_amount' => 'admin_fxe_unit',
+                                                    'thc_amount' => 'thc_unit',
+                                                    'measurement_costs_amount' => 'measurement_costs_unit',
+                                                    'congestion_surcharge_amount' => 'congestion_surcharge_unit',
+                                                    'iccm_amount' => 'iccm_unit',
                                                 ];
                                                 
-                                                foreach ($totalFields as $totalField) {
+                                                foreach ($fieldToUnitField as $amountField => $unitField) {
                                                     $value = null;
-                                                    if ($tariffId && isset($this->dirty[$tariffId][$totalField])) {
-                                                        $dirtyValue = $this->dirty[$tariffId][$totalField];
+                                                    
+                                                    if ($tariffId && isset($this->dirty[$tariffId][$amountField])) {
+                                                        $dirtyValue = $this->dirty[$tariffId][$amountField];
                                                         $value = $this->normalizeNumeric($dirtyValue);
                                                     } elseif ($tariff) {
-                                                        $value = (float) ($tariff->getAttribute($totalField) ?? 0);
+                                                        $value = (float) ($tariff->getAttribute($amountField) ?? 0);
                                                     }
+                                                    
+                                                    // For RORO/LM category, only include fields with unit='LM'
+                                                    if ($category === 'LM') {
+                                                        // Get unit value
+                                                        $unitValue = null;
+                                                        if ($tariff) {
+                                                            $unitValue = $tariff->getAttribute($unitField);
+                                                        }
+                                                        
+                                                        // Only include if unit is 'LM'
+                                                        if ($unitValue !== 'LM') {
+                                                            continue;
+                                                        }
+                                                    }
+                                                    
                                                     if ($value !== null && $value >= 0) {
                                                         $total += $value;
                                                     }
                                                 }
+                                                
                                                 $purchaseTotal = $total > 0 ? $total : null;
                                             }
                                             
@@ -394,7 +434,15 @@
                                                 @endif
                                             </td>
                                             <td class="px-3 py-2 text-center text-gray-900 dark:text-gray-100">
-                                                {{ $purchaseTotal !== null ? number_format($purchaseTotal, 2, ',', '') . ' €' : '—' }}
+                                                @if($purchaseTotal !== null)
+                                                    @if($category === 'LM')
+                                                        {{ number_format($purchaseTotal, 1, ',', '') . ' LM' }}
+                                                    @else
+                                                        {{ number_format($purchaseTotal, 2, ',', '') . ' €' }}
+                                                    @endif
+                                                @else
+                                                    —
+                                                @endif
                                             </td>
                                             <td class="px-3 py-2 text-center text-gray-900 dark:text-gray-100">
                                                 @if($margin !== null && $marginPercent !== null)
