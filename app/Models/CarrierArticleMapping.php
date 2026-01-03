@@ -83,6 +83,32 @@ class CarrierArticleMapping extends Model
 
     public function activePurchaseTariff(): ?CarrierPurchaseTariff
     {
+        // If relationship is eager-loaded, filter in memory to avoid N+1 queries
+        // and ensure we use the same tariffs that were eager-loaded with surcharges
+        if ($this->relationLoaded('purchaseTariffs')) {
+            $now = \Carbon\Carbon::now();
+            return $this->purchaseTariffs
+                ->filter(function ($tariff) use ($now) {
+                    // Apply active() scope logic in memory
+                    if (!$tariff->is_active) {
+                        return false;
+                    }
+                    if ($tariff->effective_from && $tariff->effective_from > $now) {
+                        return false;
+                    }
+                    if ($tariff->effective_to && $tariff->effective_to < $now) {
+                        return false;
+                    }
+                    return true;
+                })
+                ->sortBy([
+                    ['effective_from', 'desc'],
+                    ['sort_order', 'asc'],
+                ])
+                ->first();
+        }
+        
+        // Fallback to query if not eager-loaded
         return $this->purchaseTariffs()->active()->first();
     }
 
