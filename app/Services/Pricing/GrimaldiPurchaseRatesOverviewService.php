@@ -15,37 +15,8 @@ class GrimaldiPurchaseRatesOverviewService
      */
     public function getRatesMatrix(): array
     {
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'A',
-            'location' => 'GrimaldiPurchaseRatesOverviewService.php:18',
-            'message' => 'getRatesMatrix entry',
-            'data' => [
-                'db_driver' => \Illuminate\Support\Facades\DB::getDriverName(),
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-
         // Find Grimaldi carrier - use database-agnostic case-insensitive matching
         $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
-        
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'A',
-            'location' => 'GrimaldiPurchaseRatesOverviewService.php:25',
-            'message' => 'Carrier query setup',
-            'data' => [
-                'use_ilike' => $useIlike,
-                'db_driver' => \Illuminate\Support\Facades\DB::getDriverName(),
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
 
         $carrier = ShippingCarrier::where('code', 'GRIMALDI');
         
@@ -57,27 +28,11 @@ class GrimaldiPurchaseRatesOverviewService
         
         $carrier = $carrier->firstOrFail();
 
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'A',
-            'location' => 'GrimaldiPurchaseRatesOverviewService.php:38',
-            'message' => 'Carrier found',
-            'data' => [
-                'carrier_id' => $carrier->id,
-                'carrier_code' => $carrier->code,
-                'carrier_name' => $carrier->name,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-
         // Load all Grimaldi mappings with eager loading
         $mappings = CarrierArticleMapping::where('carrier_id', $carrier->id)
             ->with([
                 'article' => function ($query) {
-                    $query->select('id', 'pod_code', 'pod', 'article_code', 'article_name');
+                    $query->select('id', 'pod_code', 'pod', 'article_code', 'article_name', 'unit_price', 'currency');
                 },
                 'purchaseTariffs' => function ($query) {
                     $query->active()
@@ -137,12 +92,25 @@ class GrimaldiPurchaseRatesOverviewService
             // Build category entry with tariff_id
             $tariffId = $tariff ? $tariff->id : null;
             
+            // Include article data if available
+            $articleData = null;
+            if ($mapping->article) {
+                $articleData = [
+                    'id' => $mapping->article->id,
+                    'article_code' => $mapping->article->article_code,
+                    'article_name' => $mapping->article->article_name,
+                    'unit_price' => $mapping->article->unit_price,
+                    'currency' => $mapping->article->currency ?? 'EUR',
+                ];
+            }
+            
             $ports[$portCode]['categories'][$pdfCategory] = [
                 'tariff_id' => $tariffId,
                 'tariff' => $tariff,
                 'mapping_id' => $mapping->id,
                 'carrier_id' => $mapping->carrier_id,
                 'edit_url' => $editUrl,
+                'article' => $articleData,
             ];
             
             // Add tariff_id to port's tariff_ids array if not null
