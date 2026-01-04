@@ -538,7 +538,7 @@ class RobawsArticleCache extends Model
             return $mappings;
         }
 
-        return $mappings->filter(function ($mapping) use ($portId, $portGroupIds) {
+        $filtered = $mappings->filter(function ($mapping) use ($portId, $portGroupIds) {
             $mappingPortIds = $mapping->port_ids ?? [];
             $mappingPortGroupIds = $mapping->port_group_ids ?? [];
 
@@ -548,14 +548,16 @@ class RobawsArticleCache extends Model
             }
 
             // Include mappings that explicitly contain the requested port
-            if (!empty($mappingPortIds) && in_array($portId, $mappingPortIds)) {
+            // Use non-strict comparison to handle type mismatches (int vs string)
+            if (!empty($mappingPortIds) && in_array($portId, $mappingPortIds, false)) {
                 return true;
             }
 
-            // Include mappings that contain any of the requested port's port groups
-            if (!empty($mappingPortGroupIds) && !empty($portGroupIds)) {
+            // Include mappings that match via port group ONLY if they don't have specific port_ids
+            // This prevents including mappings for other ports that happen to be in the same port group
+            if (empty($mappingPortIds) && !empty($mappingPortGroupIds) && !empty($portGroupIds)) {
                 foreach ($portGroupIds as $groupId) {
-                    if (in_array($groupId, $mappingPortGroupIds)) {
+                    if (in_array($groupId, $mappingPortGroupIds, false)) {
                         return true;
                     }
                 }
@@ -564,6 +566,8 @@ class RobawsArticleCache extends Model
             // Exclude mappings for other specific ports
             return false;
         });
+
+        return $filtered;
     }
 
     /**
@@ -572,23 +576,6 @@ class RobawsArticleCache extends Model
      */
     public function scopeForQuotationContext(Builder $query, \App\Models\QuotationRequest $quotation): Builder
     {
-        // #region agent log
-        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'A',
-            'location' => 'RobawsArticleCache.php:530',
-            'message' => 'scopeForQuotationContext entry',
-            'data' => [
-                'quotation_id' => $quotation->id,
-                'quotation_pol' => $quotation->pol,
-                'quotation_pod' => $quotation->pod,
-                'service_type' => $quotation->service_type,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-
         // Use database-agnostic case-insensitive matching
         // PostgreSQL supports ILIKE, SQLite/MySQL use LOWER() with LIKE
         $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
@@ -675,70 +662,6 @@ class RobawsArticleCache extends Model
         if ($quotation->pol && $quotation->pod) {
             $quotationPolCode = $this->extractPortCode($quotation->pol);
             $quotationPodCode = $this->extractPortCode($quotation->pod);
-
-            // #region agent log
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'B,C',
-                'location' => 'RobawsArticleCache.php:633',
-                'message' => 'Port code extraction',
-                'data' => [
-                    'quotation_pol' => $quotation->pol,
-                    'quotation_pod' => $quotation->pod,
-                    'extracted_pol_code' => $quotationPolCode,
-                    'extracted_pod_code' => $quotationPodCode,
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            
-            // Test if PortResolutionService would resolve differently
-            $resolver = app(\App\Services\Ports\PortResolutionService::class);
-            $resolvedPol = $quotation->pol ? $resolver->resolveOne($quotation->pol) : null;
-            $resolvedPod = $quotation->pod ? $resolver->resolveOne($quotation->pod) : null;
-            
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'D',
-                'location' => 'RobawsArticleCache.php:648',
-                'message' => 'PortResolutionService comparison',
-                'data' => [
-                    'quotation_pol' => $quotation->pol,
-                    'quotation_pod' => $quotation->pod,
-                    'resolved_pol_id' => $resolvedPol?->id,
-                    'resolved_pol_code' => $resolvedPol?->code,
-                    'resolved_pol_name' => $resolvedPol?->name,
-                    'resolved_pod_id' => $resolvedPod?->id,
-                    'resolved_pod_code' => $resolvedPod?->code,
-                    'resolved_pod_name' => $resolvedPod?->name,
-                    'extracted_pol_code' => $quotationPolCode,
-                    'extracted_pod_code' => $quotationPodCode,
-                    'pol_code_match' => $quotationPolCode === $resolvedPol?->code,
-                    'pod_code_match' => $quotationPodCode === $resolvedPod?->code,
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            
-            // Check what articles exist with the extracted codes
-            $articlesWithPolCode = static::where('pol', 'LIKE', '%(' . ($quotationPolCode ?? 'NONE') . ')%')->pluck('pod', 'id')->take(5)->toArray();
-            $articlesWithPodCode = static::where('pod', 'LIKE', '%(' . ($quotationPodCode ?? 'NONE') . ')%')->pluck('pol', 'id')->take(5)->toArray();
-            
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'E',
-                'location' => 'RobawsArticleCache.php:671',
-                'message' => 'Sample articles with extracted codes',
-                'data' => [
-                    'articles_with_pol_code_count' => static::where('pol', 'LIKE', '%(' . ($quotationPolCode ?? 'NONE') . ')%')->count(),
-                    'articles_with_pod_code_count' => static::where('pod', 'LIKE', '%(' . ($quotationPodCode ?? 'NONE') . ')%')->count(),
-                    'sample_articles_with_pol' => $articlesWithPolCode,
-                    'sample_articles_with_pod' => $articlesWithPodCode,
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
 
             // Require both POL and POD to match exactly
             $query->where(function ($q) use ($quotation, $quotationPolCode, $useIlike) {
@@ -997,21 +920,6 @@ class RobawsArticleCache extends Model
                 'types' => $commodityTypes,
             ]);
 
-            // #region agent log
-            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'C',
-                'location' => 'RobawsArticleCache.php:827',
-                'message' => 'Commodity type filter being applied',
-                'data' => [
-                    'commodity_types' => $commodityTypes,
-                    'commodity_types_count' => count($commodityTypes),
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
-
             $placeholders = implode(', ', array_fill(0, count($commodityTypes), '?'));
             // Include articles that match the commodity type OR have NULL commodity_type (universal articles)
             // Strict filtering: only show articles that match the expanded commodity types
@@ -1021,30 +929,6 @@ class RobawsArticleCache extends Model
             });
         }
         // If no commodity selected, show all articles (existing behavior)
-
-        // #region agent log
-        $testQuery = clone $query;
-        $testCount = $testQuery->count();
-        
-        // Check if article 230 matches
-        $article230Query = clone $query;
-        $article230Matches = $article230Query->where('id', 230)->exists();
-        
-        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'A,F',
-            'location' => 'RobawsArticleCache.php:937',
-            'message' => 'scopeForQuotationContext final query count',
-            'data' => [
-                'query_count' => $testCount,
-                'quotation_pol' => $quotation->pol,
-                'quotation_pod' => $quotation->pod,
-                'article_230_matches' => $article230Matches,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
 
         return $query;
     }
