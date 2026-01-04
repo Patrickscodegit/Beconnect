@@ -1853,10 +1853,14 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                 Forms\Components\Repeater::make('articleMappings')
                                     ->relationship('articleMappings', modifyQueryUsing: function ($query) {
                                         $mappingId = request()->query('mapping_id');
+                                        $portCode = request()->query('port_code');
+                                        $category = request()->query('category');
                                         
-                                        if ($mappingId) {
-                                            // Only load the specific mapping when deep linking
-                                            return $query->where('id', $mappingId);
+                                        // When deep linking or creating new mapping, we need to load ALL mappings
+                                        // to prevent Filament from deleting existing ones when saving (sync behavior)
+                                        if ($mappingId || $portCode || $category) {
+                                            // Load all mappings to preserve existing ones
+                                            return $query->orderBy('sort_order', 'asc');
                                         } else {
                                             // Load only first 20 mappings to keep memory usage low
                                             return $query->orderBy('sort_order', 'asc')

@@ -75,10 +75,12 @@ class EditCarrierRule extends EditRecord
                 ?? request()->query('category');
             
             if ($mappingId) {
-                // Only load the specific mapping when deep linking
+                // When deep linking to a specific mapping, load ALL mappings to prevent deletion
+                // Filament Repeater with relationship() uses sync behavior, so if we only load
+                // one mapping, it will delete all others when saving
                 $this->record->load([
-                    'articleMappings' => function ($query) use ($mappingId) {
-                        $query->where('id', $mappingId);
+                    'articleMappings' => function ($query) {
+                        $query->orderBy('sort_order', 'asc');
                         // Do NOT load purchaseTariffs
                     }
                 ]);
@@ -88,6 +90,14 @@ class EditCarrierRule extends EditRecord
                 $data['carrier_rules_tabs'] = 'article_mappings';
             } elseif ($portCode || $category) {
                 // Port code or category provided - user wants to create a new mapping
+                // Load ALL mappings to prevent deletion of existing ones when saving
+                $this->record->load([
+                    'articleMappings' => function ($query) {
+                        $query->orderBy('sort_order', 'asc');
+                        // Do NOT load purchaseTariffs
+                    }
+                ]);
+                
                 // Set active tab to "Freight Mapping"
                 $data['carrier_rules_tabs'] = 'article_mappings';
                 // Store port_code and category for potential use in the form
