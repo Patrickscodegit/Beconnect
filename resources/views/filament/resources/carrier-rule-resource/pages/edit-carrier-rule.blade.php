@@ -262,4 +262,67 @@
             }
         </script>
     @endif
+    
+    {{-- Handle hash fragment for creating new mappings --}}
+    @if(request()->has('port_code') || request()->has('category'))
+        <script>
+            function switchToArticleMappingsTab() {
+                // Find all tab buttons
+                const allTabButtons = document.querySelectorAll('.fi-tabs button, [role="tab"], button[type="button"], .fi-tabs [role="tablist"] button');
+                
+                // Find the "Freight Mapping" tab - prioritize data-tab attribute
+                let tabButton = null;
+                for (const btn of allTabButtons) {
+                    const dataTab = btn.getAttribute('data-tab');
+                    if (dataTab === 'article_mappings') {
+                        tabButton = btn;
+                        break;
+                    }
+                }
+                
+                // If not found by data-tab, try text match
+                if (!tabButton) {
+                    for (const btn of allTabButtons) {
+                        const text = btn.textContent?.trim() || '';
+                        if (text === 'Freight Mapping' || (text.includes('Freight Mapping') && !text.includes('Sort'))) {
+                            const role = btn.getAttribute('role');
+                            const isInTabs = btn.closest('.fi-tabs');
+                            if (role === 'tab' || isInTabs) {
+                                tabButton = btn;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if (tabButton) {
+                    tabButton.click();
+                    tabButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                    if (typeof Livewire !== 'undefined' && typeof $wire !== 'undefined') {
+                        try {
+                            $wire.set('data.carrier_rules_tabs', 'article_mappings');
+                        } catch (e) {}
+                    }
+                    return true;
+                }
+                return false;
+            }
+            
+            // Try to switch tab when page loads
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => {
+                    setTimeout(switchToArticleMappingsTab, 100);
+                });
+            } else {
+                setTimeout(switchToArticleMappingsTab, 100);
+            }
+            
+            // Also try after Livewire mounts
+            if (typeof Livewire !== 'undefined') {
+                Livewire.hook('mounted', () => {
+                    setTimeout(switchToArticleMappingsTab, 200);
+                });
+            }
+        </script>
+    @endif
 </x-filament-panels::page>

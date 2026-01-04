@@ -180,14 +180,25 @@
                                                         {{ $formattedValue }}
                                                     </button>
                                                 @else
-                                                    {{-- No tariff: show "—" with edit link --}}
+                                                    {{-- No tariff: show "—" with edit/create link --}}
                                                     <span>{{ $formattedValue }}</span>
+                                                    @php
+                                                        $createUrl = $categoryData['create_url'] ?? null;
+                                                    @endphp
                                                     @if($editUrl)
                                                         <a href="{{ $editUrl }}" 
                                                            class="text-xs text-gray-400 hover:text-primary-500 transition-colors"
                                                            title="Edit mapping">
                                                             <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                            </svg>
+                                                        </a>
+                                                    @elseif($createUrl)
+                                                        <a href="{{ $createUrl }}" 
+                                                           class="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 transition-colors"
+                                                           title="Create mapping">
+                                                            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                                                             </svg>
                                                         </a>
                                                     @endif
@@ -469,11 +480,20 @@
                                                 @endif
                                             </td>
                                             <td class="px-3 py-2 text-center">
+                                                @php
+                                                    $createUrl = $categoryData['create_url'] ?? null;
+                                                @endphp
                                                 @if($editUrl)
                                                     <a href="{{ $editUrl }}" 
                                                        class="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400"
                                                        title="Edit mapping">
                                                         Edit Mapping
+                                                    </a>
+                                                @elseif($createUrl)
+                                                    <a href="{{ $createUrl }}" 
+                                                       class="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 font-medium"
+                                                       title="Create mapping">
+                                                        Create Mapping
                                                     </a>
                                                 @else
                                                     <span class="text-gray-400">—</span>

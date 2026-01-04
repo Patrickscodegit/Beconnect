@@ -136,6 +136,32 @@ class GrimaldiPurchaseRatesOverviewService
             }
         }
 
+        // Add create URLs for missing categories
+        $expectedCategories = ['CAR', 'SVAN', 'BVAN', 'LM'];
+        foreach ($ports as $portCode => &$portData) {
+            $categories = $portData['categories'] ?? [];
+            foreach ($expectedCategories as $category) {
+                if (!isset($categories[$category]) || $categories[$category] === null) {
+                    // No mapping exists for this category, add create URL
+                    if (!isset($portData['categories'])) {
+                        $portData['categories'] = [];
+                    }
+                    $portData['categories'][$category] = [
+                        'tariff_id' => null,
+                        'tariff' => null,
+                        'mapping_id' => null,
+                        'carrier_id' => $carrier->id,
+                        'edit_url' => null,
+                        'create_url' => CarrierRuleResource::getUrl('edit', [
+                            'record' => $carrier->id
+                        ]) . '?port_code=' . urlencode($portCode) . '&category=' . urlencode($category) . '#article_mappings',
+                        'article' => null,
+                    ];
+                }
+            }
+        }
+        unset($portData);
+
         // Sort ports by code and sort tariff_ids arrays
         ksort($ports);
         foreach ($ports as $portCode => &$portData) {

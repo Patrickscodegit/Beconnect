@@ -66,6 +66,14 @@ class EditCarrierRule extends EditRecord
                 }
             }
             
+            // Check if port_code and category are provided (for creating new mappings)
+            $portCode = request()->input('port_code') 
+                ?? request()->get('port_code') 
+                ?? request()->query('port_code');
+            $category = request()->input('category') 
+                ?? request()->get('category') 
+                ?? request()->query('category');
+            
             if ($mappingId) {
                 // Only load the specific mapping when deep linking
                 $this->record->load([
@@ -78,6 +86,13 @@ class EditCarrierRule extends EditRecord
                 // Set active tab to "Freight Mapping" (article_mappings) when mapping_id is present
                 // Filament Tabs store active tab in form state with the tabs component name as key
                 $data['carrier_rules_tabs'] = 'article_mappings';
+            } elseif ($portCode || $category) {
+                // Port code or category provided - user wants to create a new mapping
+                // Set active tab to "Freight Mapping"
+                $data['carrier_rules_tabs'] = 'article_mappings';
+                // Store port_code and category for potential use in the form
+                $data['_create_mapping_port_code'] = $portCode;
+                $data['_create_mapping_category'] = $category;
             } else {
                 // Load only first 20 mappings to keep memory usage low
                 $this->record->load([
