@@ -48,12 +48,12 @@ class ComparePortsLocalVsProduction extends Command
         $inBoth = array_intersect($localCodes, $productionCodes);
         
         // Display results
-        $this->displayComparison($missingInProduction, $missingInLocal, $inBoth, $localPorts, $productionPorts);
+        $this->displayComparison($missingInProduction, $missingInLocal, $inBoth, $localPorts, $productionPorts, $localCodes, $productionCodes);
         
         return 0;
     }
 
-    private function displayComparison(array $missingInProduction, array $missingInLocal, array $inBoth, $localPorts, array $productionPorts): void
+    private function displayComparison(array $missingInProduction, array $missingInLocal, array $inBoth, $localPorts, array $productionPorts, array $localCodes, array $productionCodes): void
     {
         $this->info('═══════════════════════════════════════════════════════════');
         $this->info('📋 COMPARISON RESULTS');
