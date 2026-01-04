@@ -38,7 +38,7 @@ class PortResolutionService
     }
 
     /**
-     * Resolve ANY string to a canonical Port (single result)
+     * Resolve ANY string to a canonical Port (single result) with optional mode filtering
      * Strategy (in order):
      * a) normalize input
      * b) if formatted contains "(CODE)" extract CODE and try code lookup
@@ -47,10 +47,16 @@ class PortResolutionService
      * e) try alias match by alias_normalized (exact)
      * f) light fuzzy starts-with on alias/name (limit e.g. 5 results; pick exact if present; otherwise null to avoid wrong matches)
      * 
+     * Mode-aware behavior:
+     * - If input matches IATA (3 letters): return AIRPORT (even if mode is SEA, IATA is explicit)
+     * - If input matches UN/LOCODE (5 chars): prefer facility type based on mode
+     * - If input is city/name/alias: prefer facility type based on mode when multiple facilities exist
+     * 
      * @param string $input
+     * @param string|null $mode 'AIR', 'SEA', or null
      * @return Port|null
      */
-    public function resolveOne(string $input): ?Port
+    public function resolveOne(string $input, ?string $mode = null): ?Port
     {
         // a) Normalize input
         $normalized = $this->normalizeInput($input);
@@ -66,24 +72,51 @@ class PortResolutionService
 
         $port = null;
 
-        // 1) UN/LOCODE match (ports.unlocode) — SEA_PORT/ICD most common, but can be any category
+        // 1) UN/LOCODE match (ports.unlocode) — mode-aware
         if (preg_match('/^[a-z0-9]{5}$/i', $normalized)) {
-            $port = Port::whereRaw('UPPER(unlocode) = ?', [strtoupper($normalized)])
-                ->first();
-            if ($port) {
+            $ports = Port::whereRaw('UPPER(unlocode) = ?', [strtoupper($normalized)])
+                ->where('is_active', true)
+                ->get();
+            
+            if ($ports->count() === 1) {
+                $port = $ports->first();
                 $this->cache[$normalized] = $port;
                 return $port;
             }
+            
+            // Multiple facilities with same UN/LOCODE - use mode to prefer
+            if ($ports->count() > 1) {
+                if ($mode === 'SEA') {
+                    $port = $ports->firstWhere('port_category', 'SEA_PORT');
+                    if ($port) {
+                        $this->cache[$normalized] = $port;
+                        return $port;
+                    }
+                } elseif ($mode === 'AIR') {
+                    $port = $ports->firstWhere('port_category', 'AIRPORT');
+                    if ($port) {
+                        $this->cache[$normalized] = $port;
+                        return $port;
+                    }
+                }
+                // If mode is null, prefer SEA_PORT (default convention for UN/LOCODE)
+                $port = $ports->firstWhere('port_category', 'SEA_PORT') ?? $ports->first();
+                if ($port) {
+                    $this->cache[$normalized] = $port;
+                    return $port;
+                }
+            }
         }
 
-        // 2) IATA match (ports.iata_code) — AIRPORT
+        // 2) IATA match (ports.iata_code) — AIRPORT (even if mode is SEA, IATA is explicit)
         if (preg_match('/^[a-z]{3}$/i', $normalized)) {
             $port = Port::whereRaw('UPPER(iata_code) = ?', [strtoupper($normalized)])
                 ->where('port_category', 'AIRPORT')
+                ->where('is_active', true)
                 ->first();
             if ($port) {
                 $this->cache[$normalized] = $port;
-                return $port; // Return immediately (collision-safe)
+                return $port; // Return immediately (IATA is explicit, even if mode is SEA)
             }
         }
 
@@ -117,18 +150,75 @@ class PortResolutionService
             }
         }
 
-        // 6) ports.name (case-insensitive exact)
-        $port = Port::findByNameInsensitive($normalized);
-        if ($port) {
+        // 6) ports.name (case-insensitive exact) — mode-aware if multiple facilities
+        $nameMatches = Port::whereRaw('UPPER(name) = ?', [strtoupper($normalized)])
+            ->where('is_active', true)
+            ->get();
+        
+        if ($nameMatches->count() === 1) {
+            $port = $nameMatches->first();
             $this->cache[$normalized] = $port;
             return $port;
         }
+        
+        // Multiple facilities with same name - check if they share city_unlocode
+        if ($nameMatches->count() > 1) {
+            // Group by city_unlocode
+            $byCity = $nameMatches->groupBy('city_unlocode');
+            
+            // If all share same city_unlocode, use mode to prefer
+            if ($byCity->count() === 1) {
+                $cityPorts = $byCity->first();
+                if ($mode === 'SEA') {
+                    $port = $cityPorts->firstWhere('port_category', 'SEA_PORT');
+                    if ($port) {
+                        $this->cache[$normalized] = $port;
+                        return $port;
+                    }
+                } elseif ($mode === 'AIR') {
+                    $port = $cityPorts->firstWhere('port_category', 'AIRPORT');
+                    if ($port) {
+                        $this->cache[$normalized] = $port;
+                        return $port;
+                    }
+                }
+                // If mode is null and multiple facilities exist, return null (ambiguous)
+                $this->cache[$normalized] = null;
+                return null;
+            }
+        }
 
-        // 7) aliases.alias_normalized (exact)
+        // 7) aliases.alias_normalized (exact) — mode-aware if multiple facilities
         $aliasNormalized = PortAliasNormalizer::normalize($normalized);
-        $alias = PortAlias::byNormalized($aliasNormalized)->active()->first();
-        if ($alias && $alias->port) {
-            $port = $alias->port;
+        $aliases = PortAlias::byNormalized($aliasNormalized)->active()->with('port')->get();
+        
+        if ($aliases->count() === 1 && $aliases->first()->port) {
+            $port = $aliases->first()->port;
+            // Check mode if multiple facilities exist for this city
+            if ($port->city_unlocode) {
+                $cityPorts = Port::byCityUnlocode($port->city_unlocode)
+                    ->where('is_active', true)
+                    ->get();
+                
+                if ($cityPorts->count() > 1) {
+                    if ($mode === 'SEA') {
+                        $seaPort = $cityPorts->firstWhere('port_category', 'SEA_PORT');
+                        if ($seaPort) {
+                            $this->cache[$normalized] = $seaPort;
+                            return $seaPort;
+                        }
+                    } elseif ($mode === 'AIR') {
+                        $airPort = $cityPorts->firstWhere('port_category', 'AIRPORT');
+                        if ($airPort) {
+                            $this->cache[$normalized] = $airPort;
+                            return $airPort;
+                        }
+                    }
+                    // If mode is null and multiple facilities exist, return null (ambiguous)
+                    $this->cache[$normalized] = null;
+                    return null;
+                }
+            }
             $this->cache[$normalized] = $port;
             return $port;
         }
@@ -257,6 +347,36 @@ class PortResolutionService
     public function formatCanonical(Port $port): string
     {
         return $port->formatFull();
+    }
+
+    /**
+     * Resolve city name to all facilities (airport + seaport)
+     * Returns Collection of Ports for that city
+     * Use mainly for admin/global search UIs (not pricing flows)
+     * 
+     * @param string $input City name or UN/LOCODE
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    public function resolveByCity(string $input): \Illuminate\Database\Eloquent\Collection
+    {
+        $normalized = $this->normalizeInput($input);
+        
+        if (empty($normalized)) {
+            return collect();
+        }
+
+        // Try to find a port by name or UN/LOCODE first
+        $port = $this->resolveOne($normalized);
+        
+        if ($port && $port->city_unlocode) {
+            // Return all active facilities for this city
+            return Port::byCityUnlocode($port->city_unlocode)
+                ->where('is_active', true)
+                ->get();
+        }
+        
+        // If no city_unlocode found, return just the single port (if found)
+        return $port ? collect([$port]) : collect();
     }
 }
 

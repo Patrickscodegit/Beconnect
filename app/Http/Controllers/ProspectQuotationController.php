@@ -32,14 +32,19 @@ class ProspectQuotationController extends Controller
             $carriers = ShippingCarrier::where('is_active', true)->orderBy('name')->get();
             
             // Get airports for airfreight services
-            $airports = collect(config('airports', []))->map(function ($airport) {
-                return [
-                    'code' => $airport['code'],
-                    'name' => $airport['name'],
-                    'country' => $airport['country'],
-                    'full_name' => $airport['full_name'],
-                ];
-            })->values()->all();
+            $airports = Port::forAirports()
+                ->orderBy('name')
+                ->get()
+                ->map(function ($port) {
+                    return [
+                        'code' => $port->code,
+                        'name' => $port->name,
+                        'country' => $port->country,
+                        'full_name' => $port->getDisplayName(),
+                    ];
+                })
+                ->values()
+                ->all();
             
             // Service types from config
             $serviceTypes = config('quotation.service_types', []);

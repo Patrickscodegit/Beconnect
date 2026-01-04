@@ -934,7 +934,7 @@ class QuotationCreator extends Component
         $isAirService = $this->isAirService();
 
         $polPorts = $isAirService
-            ? collect()
+            ? Port::forAirports()->orderBy('name')->get()
             : Port::europeanOrigins()->orderBy('name')->get();
 
         // Extract port name and code from formats like:
@@ -999,7 +999,10 @@ class QuotationCreator extends Component
         
         // Extract POD ports from active schedules
         $podPorts = collect();
-        if (!$isAirService && $baseScheduleQuery) {
+        if ($isAirService) {
+            // For air services, use airports
+            $podPorts = Port::forAirports()->orderBy('name')->get();
+        } elseif ($baseScheduleQuery) {
             // Get unique POD IDs from schedules
             $podIds = $baseScheduleQuery
                 ->whereNotNull('pod_id')
@@ -1149,12 +1152,12 @@ class QuotationCreator extends Component
     protected function formatPortOptions(bool $isAirService, $polPorts, $podPorts): array
     {
         if ($isAirService) {
-            $airports = collect(config('airports', []));
+            $airports = \App\Models\Port::forAirports()
+                ->orderBy('name')
+                ->get();
 
-            $formatted = $airports->mapWithKeys(function ($airport) {
-                $display = $airport['full_name']
-                    ?? sprintf('%s (%s) – %s, Airport', $airport['name'], $airport['code'], $airport['country']);
-
+            $formatted = $airports->mapWithKeys(function ($port) {
+                $display = $port->getDisplayName();
                 return [$display => $display];
             })->toArray();
 

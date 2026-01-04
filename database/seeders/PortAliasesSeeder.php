@@ -160,6 +160,67 @@ class PortAliasesSeeder extends Seeder
             }
         }
 
+        // 5. Add Jeddah multi-facility aliases (mode-aware)
+        $this->command->info('Adding Jeddah multi-facility aliases...');
+        $jeddahAirport = Port::findByCodeInsensitive('JED');
+        $jeddahSeaport = Port::findByCodeInsensitive('SAJED-SEA');
+
+        if ($jeddahAirport) {
+            // Airport-specific aliases
+            $airportAliases = [
+                'Jeddah airport' => $jeddahAirport,
+            ];
+
+            foreach ($airportAliases as $aliasText => $port) {
+                $alias = PortAlias::updateOrCreate(
+                    ['alias_normalized' => PortAlias::normalizeAlias($aliasText)],
+                    [
+                        'port_id' => $port->id,
+                        'alias' => $aliasText,
+                        'alias_type' => 'name_variant',
+                        'is_active' => true,
+                    ]
+                );
+
+                if ($alias->wasRecentlyCreated) {
+                    $inserted++;
+                } else {
+                    $updated++;
+                }
+            }
+        }
+
+        if ($jeddahSeaport) {
+            // Seaport-specific aliases
+            $seaportAliases = [
+                'Jeddah port' => $jeddahSeaport,
+                'Jeddah seaport' => $jeddahSeaport,
+                'Jeddah Islamic Port' => $jeddahSeaport,
+            ];
+
+            foreach ($seaportAliases as $aliasText => $port) {
+                $alias = PortAlias::updateOrCreate(
+                    ['alias_normalized' => PortAlias::normalizeAlias($aliasText)],
+                    [
+                        'port_id' => $port->id,
+                        'alias' => $aliasText,
+                        'alias_type' => 'name_variant',
+                        'is_active' => true,
+                    ]
+                );
+
+                if ($alias->wasRecentlyCreated) {
+                    $inserted++;
+                } else {
+                    $updated++;
+                }
+            }
+        }
+
+        // Note: "Jeddah" without qualifier should be handled by mode-aware resolver
+        // We keep it pointing to JED only if needed for backward compatibility
+        // The mode-aware resolver will handle the correct facility selection
+
         $this->command->info("Port aliases seeding completed!");
         $this->command->info("  Inserted: {$inserted}");
         $this->command->info("  Updated: {$updated}");

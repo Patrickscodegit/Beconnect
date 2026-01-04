@@ -210,13 +210,16 @@ class QuotationRequestResource extends Resource
                             ->label('Port of Loading (POL)')
                             ->options(function (Forms\Get $get) {
                                 $serviceType = $get('service_type');
+                                $mode = self::getModeFromServiceType($serviceType);
                                 
                                 // Show airports for airfreight services
-                                if (in_array($serviceType, ['AIRFREIGHT_EXPORT', 'AIRFREIGHT_IMPORT'])) {
-                                    $airports = config('airports', []);
-                                    return collect($airports)->mapWithKeys(function ($airport, $code) {
-                                        return [$airport['name'] => $airport['full_name']];
-                                    });
+                                if ($mode === 'AIR') {
+                                    return \App\Models\Port::forAirports()
+                                        ->orderBy('name')
+                                        ->get()
+                                        ->mapWithKeys(function ($port) {
+                                            return [$port->name => $port->getDisplayName()];
+                                        });
                                 }
                                 
                                 // Show seaports for all other services
@@ -224,26 +227,53 @@ class QuotationRequestResource extends Resource
                                     ->orderBy('name')
                                     ->get()
                                     ->mapWithKeys(function ($port) {
-                                        return [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country];
+                                        return [$port->name => $port->getDisplayName()];
                                     });
                             })
                             ->searchable()
                             ->allowHtml()
                             ->getSearchResultsUsing(function (string $search, Forms\Get $get) {
                                 $serviceType = $get('service_type');
+                                $mode = self::getModeFromServiceType($serviceType);
                                 
-                                if (in_array($serviceType, ['AIRFREIGHT_EXPORT', 'AIRFREIGHT_IMPORT'])) {
-                                    $airports = config('airports', []);
-                                    return collect($airports)
-                                        ->filter(fn($airport) => 
-                                            str_contains(strtolower($airport['name']), strtolower($search)) ||
-                                            str_contains(strtolower($airport['code']), strtolower($search))
-                                        )
-                                        ->mapWithKeys(fn($airport) => [$airport['name'] => $airport['full_name']])
-                                        ->all();
+                                $resolver = app(\App\Services\Ports\PortResolutionService::class);
+                                
+                                // Try exact match first with mode
+                                $port = $resolver->resolveOne($search, $mode);
+                                if ($port) {
+                                    // Check if it matches the mode filter
+                                    if ($mode === 'AIR' && $port->port_category === 'AIRPORT') {
+                                        return [$port->name => $port->getDisplayName()];
+                                    } elseif ($mode === 'SEA' && $port->port_category === 'SEA_PORT') {
+                                        // Also check if it's in europeanOrigins for POL
+                                        $europeanPorts = \App\Models\Port::europeanOrigins()->pluck('id')->toArray();
+                                        if (in_array($port->id, $europeanPorts)) {
+                                            return [$port->name => $port->getDisplayName()];
+                                        }
+                                    }
+                                }
+                                
+                                // Fallback: search by name/alias with mode filter
+                                $searchLower = strtolower($search);
+                                
+                                if ($mode === 'AIR') {
+                                    $ports = \App\Models\Port::forAirports()
+                                        ->where(function($q) use ($searchLower) {
+                                            $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                                              ->orWhereRaw('LOWER(code) LIKE ?', ["%{$searchLower}%"])
+                                              ->orWhereRaw('LOWER(iata_code) LIKE ?', ["%{$searchLower}%"]);
+                                        })
+                                        ->orWhereHas('aliases', function($q) use ($searchLower) {
+                                            $q->where('alias_normalized', 'LIKE', "%{$searchLower}%")
+                                              ->where('is_active', true);
+                                        })
+                                        ->get()
+                                        ->unique('id')
+                                        ->mapWithKeys(fn($port) => [$port->name => $port->getDisplayName()]);
+                                    
+                                    return $ports->all();
                                 } else {
-                                    // Search ports including aliases
-                                    $searchLower = strtolower($search);
+                                    // Search seaports including aliases
                                     $ports = \App\Models\Port::europeanOrigins()
                                         ->where(function($q) use ($searchLower) {
                                             $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
@@ -255,7 +285,7 @@ class QuotationRequestResource extends Resource
                                         })
                                         ->get()
                                         ->unique('id')
-                                        ->mapWithKeys(fn($port) => [$port->name => $port->formatFull()]);
+                                        ->mapWithKeys(fn($port) => [$port->name => $port->getDisplayName()]);
                                     
                                     return $ports->all();
                                 }
@@ -277,13 +307,16 @@ class QuotationRequestResource extends Resource
                             ->label('Port of Discharge (POD)')
                             ->options(function (Forms\Get $get) {
                                 $serviceType = $get('service_type');
+                                $mode = self::getModeFromServiceType($serviceType);
                                 
                                 // Show airports for airfreight services
-                                if (in_array($serviceType, ['AIRFREIGHT_EXPORT', 'AIRFREIGHT_IMPORT'])) {
-                                    $airports = config('airports', []);
-                                    return collect($airports)->mapWithKeys(function ($airport, $code) {
-                                        return [$airport['name'] => $airport['full_name']];
-                                    });
+                                if ($mode === 'AIR') {
+                                    return \App\Models\Port::forAirports()
+                                        ->orderBy('name')
+                                        ->get()
+                                        ->mapWithKeys(function ($port) {
+                                            return [$port->name => $port->getDisplayName()];
+                                        });
                                 }
                                 
                                 // Show seaports for all other services
@@ -291,26 +324,52 @@ class QuotationRequestResource extends Resource
                                     ->orderBy('name')
                                     ->get()
                                     ->mapWithKeys(function ($port) {
-                                        return [$port->name => $port->name . ' (' . $port->code . '), ' . $port->country];
+                                        return [$port->name => $port->getDisplayName()];
                                     });
                             })
                             ->searchable()
                             ->allowHtml()
                             ->getSearchResultsUsing(function (string $search, Forms\Get $get) {
                                 $serviceType = $get('service_type');
+                                $mode = self::getModeFromServiceType($serviceType);
                                 
-                                if (in_array($serviceType, ['AIRFREIGHT_EXPORT', 'AIRFREIGHT_IMPORT'])) {
-                                    $airports = config('airports', []);
-                                    return collect($airports)
-                                        ->filter(fn($airport) => 
-                                            str_contains(strtolower($airport['name']), strtolower($search)) ||
-                                            str_contains(strtolower($airport['code']), strtolower($search))
-                                        )
-                                        ->mapWithKeys(fn($airport) => [$airport['name'] => $airport['full_name']])
-                                        ->all();
+                                $resolver = app(\App\Services\Ports\PortResolutionService::class);
+                                
+                                // Try exact match first with mode
+                                $port = $resolver->resolveOne($search, $mode);
+                                if ($port) {
+                                    // Check if it matches the mode filter
+                                    if ($mode === 'AIR' && $port->port_category === 'AIRPORT') {
+                                        return [$port->name => $port->getDisplayName()];
+                                    } elseif ($mode === 'SEA' && $port->port_category === 'SEA_PORT') {
+                                        // Also check if it has active POD schedules
+                                        if ($port->getActivePodSchedules()->exists()) {
+                                            return [$port->name => $port->getDisplayName()];
+                                        }
+                                    }
+                                }
+                                
+                                // Fallback: search by name/alias with mode filter
+                                $searchLower = strtolower($search);
+                                
+                                if ($mode === 'AIR') {
+                                    $ports = \App\Models\Port::forAirports()
+                                        ->where(function($q) use ($searchLower) {
+                                            $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
+                                              ->orWhereRaw('LOWER(code) LIKE ?', ["%{$searchLower}%"])
+                                              ->orWhereRaw('LOWER(iata_code) LIKE ?', ["%{$searchLower}%"]);
+                                        })
+                                        ->orWhereHas('aliases', function($q) use ($searchLower) {
+                                            $q->where('alias_normalized', 'LIKE', "%{$searchLower}%")
+                                              ->where('is_active', true);
+                                        })
+                                        ->get()
+                                        ->unique('id')
+                                        ->mapWithKeys(fn($port) => [$port->name => $port->getDisplayName()]);
+                                    
+                                    return $ports->all();
                                 } else {
-                                    // Search ports including aliases
-                                    $searchLower = strtolower($search);
+                                    // Search seaports including aliases
                                     $ports = \App\Models\Port::withActivePodSchedules()
                                         ->where(function($q) use ($searchLower) {
                                             $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
@@ -322,7 +381,7 @@ class QuotationRequestResource extends Resource
                                         })
                                         ->get()
                                         ->unique('id')
-                                        ->mapWithKeys(fn($port) => [$port->name => $port->formatFull()]);
+                                        ->mapWithKeys(fn($port) => [$port->name => $port->getDisplayName()]);
                                     
                                     return $ports->all();
                                 }
@@ -1145,6 +1204,28 @@ class QuotationRequestResource extends Resource
         }
         // For ROAD_TRANSPORT, CUSTOMS, PORT_FORWARDING, OTHER
         return 'both';
+    }
+
+    /**
+     * Map service_type to port resolution mode
+     * Returns 'AIR', 'SEA', or null
+     * 
+     * @param string|null $serviceType
+     * @return string|null
+     */
+    public static function getModeFromServiceType(?string $serviceType): ?string
+    {
+        if (!$serviceType) {
+            return null;
+        }
+        
+        // Air services
+        if (in_array($serviceType, ['AIRFREIGHT_EXPORT', 'AIRFREIGHT_IMPORT'])) {
+            return 'AIR';
+        }
+        
+        // All other services are sea (RORO, FCL, LCL, BB, etc.)
+        return 'SEA';
     }
     
 }

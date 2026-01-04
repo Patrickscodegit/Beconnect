@@ -22,6 +22,7 @@ class Port extends Model
         'port_category',
         'iata_code',
         'icao_code',
+        'city_unlocode',
     ];
 
     protected $casts = [
@@ -115,6 +116,42 @@ class Port extends Model
             ->where('is_active', true);
     }
 
+    /**
+     * Scope to find all ports for a specific city UN/LOCODE
+     * 
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @param string $unlocode
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeByCityUnlocode($query, string $unlocode)
+    {
+        return $query->where('city_unlocode', $unlocode);
+    }
+
+    /**
+     * Scope to get active airports
+     * 
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeForAirports($query)
+    {
+        return $query->where('port_category', 'AIRPORT')
+            ->where('is_active', true);
+    }
+
+    /**
+     * Scope to get active seaports
+     * 
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeForSeaports($query)
+    {
+        return $query->where('port_category', 'SEA_PORT')
+            ->where('is_active', true);
+    }
+
     public function getFullNameAttribute(): string
     {
         return $this->name . ($this->country ? ', ' . $this->country : '');
@@ -196,5 +233,40 @@ class Port extends Model
             'mappings' => \App\Models\CarrierArticleMapping::whereJsonContains('port_ids', $this->id)->exists(),
             'robaws_cache' => \App\Models\RobawsArticleCache::where('pod_code', $this->code)->exists(),
         ];
+    }
+
+    /**
+     * Get all active facilities for the same city (same city_unlocode)
+     * 
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    public function getCityFacilities()
+    {
+        if (!$this->city_unlocode) {
+            return collect([$this]);
+        }
+
+        return static::byCityUnlocode($this->city_unlocode)
+            ->where('is_active', true)
+            ->get();
+    }
+
+    /**
+     * Get display name with facility type indicator
+     * 
+     * @return string
+     */
+    public function getDisplayName(): string
+    {
+        if ($this->port_category === 'AIRPORT' && $this->iata_code) {
+            return "{$this->name} – Airport ({$this->iata_code})";
+        }
+
+        if ($this->port_category === 'SEA_PORT') {
+            return "{$this->name} – Seaport";
+        }
+
+        // Fallback to existing format
+        return $this->formatFull();
     }
 }
