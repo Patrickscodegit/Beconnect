@@ -172,13 +172,24 @@
                                                         placeholder="0"
                                                     />
                                                 @elseif($tariffId)
-                                                    {{-- Editable cell: show button --}}
-                                                    <button 
-                                                        type="button" 
-                                                        class="w-full text-center hover:bg-gray-50 dark:hover:bg-gray-800 rounded px-2 py-1 transition-colors"
-                                                        wire:click="startEditing({{ $tariffId }}, '{{ $field }}')">
-                                                        {{ $formattedValue }}
-                                                    </button>
+                                                    {{-- Editable cell: show button with edit icon --}}
+                                                    <div class="flex items-center justify-center gap-1">
+                                                        <button 
+                                                            type="button" 
+                                                            class="flex-1 text-center hover:bg-gray-50 dark:hover:bg-gray-800 rounded px-2 py-1 transition-colors"
+                                                            wire:click="startEditing({{ $tariffId }}, '{{ $field }}')">
+                                                            {{ $formattedValue }}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+                                                            wire:click="openTariffEditor({{ $tariffId }})"
+                                                            title="Edit tariff details">
+                                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
                                                 @else
                                                     {{-- No tariff: show "—" with edit/create link --}}
                                                     <span>{{ $formattedValue }}</span>
@@ -514,4 +525,211 @@
             </div>
         @endif
     </div>
+
+    {{-- Tariff Details Editor Modal --}}
+    @if($this->editingTariffId)
+        <div 
+            x-data="{ show: true }"
+            x-show="show"
+            x-cloak
+            class="fixed inset-0 z-50 overflow-y-auto"
+            x-on:keydown.escape.window="$wire.closeTariffEditor()"
+            wire:ignore.self>
+            {{-- Backdrop --}}
+            <div 
+                x-show="show"
+            x-transition:enter="ease-out duration-300"
+            x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100"
+            x-transition:leave="ease-in duration-200"
+            x-transition:leave-start="opacity-100"
+            x-transition:leave-end="opacity-0"
+            class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+            x-on:click="$wire.closeTariffEditor()">
+        </div>
+        
+        {{-- Modal --}}
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div 
+                x-show="show"
+                x-transition:enter="ease-out duration-300"
+                x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                x-transition:leave="ease-in duration-200"
+                x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                class="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-4xl">
+                {{-- Header --}}
+                <div class="bg-white dark:bg-gray-800 px-4 pb-4 pt-5 sm:p-6 sm:pb-4 border-b border-gray-200 dark:border-gray-700">
+                    <h3 class="text-lg font-semibold leading-6 text-gray-900 dark:text-white">
+                        Edit Purchase Tariff Details
+                    </h3>
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        Edit all tariff fields including amounts, units, effective dates, and metadata.
+                    </p>
+                </div>
+                
+                {{-- Content --}}
+                <div class="bg-white dark:bg-gray-800 px-4 py-5 sm:p-6">
+                    @if($this->editingTariffId)
+                        @php
+                            $tariffId = $this->editingTariffId;
+                            $details = $this->tariffDetails[$tariffId] ?? [];
+                        @endphp
+                        
+                        <div class="space-y-6">
+                            {{-- Base Freight --}}
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Base Freight Amount
+                                    </label>
+                                    <input 
+                                        type="number"
+                                        step="0.01"
+                                        wire:model="tariffDetails.{{ $tariffId }}.base_freight_amount"
+                                        class="fi-input block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm transition duration-75 focus:border-primary-500 focus:ring-1 focus:ring-inset focus:ring-primary-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:dark:bg-gray-900 disabled:dark:text-gray-400"
+                                        required />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Base Freight Unit
+                                    </label>
+                                    <select 
+                                        wire:model="tariffDetails.{{ $tariffId }}.base_freight_unit"
+                                        class="fi-input block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm transition duration-75 focus:border-primary-500 focus:ring-1 focus:ring-inset focus:ring-primary-500">
+                                        <option value="LUMPSUM">LUMPSUM</option>
+                                        <option value="LM">LM</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            {{-- Surcharges --}}
+                            <div class="space-y-4">
+                                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Surcharges</h3>
+                                @foreach([
+                                    ['amount' => 'baf_amount', 'unit' => 'baf_unit', 'label' => 'BAF'],
+                                    ['amount' => 'ets_amount', 'unit' => 'ets_unit', 'label' => 'ETS'],
+                                    ['amount' => 'port_additional_amount', 'unit' => 'port_additional_unit', 'label' => 'Port Additional'],
+                                    ['amount' => 'admin_fxe_amount', 'unit' => 'admin_fxe_unit', 'label' => 'Admin Fee'],
+                                    ['amount' => 'thc_amount', 'unit' => 'thc_unit', 'label' => 'THC'],
+                                    ['amount' => 'measurement_costs_amount', 'unit' => 'measurement_costs_unit', 'label' => 'Measurement Costs'],
+                                    ['amount' => 'congestion_surcharge_amount', 'unit' => 'congestion_surcharge_unit', 'label' => 'Congestion Surcharge'],
+                                    ['amount' => 'iccm_amount', 'unit' => 'iccm_unit', 'label' => 'ICCM'],
+                                ] as $surcharge)
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                            {{ $surcharge['label'] }} Amount
+                                        </label>
+                                        <input 
+                                            type="number"
+                                            step="0.01"
+                                            wire:model="tariffDetails.{{ $tariffId }}.{{ $surcharge['amount'] }}"
+                                            class="fi-input block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm transition duration-75 focus:border-primary-500 focus:ring-1 focus:ring-inset focus:ring-primary-500" />
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                            {{ $surcharge['label'] }} Unit
+                                        </label>
+                                        <select 
+                                            wire:model="tariffDetails.{{ $tariffId }}.{{ $surcharge['unit'] }}"
+                                            class="fi-input block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm transition duration-75 focus:border-primary-500 focus:ring-1 focus:ring-inset focus:ring-primary-500">
+                                            <option value="LUMPSUM">LUMPSUM</option>
+                                            <option value="LM">LM</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                @endforeach
+                            </div>
+                            
+                            {{-- Metadata --}}
+                            <div class="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Effective From
+                                    </label>
+                                    <input 
+                                        type="date"
+                                        wire:model="tariffDetails.{{ $tariffId }}.effective_from"
+                                        class="fi-input block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm transition duration-75 focus:border-primary-500 focus:ring-1 focus:ring-inset focus:ring-primary-500" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Effective To
+                                    </label>
+                                    <input 
+                                        type="date"
+                                        wire:model="tariffDetails.{{ $tariffId }}.effective_to"
+                                        class="fi-input block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm transition duration-75 focus:border-primary-500 focus:ring-1 focus:ring-inset focus:ring-primary-500" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Currency
+                                    </label>
+                                    <select 
+                                        wire:model="tariffDetails.{{ $tariffId }}.currency"
+                                        class="fi-input block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm transition duration-75 focus:border-primary-500 focus:ring-1 focus:ring-inset focus:ring-primary-500">
+                                        <option value="EUR">EUR</option>
+                                        <option value="USD">USD</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="flex items-center">
+                                    <input 
+                                        type="checkbox"
+                                        wire:model="tariffDetails.{{ $tariffId }}.is_active"
+                                        id="tariff-active-{{ $tariffId }}"
+                                        class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                                    <label for="tariff-active-{{ $tariffId }}" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                                        Active
+                                    </label>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Source
+                                    </label>
+                                    <select 
+                                        wire:model="tariffDetails.{{ $tariffId }}.source"
+                                        class="fi-input block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm transition duration-75 focus:border-primary-500 focus:ring-1 focus:ring-inset focus:ring-primary-500">
+                                        <option value="">None</option>
+                                        <option value="excel">Excel</option>
+                                        <option value="import">Import</option>
+                                        <option value="manual">Manual</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Notes
+                                </label>
+                                <textarea 
+                                    wire:model="tariffDetails.{{ $tariffId }}.notes"
+                                    rows="3"
+                                    class="fi-input block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm transition duration-75 focus:border-primary-500 focus:ring-1 focus:ring-inset focus:ring-primary-500"></textarea>
+                            </div>
+                        </div>
+                    @endif
+                </div>
+                
+                {{-- Footer --}}
+                <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 border-t border-gray-200 dark:border-gray-600">
+                    <x-filament::button 
+                        wire:click="saveTariffDetails"
+                        color="primary"
+                        class="ml-3">
+                        Save
+                    </x-filament::button>
+                    <x-filament::button 
+                        wire:click="closeTariffEditor"
+                        color="gray">
+                        Cancel
+                    </x-filament::button>
+                </div>
+            </div>
+        </div>
+    @endif
 </x-filament-panels::page>

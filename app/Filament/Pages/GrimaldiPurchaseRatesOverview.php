@@ -31,8 +31,13 @@ class GrimaldiPurchaseRatesOverview extends Page
     
     public ?string $editingKey = null;
     
+    public ?int $editingTariffId = null;
+    
+    public array $tariffDetails = []; // [tariffId => [field => value]]
+    
     // Whitelist of editable amount fields
     protected array $editableFields = [
+        // Amount fields (existing)
         'base_freight_amount',
         'baf_amount',
         'ets_amount',
@@ -42,6 +47,21 @@ class GrimaldiPurchaseRatesOverview extends Page
         'measurement_costs_amount',
         'congestion_surcharge_amount',
         'iccm_amount',
+        // Unit fields (NEW)
+        'base_freight_unit',
+        'baf_unit',
+        'ets_unit',
+        'port_additional_unit',
+        'admin_fxe_unit',
+        'thc_unit',
+        'measurement_costs_unit',
+        'congestion_surcharge_unit',
+        'iccm_unit',
+        // Metadata fields (NEW)
+        'effective_from',
+        'effective_to',
+        'currency',
+        'is_active',
     ];
 
     public function mount(): void
@@ -178,9 +198,21 @@ class GrimaldiPurchaseRatesOverview extends Page
                     
                     // Validate and normalize each field
                     $validated = [];
+                    
+                    // Handle amount fields (numeric)
                     foreach ($payload as $field => $value) {
                         // Only allow whitelist fields
                         if (!in_array($field, $this->editableFields)) {
+                            continue;
+                        }
+                        
+                        // Skip unit fields (handled separately)
+                        if (str_ends_with($field, '_unit')) {
+                            continue;
+                        }
+                        
+                        // Skip metadata fields (handled separately)
+                        if (in_array($field, ['effective_from', 'effective_to', 'currency', 'is_active', 'source', 'notes'])) {
                             continue;
                         }
                         
@@ -201,6 +233,17 @@ class GrimaldiPurchaseRatesOverview extends Page
                         }
                         
                         $validated[$field] = $normalized;
+                    }
+                    
+                    // Handle unit fields (if present in dirty)
+                    foreach (['base_freight_unit', 'baf_unit', 'ets_unit', 'port_additional_unit',
+                             'admin_fxe_unit', 'thc_unit', 'measurement_costs_unit',
+                             'congestion_surcharge_unit', 'iccm_unit'] as $field) {
+                        if (isset($payload[$field])) {
+                            $validated[$field] = in_array($payload[$field], ['LUMPSUM', 'LM']) 
+                                ? $payload[$field] 
+                                : 'LUMPSUM';
+                        }
                     }
                     
                     if (empty($validated)) {
@@ -386,6 +429,184 @@ class GrimaldiPurchaseRatesOverview extends Page
         
         $this->editingKey = null;
         $this->loadMatrix();
+    }
+    
+    // Tariff details editor methods
+    
+    /**
+     * Open tariff details editor modal
+     */
+    public function openTariffEditor(int $tariffId): void
+    {
+        $this->editingTariffId = $tariffId;
+        
+        // Load tariff and populate tariffDetails
+        $tariff = CarrierPurchaseTariff::find($tariffId);
+        if ($tariff) {
+            $this->tariffDetails[$tariffId] = [
+                // Amounts
+                'base_freight_amount' => $tariff->base_freight_amount,
+                'baf_amount' => $tariff->baf_amount,
+                'ets_amount' => $tariff->ets_amount,
+                'port_additional_amount' => $tariff->port_additional_amount,
+                'admin_fxe_amount' => $tariff->admin_fxe_amount,
+                'thc_amount' => $tariff->thc_amount,
+                'measurement_costs_amount' => $tariff->measurement_costs_amount,
+                'congestion_surcharge_amount' => $tariff->congestion_surcharge_amount,
+                'iccm_amount' => $tariff->iccm_amount,
+                // Units
+                'base_freight_unit' => $tariff->base_freight_unit ?? 'LUMPSUM',
+                'baf_unit' => $tariff->baf_unit ?? 'LUMPSUM',
+                'ets_unit' => $tariff->ets_unit ?? 'LUMPSUM',
+                'port_additional_unit' => $tariff->port_additional_unit ?? 'LUMPSUM',
+                'admin_fxe_unit' => $tariff->admin_fxe_unit ?? 'LUMPSUM',
+                'thc_unit' => $tariff->thc_unit ?? 'LUMPSUM',
+                'measurement_costs_unit' => $tariff->measurement_costs_unit ?? 'LUMPSUM',
+                'congestion_surcharge_unit' => $tariff->congestion_surcharge_unit ?? 'LUMPSUM',
+                'iccm_unit' => $tariff->iccm_unit ?? 'LUMPSUM',
+                // Metadata
+                'effective_from' => $tariff->effective_from?->format('Y-m-d'),
+                'effective_to' => $tariff->effective_to?->format('Y-m-d'),
+                'currency' => $tariff->currency ?? 'EUR',
+                'is_active' => $tariff->is_active,
+                'source' => $tariff->source,
+                'notes' => $tariff->notes,
+            ];
+        }
+    }
+    
+    /**
+     * Close tariff editor modal
+     */
+    public function closeTariffEditor(): void
+    {
+        $this->editingTariffId = null;
+        $this->tariffDetails = [];
+    }
+    
+    /**
+     * Save tariff details from modal
+     */
+    public function saveTariffDetails(): void
+    {
+        if (!$this->editingTariffId) {
+            return;
+        }
+        
+        try {
+            DB::transaction(function () {
+                $tariff = CarrierPurchaseTariff::findOrFail($this->editingTariffId);
+                $details = $this->tariffDetails[$this->editingTariffId] ?? [];
+                
+                $validated = [];
+                
+                // Validate and normalize amount fields
+                foreach (['base_freight_amount', 'baf_amount', 'ets_amount', 'port_additional_amount',
+                         'admin_fxe_amount', 'thc_amount', 'measurement_costs_amount',
+                         'congestion_surcharge_amount', 'iccm_amount'] as $field) {
+                    if (isset($details[$field])) {
+                        $normalized = $this->normalizeNumeric($details[$field]);
+                        if ($field === 'base_freight_amount' && $normalized === null) {
+                            throw new \InvalidArgumentException("Base freight amount is required");
+                        }
+                        if ($normalized !== null && $normalized < 0) {
+                            throw new \InvalidArgumentException("Field {$field} must be >= 0");
+                        }
+                        $validated[$field] = $normalized;
+                    }
+                }
+                
+                // Unit fields
+                foreach (['base_freight_unit', 'baf_unit', 'ets_unit', 'port_additional_unit',
+                         'admin_fxe_unit', 'thc_unit', 'measurement_costs_unit',
+                         'congestion_surcharge_unit', 'iccm_unit'] as $field) {
+                    if (isset($details[$field])) {
+                        $validated[$field] = in_array($details[$field], ['LUMPSUM', 'LM']) 
+                            ? $details[$field] 
+                            : 'LUMPSUM';
+                    }
+                }
+                
+                // Date fields
+                if (isset($details['effective_from'])) {
+                    $validated['effective_from'] = $details['effective_from'] ?: null;
+                }
+                if (isset($details['effective_to'])) {
+                    $validated['effective_to'] = $details['effective_to'] ?: null;
+                }
+                
+                // Other fields
+                if (isset($details['currency'])) {
+                    $validated['currency'] = in_array($details['currency'], ['EUR', 'USD']) 
+                        ? $details['currency'] 
+                        : 'EUR';
+                }
+                if (isset($details['is_active'])) {
+                    $validated['is_active'] = (bool) $details['is_active'];
+                }
+                if (isset($details['source'])) {
+                    $validated['source'] = $details['source'];
+                }
+                if (isset($details['notes'])) {
+                    $validated['notes'] = $details['notes'];
+                }
+                
+                $tariff->fill($validated);
+                $tariff->save();
+            });
+            
+            $this->closeTariffEditor();
+            $this->loadMatrix();
+            
+            Notification::make()
+                ->title('Saved')
+                ->body('Tariff details saved successfully.')
+                ->success()
+                ->send();
+                
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Error')
+                ->body('Failed to save: ' . $e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+    
+    /**
+     * Create new tariff for a mapping
+     */
+    public function createTariff(int $mappingId): void
+    {
+        try {
+            $mapping = \App\Models\CarrierArticleMapping::findOrFail($mappingId);
+            
+            // Create default tariff
+            $tariff = CarrierPurchaseTariff::create([
+                'carrier_article_mapping_id' => $mappingId,
+                'effective_from' => now()->format('Y-m-d'),
+                'is_active' => true,
+                'currency' => 'EUR',
+                'base_freight_amount' => 0,
+                'base_freight_unit' => 'LUMPSUM',
+                'source' => 'manual',
+            ]);
+            
+            $this->openTariffEditor($tariff->id);
+            
+            Notification::make()
+                ->title('Created')
+                ->body('New tariff created. Please fill in the details.')
+                ->success()
+                ->send();
+                
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Error')
+                ->body('Failed to create tariff: ' . $e->getMessage())
+                ->danger()
+                ->send();
+        }
     }
 }
 
