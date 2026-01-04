@@ -335,6 +335,38 @@ class CarrierRuleIntegrationService
                     $vesselName,
                     $vesselClass
                 );
+
+                // Filter mappings to only include those that match the requested port
+                if ($podPortId !== null) {
+                    $portGroupIds = $resolver->resolvePortGroupIdsForPort($carrierId, $podPortId);
+                    $mappings = $mappings->filter(function ($mapping) use ($podPortId, $portGroupIds) {
+                        $mappingPortIds = $mapping->port_ids ?? [];
+                        $mappingPortGroupIds = $mapping->port_group_ids ?? [];
+
+                        // Include global mappings (port_ids=null and port_group_ids=null)
+                        if (empty($mappingPortIds) && empty($mappingPortGroupIds)) {
+                            return true;
+                        }
+
+                        // Include mappings that explicitly contain the requested port
+                        if (!empty($mappingPortIds) && in_array($podPortId, $mappingPortIds)) {
+                            return true;
+                        }
+
+                        // Include mappings that contain any of the requested port's port groups
+                        if (!empty($mappingPortGroupIds) && !empty($portGroupIds)) {
+                            foreach ($portGroupIds as $groupId) {
+                                if (in_array($groupId, $mappingPortGroupIds)) {
+                                    return true;
+                                }
+                            }
+                        }
+
+                        // Exclude mappings for other specific ports
+                        return false;
+                    });
+                }
+
                 $carrierRuleMappedArticleIds = $mappings->pluck('article_id')->unique()->toArray();
             }
         }
