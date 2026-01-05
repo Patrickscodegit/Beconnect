@@ -46,6 +46,36 @@
                     | Effective date: {{ $effectiveDate }}
                 @endif
             </p>
+            
+            {{-- Bulk Date Setter --}}
+            <div class="mt-4 flex items-center gap-4">
+                <div class="flex items-center gap-2">
+                    <label class="text-sm text-gray-700 dark:text-gray-300">Update Date (All):</label>
+                    <input 
+                        type="date" 
+                        wire:model="bulkUpdateDate" 
+                        class="rounded-md border-gray-300 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                    />
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="text-sm text-gray-700 dark:text-gray-300">Validity Date (All):</label>
+                    <input 
+                        type="date" 
+                        wire:model="bulkValidityDate" 
+                        class="rounded-md border-gray-300 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                    />
+                </div>
+                <x-filament::button wire:click="applyBulkDates" size="sm">
+                    Apply to All Destinations
+                </x-filament::button>
+                <x-filament::button 
+                    wire:click="clearBulkDates" 
+                    size="sm"
+                    color="gray"
+                    title="Clear all date overrides">
+                    Clear All
+                </x-filament::button>
+            </div>
         </div>
 
         {{-- Port Blocks --}}
@@ -61,6 +91,32 @@
                     <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                         {{ $portCode }} — {{ $portName }}
                     </h2>
+                    
+                    <div class="flex items-center gap-2">
+                        {{-- Per-Port Date Setter --}}
+                        <input 
+                            type="date" 
+                            wire:model="portDates.{{ $portCode }}.update_date" 
+                            class="rounded-md border-gray-300 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                            placeholder="Update Date"
+                        />
+                        <input 
+                            type="date" 
+                            wire:model="portDates.{{ $portCode }}.validity_date" 
+                            class="rounded-md border-gray-300 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                            placeholder="Validity Date"
+                        />
+                        <x-filament::button wire:click="applyPortDates('{{ $portCode }}')" size="sm">
+                            Apply to {{ $portCode }}
+                        </x-filament::button>
+                        <x-filament::button 
+                            wire:click="clearPortDates('{{ $portCode }}')" 
+                            size="sm"
+                            color="gray"
+                            title="Clear date overrides for {{ $portCode }}">
+                            Clear
+                        </x-filament::button>
+                    </div>
                     
                     @if($this->hasDirtyForPort($portCode))
                         <div class="flex items-center gap-2">
@@ -673,6 +729,28 @@
                                         <option value="EUR">EUR</option>
                                         <option value="USD">USD</option>
                                     </select>
+                                </div>
+                            </div>
+                            
+                            {{-- Date Fields --}}
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Update Date
+                                    </label>
+                                    <input 
+                                        type="date"
+                                        wire:model="tariffDetails.{{ $tariffId }}.update_date"
+                                        class="fi-input block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm transition duration-75 focus:border-primary-500 focus:ring-1 focus:ring-inset focus:ring-primary-500" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Validity Date
+                                    </label>
+                                    <input 
+                                        type="date"
+                                        wire:model="tariffDetails.{{ $tariffId }}.validity_date"
+                                        class="fi-input block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm transition duration-75 focus:border-primary-500 focus:ring-1 focus:ring-inset focus:ring-primary-500" />
                                 </div>
                             </div>
                             
