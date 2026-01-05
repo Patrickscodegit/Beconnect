@@ -4,10 +4,14 @@ namespace App\Filament\Pages;
 
 use App\Models\CarrierPurchaseTariff;
 use App\Models\RobawsArticleCache;
+use App\Models\ShippingCarrier;
+use App\Models\Port;
 use App\Services\Pricing\GrimaldiPurchaseRatesOverviewService;
+use App\Services\Export\Clients\RobawsApiClient;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Artisan;
 
 class GrimaldiPurchaseRatesOverview extends Page
 {
@@ -34,6 +38,11 @@ class GrimaldiPurchaseRatesOverview extends Page
     public ?int $editingTariffId = null;
     
     public array $tariffDetails = []; // [tariffId => [field => value]]
+    
+    // Date management properties
+    public ?string $bulkUpdateDate = null;
+    public ?string $bulkValidityDate = null;
+    public array $portDates = []; // [portCode => ['update_date' => ..., 'validity_date' => ...]]
     
     // Whitelist of editable amount fields
     protected array $editableFields = [
@@ -467,6 +476,8 @@ class GrimaldiPurchaseRatesOverview extends Page
                 // Metadata
                 'effective_from' => $tariff->effective_from?->format('Y-m-d'),
                 'effective_to' => $tariff->effective_to?->format('Y-m-d'),
+                'update_date' => $tariff->update_date?->format('Y-m-d'),
+                'validity_date' => $tariff->validity_date?->format('Y-m-d'),
                 'currency' => $tariff->currency ?? 'EUR',
                 'is_active' => $tariff->is_active,
                 'source' => $tariff->source,
@@ -534,6 +545,12 @@ class GrimaldiPurchaseRatesOverview extends Page
                 if (isset($details['effective_to'])) {
                     $validated['effective_to'] = $details['effective_to'] ?: null;
                 }
+                if (isset($details['update_date'])) {
+                    $validated['update_date'] = $details['update_date'] ?: null; // Allow clearing
+                }
+                if (isset($details['validity_date'])) {
+                    $validated['validity_date'] = $details['validity_date'] ?: null; // Allow clearing
+                }
                 
                 // Other fields
                 if (isset($details['currency'])) {
@@ -553,6 +570,9 @@ class GrimaldiPurchaseRatesOverview extends Page
                 
                 $tariff->fill($validated);
                 $tariff->save();
+                
+                // Sync dates to article cache
+                $this->syncTariffDatesToArticle($tariff);
             });
             
             $this->closeTariffEditor();
@@ -607,6 +627,275 @@ class GrimaldiPurchaseRatesOverview extends Page
                 ->danger()
                 ->send();
         }
+    }
+    
+    /**
+     * Apply bulk dates to all destinations
+     */
+    public function applyBulkDates(): void
+    {
+        if (!$this->bulkUpdateDate && !$this->bulkValidityDate) {
+            return;
+        }
+        
+        try {
+            $bulkUpdateDate = $this->bulkUpdateDate;
+            $bulkValidityDate = $this->bulkValidityDate;
+            $syncService = app(\App\Services\Pricing\TariffDateSyncService::class);
+            
+            $carrier = ShippingCarrier::where('code', 'GRIMALDI')->firstOrFail();
+            
+            CarrierPurchaseTariff::query()
+                ->whereHas('carrierArticleMapping', function ($q) use ($carrier) {
+                    $q->where('carrier_id', $carrier->id);
+                })
+                ->with(['carrierArticleMapping.article'])
+                ->chunkById(200, function ($tariffs) use ($bulkUpdateDate, $bulkValidityDate, $syncService) {
+                    // No transaction - Laravel writes are atomic per statement
+                    foreach ($tariffs as $tariff) {
+                        if ($bulkUpdateDate) {
+                            $tariff->update_date = $bulkUpdateDate;
+                        }
+                        if ($bulkValidityDate) {
+                            $tariff->validity_date = $bulkValidityDate;
+                        }
+                        $tariff->save();
+                        
+                        $syncService->syncTariffDatesToArticle($tariff);
+                    }
+                });
+            
+            $this->loadMatrix();
+            Notification::make()->success()->title('Bulk dates applied')->send();
+        } catch (\Exception $e) {
+            Notification::make()->danger()->title('Error')->body($e->getMessage())->send();
+        }
+    }
+    
+    /**
+     * Apply dates to a specific port
+     */
+    public function applyPortDates(string $portCode): void
+    {
+        $portDates = $this->portDates[$portCode] ?? [];
+        
+        if (empty($portDates['update_date']) && empty($portDates['validity_date'])) {
+            Notification::make()->warning()->title('No dates provided')->body('Please enter at least one date before applying.')->send();
+            return;
+        }
+        
+        try {
+            $updateDate = !empty($portDates['update_date']) ? $portDates['update_date'] : null;
+            $validityDate = !empty($portDates['validity_date']) ? $portDates['validity_date'] : null;
+            $syncService = app(\App\Services\Pricing\TariffDateSyncService::class);
+            
+            $carrier = ShippingCarrier::where('code', 'GRIMALDI')->firstOrFail();
+            $port = Port::where('code', $portCode)->first();
+            
+            if (!$port) {
+                throw new \Exception("Port {$portCode} not found");
+            }
+            
+            // Track article codes that were updated for pushing to Robaws
+            $updatedArticleCodes = [];
+            
+            // Filter by article POD (matches how service groups ports)
+            CarrierPurchaseTariff::query()
+                ->whereHas('carrierArticleMapping', function ($q) use ($carrier, $port) {
+                    $q->where('carrier_id', $carrier->id)
+                      ->whereHas('article', function ($articleQ) use ($port) {
+                          // Primary: use normalized pod_code field
+                          $articleQ->where('pod_code', $port->code);
+                      });
+                })
+                ->with(['carrierArticleMapping.article'])
+                ->chunkById(200, function ($tariffs) use ($updateDate, $validityDate, $syncService, &$updatedArticleCodes) {
+                    // No transaction
+                    foreach ($tariffs as $tariff) {
+                        if ($updateDate !== null) {
+                            $tariff->update_date = $updateDate ?: null; // Allow clearing
+                        }
+                        if ($validityDate !== null) {
+                            $tariff->validity_date = $validityDate ?: null; // Allow clearing
+                        }
+                        
+                        try {
+                            $tariff->save();
+                        } catch (\Exception $e) {
+                            throw $e;
+                        }
+                        
+                        $syncService->syncTariffDatesToArticle($tariff);
+                        
+                        // Collect article codes for pushing to Robaws
+                        if ($tariff->carrierArticleMapping && $tariff->carrierArticleMapping->article) {
+                            $articleCode = $tariff->carrierArticleMapping->article->article_code;
+                            if ($articleCode && !in_array($articleCode, $updatedArticleCodes)) {
+                                $updatedArticleCodes[] = $articleCode;
+                            }
+                        }
+                    }
+                });
+            
+            // Push updated articles to Robaws
+            if (!empty($updatedArticleCodes)) {
+                try {
+                    // Push each article to Robaws
+                    $client = app(RobawsApiClient::class);
+                    $pushedCount = 0;
+                    $failedCount = 0;
+                    
+                    foreach ($updatedArticleCodes as $articleCode) {
+                        $article = RobawsArticleCache::where('article_code', $articleCode)->first();
+                        if (!$article || !$article->robaws_article_id) {
+                            continue;
+                        }
+                        
+                        $updateDate = $article->effective_update_date?->format('m/d/Y');
+                        $validityDate = $article->effective_validity_date?->format('m/d/Y');
+                        
+                        if (!$updateDate && !$validityDate) {
+                            continue;
+                        }
+                        
+                        $extraFields = [];
+                        if ($updateDate) {
+                            $extraFields['UPDATE DATE'] = [
+                                'type' => 'TEXT',
+                                'group' => 'IMPORTANT INFO',
+                                'stringValue' => $updateDate,
+                            ];
+                        }
+                        if ($validityDate) {
+                            $extraFields['VALIDITY DATE'] = [
+                                'type' => 'TEXT',
+                                'group' => 'IMPORTANT INFO',
+                                'stringValue' => $validityDate,
+                            ];
+                        }
+                        
+                        $payload = ['extraFields' => $extraFields];
+                        $response = $client->updateArticle($article->robaws_article_id, $payload);
+                        
+                        if ($response['success'] ?? false) {
+                            $pushedCount++;
+                            // Update last_pushed timestamps
+                            $article->update([
+                                'last_pushed_dates_at' => now(),
+                                'last_pushed_update_date' => $article->effective_update_date,
+                                'last_pushed_validity_date' => $article->effective_validity_date,
+                            ]);
+                        } else {
+                            $failedCount++;
+                        }
+                        
+                        // Small delay to respect rate limits
+                        usleep(100000); // 100ms
+                    }
+                    
+                    if ($pushedCount > 0) {
+                        Notification::make()
+                            ->success()
+                            ->title("Dates applied to {$portCode}")
+                            ->body("Pushed {$pushedCount} article(s) to Robaws" . ($failedCount > 0 ? " ({$failedCount} failed)" : ""))
+                            ->send();
+                    }
+                } catch (\Exception $e) {
+                    Notification::make()
+                        ->warning()
+                        ->title("Dates applied to {$portCode}")
+                        ->body("Failed to push to Robaws: " . $e->getMessage())
+                        ->send();
+                }
+            } else {
+                Notification::make()->success()->title("Dates applied to {$portCode}")->send();
+            }
+            
+            $this->loadMatrix();
+        } catch (\Exception $e) {
+            Notification::make()->danger()->title('Error')->body($e->getMessage())->send();
+        }
+    }
+    
+    /**
+     * Clear date overrides for a specific port
+     */
+    public function clearPortDates(string $portCode): void
+    {
+        try {
+            $syncService = app(\App\Services\Pricing\TariffDateSyncService::class);
+            $carrier = ShippingCarrier::where('code', 'GRIMALDI')->firstOrFail();
+            $port = Port::where('code', $portCode)->first();
+            
+            if (!$port) {
+                throw new \Exception("Port {$portCode} not found");
+            }
+            
+            CarrierPurchaseTariff::query()
+                ->whereHas('carrierArticleMapping', function ($q) use ($carrier, $port) {
+                    $q->where('carrier_id', $carrier->id)
+                      ->whereHas('article', function ($articleQ) use ($port) {
+                          $articleQ->where('pod_code', $port->code);
+                      });
+                })
+                ->with(['carrierArticleMapping.article'])
+                ->chunkById(200, function ($tariffs) use ($syncService) {
+                    foreach ($tariffs as $tariff) {
+                        // Clear dates on tariff
+                        $tariff->update_date = null;
+                        $tariff->validity_date = null;
+                        $tariff->save();
+                        
+                        // This will clear overrides via sync service
+                        $syncService->syncTariffDatesToArticle($tariff);
+                    }
+                });
+            
+            $this->loadMatrix();
+            Notification::make()->success()->title("Date overrides cleared for {$portCode}")->send();
+        } catch (\Exception $e) {
+            Notification::make()->danger()->title('Error')->body($e->getMessage())->send();
+        }
+    }
+    
+    /**
+     * Clear all date overrides
+     */
+    public function clearBulkDates(): void
+    {
+        try {
+            $syncService = app(\App\Services\Pricing\TariffDateSyncService::class);
+            $carrier = ShippingCarrier::where('code', 'GRIMALDI')->firstOrFail();
+            
+            CarrierPurchaseTariff::query()
+                ->whereHas('carrierArticleMapping', function ($q) use ($carrier) {
+                    $q->where('carrier_id', $carrier->id);
+                })
+                ->with(['carrierArticleMapping.article'])
+                ->chunkById(200, function ($tariffs) use ($syncService) {
+                    foreach ($tariffs as $tariff) {
+                        $tariff->update_date = null;
+                        $tariff->validity_date = null;
+                        $tariff->save();
+                        
+                        $syncService->syncTariffDatesToArticle($tariff);
+                    }
+                });
+            
+            $this->loadMatrix();
+            Notification::make()->success()->title('All date overrides cleared')->send();
+        } catch (\Exception $e) {
+            Notification::make()->danger()->title('Error')->body($e->getMessage())->send();
+        }
+    }
+    
+    /**
+     * Sync tariff dates to article cache (uses service)
+     */
+    protected function syncTariffDatesToArticle(CarrierPurchaseTariff $tariff): void
+    {
+        app(\App\Services\Pricing\TariffDateSyncService::class)
+            ->syncTariffDatesToArticle($tariff);
     }
 }
 

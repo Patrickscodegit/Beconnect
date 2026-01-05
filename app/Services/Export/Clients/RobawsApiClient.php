@@ -2097,6 +2097,63 @@ final class RobawsApiClient
     }
 
     /**
+     * Update an article in Robaws
+     * PATCH /api/v2/articles/{id}
+     *
+     * @param string|int $articleId Robaws article ID
+     * @param array $payload Update payload with extraFields structure
+     * @return array Response wrapper: ['success' => bool, 'data'|'error' => mixed, 'status' => int]
+     */
+    public function updateArticle(string|int $articleId, array $payload): array
+    {
+        try {
+            $this->enforceRateLimit();
+
+            // Explicitly JSON-encode the payload and use merge-patch content type
+            // This matches the pattern used in setOfferContact and updateClientContact
+            $jsonBody = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            
+            $response = $this->getHttpClient()
+                ->withHeaders([
+                    'Accept' => 'application/json',
+                ])
+                ->withBody($jsonBody, 'application/merge-patch+json')
+                ->patch("/api/v2/articles/{$articleId}");
+
+            $this->updateRateLimitsFromResponse($response);
+
+            $responseBody = $response->body();
+            $responseJson = $response->json();
+
+            if ($response->successful()) {
+                return [
+                    'success' => true,
+                    'data' => $responseJson,
+                    'status' => $response->status(),
+                    'body' => $responseBody, // Include body for debugging
+                ];
+            }
+
+            return [
+                'success' => false,
+                'error' => $responseBody,
+                'status' => $response->status(),
+            ];
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to update Robaws article', [
+                'robaws_article_id' => $articleId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'status' => 500,
+            ];
+        }
+    }
+
+    /**
      * Register webhook endpoint with Robaws
      */
     public function registerWebhook(array $payload): array
