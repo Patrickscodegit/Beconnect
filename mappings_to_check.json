@@ -1,0 +1,482 @@
+[
+    {
+        "local_code": "GANRABIBV",
+        "expected_code": "GANRABIBV",
+        "port": "ABI",
+        "name": "Big Van Abidjan (GANRABIBV)"
+    },
+    {
+        "local_code": "GANRABICAR",
+        "expected_code": "GANRABICAR",
+        "port": "ABI",
+        "name": "Car Abidjan (GANRABICAR)"
+    },
+    {
+        "local_code": "GANRABIHH",
+        "expected_code": "GANRABIHH",
+        "port": "ABI",
+        "name": "LM Cargo Abidjan (GANRABIHH)"
+    },
+    {
+        "local_code": "GANRABISV",
+        "expected_code": "GANRABISV",
+        "port": "ABI",
+        "name": "Small Van Abidjan (GANRABISV)"
+    },
+    {
+        "local_code": "GANRBANBV",
+        "expected_code": "GANRBANBV",
+        "port": "BAN",
+        "name": "Big Van Banjul (GANRBANBV)"
+    },
+    {
+        "local_code": "GANRBANCAR",
+        "expected_code": "GANRBANCAR",
+        "port": "BAN",
+        "name": "Car Banjul (GANRBANCAR)"
+    },
+    {
+        "local_code": "GANRBANHH",
+        "expected_code": "GANRBANHH",
+        "port": "BAN",
+        "name": "LM Cargo Banjul (GANRBANHH)"
+    },
+    {
+        "local_code": "GANRBANSV",
+        "expected_code": "GANRBANSV",
+        "port": "BAN",
+        "name": "Small Van Banjul (GANRBANSV)"
+    },
+    {
+        "local_code": "GANRBATBV",
+        "expected_code": "GANRBATBV",
+        "port": "BAT",
+        "name": "Big Van Bata (GANRBATBV)"
+    },
+    {
+        "local_code": "GANRBATCAR",
+        "expected_code": "GANRBATCAR",
+        "port": "BAT",
+        "name": "Car Bata (GANRBATCAR)"
+    },
+    {
+        "local_code": "GANRBATHH",
+        "expected_code": "GANRBATHH",
+        "port": "BAT",
+        "name": "LM Cargo Bata (GANRBATHH)"
+    },
+    {
+        "local_code": "GANRBATSV",
+        "expected_code": "GANRBATSV",
+        "port": "BAT",
+        "name": "Small Van Bata (GANRBATSV)"
+    },
+    {
+        "local_code": "GANRCASBV",
+        "expected_code": "GANRCASBV",
+        "port": "CAS",
+        "name": "Big Van Casablanca (GANRCASBV)"
+    },
+    {
+        "local_code": "GANRCASCAR",
+        "expected_code": "GANRCASCAR",
+        "port": "CAS",
+        "name": "Car Casablanca (GANRCASCAR)"
+    },
+    {
+        "local_code": "GANRCASHH",
+        "expected_code": "GANRCASHH",
+        "port": "CAS",
+        "name": "LM Cargo Casablanca (GANRCASHH)"
+    },
+    {
+        "local_code": "GANRCASSV",
+        "expected_code": "GANRCASSV",
+        "port": "CAS",
+        "name": "Small Van Casablanca (GANRCASSV)"
+    },
+    {
+        "local_code": "GANRCONBV",
+        "expected_code": "GANRCONBV",
+        "port": "CON",
+        "name": "Big Van Conakry (GANRCONBV)"
+    },
+    {
+        "local_code": "GANRCONCAR",
+        "expected_code": "GANRCONCAR",
+        "port": "CON",
+        "name": "Car Conakry (GANRCONCAR)"
+    },
+    {
+        "local_code": "GANRCONHH",
+        "expected_code": "GANRCONHH",
+        "port": "CON",
+        "name": "LM Cargo Conakry (GANRCONHH)"
+    },
+    {
+        "local_code": "GANRCONSV",
+        "expected_code": "GANRCONSV",
+        "port": "CON",
+        "name": "Small Van Conakry (GANRCONSV)"
+    },
+    {
+        "local_code": "GANRCOTBV",
+        "expected_code": "GANRCOTBV",
+        "port": "COT",
+        "name": "Big Van Cotonou (GANRCOTBV)"
+    },
+    {
+        "local_code": "GANRCOTCAR",
+        "expected_code": "GANRCOTCAR",
+        "port": "COT",
+        "name": "Car Cotonou (GANRCOTCAR)"
+    },
+    {
+        "local_code": "GANRCOTHH",
+        "expected_code": "GANRCOTHH",
+        "port": "COT",
+        "name": "LM Cargo Cotonou (GANRCOTHH)"
+    },
+    {
+        "local_code": "GANRCOTSV",
+        "expected_code": "GANRCOTSV",
+        "port": "COT",
+        "name": "Small Van Cotonou (GANRCOTSV)"
+    },
+    {
+        "local_code": "GANRDAKBV",
+        "expected_code": "GANRDAKBV",
+        "port": "DAK",
+        "name": "Big Van Dakar (GANRDAKBV)"
+    },
+    {
+        "local_code": "GANRDAKCAR",
+        "expected_code": "GANRDAKCAR",
+        "port": "DAK",
+        "name": "Car Dakar (GANRDAKCAR)"
+    },
+    {
+        "local_code": "GANRDAKHH",
+        "expected_code": "GANRDAKHH",
+        "port": "DAK",
+        "name": "LM Cargo Dakar (GANRDAKHH)"
+    },
+    {
+        "local_code": "GANRDAKSV",
+        "expected_code": "GANRDAKSV",
+        "port": "DAK",
+        "name": "Small Van Dakar (GANRDAKSV)"
+    },
+    {
+        "local_code": "GANRDOUBV",
+        "expected_code": "GANRDOUBV",
+        "port": "DOU",
+        "name": "Big Van Douala (GANRDOUBV)"
+    },
+    {
+        "local_code": "GANRDOUCAR",
+        "expected_code": "GANRDOUCAR",
+        "port": "DOU",
+        "name": "Car Douala (GANRDOUCAR)"
+    },
+    {
+        "local_code": "GANRDOUHH",
+        "expected_code": "GANRDOUHH",
+        "port": "DOU",
+        "name": "LM Cargo Douala (GANRDOUHH)"
+    },
+    {
+        "local_code": "GANRDOUSV",
+        "expected_code": "GANRDOUSV",
+        "port": "DOU",
+        "name": "Small Van Douala (GANRDOUSV)"
+    },
+    {
+        "local_code": "GANRFREBV",
+        "expected_code": "GANRFREBV",
+        "port": "FRE",
+        "name": "Big Van Freetown (GANRFREBV)"
+    },
+    {
+        "local_code": "GANRFRECAR",
+        "expected_code": "GANRFRECAR",
+        "port": "FRE",
+        "name": "Car Freetown (GANRFRECAR)"
+    },
+    {
+        "local_code": "GANRFREHH",
+        "expected_code": "GANRFREHH",
+        "port": "FRE",
+        "name": "LM Cargo Freetown (GANRFREHH)"
+    },
+    {
+        "local_code": "GANRFRESV",
+        "expected_code": "GANRFRESV",
+        "port": "FRE",
+        "name": "Small Van Freetown (GANRFRESV)"
+    },
+    {
+        "local_code": "GANRLAGBV",
+        "expected_code": "GANRLAGBV",
+        "port": "LAG",
+        "name": "Big Van Lagos (GANRLAGBV)"
+    },
+    {
+        "local_code": "GANRLAGCAR",
+        "expected_code": "GANRLAGCAR",
+        "port": "LAG",
+        "name": "Car Lagos (GANRLAGCAR)"
+    },
+    {
+        "local_code": "GANRLAGHH",
+        "expected_code": "GANRLAGHH",
+        "port": "LAG",
+        "name": "LM Cargo Lagos (GANRLAGHH)"
+    },
+    {
+        "local_code": "GANRLAGSV",
+        "expected_code": "GANRLAGSV",
+        "port": "LAG",
+        "name": "Small Van Lagos (GANRLAGSV)"
+    },
+    {
+        "local_code": "GANRLIBBV",
+        "expected_code": "GANRLIBBV",
+        "port": "LIB",
+        "name": "Big Van Libreville (GANRLIBBV)"
+    },
+    {
+        "local_code": "GANRLIBCAR",
+        "expected_code": "GANRLIBCAR",
+        "port": "LIB",
+        "name": "Car Libreville (GANRLIBCAR)"
+    },
+    {
+        "local_code": "GANRLIBHH",
+        "expected_code": "GANRLIBHH",
+        "port": "LIB",
+        "name": "LM Cargo Libreville (GANRLIBHH)"
+    },
+    {
+        "local_code": "GANRLIBSV",
+        "expected_code": "GANRLIBSV",
+        "port": "LIB",
+        "name": "Small Van Libreville (GANRLIBSV)"
+    },
+    {
+        "local_code": "GANRLOMBV",
+        "expected_code": "GANRLOMBV",
+        "port": "LOM",
+        "name": "Big Van Lome (GANRLOMBV)"
+    },
+    {
+        "local_code": "GANRLOMCAR",
+        "expected_code": "GANRLOMCAR",
+        "port": "LOM",
+        "name": "Car Lome (GANRLOMCAR)"
+    },
+    {
+        "local_code": "GANRLOMHH",
+        "expected_code": "GANRLOMHH",
+        "port": "LOM",
+        "name": "LM Cargo Lome (GANRLOMHH)"
+    },
+    {
+        "local_code": "GANRLOMSV",
+        "expected_code": "GANRLOMSV",
+        "port": "LOM",
+        "name": "Small Van Lome (GANRLOMSV)"
+    },
+    {
+        "local_code": "GANRLUABV",
+        "expected_code": "GANRLUABV",
+        "port": "LUA",
+        "name": "Big Van Luanda (GANRLUABV)"
+    },
+    {
+        "local_code": "GANRLUACAR",
+        "expected_code": "GANRLUACAR",
+        "port": "LUA",
+        "name": "Car Luanda (GANRLUACAR)"
+    },
+    {
+        "local_code": "GANRLUAHH",
+        "expected_code": "GANRLUAHH",
+        "port": "LUA",
+        "name": "LM Cargo Luanda (GANRLUAHH)"
+    },
+    {
+        "local_code": "GANRLUASV",
+        "expected_code": "GANRLUASV",
+        "port": "LUA",
+        "name": "Small Van Luanda (GANRLUASV)"
+    },
+    {
+        "local_code": "GANRMALBV",
+        "expected_code": "GANRMALBV",
+        "port": "MAL",
+        "name": "Big Van Malabo (GANRMALBV)"
+    },
+    {
+        "local_code": "GANRMALCAR",
+        "expected_code": "GANRMALCAR",
+        "port": "MAL",
+        "name": "Car Malabo (GANRMALCAR)"
+    },
+    {
+        "local_code": "GANRMALHH",
+        "expected_code": "GANRMALHH",
+        "port": "MAL",
+        "name": "LM Cargo Malabo (GANRMALHH)"
+    },
+    {
+        "local_code": "GANRMALSV",
+        "expected_code": "GANRMALSV",
+        "port": "MAL",
+        "name": "Small Van Malabo (GANRMALSV)"
+    },
+    {
+        "local_code": "GANRMONBV",
+        "expected_code": "GANRMONBV",
+        "port": "MON",
+        "name": "Big Van Monrovia (GANRMONBV)"
+    },
+    {
+        "local_code": "GANRMONCAR",
+        "expected_code": "GANRMONCAR",
+        "port": "MON",
+        "name": "Car Monrovia (GANRMONCAR)"
+    },
+    {
+        "local_code": "GANRMONHH",
+        "expected_code": "GANRMONHH",
+        "port": "MON",
+        "name": "LM Cargo Monrovia (GANRMONHH)"
+    },
+    {
+        "local_code": "GANRMONSV",
+        "expected_code": "GANRMONSV",
+        "port": "MON",
+        "name": "Small Van Monrovia (GANRMONSV)"
+    },
+    {
+        "local_code": "GANRNOUBV",
+        "expected_code": "GANRNOUBV",
+        "port": "NOU",
+        "name": "Big Van Nouakchott (GANRNOUBV)"
+    },
+    {
+        "local_code": "GANRNOUCAR",
+        "expected_code": "GANRNOUCAR",
+        "port": "NOU",
+        "name": "Car Nouakchott (GANRNOUCAR)"
+    },
+    {
+        "local_code": "GANRNOUHH",
+        "expected_code": "GANRNOUHH",
+        "port": "NOU",
+        "name": "LM Cargo Nouakchott (GANRNOUHH)"
+    },
+    {
+        "local_code": "GANRNOUSV",
+        "expected_code": "GANRNOUSV",
+        "port": "NOU",
+        "name": "Small Van Nouakchott (GANRNOUSV)"
+    },
+    {
+        "local_code": "GANRPOIBV",
+        "expected_code": "GANRPOIBV",
+        "port": "POI",
+        "name": "Big Van Pointe-Noire (GANRPOIBV)"
+    },
+    {
+        "local_code": "GANRPOICAR",
+        "expected_code": "GANRPOICAR",
+        "port": "POI",
+        "name": "Car Pointe-Noire (GANRPOICAR)"
+    },
+    {
+        "local_code": "GANRPOIHH",
+        "expected_code": "GANRPOIHH",
+        "port": "POI",
+        "name": "LM Cargo Pointe-Noire (GANRPOIHH)"
+    },
+    {
+        "local_code": "GANRPOISV",
+        "expected_code": "GANRPOISV",
+        "port": "POI",
+        "name": "Small Van Pointe-Noire (GANRPOISV)"
+    },
+    {
+        "local_code": "GANRTAKBV",
+        "expected_code": "GANRTAKBV",
+        "port": "TAK",
+        "name": "Big Van Takoradi (GANRTAKBV)"
+    },
+    {
+        "local_code": "GANRTAKCAR",
+        "expected_code": "GANRTAKCAR",
+        "port": "TAK",
+        "name": "Car Takoradi (GANRTAKCAR)"
+    },
+    {
+        "local_code": "GANRTAKHH",
+        "expected_code": "GANRTAKHH",
+        "port": "TAK",
+        "name": "LM Cargo Takoradi (GANRTAKHH)"
+    },
+    {
+        "local_code": "GANRTAKSV",
+        "expected_code": "GANRTAKSV",
+        "port": "TAK",
+        "name": "Small Van Takoradi (GANRTAKSV)"
+    },
+    {
+        "local_code": "GANRTEMBV",
+        "expected_code": "GANRTEMBV",
+        "port": "TEM",
+        "name": "Big Van Tema (GANRTEMBV)"
+    },
+    {
+        "local_code": "GANRTEMCAR",
+        "expected_code": "GANRTEMCAR",
+        "port": "TEM",
+        "name": "Car Tema (GANRTEMCAR)"
+    },
+    {
+        "local_code": "GANRTEMHH",
+        "expected_code": "GANRTEMHH",
+        "port": "TEM",
+        "name": "LM Cargo Tema (GANRTEMHH)"
+    },
+    {
+        "local_code": "GANRTEMSV",
+        "expected_code": "GANRTEMSV",
+        "port": "TEM",
+        "name": "Small Van Tema (GANRTEMSV)"
+    },
+    {
+        "local_code": "GANRTFNCAR",
+        "expected_code": "GANRTFNCAR",
+        "port": "TFN",
+        "name": "Car Tenerife (GANRTFNCAR)"
+    },
+    {
+        "local_code": "GANRTFNSV",
+        "expected_code": "GANRTFNSV",
+        "port": "TFN",
+        "name": "Small Van Tenerife (GANRTFNSV)"
+    },
+    {
+        "local_code": "GANRTFNBV",
+        "expected_code": "GANRTFNBV",
+        "port": "TFN",
+        "name": "Big Van Tenerife (GANRTFNBV)"
+    },
+    {
+        "local_code": "GANRTFNHH",
+        "expected_code": "GANRTFNHH",
+        "port": "TFN",
+        "name": "LM Cargo Tenerife (GANRTFNHH)"
+    }
+]

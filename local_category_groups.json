@@ -1,0 +1,27 @@
+[
+    {
+        "code": "CARS",
+        "sort_order": 1,
+        "is_active": true
+    },
+    {
+        "code": "SMALL_VANS",
+        "sort_order": 2,
+        "is_active": true
+    },
+    {
+        "code": "BIG_VANS",
+        "sort_order": 3,
+        "is_active": true
+    },
+    {
+        "code": "LM_CARGO_TRUCKS",
+        "sort_order": 4,
+        "is_active": true
+    },
+    {
+        "code": "LM_CARGO_TRAILERS",
+        "sort_order": 5,
+        "is_active": true
+    }
+]

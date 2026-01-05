@@ -1,0 +1,970 @@
+[
+    {
+        "article_code": "GANRABICAR",
+        "name": "Car Abidjan (GANRABICAR)",
+        "port_ids": [
+            26
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 1,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRABISV",
+        "name": "Small Van Abidjan (GANRABISV)",
+        "port_ids": [
+            26
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 2,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRABIBV",
+        "name": "Big Van Abidjan (GANRABIBV)",
+        "port_ids": [
+            26
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 3,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRABIHH",
+        "name": "LM Cargo Abidjan (GANRABIHH)",
+        "port_ids": [
+            26
+        ],
+        "category_group_ids": null,
+        "sort_order": 4,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRBANBV",
+        "name": "Big Van Banjul (GANRBANBV)",
+        "port_ids": [
+            73
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 5,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRBANCAR",
+        "name": "Car Banjul (GANRBANCAR)",
+        "port_ids": [
+            73
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 6,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRBANHH",
+        "name": "LM Cargo Banjul (GANRBANHH)",
+        "port_ids": [
+            73
+        ],
+        "category_group_ids": [
+            4,
+            9
+        ],
+        "sort_order": 7,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRBANSV",
+        "name": "Small Van Banjul (GANRBANSV)",
+        "port_ids": [
+            73
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 8,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRBATBV",
+        "name": "Big Van Bata (GANRBATBV)",
+        "port_ids": [
+            76
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 9,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRBATCAR",
+        "name": "Car Bata (GANRBATCAR)",
+        "port_ids": [
+            76
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 10,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRBATHH",
+        "name": "LM Cargo Bata (GANRBATHH)",
+        "port_ids": [
+            76
+        ],
+        "category_group_ids": [
+            4,
+            9
+        ],
+        "sort_order": 11,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRBATSV",
+        "name": "Small Van Bata (GANRBATSV)",
+        "port_ids": [
+            76
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 12,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRCASBV",
+        "name": "Big Van Casablanca (GANRCASBV)",
+        "port_ids": [
+            20
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 13,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRCASCAR",
+        "name": "Car Casablanca (GANRCASCAR)",
+        "port_ids": [
+            20
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 14,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRCASHH",
+        "name": "LM Cargo Casablanca (GANRCASHH)",
+        "port_ids": [
+            20
+        ],
+        "category_group_ids": [
+            4,
+            9
+        ],
+        "sort_order": 15,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRCASSV",
+        "name": "Small Van Casablanca (GANRCASSV)",
+        "port_ids": [
+            20
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 16,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRCONHH",
+        "name": "LM Cargo Conakry (GANRCONHH)",
+        "port_ids": [
+            64
+        ],
+        "category_group_ids": [
+            4,
+            9
+        ],
+        "sort_order": 17,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRCONBV",
+        "name": "Big Van Conakry (GANRCONBV)",
+        "port_ids": [
+            64
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 18,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRCONCAR",
+        "name": "Car Conakry (GANRCONCAR)",
+        "port_ids": [
+            64
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 19,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRCONSV",
+        "name": "Small Van Conakry (GANRCONSV)",
+        "port_ids": [
+            64
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 20,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRCOTHH",
+        "name": "LM Cargo Cotonou (GANRCOTHH)",
+        "port_ids": [
+            65
+        ],
+        "category_group_ids": [
+            4,
+            9
+        ],
+        "sort_order": 21,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRCOTBV",
+        "name": "Big Van Cotonou (GANRCOTBV)",
+        "port_ids": [
+            65
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 22,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRCOTCAR",
+        "name": "Car Cotonou (GANRCOTCAR)",
+        "port_ids": [
+            65
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 23,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRCOTSV",
+        "name": "Small Van Cotonou (GANRCOTSV)",
+        "port_ids": [
+            65
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 24,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRDAKHH",
+        "name": "LM Cargo Dakar (GANRDAKHH)",
+        "port_ids": [
+            66
+        ],
+        "category_group_ids": [
+            4,
+            9
+        ],
+        "sort_order": 25,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRDAKBV",
+        "name": "Big Van Dakar (GANRDAKBV)",
+        "port_ids": [
+            66
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 26,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRDAKCAR",
+        "name": "Car Dakar (GANRDAKCAR)",
+        "port_ids": [
+            66
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 27,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRDAKSV",
+        "name": "Small Van Dakar (GANRDAKSV)",
+        "port_ids": [
+            66
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 28,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRDOUBV",
+        "name": "Big Van Douala (GANRDOUBV)",
+        "port_ids": [
+            68
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 29,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRDOUCAR",
+        "name": "Car Douala (GANRDOUCAR)",
+        "port_ids": [
+            68
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 30,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRDOUHH",
+        "name": "LM Cargo Douala (GANRDOUHH)",
+        "port_ids": [
+            68
+        ],
+        "category_group_ids": null,
+        "sort_order": 31,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRDOUSV",
+        "name": "Small Van Douala (GANRDOUSV)",
+        "port_ids": [
+            68
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 32,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRFREHH",
+        "name": "LM Cargo Freetown (GANRFREHH)",
+        "port_ids": [
+            25
+        ],
+        "category_group_ids": [
+            4,
+            9
+        ],
+        "sort_order": 33,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRFREBV",
+        "name": "Big Van Freetown (GANRFREBV)",
+        "port_ids": [
+            25
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 34,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRFRECAR",
+        "name": "Car Freetown (GANRFRECAR)",
+        "port_ids": [
+            25
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 35,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRFRESV",
+        "name": "Small Van Freetown (GANRFRESV)",
+        "port_ids": [
+            25
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 36,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRLAGHH",
+        "name": "LM Cargo Lagos (GANRLAGHH)",
+        "port_ids": [
+            16
+        ],
+        "category_group_ids": [
+            4,
+            9
+        ],
+        "sort_order": 37,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRLAGBV",
+        "name": "Big Van Lagos (GANRLAGBV)",
+        "port_ids": [
+            16
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 38,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRLAGCAR",
+        "name": "Car Lagos (GANRLAGCAR)",
+        "port_ids": [
+            16
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 39,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRLAGSV",
+        "name": "Small Van Lagos (GANRLAGSV)",
+        "port_ids": [
+            16
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 40,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRLIBBV",
+        "name": "Big Van Libreville (GANRLIBBV)",
+        "port_ids": [
+            24
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 41,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRLIBCAR",
+        "name": "Car Libreville (GANRLIBCAR)",
+        "port_ids": [
+            24
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 42,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRLIBHH",
+        "name": "LM Cargo Libreville (GANRLIBHH)",
+        "port_ids": [
+            24
+        ],
+        "category_group_ids": null,
+        "sort_order": 43,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRLIBSV",
+        "name": "Small Van Libreville (GANRLIBSV)",
+        "port_ids": [
+            24
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 44,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRLOMCAR",
+        "name": "Car Lome (GANRLOMCAR)",
+        "port_ids": [
+            70
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 45,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRLOMHH",
+        "name": "LM Cargo Lome (GANRLOMHH)",
+        "port_ids": [
+            70
+        ],
+        "category_group_ids": [
+            4,
+            9
+        ],
+        "sort_order": 46,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRLOMBV",
+        "name": "Big Van Lome (GANRLOMBV)",
+        "port_ids": [
+            70
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 47,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRLOMSV",
+        "name": "Small Van Lome (GANRLOMSV)",
+        "port_ids": [
+            70
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 48,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRLUABV",
+        "name": "Big Van Luanda (GANRLUABV)",
+        "port_ids": [
+            74
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 49,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRLUACAR",
+        "name": "Car Luanda (GANRLUACAR)",
+        "port_ids": [
+            74
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 50,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRLUAHH",
+        "name": "LM Cargo Luanda (GANRLUAHH)",
+        "port_ids": [
+            74
+        ],
+        "category_group_ids": [
+            4,
+            9
+        ],
+        "sort_order": 51,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRLUASV",
+        "name": "Small Van Luanda (GANRLUASV)",
+        "port_ids": [
+            74
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 52,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRMALBV",
+        "name": "Big Van Malabo (GANRMALBV)",
+        "port_ids": [
+            77
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 53,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRMALCAR",
+        "name": "Car Malabo (GANRMALCAR)",
+        "port_ids": [
+            77
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 54,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRMALHH",
+        "name": "LM Cargo Malabo (GANRMALHH)",
+        "port_ids": [
+            77
+        ],
+        "category_group_ids": [
+            4,
+            9
+        ],
+        "sort_order": 55,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRMALSV",
+        "name": "Small Van Malabo (GANRMALSV)",
+        "port_ids": [
+            77
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 56,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRMONBV",
+        "name": "Big Van Monrovia (GANRMONBV)",
+        "port_ids": [
+            75
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 57,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRMONCAR",
+        "name": "Car Monrovia (GANRMONCAR)",
+        "port_ids": [
+            75
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 58,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRMONHH",
+        "name": "LM Cargo Monrovia (GANRMONHH)",
+        "port_ids": [
+            75
+        ],
+        "category_group_ids": [
+            4,
+            9
+        ],
+        "sort_order": 59,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRMONSV",
+        "name": "Small Van Monrovia (GANRMONSV)",
+        "port_ids": [
+            75
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 60,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRNOUBV",
+        "name": "Big Van Nouakchott (GANRNOUBV)",
+        "port_ids": [
+            23
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 61,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRNOUCAR",
+        "name": "Car Nouakchott (GANRNOUCAR)",
+        "port_ids": [
+            23
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 62,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRNOUHH",
+        "name": "LM Cargo Nouakchott (GANRNOUHH)",
+        "port_ids": [
+            23
+        ],
+        "category_group_ids": [
+            4,
+            9
+        ],
+        "sort_order": 63,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRNOUSV",
+        "name": "Small Van Nouakchott (GANRNOUSV)",
+        "port_ids": [
+            23
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 64,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRPOIBV",
+        "name": "Big Van Pointe-Noire (GANRPOIBV)",
+        "port_ids": [
+            28
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 65,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRPOICAR",
+        "name": "Car Pointe-Noire (GANRPOICAR)",
+        "port_ids": [
+            28
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 66,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRPOIHH",
+        "name": "LM Cargo Pointe-Noire (GANRPOIHH)",
+        "port_ids": [
+            28
+        ],
+        "category_group_ids": null,
+        "sort_order": 67,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRPOISV",
+        "name": "Small Van Pointe-Noire (GANRPOISV)",
+        "port_ids": [
+            28
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 68,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRTAKBV",
+        "name": "Big Van Takoradi (GANRTAKBV)",
+        "port_ids": [
+            80
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 69,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRTAKCAR",
+        "name": "Car Takoradi (GANRTAKCAR)",
+        "port_ids": [
+            80
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 70,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRTAKHH",
+        "name": "LM Cargo Takoradi (GANRTAKHH)",
+        "port_ids": [
+            80
+        ],
+        "category_group_ids": [
+            4,
+            9
+        ],
+        "sort_order": 71,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRTAKSV",
+        "name": "Small Van Takoradi (GANRTAKSV)",
+        "port_ids": [
+            80
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 72,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRTEMBV",
+        "name": "Big Van Tema (GANRTEMBV)",
+        "port_ids": [
+            79
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 73,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRTEMCAR",
+        "name": "Car Tema (GANRTEMCAR)",
+        "port_ids": [
+            79
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 74,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRTEMHH",
+        "name": "LM Cargo Tema (GANRTEMHH)",
+        "port_ids": [
+            79
+        ],
+        "category_group_ids": [
+            4,
+            9
+        ],
+        "sort_order": 75,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRTEMSV",
+        "name": "Small Van Tema (GANRTEMSV)",
+        "port_ids": [
+            79
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 76,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRTFNCAR",
+        "name": "Car Tenerife (GANRTFNCAR)",
+        "port_ids": [
+            78
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "sort_order": 77,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRTFNSV",
+        "name": "Small Van Tenerife (GANRTFNSV)",
+        "port_ids": [
+            78
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "sort_order": 78,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRTFNBV",
+        "name": "Big Van Tenerife (GANRTFNBV)",
+        "port_ids": [
+            78
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "sort_order": 79,
+        "is_active": true
+    },
+    {
+        "article_code": "GANRTFNHH",
+        "name": "LM Cargo Tenerife (GANRTFNHH)",
+        "port_ids": [
+            78
+        ],
+        "category_group_ids": [
+            4,
+            9
+        ],
+        "sort_order": 80,
+        "is_active": true
+    }
+]

@@ -349,14 +349,15 @@ class CarrierRuleIntegrationService
                         }
 
                         // Include mappings that explicitly contain the requested port
-                        if (!empty($mappingPortIds) && in_array($podPortId, $mappingPortIds)) {
+                        if (!empty($mappingPortIds) && in_array($podPortId, $mappingPortIds, false)) {
                             return true;
                         }
 
-                        // Include mappings that contain any of the requested port's port groups
-                        if (!empty($mappingPortGroupIds) && !empty($portGroupIds)) {
+                        // Include mappings that match via port group ONLY if they don't have specific port_ids
+                        // This prevents including mappings for other ports that happen to be in the same port group
+                        if (empty($mappingPortIds) && !empty($mappingPortGroupIds) && !empty($portGroupIds)) {
                             foreach ($portGroupIds as $groupId) {
-                                if (in_array($groupId, $mappingPortGroupIds)) {
+                                if (in_array($groupId, $mappingPortGroupIds, false)) {
                                     return true;
                                 }
                             }

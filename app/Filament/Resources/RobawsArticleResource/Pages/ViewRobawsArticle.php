@@ -86,11 +86,11 @@ class ViewRobawsArticle extends ViewRecord
                         Infolists\Components\TextEntry::make('cost_side')
                             ->badge()
                             ->placeholder('N/A'),
-                        Infolists\Components\TextEntry::make('update_date')
+                        Infolists\Components\TextEntry::make('effective_update_date')
                             ->label('Update Date')
                             ->date('d-m-Y')
                             ->placeholder('N/A'),
-                        Infolists\Components\TextEntry::make('validity_date')
+                        Infolists\Components\TextEntry::make('effective_validity_date')
                             ->label('Validity Date')
                             ->date('d-m-Y')
                             ->placeholder('N/A'),

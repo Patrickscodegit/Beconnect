@@ -558,7 +558,7 @@ class RobawsArticleResource extends Resource
                     ->limit(30)
                     ->toggleable(isToggledHiddenByDefault: true),
                     
-                Tables\Columns\TextColumn::make('validity_date')
+                Tables\Columns\TextColumn::make('effective_validity_date')
                     ->date('M d, Y')
                     ->label('Valid Until')
                     ->placeholder('Not set')
