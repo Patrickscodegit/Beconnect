@@ -677,6 +677,10 @@ class GrimaldiPurchaseRatesOverview extends Page
      */
     public function applyPortDates(string $portCode): void
     {
+        // #region agent log
+        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'F', 'location' => 'GrimaldiPurchaseRatesOverview.php:678', 'message' => 'applyPortDates entry', 'data' => ['portCode' => $portCode, 'portDates' => $this->portDates[$portCode] ?? []], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+        // #endregion
+        
         $portDates = $this->portDates[$portCode] ?? [];
         
         if (empty($portDates['update_date']) && empty($portDates['validity_date'])) {
@@ -688,6 +692,10 @@ class GrimaldiPurchaseRatesOverview extends Page
             $updateDate = !empty($portDates['update_date']) ? $portDates['update_date'] : null;
             $validityDate = !empty($portDates['validity_date']) ? $portDates['validity_date'] : null;
             $syncService = app(\App\Services\Pricing\TariffDateSyncService::class);
+            
+            // #region agent log
+            file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'F', 'location' => 'GrimaldiPurchaseRatesOverview.php:690', 'message' => 'Date values to apply', 'data' => ['portCode' => $portCode, 'updateDate' => $updateDate, 'validityDate' => $validityDate], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+            // #endregion
             
             $carrier = ShippingCarrier::where('code', 'GRIMALDI')->firstOrFail();
             $port = Port::where('code', $portCode)->first();
@@ -710,6 +718,9 @@ class GrimaldiPurchaseRatesOverview extends Page
                 })
                 ->with(['carrierArticleMapping.article'])
                 ->chunkById(200, function ($tariffs) use ($updateDate, $validityDate, $syncService, &$updatedArticleCodes) {
+                    // #region agent log
+                    file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'F', 'location' => 'GrimaldiPurchaseRatesOverview.php:712', 'message' => 'Chunk processing start', 'data' => ['tariffCount' => $tariffs->count()], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+                    // #endregion
                     // No transaction
                     foreach ($tariffs as $tariff) {
                         if ($updateDate !== null) {
@@ -721,11 +732,26 @@ class GrimaldiPurchaseRatesOverview extends Page
                         
                         try {
                             $tariff->save();
+                            
+                            // #region agent log
+                            file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'A', 'location' => 'GrimaldiPurchaseRatesOverview.php:723', 'message' => 'Tariff saved', 'data' => ['tariffId' => $tariff->id, 'updateDate' => $tariff->update_date?->format('Y-m-d'), 'validityDate' => $tariff->validity_date?->format('Y-m-d'), 'hasMapping' => $tariff->carrierArticleMapping !== null, 'mappingId' => $tariff->carrierArticleMapping?->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+                            // #endregion
                         } catch (\Exception $e) {
+                            // #region agent log
+                            file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'A', 'location' => 'GrimaldiPurchaseRatesOverview.php:726', 'message' => 'Tariff save failed', 'data' => ['tariffId' => $tariff->id, 'error' => $e->getMessage()], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+                            // #endregion
                             throw $e;
                         }
                         
+                        // #region agent log
+                        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'B', 'location' => 'GrimaldiPurchaseRatesOverview.php:730', 'message' => 'Before sync call', 'data' => ['tariffId' => $tariff->id, 'mappingId' => $tariff->carrierArticleMapping?->id, 'articleId' => $tariff->carrierArticleMapping?->article?->id, 'articleCode' => $tariff->carrierArticleMapping?->article?->article_code], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+                        // #endregion
+                        
                         $syncService->syncTariffDatesToArticle($tariff);
+                        
+                        // #region agent log
+                        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode(['sessionId' => 'debug-session', 'runId' => 'run1', 'hypothesisId' => 'B', 'location' => 'GrimaldiPurchaseRatesOverview.php:738', 'message' => 'After sync call', 'data' => ['tariffId' => $tariff->id], 'timestamp' => time() * 1000]) . "\n", FILE_APPEND);
+                        // #endregion
                         
                         // Collect article codes for pushing to Robaws
                         if ($tariff->carrierArticleMapping && $tariff->carrierArticleMapping->article) {
