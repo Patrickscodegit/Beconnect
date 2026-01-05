@@ -14,6 +14,8 @@ class CarrierPurchaseTariff extends Model
         'carrier_article_mapping_id',
         'effective_from',
         'effective_to',
+        'update_date',
+        'validity_date',
         'is_active',
         'sort_order',
         'currency',
@@ -42,6 +44,8 @@ class CarrierPurchaseTariff extends Model
     protected $casts = [
         'effective_from' => 'date',
         'effective_to' => 'date',
+        'update_date' => 'date',
+        'validity_date' => 'date',
         'is_active' => 'boolean',
         'base_freight_amount' => 'decimal:2',
         'baf_amount' => 'decimal:2',

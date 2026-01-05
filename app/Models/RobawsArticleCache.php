@@ -49,6 +49,14 @@ class RobawsArticleCache extends Model
         'article_info',
         'update_date',
         'validity_date',
+        // Override columns for date management
+        'update_date_override',
+        'validity_date_override',
+        'dates_override_source',
+        'dates_override_at',
+        'last_pushed_dates_at',
+        'last_pushed_update_date',
+        'last_pushed_validity_date',
         // Port information in full Robaws format: "Antwerp (ANR), Belgium"
         'pol',
         'pod',
@@ -96,6 +104,13 @@ class RobawsArticleCache extends Model
         'is_mandatory' => 'boolean',
         'update_date' => 'date',
         'validity_date' => 'date',
+        // Override fields
+        'update_date_override' => 'date',
+        'validity_date_override' => 'date',
+        'dates_override_at' => 'datetime',
+        'last_pushed_dates_at' => 'datetime',
+        'last_pushed_update_date' => 'date',
+        'last_pushed_validity_date' => 'date',
         // Standard Robaws field casts
         'sale_price' => 'decimal:2',
         'cost_price' => 'decimal:2',
@@ -1074,5 +1089,21 @@ class RobawsArticleCache extends Model
         }
         
         return null;
+    }
+
+    /**
+     * Get effective update date (override takes precedence over base)
+     */
+    public function getEffectiveUpdateDateAttribute()
+    {
+        return $this->update_date_override ?? $this->update_date;
+    }
+
+    /**
+     * Get effective validity date (override takes precedence over base)
+     */
+    public function getEffectiveValidityDateAttribute()
+    {
+        return $this->validity_date_override ?? $this->validity_date;
     }
 }
