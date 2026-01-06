@@ -31,8 +31,10 @@ class CarrierPurchaseTariffTest extends TestCase
             'robaws_article_id' => 1,
             'article_code' => 'TEST001',
             'article_name' => 'Test Article',
+            'category' => 'general',
             'is_parent_article' => true,
             'is_active' => true,
+            'last_synced_at' => now(),
         ]);
 
         $this->mapping = CarrierArticleMapping::create([

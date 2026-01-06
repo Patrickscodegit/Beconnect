@@ -303,10 +303,13 @@ class CarrierRuleResolverTest extends TestCase
     {
         // Create article
         $article = RobawsArticleCache::create([
+            'robaws_article_id' => 'TEST001',
             'article_code' => 'TEST001',
             'article_name' => 'Test Surcharge',
+            'category' => 'general',
             'unit_price' => 100,
             'currency' => 'EUR',
+            'last_synced_at' => now(),
         ]);
 
         // Create article map
