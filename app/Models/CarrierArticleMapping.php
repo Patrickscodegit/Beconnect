@@ -73,7 +73,7 @@ class CarrierArticleMapping extends Model
     {
         return $this->hasMany(CarrierPurchaseTariff::class)
             ->orderBy('sort_order', 'asc')
-            ->orderBy('effective_from', 'desc');
+            ->orderBy('effective_from', 'asc');
     }
 
     public function activePurchaseTariff(): ?CarrierPurchaseTariff
