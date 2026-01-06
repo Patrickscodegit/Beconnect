@@ -12,8 +12,12 @@ class GrimaldiPurchaseRatesOverviewService
 {
     /**
      * Get rates matrix for Grimaldi purchase tariffs in PDF-style format
+     * 
+     * @param string|null $portGroupCode Port group code to filter by (default: 'Grimaldi_WAF')
+     * @param bool $excludePortGroup If true, exclude the specified port group instead of including it
+     * @return array
      */
-    public function getRatesMatrix(): array
+    public function getRatesMatrix(?string $portGroupCode = 'Grimaldi_WAF', bool $excludePortGroup = false): array
     {
         // Find Grimaldi carrier - use database-agnostic case-insensitive matching
         $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
@@ -28,9 +32,47 @@ class GrimaldiPurchaseRatesOverviewService
         
         $carrier = $carrier->firstOrFail();
 
-        // Load all Grimaldi mappings with eager loading
-        $mappings = CarrierArticleMapping::where('carrier_id', $carrier->id)
-            ->with([
+        // Get port group if specified
+        $portGroup = null;
+        $portGroupId = null;
+        $portCodes = [];
+        
+        if ($portGroupCode) {
+            $portGroup = \App\Models\CarrierPortGroup::where('carrier_id', $carrier->id)
+                ->where('code', $portGroupCode)
+                ->where('is_active', true)
+                ->first();
+
+            $portGroupId = $portGroup ? $portGroup->id : null;
+            
+            // Get port codes for additional filtering
+            if ($portGroup) {
+                $portCodes = $portGroup->activeMembers()
+                    ->with('port')
+                    ->get()
+                    ->pluck('port.code')
+                    ->filter()
+                    ->toArray();
+            }
+        }
+
+        // Load Grimaldi mappings with port group filter
+        $mappingsQuery = CarrierArticleMapping::where('carrier_id', $carrier->id);
+        
+        if ($portGroupId) {
+            if ($excludePortGroup) {
+                // Exclude mappings that belong to this port group
+                $mappingsQuery->where(function ($q) use ($portGroupId) {
+                    $q->whereJsonDoesntContain('port_group_ids', $portGroupId)
+                      ->orWhereNull('port_group_ids');
+                });
+            } else {
+                // Only include mappings that belong to this port group
+                $mappingsQuery->whereJsonContains('port_group_ids', $portGroupId);
+            }
+        }
+        
+        $mappings = $mappingsQuery->with([
                 'article' => function ($query) {
                     $query->select('id', 'pod_code', 'pod', 'article_code', 'article_name', 'unit_price', 'currency');
                 },
@@ -47,6 +89,29 @@ class GrimaldiPurchaseRatesOverviewService
         $hasCongestion = false;
         $hasIccm = false;
 
+        // Pre-seed ports from port group if including (so WAF ports always appear even with no mappings)
+        if ($portGroup && !$excludePortGroup) {
+            $portGroupMembers = $portGroup->activeMembers()->with('port')->get();
+            foreach ($portGroupMembers as $member) {
+                if ($member->port) {
+                    $portCode = $member->port->code;
+                    if (!isset($ports[$portCode])) {
+                        $ports[$portCode] = [
+                            'code' => $portCode,
+                            'name' => $member->port->name,
+                            'tariff_ids' => [],
+                            'categories' => [
+                                'CAR' => null,
+                                'SVAN' => null,
+                                'BVAN' => null,
+                                'LM' => null,
+                            ],
+                        ];
+                    }
+                }
+            }
+        }
+
         // Process each mapping
         foreach ($mappings as $mapping) {
             $tariff = $mapping->activePurchaseTariff();
@@ -59,6 +124,21 @@ class GrimaldiPurchaseRatesOverviewService
 
             $portCode = $portInfo['code'];
             $portName = $portInfo['name'];
+            
+            // Defense in depth: verify port matches filter criteria
+            if ($portGroupCode && !empty($portCodes)) {
+                if ($excludePortGroup) {
+                    // Skip ports that are in the excluded port group
+                    if (in_array($portCode, $portCodes)) {
+                        continue;
+                    }
+                } else {
+                    // Skip ports that are NOT in the included port group
+                    if (!in_array($portCode, $portCodes)) {
+                        continue;
+                    }
+                }
+            }
 
             // Determine PDF category
             $pdfCategory = $this->determinePdfCategory($mapping);
