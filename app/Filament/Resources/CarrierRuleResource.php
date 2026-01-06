@@ -1852,20 +1852,8 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
 
                                 Forms\Components\Repeater::make('articleMappings')
                                     ->relationship('articleMappings', modifyQueryUsing: function ($query) {
-                                        $mappingId = request()->query('mapping_id');
-                                        $portCode = request()->query('port_code');
-                                        $category = request()->query('category');
-                                        
-                                        // When deep linking or creating new mapping, we need to load ALL mappings
-                                        // to prevent Filament from deleting existing ones when saving (sync behavior)
-                                        if ($mappingId || $portCode || $category) {
-                                            // Load all mappings to preserve existing ones
-                                            return $query->orderBy('sort_order', 'asc');
-                                        } else {
-                                            // Load only first 20 mappings to keep memory usage low
-                                            return $query->orderBy('sort_order', 'asc')
-                                                ->limit(20);
-                                        }
+                                        // Load all mappings (no limit)
+                                        return $query->orderBy('sort_order', 'asc');
                                     })
                                     ->reorderable('sort_order')
                                     ->collapsible()
@@ -2151,23 +2139,6 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                         Forms\Components\TagsInput::make('vessel_classes')
                                             ->label('Vessel Classes')
                                             ->helperText('Enter vessel classes (one per line or comma-separated). Leave empty for all vessel classes.')
-                                            ->columnSpan(1),
-
-                                        Forms\Components\TextInput::make('priority')
-                                            ->label('Priority')
-                                            ->numeric()
-                                            ->default(0)
-                                            ->helperText('Higher priority = checked first')
-                                            ->columnSpan(1),
-
-                                        Forms\Components\DatePicker::make('effective_from')
-                                            ->label('Effective From')
-                                            ->helperText('Rule becomes active on this date')
-                                            ->columnSpan(1),
-
-                                        Forms\Components\DatePicker::make('effective_to')
-                                            ->label('Effective To')
-                                            ->helperText('Rule expires on this date')
                                             ->columnSpan(1),
 
                                         Forms\Components\Toggle::make('is_active')

@@ -160,6 +160,116 @@ class ViewRobawsArticle extends ViewRecord
                     ->columns(3)
                     ->collapsible(),
 
+                Infolists\Components\Section::make('Purchase Price')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('cost_price')
+                            ->label('Total Purchase Cost')
+                            ->money(fn ($record) => is_array($record->purchase_price_breakdown) && isset($record->purchase_price_breakdown['currency']) ? $record->purchase_price_breakdown['currency'] : ($record->currency ?? 'EUR'))
+                            ->placeholder('No purchase price data')
+                            ->weight('bold')
+                            ->size('lg')
+                            ->visible(fn ($record): bool => $record->cost_price !== null || (!empty($record->purchase_price_breakdown) && is_array($record->purchase_price_breakdown))),
+                        Infolists\Components\TextEntry::make('purchase_price_breakdown')
+                            ->label('Breakdown')
+                            ->getStateUsing(function ($record) {
+                                $breakdown = $record->purchase_price_breakdown ?? [];
+                                if (empty($breakdown) || !is_array($breakdown)) {
+                                    return new \Illuminate\Support\HtmlString('<p class="text-gray-500">No breakdown data available</p>');
+                                }
+                                
+                                $currency = $breakdown['currency'] ?? 'EUR';
+                                $html = '<div class="space-y-3">';
+                                
+                                // Base Freight
+                                $baseFreight = $breakdown['base_freight'] ?? null;
+                                if ($baseFreight && isset($baseFreight['amount'])) {
+                                    $amount = number_format((float) $baseFreight['amount'], 2, ',', '');
+                                    $unit = $baseFreight['unit'] ?? 'LUMPSUM';
+                                    $html .= '<div class="border-b border-gray-200 dark:border-gray-700 pb-2">';
+                                    $html .= '<div class="font-semibold text-gray-700 dark:text-gray-300 mb-1">Base Freight</div>';
+                                    $html .= '<div class="text-sm text-gray-900 dark:text-gray-100">' . htmlspecialchars("{$currency} {$amount} ({$unit})") . '</div>';
+                                    $html .= '</div>';
+                                }
+                                
+                                // Surcharges
+                                $surcharges = $breakdown['surcharges'] ?? [];
+                                if (!empty($surcharges)) {
+                                    $html .= '<div class="border-b border-gray-200 dark:border-gray-700 pb-2">';
+                                    $html .= '<div class="font-semibold text-gray-700 dark:text-gray-300 mb-2">Surcharges</div>';
+                                    $html .= '<div class="space-y-1">';
+                                    $labels = [
+                                        'baf' => 'BAF',
+                                        'ets' => 'ETS',
+                                        'port_additional' => 'Port Additional',
+                                        'admin_fxe' => 'Admin Fee',
+                                        'thc' => 'THC',
+                                        'measurement_costs' => 'Measurement Costs',
+                                        'congestion_surcharge' => 'Congestion Surcharge',
+                                        'iccm' => 'ICCM',
+                                    ];
+                                    $hasSurcharges = false;
+                                    foreach ($surcharges as $key => $surcharge) {
+                                        if (isset($surcharge['amount']) && $surcharge['amount'] > 0) {
+                                            $hasSurcharges = true;
+                                            $amount = number_format((float) $surcharge['amount'], 2, ',', '');
+                                            $unit = $surcharge['unit'] ?? 'LUMPSUM';
+                                            $label = $labels[$key] ?? ucfirst(str_replace('_', ' ', $key));
+                                            $html .= '<div class="text-sm flex justify-between"><span class="text-gray-600 dark:text-gray-400">' . htmlspecialchars($label) . ':</span> <span class="text-gray-900 dark:text-gray-100 font-medium">' . htmlspecialchars("{$currency} {$amount} ({$unit})") . '</span></div>';
+                                        }
+                                    }
+                                    if (!$hasSurcharges) {
+                                        $html .= '<div class="text-sm text-gray-500">None</div>';
+                                    }
+                                    $html .= '</div>';
+                                    $html .= '</div>';
+                                }
+                                
+                                // Metadata
+                                $html .= '<div class="grid grid-cols-2 gap-2 text-sm">';
+                                if (!empty($breakdown['carrier_name'])) {
+                                    $html .= '<div><span class="text-gray-600 dark:text-gray-400">Carrier:</span> <span class="font-medium text-gray-900 dark:text-gray-100">' . htmlspecialchars($breakdown['carrier_name']) . '</span></div>';
+                                }
+                                if (!empty($breakdown['effective_from'])) {
+                                    try {
+                                        $date = \Carbon\Carbon::parse($breakdown['effective_from'])->format('d-m-Y');
+                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Effective From:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($date) . '</span></div>';
+                                    } catch (\Exception $e) {
+                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Effective From:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($breakdown['effective_from']) . '</span></div>';
+                                    }
+                                }
+                                if (!empty($breakdown['effective_to'])) {
+                                    try {
+                                        $date = \Carbon\Carbon::parse($breakdown['effective_to'])->format('d-m-Y');
+                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Effective To:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($date) . '</span></div>';
+                                    } catch (\Exception $e) {
+                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Effective To:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($breakdown['effective_to']) . '</span></div>';
+                                    }
+                                }
+                                if (!empty($breakdown['last_synced_at'])) {
+                                    try {
+                                        $date = \Carbon\Carbon::parse($breakdown['last_synced_at'])->format('d-m-Y H:i:s');
+                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Last Synced:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($date) . '</span></div>';
+                                    } catch (\Exception $e) {
+                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Last Synced:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($breakdown['last_synced_at']) . '</span></div>';
+                                    }
+                                }
+                                if (!empty($breakdown['source'])) {
+                                    $html .= '<div><span class="text-gray-600 dark:text-gray-400">Source:</span> <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">' . htmlspecialchars(ucfirst($breakdown['source'])) . '</span></div>';
+                                }
+                                $html .= '</div>';
+                                
+                                $html .= '</div>';
+                                return new \Illuminate\Support\HtmlString($html);
+                            })
+                            ->html()
+                            ->columnSpanFull()
+                            ->visible(fn ($record): bool => !empty($record->purchase_price_breakdown) && is_array($record->purchase_price_breakdown)),
+                    ])
+                    ->columns(1)
+                    ->collapsible()
+                    ->collapsed(false)
+                    ->visible(fn ($record): bool => $record->cost_price !== null || (!empty($record->purchase_price_breakdown) && is_array($record->purchase_price_breakdown))),
+
                 Infolists\Components\Section::make('Notes & Extra Information')
                     ->schema([
                         Infolists\Components\TextEntry::make('notes')

@@ -22,9 +22,6 @@ class CarrierArticleMapping extends Model
         'category_group_ids',
         'vessel_names',
         'vessel_classes',
-        'priority',
-        'effective_from',
-        'effective_to',
         'is_active',
         'sort_order',
     ];
@@ -36,8 +33,6 @@ class CarrierArticleMapping extends Model
         'category_group_ids' => 'array',
         'vessel_names' => 'array',
         'vessel_classes' => 'array',
-        'effective_from' => 'date',
-        'effective_to' => 'date',
         'is_active' => 'boolean',
     ];
 
@@ -87,7 +82,7 @@ class CarrierArticleMapping extends Model
         // and ensure we use the same tariffs that were eager-loaded with surcharges
         if ($this->relationLoaded('purchaseTariffs')) {
             $now = \Carbon\Carbon::now();
-            return $this->purchaseTariffs
+            $filtered = $this->purchaseTariffs
                 ->filter(function ($tariff) use ($now) {
                     // Apply active() scope logic in memory
                     if (!$tariff->is_active) {
@@ -104,8 +99,9 @@ class CarrierArticleMapping extends Model
                 ->sortBy([
                     ['effective_from', 'desc'],
                     ['sort_order', 'asc'],
-                ])
-                ->first();
+                ]);
+            
+            return $filtered->first();
         }
         
         // Fallback to query if not eager-loaded
@@ -114,15 +110,7 @@ class CarrierArticleMapping extends Model
 
     public function scopeActive($query)
     {
-        return $query->where('is_active', true)
-            ->where(function ($q) {
-                $q->whereNull('effective_from')
-                  ->orWhere('effective_from', '<=', now());
-            })
-            ->where(function ($q) {
-                $q->whereNull('effective_to')
-                  ->orWhere('effective_to', '>=', now());
-            });
+        return $query->where('is_active', true);
     }
 }
 
