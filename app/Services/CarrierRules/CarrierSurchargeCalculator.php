@@ -101,6 +101,7 @@ class CarrierSurchargeCalculator
     {
         $tiers = $params['tiers'] ?? [];
         $matchedTier = null;
+        $lastTierWithNullMax = null; // Track catch-all tier
 
         foreach ($tiers as $tier) {
             $maxKg = $tier['max_kg'] ?? null;
@@ -113,6 +114,16 @@ class CarrierSurchargeCalculator
                 $matchedTier = $tier;
                 // Continue to check if there's a more specific tier
             }
+            
+            // Track the last tier with null max_kg (catch-all)
+            if ($maxKg === null) {
+                $lastTierWithNullMax = $tier;
+            }
+        }
+
+        // If no tier matched but we have a catch-all tier, use it
+        if (!$matchedTier && $lastTierWithNullMax !== null) {
+            $matchedTier = $lastTierWithNullMax;
         }
 
         if (!$matchedTier) {
