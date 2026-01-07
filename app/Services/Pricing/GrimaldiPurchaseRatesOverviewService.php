@@ -118,6 +118,14 @@ class GrimaldiPurchaseRatesOverviewService
                 $effectiveUpdateDate = $mapping->article->effective_update_date;
                 $effectiveValidityDate = $mapping->article->effective_validity_date;
                 
+                // Ensure date keys exist before accessing them (defensive check)
+                if (!isset($ports[$portCode]['oldest_update_date'])) {
+                    $ports[$portCode]['oldest_update_date'] = null;
+                }
+                if (!isset($ports[$portCode]['oldest_validity_date'])) {
+                    $ports[$portCode]['oldest_validity_date'] = null;
+                }
+                
                 if ($effectiveUpdateDate) {
                     $currentOldest = $ports[$portCode]['oldest_update_date'];
                     if ($currentOldest === null || $effectiveUpdateDate->lt($currentOldest)) {
