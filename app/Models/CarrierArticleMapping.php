@@ -105,7 +105,12 @@ class CarrierArticleMapping extends Model
         }
         
         // Fallback to query if not eager-loaded
-        return $this->purchaseTariffs()->active()->first();
+        // Get the most recent active tariff (effective_from DESC, then sort_order ASC)
+        return $this->purchaseTariffs()
+            ->active()
+            ->orderBy('effective_from', 'desc')
+            ->orderBy('sort_order', 'asc')
+            ->first();
     }
 
     public function scopeActive($query)
