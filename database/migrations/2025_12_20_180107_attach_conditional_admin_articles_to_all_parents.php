@@ -23,7 +23,7 @@ return new class extends Migration
             $article = DB::table('robaws_articles_cache')
                 ->where('article_name', $articleName)
                 ->where('unit_price', $unitPrice)
-                ->first();
+            ->first();
 
             if ($article) {
                 return $article->id;

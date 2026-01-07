@@ -1621,7 +1621,7 @@ class RobawsMapper
                        $extractionData['address']['street_number'] ?? 
                        $extractionData['street_number'] ?? 
                        $address['street_number'] ?? 
-                       null;
+                 null;
         
         $city = $rawData['city'] ?? 
                $extractionData['address']['city'] ?? 

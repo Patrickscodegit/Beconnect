@@ -1853,7 +1853,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                 Forms\Components\Repeater::make('articleMappings')
                                     ->relationship('articleMappings', modifyQueryUsing: function ($query) {
                                         // Load all mappings (no limit)
-                                        return $query->orderBy('sort_order', 'asc');
+                                            return $query->orderBy('sort_order', 'asc');
                                     })
                                     ->reorderable('sort_order')
                                     ->collapsible()

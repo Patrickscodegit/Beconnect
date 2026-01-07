@@ -216,8 +216,8 @@ class CarrierRuleEngine
                 $status = 'ALLOWED_UPON_REQUEST';
             } else {
                 // Exceeds soft limit or no soft limit configured - not allowed
-                $violations[] = 'max_height_exceeded';
-                $status = 'NOT_ALLOWED';
+            $violations[] = 'max_height_exceeded';
+            $status = 'NOT_ALLOWED';
             }
         }
         if ($rule->max_cbm && $input->cbm > $rule->max_cbm) {
