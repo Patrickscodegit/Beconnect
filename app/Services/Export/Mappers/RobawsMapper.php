@@ -1612,22 +1612,32 @@ class RobawsMapper
         
         // Extract individual address components with enhanced fallbacks
         $street = $rawData['street'] ?? 
+                 $extractionData['address']['street'] ?? 
                  $extractionData['street'] ?? 
                  $address['street'] ?? 
                  null;
         
+        $streetNumber = $rawData['street_number'] ?? 
+                       $extractionData['address']['street_number'] ?? 
+                       $extractionData['street_number'] ?? 
+                       $address['street_number'] ?? 
+                 null;
+        
         $city = $rawData['city'] ?? 
+               $extractionData['address']['city'] ?? 
                $extractionData['city'] ?? 
                $address['city'] ?? 
                null;
         
         $zip = $rawData['zip'] ?? 
               $rawData['postal_code'] ?? 
+              $extractionData['address']['postal_code'] ?? 
               $extractionData['postal_code'] ?? 
               $address['postal_code'] ?? 
               null;
         
         $country = $rawData['country'] ?? 
+                  $extractionData['address']['country'] ?? 
                   $extractionData['country'] ?? 
                   $address['country'] ?? 
                   'Belgium'; // Default for Belgian companies
@@ -1635,6 +1645,7 @@ class RobawsMapper
         // Build final address structure
         $finalAddress = array_filter([
             'street' => $street,
+            'street_number' => $streetNumber,
             'city' => $city,
             'postal_code' => $zip,
             'country' => $this->normalizeCountryName($country),
@@ -1648,7 +1659,28 @@ class RobawsMapper
             
             if ($origin) {
                 $originParts = $this->parseLocationString($origin);
+                // Normalize country from origin
+                if (isset($originParts['country'])) {
+                    $originParts['country'] = $this->normalizeCountryName($originParts['country']);
+                } else {
+                    // If no country in parsed origin, normalize the origin itself as country
+                    $originParts['country'] = $this->normalizeCountryName($origin);
+                }
                 $finalAddress = array_merge($finalAddress, $originParts);
+            }
+        }
+        
+        // If country is still not set, try to normalize from shipping origin directly
+        if (empty($finalAddress['country']) || $finalAddress['country'] === 'Belgium') {
+            $origin = $extractionData['shipping']['origin'] ?? 
+                     $extractionData['shipment']['origin'] ?? 
+                     null;
+            
+            if ($origin) {
+                $normalizedCountry = $this->normalizeCountryName($origin);
+                if ($normalizedCountry && $normalizedCountry !== 'Belgium') {
+                    $finalAddress['country'] = $normalizedCountry;
+                }
             }
         }
         

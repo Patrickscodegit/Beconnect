@@ -31,8 +31,10 @@ class CarrierPurchaseTariffTest extends TestCase
             'robaws_article_id' => 1,
             'article_code' => 'TEST001',
             'article_name' => 'Test Article',
+            'category' => 'general',
             'is_parent_article' => true,
             'is_active' => true,
+            'last_synced_at' => now(),
         ]);
 
         $this->mapping = CarrierArticleMapping::create([
@@ -204,22 +206,24 @@ class CarrierPurchaseTariffTest extends TestCase
 
         $tariff->refresh();
 
-        $this->assertIsFloat($tariff->baf_amount);
-        $this->assertEquals(75.50, $tariff->baf_amount);
-        $this->assertIsFloat($tariff->ets_amount);
-        $this->assertEquals(29.75, $tariff->ets_amount);
-        $this->assertIsFloat($tariff->port_additional_amount);
-        $this->assertEquals(12.25, $tariff->port_additional_amount);
-        $this->assertIsFloat($tariff->admin_fxe_amount);
-        $this->assertEquals(26.00, $tariff->admin_fxe_amount);
-        $this->assertIsFloat($tariff->thc_amount);
-        $this->assertEquals(10.50, $tariff->thc_amount);
-        $this->assertIsFloat($tariff->measurement_costs_amount);
-        $this->assertEquals(2.33, $tariff->measurement_costs_amount);
-        $this->assertIsFloat($tariff->congestion_surcharge_amount);
-        $this->assertEquals(150.99, $tariff->congestion_surcharge_amount);
-        $this->assertIsFloat($tariff->iccm_amount);
-        $this->assertEquals(67.00, $tariff->iccm_amount);
+        // Verify surcharge amounts are numeric and have correct values
+        // Using decimal:2 cast returns strings, which is correct for monetary values
+        $this->assertIsNumeric($tariff->baf_amount);
+        $this->assertEquals(75.50, (float) $tariff->baf_amount);
+        $this->assertIsNumeric($tariff->ets_amount);
+        $this->assertEquals(29.75, (float) $tariff->ets_amount);
+        $this->assertIsNumeric($tariff->port_additional_amount);
+        $this->assertEquals(12.25, (float) $tariff->port_additional_amount);
+        $this->assertIsNumeric($tariff->admin_fxe_amount);
+        $this->assertEquals(26.00, (float) $tariff->admin_fxe_amount);
+        $this->assertIsNumeric($tariff->thc_amount);
+        $this->assertEquals(10.50, (float) $tariff->thc_amount);
+        $this->assertIsNumeric($tariff->measurement_costs_amount);
+        $this->assertEquals(2.33, (float) $tariff->measurement_costs_amount);
+        $this->assertIsNumeric($tariff->congestion_surcharge_amount);
+        $this->assertEquals(150.99, (float) $tariff->congestion_surcharge_amount);
+        $this->assertIsNumeric($tariff->iccm_amount);
+        $this->assertEquals(67.00, (float) $tariff->iccm_amount);
     }
 
     /** @test */

@@ -220,10 +220,13 @@ class CarrierRuleEngineTest extends TestCase
     {
         // Create article
         $article = RobawsArticleCache::create([
+            'robaws_article_id' => 'SURCH001',
             'article_code' => 'SURCH001',
             'article_name' => 'Towing Surcharge',
+            'category' => 'general',
             'unit_price' => 150,
             'currency' => 'EUR',
+            'last_synced_at' => now(),
         ]);
 
         // Create surcharge rule

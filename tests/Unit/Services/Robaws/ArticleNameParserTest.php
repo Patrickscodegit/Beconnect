@@ -3,9 +3,11 @@
 namespace Tests\Unit\Services\Robaws;
 
 use App\Services\Robaws\ArticleNameParser;
+use App\Services\Ports\PortResolutionService;
 use App\Models\Port;
 use Tests\TestCase;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Mockery;
 
 class ArticleNameParserTest extends TestCase
 {
@@ -16,35 +18,66 @@ class ArticleNameParserTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->parser = new ArticleNameParser();
         
-        // Create test ports
-        Port::create([
+        // Create test ports first
+        $anrPort = Port::create([
             'code' => 'ANR',
             'name' => 'Antwerp',
             'country' => 'Belgium',
             'is_european_origin' => true,
         ]);
         
-        Port::create([
+        $ckyPort = Port::create([
             'code' => 'CKY',
             'name' => 'Conakry',
             'country' => 'Guinea',
             'is_african_destination' => true,
         ]);
         
-        Port::create([
+        $abjPort = Port::create([
             'code' => 'ABJ',
             'name' => 'Abidjan',
             'country' => 'Ivory Coast',
             'is_african_destination' => true,
         ]);
         
-        Port::create([
+        $halPort = Port::create([
             'code' => 'HAL',
             'name' => 'Halifax',
             'country' => 'Canada',
         ]);
+
+        // Mock the PortResolutionService
+        $portResolverMock = Mockery::mock(PortResolutionService::class);
+        
+        // Configure the mock to return ports based on input
+        $portResolverMock->shouldReceive('resolveOne')
+            ->andReturnUsing(function ($input) use ($anrPort, $ckyPort, $abjPort, $halPort) {
+                $input = strtoupper(trim($input));
+                
+                // Match by code
+                if ($input === 'ANR') return $anrPort;
+                if ($input === 'CKY') return $ckyPort;
+                if ($input === 'ABJ') return $abjPort;
+                if ($input === 'HAL') return $halPort;
+                
+                // Match by name (case-insensitive)
+                if (stripos($input, 'antwerp') !== false) return $anrPort;
+                if (stripos($input, 'conakry') !== false) return $ckyPort;
+                if (stripos($input, 'abidjan') !== false) return $abjPort;
+                if (stripos($input, 'halifax') !== false) return $halPort;
+                
+                // Return null for unknown ports
+                return null;
+            });
+
+        $this->parser = new ArticleNameParser($portResolverMock);
+    }
+
+    protected function tearDown(): void
+    {
+        Mockery::close();
+        parent::tearDown();
     }
 
     /** @test */

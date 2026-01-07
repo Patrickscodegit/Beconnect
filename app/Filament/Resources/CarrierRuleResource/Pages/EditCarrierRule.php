@@ -104,11 +104,10 @@ class EditCarrierRule extends EditRecord
                 $data['_create_mapping_port_code'] = $portCode;
                 $data['_create_mapping_category'] = $category;
             } else {
-                // Load only first 20 mappings to keep memory usage low
+                // Load all mappings
                 $this->record->load([
                     'articleMappings' => function ($query) {
-                        $query->orderBy('sort_order', 'asc')
-                            ->limit(20);
+                        $query->orderBy('sort_order', 'asc');
                         // Do NOT load purchaseTariffs
                     }
                 ]);

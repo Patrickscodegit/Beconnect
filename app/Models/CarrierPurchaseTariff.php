@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Pricing\PurchasePriceSyncService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,6 +10,26 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class CarrierPurchaseTariff extends Model
 {
     use HasFactory;
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Sync to article when tariff is saved (created or updated)
+        static::saved(function ($tariff) {
+            $syncService = app(PurchasePriceSyncService::class);
+            $syncService->syncTariffToArticle($tariff);
+        });
+
+        // When tariff is deleted, check if article needs price cleared
+        static::deleted(function ($tariff) {
+            $mapping = $tariff->carrierArticleMapping;
+            if ($mapping && $mapping->article) {
+                $syncService = app(PurchasePriceSyncService::class);
+                $syncService->syncActiveTariffForArticle($mapping->article);
+            }
+        });
+    }
 
     protected $fillable = [
         'carrier_article_mapping_id',

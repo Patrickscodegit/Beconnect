@@ -101,6 +101,7 @@ class CarrierSurchargeCalculator
     {
         $tiers = $params['tiers'] ?? [];
         $matchedTier = null;
+        $lastTierWithNullMax = null; // Track catch-all tier
 
         foreach ($tiers as $tier) {
             $maxKg = $tier['max_kg'] ?? null;
@@ -113,6 +114,16 @@ class CarrierSurchargeCalculator
                 $matchedTier = $tier;
                 // Continue to check if there's a more specific tier
             }
+            
+            // Track the last tier with null max_kg (catch-all)
+            if ($maxKg === null) {
+                $lastTierWithNullMax = $tier;
+            }
+        }
+
+        // If no tier matched but we have a catch-all tier, use it
+        if (!$matchedTier && $lastTierWithNullMax !== null) {
+            $matchedTier = $lastTierWithNullMax;
         }
 
         if (!$matchedTier) {
@@ -204,6 +215,7 @@ class CarrierSurchargeCalculator
     ): array {
         $triggerWidth = $params['trigger_width_gt_cm'] ?? 250;
         $useChargeableLm = $params['use_chargeable_lm'] ?? true;
+        $amountPerLm = $params['amount_per_lm'] ?? 0;
 
         if ($widthCm <= $triggerWidth) {
             return [
@@ -220,7 +232,7 @@ class CarrierSurchargeCalculator
         return [
             'qty' => $qty,
             'amount_basis' => 'WIDTH_LM_BASIS',
-            'amount' => 0, // Amount comes from article unit price
+            'amount' => $amountPerLm, // Amount per LM from params
             'needs_basic_freight' => false,
         ];
     }
@@ -238,6 +250,7 @@ class CarrierSurchargeCalculator
         $blockCm = $params['block_cm'] ?? 25;
         $triggerWidth = $params['trigger_width_gt_cm'] ?? $threshold;
         $qtyBasis = $params['qty_basis'] ?? 'LM';
+        $amountPerBlock = $params['amount_per_block'] ?? 0;
 
         if ($widthCm <= $triggerWidth) {
             return [
@@ -249,14 +262,14 @@ class CarrierSurchargeCalculator
         }
 
         $overWidth = max(0, $widthCm - $threshold);
-        $blocks = ceil($overWidth / $blockCm); // Started blocks
+        $blocks = ceil($overWidth / $blockCm); // Number of blocks
 
-        $qty = $blocks * ($qtyBasis === 'LM' ? $chargeableMeasure->chargeableLm : $unitCount);
+        $qty = $blocks * ($qtyBasis === 'LM' ? $chargeableMeasure->baseLm : $unitCount);
 
         return [
             'qty' => $qty,
             'amount_basis' => 'WIDTH_STEP_BLOCKS',
-            'amount' => 0, // Amount comes from article unit price
+            'amount' => $amountPerBlock, // Amount per block
             'needs_basic_freight' => false,
         ];
     }

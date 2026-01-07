@@ -68,6 +68,14 @@ jobs:
         DB_USERNAME: postgres
         DB_PASSWORD: postgres
 
+    - name: Create SQLite database files
+      run: |
+        mkdir -p database
+        touch database/testing.sqlite
+        touch database/database.sqlite
+        touch database/pipeline-testing.sqlite
+        chmod 666 database/*.sqlite
+
     - name: Syntax check core files
       run: |
         php -l app/Services/Robaws/RobawsExportService.php

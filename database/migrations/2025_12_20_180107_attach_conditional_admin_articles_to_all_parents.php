@@ -18,50 +18,63 @@ return new class extends Migration
             ->pluck('id')
             ->toArray();
 
-        // Find admin articles dynamically (works in both local and production)
-        $admin75 = DB::table('robaws_articles_cache')
-            ->where('article_name', 'Admin 75')
-            ->where('unit_price', 75)
-            ->first();
-        $admin100 = DB::table('robaws_articles_cache')
-            ->where('article_name', 'Admin 100')
-            ->where('unit_price', 100)
-            ->first();
-        $admin110 = DB::table('robaws_articles_cache')
-            ->where('article_name', 'Admin 110')
-            ->where('unit_price', 110)
-            ->first();
-        $admin115 = DB::table('robaws_articles_cache')
-            ->where('article_name', 'Admin')
-            ->where('unit_price', 115)
-            ->first();
-        $admin125 = DB::table('robaws_articles_cache')
-            ->where('article_name', 'Admin 125')
-            ->where('unit_price', 125)
+        // Helper function to find or create admin article
+        $findOrCreateAdminArticle = function($articleName, $unitPrice, $robawsArticleIdSuffix) {
+            $article = DB::table('robaws_articles_cache')
+                ->where('article_name', $articleName)
+                ->where('unit_price', $unitPrice)
             ->first();
 
-        // Extract IDs safely
-        $admin75Id = $admin75 ? $admin75->id : null;
-        $admin100Id = $admin100 ? $admin100->id : null;
-        $admin110Id = $admin110 ? $admin110->id : null;
-        $admin115Id = $admin115 ? $admin115->id : null;
-        $admin125Id = $admin125 ? $admin125->id : null;
+            if ($article) {
+                return $article->id;
+            }
 
-        if (!$admin75Id || !$admin100Id || !$admin110Id || !$admin115Id || !$admin125Id) {
-            \Log::error('Could not find all admin articles in migration', [
-                'admin_75' => $admin75Id ?: 'NOT FOUND',
-                'admin_100' => $admin100Id ?: 'NOT FOUND',
-                'admin_110' => $admin110Id ?: 'NOT FOUND',
-                'admin_115' => $admin115Id ?: 'NOT FOUND',
-                'admin_125' => $admin125Id ?: 'NOT FOUND',
-                'admin75_object' => $admin75 ? 'EXISTS' : 'NULL',
-                'admin100_object' => $admin100 ? 'EXISTS' : 'NULL',
-                'admin110_object' => $admin110 ? 'EXISTS' : 'NULL',
-                'admin115_object' => $admin115 ? 'EXISTS' : 'NULL',
-                'admin125_object' => $admin125 ? 'EXISTS' : 'NULL',
+            // Generate unique robaws_article_id
+            $baseRobawsId = 'ADMIN_' . str_replace(' ', '_', strtoupper($articleName)) . '_' . $unitPrice;
+            $robawsArticleId = $baseRobawsId;
+            $counter = 1;
+            
+            // Ensure unique robaws_article_id
+            while (DB::table('robaws_articles_cache')->where('robaws_article_id', $robawsArticleId)->exists()) {
+                $robawsArticleId = $baseRobawsId . '_' . $counter;
+                $counter++;
+            }
+
+            // Create missing admin article
+            $articleId = DB::table('robaws_articles_cache')->insertGetId([
+                'robaws_article_id' => $robawsArticleId,
+                'article_name' => $articleName,
+                'description' => $articleName . ' fee',
+                'category' => 'general',
+                'unit_price' => $unitPrice,
+                'currency' => 'EUR',
+                'is_parent_article' => false,
+                'is_surcharge' => true,
+                'is_active' => true,
+                'requires_manual_review' => false,
+                'min_quantity' => 1,
+                'max_quantity' => 1,
+                'last_synced_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
-            throw new \Exception('Could not find all required admin articles. Please verify admin articles exist in robaws_articles_cache table.');
-        }
+
+            \Log::info('Created missing admin article in migration', [
+                'article_name' => $articleName,
+                'unit_price' => $unitPrice,
+                'article_id' => $articleId,
+                'robaws_article_id' => $robawsArticleId,
+            ]);
+
+            return $articleId;
+        };
+
+        // Find or create admin articles
+        $admin75Id = $findOrCreateAdminArticle('Admin 75', 75, '75');
+        $admin100Id = $findOrCreateAdminArticle('Admin 100', 100, '100');
+        $admin110Id = $findOrCreateAdminArticle('Admin 110', 110, '110');
+        $admin115Id = $findOrCreateAdminArticle('Admin', 115, '115');
+        $admin125Id = $findOrCreateAdminArticle('Admin 125', 125, '125');
 
         // Define conditions for each admin article
         $conditions = [

@@ -74,7 +74,8 @@ class GrimaldiPurchaseRatesOverviewService
         
         $mappings = $mappingsQuery->with([
                 'article' => function ($query) {
-                    $query->select('id', 'pod_code', 'pod', 'article_code', 'article_name', 'unit_price', 'currency');
+                    $query->select('id', 'pod_code', 'pod', 'article_code', 'article_name', 'unit_price', 'currency', 
+                        'update_date', 'validity_date', 'update_date_override', 'validity_date_override');
                 },
                 'purchaseTariffs' => function ($query) {
                     $query->active()
@@ -158,6 +159,8 @@ class GrimaldiPurchaseRatesOverviewService
                         'BVAN' => null,
                         'LM' => null,
                     ],
+                    'oldest_update_date' => null,
+                    'oldest_validity_date' => null,
                 ];
             }
 
@@ -172,6 +175,13 @@ class GrimaldiPurchaseRatesOverviewService
             // Build category entry with tariff_id
             $tariffId = $tariff ? $tariff->id : null;
             
+            // Prefer mappings with tariffs when there are duplicates for the same port/category
+            $existingCategory = $ports[$portCode]['categories'][$pdfCategory] ?? null;
+            if ($existingCategory && $existingCategory['tariff'] && !$tariff) {
+                // Existing entry has a tariff and current doesn't, keep the existing one
+                continue;
+            }
+            
             // Include article data if available
             $articleData = null;
             if ($mapping->article) {
@@ -182,6 +192,25 @@ class GrimaldiPurchaseRatesOverviewService
                     'unit_price' => $mapping->article->unit_price,
                     'currency' => $mapping->article->currency ?? 'EUR',
                 ];
+                
+                // Track oldest dates from article cache for this port
+                // Only collect dates from articles that are actually being displayed (not skipped)
+                $effectiveUpdateDate = $mapping->article->effective_update_date;
+                $effectiveValidityDate = $mapping->article->effective_validity_date;
+                
+                if ($effectiveUpdateDate) {
+                    $currentOldest = $ports[$portCode]['oldest_update_date'];
+                    if ($currentOldest === null || $effectiveUpdateDate->lt($currentOldest)) {
+                        $ports[$portCode]['oldest_update_date'] = $effectiveUpdateDate;
+                    }
+                }
+                
+                if ($effectiveValidityDate) {
+                    $currentOldest = $ports[$portCode]['oldest_validity_date'];
+                    if ($currentOldest === null || $effectiveValidityDate->lt($currentOldest)) {
+                        $ports[$portCode]['oldest_validity_date'] = $effectiveValidityDate;
+                    }
+                }
             }
             
             $ports[$portCode]['categories'][$pdfCategory] = [
@@ -300,6 +329,34 @@ class GrimaldiPurchaseRatesOverviewService
                 } elseif (in_array($category, ['truck', 'truckhead', 'trailer', 'lm', 'roro'])) {
                     return 'LM';
                 }
+            }
+        }
+
+        // Fallback to article code/name patterns (for mappings without category groups)
+        if ($mapping->article) {
+            $articleCode = strtoupper($mapping->article->article_code ?? '');
+            $articleName = strtoupper($mapping->article->article_name ?? '');
+            
+            // Check article code suffix patterns
+            if (str_ends_with($articleCode, 'CAR') || str_contains($articleCode, 'CAR')) {
+                return 'CAR';
+            } elseif (str_ends_with($articleCode, 'SV') || str_contains($articleCode, 'SV')) {
+                return 'SVAN';
+            } elseif (str_ends_with($articleCode, 'BV') || str_contains($articleCode, 'BV')) {
+                return 'BVAN';
+            } elseif (str_ends_with($articleCode, 'HH') || str_contains($articleCode, 'LM') || str_contains($articleCode, 'HH')) {
+                return 'LM';
+            }
+            
+            // Check article name patterns
+            if (str_contains($articleName, ' CAR ') || str_contains($articleName, ' CAR,') || str_contains($articleName, ' CAR.')) {
+                return 'CAR';
+            } elseif (str_contains($articleName, ' SMALL VAN') || str_contains($articleName, ' SMALLVAN')) {
+                return 'SVAN';
+            } elseif (str_contains($articleName, ' BIG VAN') || str_contains($articleName, ' BIGVAN')) {
+                return 'BVAN';
+            } elseif (str_contains($articleName, ' LM ') || str_contains($articleName, ' LM,') || str_contains($articleName, ' LM.') || str_contains($articleName, ' LM SEAFREIGHT') || str_contains($articleName, ' LM CARGO')) {
+                return 'LM';
             }
         }
 

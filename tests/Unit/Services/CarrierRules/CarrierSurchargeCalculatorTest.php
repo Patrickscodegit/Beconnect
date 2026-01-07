@@ -6,7 +6,7 @@ use App\Models\CarrierSurchargeRule;
 use App\Models\ShippingCarrier;
 use App\Services\CarrierRules\CarrierSurchargeCalculator;
 use App\Services\CarrierRules\DTOs\CargoInputDTO;
-use App\Services\CarrierRules\DTOs\ChargeableMeasureDTO;
+use App\Services\CarrierRules\ChargeableMeasureDTO;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 

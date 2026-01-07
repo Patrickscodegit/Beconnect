@@ -1104,17 +1104,28 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                     $thc, $measurementCosts, $congestion, $iccm
                 );
                 
-                $tariff = CarrierPurchaseTariff::updateOrCreate(
-                    [
-                        'carrier_article_mapping_id' => $mapping->id,
-                        'effective_from' => Carbon::parse(self::EFFECTIVE_DATE)->format('Y-m-d'),
-                    ],
-                    $tariffData
-                );
+                // Use whereDate to match date regardless of time component
+                $effectiveDate = Carbon::parse(self::EFFECTIVE_DATE);
+                $tariffData['effective_from'] = $effectiveDate->format('Y-m-d');
+                $tariffData['carrier_article_mapping_id'] = $mapping->id;
+                
+                // First try to find existing tariff using whereDate
+                $existingTariff = CarrierPurchaseTariff::where('carrier_article_mapping_id', $mapping->id)
+                    ->whereDate('effective_from', $effectiveDate->format('Y-m-d'))
+                    ->first();
+                
+                $wasRecentlyCreated = false;
+                if ($existingTariff) {
+                    $existingTariff->update($tariffData);
+                    $tariff = $existingTariff;
+                } else {
+                    $tariff = CarrierPurchaseTariff::create($tariffData);
+                    $wasRecentlyCreated = true;
+                }
 
                 $baseAmount = $baseFreight['amount'];
                 $unit = $baseFreight['unit'] ?? ($category === 'LM' ? 'LM' : 'EUR');
-                if ($tariff->wasRecentlyCreated) {
+                if ($wasRecentlyCreated) {
                     $stats['tariffs_created']++;
                     $this->command->info("    ✓ Created tariff: {$category} = {$baseAmount} {$unit}");
                 } else {
@@ -1195,17 +1206,28 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                     $thc, $measurementCosts, $congestion, $iccm
                 );
                 
-                $tariff = CarrierPurchaseTariff::updateOrCreate(
-                    [
-                        'carrier_article_mapping_id' => $mapping->id,
-                        'effective_from' => Carbon::parse(self::EFFECTIVE_DATE)->format('Y-m-d'),
-                    ],
-                    $tariffData
-                );
+                // Use whereDate to match date regardless of time component
+                $effectiveDate = Carbon::parse(self::EFFECTIVE_DATE);
+                $tariffData['effective_from'] = $effectiveDate->format('Y-m-d');
+                $tariffData['carrier_article_mapping_id'] = $mapping->id;
+                
+                // First try to find existing tariff using whereDate
+                $existingTariff = CarrierPurchaseTariff::where('carrier_article_mapping_id', $mapping->id)
+                    ->whereDate('effective_from', $effectiveDate->format('Y-m-d'))
+                    ->first();
+                
+                $wasRecentlyCreated = false;
+                if ($existingTariff) {
+                    $existingTariff->update($tariffData);
+                    $tariff = $existingTariff;
+                } else {
+                    $tariff = CarrierPurchaseTariff::create($tariffData);
+                    $wasRecentlyCreated = true;
+                }
 
                 $baseAmount = $baseFreight['amount'];
                 $unit = $baseFreight['unit'] ?? ($category === 'LM' ? 'LM' : 'EUR');
-                if ($tariff->wasRecentlyCreated) {
+                if ($wasRecentlyCreated) {
                     $stats['tariffs_created']++;
                     $this->command->info("    ✓ Created tariff: {$category} = {$baseAmount} {$unit}");
                 } else {
@@ -1306,8 +1328,6 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 'port_group_ids' => $wafPortGroupIds,
                 'category_group_ids' => $categoryGroupIds,
                 'vehicle_categories' => null, // Mutually exclusive with category_group_ids
-                'priority' => 10,
-                'effective_from' => now()->subYear(),
                 'is_active' => true,
             ]
         );
