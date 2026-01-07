@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
-final class RobawsApiClient
+final class RobawsApiClient implements RobawsApiClientInterface
 {
     private ?PendingRequest $http = null;
     

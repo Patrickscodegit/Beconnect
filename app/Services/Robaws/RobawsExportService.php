@@ -6,6 +6,7 @@ use App\Models\Intake;
 use App\Models\RobawsDocument;
 use App\Services\Export\Mappers\RobawsMapper;
 use App\Services\Export\Clients\RobawsApiClient;
+use App\Services\Export\Clients\RobawsApiClientInterface;
 use App\Services\RobawsClient;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
@@ -16,12 +17,12 @@ use Illuminate\Support\Str;
 class RobawsExportService
 {
     private RobawsMapper $mapper;
-    private RobawsApiClient $apiClient;
+    private RobawsApiClientInterface $apiClient;
     private ?RobawsClient $legacyClient = null;
 
     public function __construct(
         RobawsMapper $mapper,
-        RobawsApiClient $apiClient,
+        RobawsApiClientInterface $apiClient,
         ?RobawsClient $legacyClient = null
     ) {
         $this->mapper = $mapper;

@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use App\Services\Robaws\RobawsExportService;
 use App\Services\Export\Mappers\RobawsMapper;
 use App\Services\Export\Clients\RobawsApiClient;
+use App\Services\Export\Clients\RobawsApiClientInterface;
 use App\Models\Intake;
 use Mockery;
 use ReflectionClass;
@@ -27,13 +28,8 @@ class RobawsExportServiceTypeSafetyTest extends TestCase
         // Mock dependencies
         $this->mapper = Mockery::mock(RobawsMapper::class);
 
-        // Create a partial mock around a real RobawsApiClient instance (final class)
-        $config = [
-            'api_url' => 'https://test.api.com',
-            'api_username' => 'test',
-            'api_password' => 'test',
-        ];
-        $this->apiClient = Mockery::mock(new RobawsApiClient($config))->makePartial();
+        // Create a mock of RobawsApiClientInterface (using interface allows proper mocking)
+        $this->apiClient = Mockery::mock(RobawsApiClientInterface::class);
 
         $this->service = new RobawsExportService($this->mapper, $this->apiClient);
     }
