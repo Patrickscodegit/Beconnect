@@ -204,6 +204,7 @@ class CarrierSurchargeCalculator
     ): array {
         $triggerWidth = $params['trigger_width_gt_cm'] ?? 250;
         $useChargeableLm = $params['use_chargeable_lm'] ?? true;
+        $amountPerLm = $params['amount_per_lm'] ?? 0;
 
         if ($widthCm <= $triggerWidth) {
             return [
@@ -220,7 +221,7 @@ class CarrierSurchargeCalculator
         return [
             'qty' => $qty,
             'amount_basis' => 'WIDTH_LM_BASIS',
-            'amount' => 0, // Amount comes from article unit price
+            'amount' => $amountPerLm, // Amount per LM from params
             'needs_basic_freight' => false,
         ];
     }
