@@ -18,7 +18,7 @@ return new class extends Migration
                 ->onDelete('cascade');
             
             $table->string('vehicle_category')->nullable(); // CAR|SMALL_VAN|BIG_VAN|VBV|LM
-            $table->string('unit_basis')->default('UNIT'); // UNIT|LM
+            $table->string('unit_basis')->nullable()->default('UNIT'); // UNIT|LM (null for global rules)
             $table->string('margin_type')->default('FIXED'); // FIXED|PERCENT
             $table->decimal('margin_value', 12, 2);
             $table->integer('priority')->default(0);
