@@ -238,6 +238,7 @@ class CarrierSurchargeCalculator
         $blockCm = $params['block_cm'] ?? 25;
         $triggerWidth = $params['trigger_width_gt_cm'] ?? $threshold;
         $qtyBasis = $params['qty_basis'] ?? 'LM';
+        $amountPerBlock = $params['amount_per_block'] ?? 0;
 
         if ($widthCm <= $triggerWidth) {
             return [
@@ -249,14 +250,14 @@ class CarrierSurchargeCalculator
         }
 
         $overWidth = max(0, $widthCm - $threshold);
-        $blocks = ceil($overWidth / $blockCm); // Started blocks
+        $blocks = ceil($overWidth / $blockCm); // Number of blocks
 
-        $qty = $blocks * ($qtyBasis === 'LM' ? $chargeableMeasure->chargeableLm : $unitCount);
+        $qty = $blocks * ($qtyBasis === 'LM' ? $chargeableMeasure->baseLm : $unitCount);
 
         return [
             'qty' => $qty,
             'amount_basis' => 'WIDTH_STEP_BLOCKS',
-            'amount' => 0, // Amount comes from article unit price
+            'amount' => $amountPerBlock, // Amount per block
             'needs_basic_freight' => false,
         ];
     }
