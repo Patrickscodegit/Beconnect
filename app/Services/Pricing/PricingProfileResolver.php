@@ -24,16 +24,8 @@ class PricingProfileResolver
 
         // Priority 1: Client-specific profile (robaws_client_id matches, carrier_id optional)
         if ($robawsClientId) {
-            $profile = PricingProfile::active()
+            $profile = PricingProfile::active($date)
                 ->where('robaws_client_id', $robawsClientId)
-                ->where(function ($q) use ($date) {
-                    $q->whereNull('effective_from')
-                      ->orWhere('effective_from', '<=', $date);
-                })
-                ->where(function ($q) use ($date) {
-                    $q->whereNull('effective_to')
-                      ->orWhere('effective_to', '>=', $date);
-                })
                 ->first();
 
             if ($profile) {
@@ -43,17 +35,9 @@ class PricingProfileResolver
 
         // Priority 2: Carrier default profile
         if ($carrierId) {
-            $profile = PricingProfile::active()
+            $profile = PricingProfile::active($date)
                 ->where('carrier_id', $carrierId)
                 ->whereNull('robaws_client_id')
-                ->where(function ($q) use ($date) {
-                    $q->whereNull('effective_from')
-                      ->orWhere('effective_from', '<=', $date);
-                })
-                ->where(function ($q) use ($date) {
-                    $q->whereNull('effective_to')
-                      ->orWhere('effective_to', '>=', $date);
-                })
                 ->first();
 
             if ($profile) {
@@ -62,17 +46,9 @@ class PricingProfileResolver
         }
 
         // Priority 3: Global profile
-        $profile = PricingProfile::active()
+        $profile = PricingProfile::active($date)
             ->whereNull('carrier_id')
             ->whereNull('robaws_client_id')
-            ->where(function ($q) use ($date) {
-                $q->whereNull('effective_from')
-                  ->orWhere('effective_from', '<=', $date);
-            })
-            ->where(function ($q) use ($date) {
-                $q->whereNull('effective_to')
-                  ->orWhere('effective_to', '>=', $date);
-            })
             ->first();
 
         return $profile;

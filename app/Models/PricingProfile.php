@@ -43,16 +43,18 @@ class PricingProfile extends Model
         return $this->hasMany(PricingRule::class)->orderBy('priority', 'asc');
     }
 
-    public function scopeActive($query)
+    public function scopeActive($query, $date = null)
     {
+        $date = $date ?? now();
+        
         return $query->where('is_active', true)
-            ->where(function ($q) {
+            ->where(function ($q) use ($date) {
                 $q->whereNull('effective_from')
-                  ->orWhere('effective_from', '<=', now());
+                  ->orWhere('effective_from', '<=', $date);
             })
-            ->where(function ($q) {
+            ->where(function ($q) use ($date) {
                 $q->whereNull('effective_to')
-                  ->orWhere('effective_to', '>=', now());
+                  ->orWhere('effective_to', '>=', $date);
             });
     }
 }
