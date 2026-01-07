@@ -417,7 +417,7 @@ class CarrierRuleResource extends Resource
                                             ->preload()
                                             ->helperText('Select one or more vehicle categories. Leave empty for all categories. Note: If Category Group is selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('category_group_ids'))),
+                                            ->disabled(fn ($get) => !empty($get('category_group_ids')) && empty($get('vehicle_categories'))),
 
                                         Forms\Components\Hidden::make('vehicle_category')
                                             ->dehydrated(false),
@@ -468,7 +468,7 @@ class CarrierRuleResource extends Resource
                                             ->preload()
                                             ->helperText('OR use one or more category groups. Note: If Vehicle Categories are selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')))
+                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')) && empty($get('category_group_ids')))
                                             ->reactive(),
 
                                         Forms\Components\Select::make('vessel_names')
@@ -911,7 +911,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->preload()
                                             ->helperText('Select one or more vehicle categories. Leave empty for all categories. Note: If Category Group is selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('category_group_ids'))),
+                                            ->disabled(fn ($get) => !empty($get('category_group_ids')) && empty($get('vehicle_categories'))),
 
                                         Forms\Components\Hidden::make('vehicle_category')
                                             ->dehydrated(false),
@@ -965,7 +965,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->preload()
                                             ->helperText('OR use one or more category groups. Note: If Vehicle Categories are selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')))
+                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')) && empty($get('category_group_ids')))
                                             ->reactive(),
 
                                         Forms\Components\Select::make('vessel_names')
@@ -1214,7 +1214,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->preload()
                                             ->helperText('Select one or more vehicle categories. Leave empty for all categories. Note: If Category Group is selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('category_group_ids'))),
+                                            ->disabled(fn ($get) => !empty($get('category_group_ids')) && empty($get('vehicle_categories'))),
 
                                         Forms\Components\Hidden::make('vehicle_category')
                                             ->dehydrated(false),
@@ -1253,7 +1253,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->preload()
                                             ->helperText('OR use one or more category groups. Note: If Vehicle Categories are selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')))
+                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')) && empty($get('category_group_ids')))
                                             ->reactive(),
 
                                         Forms\Components\Select::make('vessel_names')
@@ -1623,7 +1623,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->preload()
                                             ->helperText('Select one or more vehicle categories. Leave empty for all categories. Note: If Category Group is selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('category_group_ids'))),
+                                            ->disabled(fn ($get) => !empty($get('category_group_ids')) && empty($get('vehicle_categories'))),
 
                                         Forms\Components\Hidden::make('vehicle_category')
                                             ->dehydrated(false),
@@ -1662,7 +1662,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->preload()
                                             ->helperText('OR use one or more category groups. Note: If Vehicle Categories are selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')))
+                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')) && empty($get('category_group_ids')))
                                             ->reactive(),
 
                                         Forms\Components\Select::make('vessel_names')
@@ -2105,7 +2105,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->multiple()
                                             ->helperText('Select one or more vehicle categories. Leave empty for all categories. Note: If Category Group is selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('category_group_ids')))
+                                            ->disabled(fn ($get) => !empty($get('category_group_ids')) && empty($get('vehicle_categories')))
                                             ->live(),
 
                                         Forms\Components\Select::make('category_group_ids')
@@ -2153,7 +2153,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->multiple()
                                             ->helperText('OR use one or more category groups. Note: If Vehicle Categories are selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')))
+                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')) && empty($get('category_group_ids')))
                                             ->live(),
 
                                         Forms\Components\TagsInput::make('vessel_names')
