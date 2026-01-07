@@ -207,29 +207,35 @@ class CarrierRuleEngine
             $status = 'NOT_ALLOWED';
         }
         if ($rule->max_height_cm && $input->heightCm > $rule->max_height_cm) {
-            $violations[] = 'max_height_exceeded';
-            $status = 'NOT_ALLOWED';
+            // Check if within soft limit range (exceeds max but within soft_max)
+            if ($rule->soft_max_height_cm && 
+                $input->heightCm <= $rule->soft_max_height_cm && 
+                $rule->soft_height_requires_approval) {
+                // Within soft limit range - requires approval
+                $approvalsRequired[] = 'soft_height_approval';
+                $status = 'ALLOWED_UPON_REQUEST';
+            } else {
+                // Exceeds soft limit or no soft limit configured - not allowed
+                $violations[] = 'max_height_exceeded';
+                $status = 'NOT_ALLOWED';
+            }
         }
         if ($rule->max_cbm && $input->cbm > $rule->max_cbm) {
             $violations[] = 'max_cbm_exceeded';
             $status = 'NOT_ALLOWED';
         }
         if ($rule->max_weight_kg && $input->weightKg > $rule->max_weight_kg) {
-            $violations[] = 'max_weight_exceeded';
-            $status = 'NOT_ALLOWED';
-        }
-
-        // Check soft limits
-        if ($rule->soft_max_height_cm && $input->heightCm > $rule->soft_max_height_cm) {
-            if ($rule->soft_height_requires_approval) {
-                $approvalsRequired[] = 'soft_height_approval';
-                $status = 'ALLOWED_UPON_REQUEST';
-            }
-        }
-        if ($rule->soft_max_weight_kg && $input->weightKg > $rule->soft_max_weight_kg) {
-            if ($rule->soft_weight_requires_approval) {
+            // Check if within soft limit range (exceeds max but within soft_max)
+            if ($rule->soft_max_weight_kg && 
+                $input->weightKg <= $rule->soft_max_weight_kg && 
+                $rule->soft_weight_requires_approval) {
+                // Within soft limit range - requires approval
                 $approvalsRequired[] = 'soft_weight_approval';
                 $status = 'ALLOWED_UPON_REQUEST';
+            } else {
+                // Exceeds soft limit or no soft limit configured - not allowed
+                $violations[] = 'max_weight_exceeded';
+                $status = 'NOT_ALLOWED';
             }
         }
 

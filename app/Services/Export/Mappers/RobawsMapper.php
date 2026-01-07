@@ -1617,6 +1617,12 @@ class RobawsMapper
                  $address['street'] ?? 
                  null;
         
+        $streetNumber = $rawData['street_number'] ?? 
+                       $extractionData['address']['street_number'] ?? 
+                       $extractionData['street_number'] ?? 
+                       $address['street_number'] ?? 
+                       null;
+        
         $city = $rawData['city'] ?? 
                $extractionData['address']['city'] ?? 
                $extractionData['city'] ?? 
@@ -1639,6 +1645,7 @@ class RobawsMapper
         // Build final address structure
         $finalAddress = array_filter([
             'street' => $street,
+            'street_number' => $streetNumber,
             'city' => $city,
             'postal_code' => $zip,
             'country' => $this->normalizeCountryName($country),
