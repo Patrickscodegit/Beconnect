@@ -365,9 +365,14 @@ class CarrierRuleResource extends Resource
                                             ->options(function (Forms\Get $get, $livewire) {
                                                 try {
                                                     $carrierId = null;
-                                                    if (isset($livewire) && method_exists($livewire, 'getRecord')) {
-                                                        $record = $livewire->getRecord();
-                                                        $carrierId = $record ? $record->id : null;
+                                                    // Check if livewire is an object before calling method_exists
+                                                    if (isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
+                                                        try {
+                                                            $record = $livewire->getRecord();
+                                                            $carrierId = $record ? $record->id : null;
+                                                        } catch (\Throwable $e) {
+                                                            // Livewire getRecord failed, will return empty array below
+                                                        }
                                                     }
                                                     
                                                     if (!$carrierId) {
@@ -424,9 +429,14 @@ class CarrierRuleResource extends Resource
                                                     $carrierId = null;
                                                     
                                                     // Get carrier ID from livewire's record
-                                                    if (isset($livewire) && method_exists($livewire, 'getRecord')) {
-                                                        $record = $livewire->getRecord();
-                                                        $carrierId = $record ? $record->id : null;
+                                                    // Check if livewire is an object before calling method_exists
+                                                    if (isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
+                                                        try {
+                                                            $record = $livewire->getRecord();
+                                                            $carrierId = $record ? $record->id : null;
+                                                        } catch (\Throwable $e) {
+                                                            // Livewire getRecord failed, fall through to $get
+                                                        }
                                                     }
                                                     
                                                     if (!$carrierId) {
@@ -849,9 +859,14 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->options(function (Forms\Get $get, $livewire) {
                                                 try {
                                                     $carrierId = null;
-                                                    if (isset($livewire) && method_exists($livewire, 'getRecord')) {
-                                                        $record = $livewire->getRecord();
-                                                        $carrierId = $record ? $record->id : null;
+                                                    // Check if livewire is an object before calling method_exists
+                                                    if (isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
+                                                        try {
+                                                            $record = $livewire->getRecord();
+                                                            $carrierId = $record ? $record->id : null;
+                                                        } catch (\Throwable $e) {
+                                                            // Livewire getRecord failed, will return empty array below
+                                                        }
                                                     }
                                                     
                                                     if (!$carrierId) {
@@ -1147,9 +1162,14 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->options(function (Forms\Get $get, $livewire) {
                                                 try {
                                                     $carrierId = null;
-                                                    if (isset($livewire) && method_exists($livewire, 'getRecord')) {
-                                                        $record = $livewire->getRecord();
-                                                        $carrierId = $record ? $record->id : null;
+                                                    // Check if livewire is an object before calling method_exists
+                                                    if (isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
+                                                        try {
+                                                            $record = $livewire->getRecord();
+                                                            $carrierId = $record ? $record->id : null;
+                                                        } catch (\Throwable $e) {
+                                                            // Livewire getRecord failed, will return empty array below
+                                                        }
                                                     }
                                                     
                                                     if (!$carrierId) {
@@ -1551,9 +1571,14 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->options(function (Forms\Get $get, $livewire) {
                                                 try {
                                                     $carrierId = null;
-                                                    if (isset($livewire) && method_exists($livewire, 'getRecord')) {
-                                                        $record = $livewire->getRecord();
-                                                        $carrierId = $record ? $record->id : null;
+                                                    // Check if livewire is an object before calling method_exists
+                                                    if (isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
+                                                        try {
+                                                            $record = $livewire->getRecord();
+                                                            $carrierId = $record ? $record->id : null;
+                                                        } catch (\Throwable $e) {
+                                                            // Livewire getRecord failed, will return empty array below
+                                                        }
                                                     }
                                                     
                                                     if (!$carrierId) {

@@ -195,6 +195,13 @@ class GrimaldiPurchaseRatesOverviewService
         ksort($ports);
         foreach ($ports as $portCode => &$portData) {
             sort($portData['tariff_ids']);
+            // Ensure date keys always exist (defensive programming)
+            if (!isset($portData['oldest_update_date'])) {
+                $portData['oldest_update_date'] = null;
+            }
+            if (!isset($portData['oldest_validity_date'])) {
+                $portData['oldest_validity_date'] = null;
+            }
         }
         unset($portData);
 
