@@ -1,0 +1,1956 @@
+[
+    {
+        "id": 10,
+        "carrier_id": 15,
+        "article_id": 5175,
+        "article_code": "GANRCOTSV",
+        "article_name": "Grimaldi(ANR 1333) Cotonou Benin, SMALL VAN Seafreight",
+        "name": "Small Van Cotonou (GANRCOTSV)",
+        "port_ids": [
+            64
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "small_van"
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 24
+    },
+    {
+        "id": 13,
+        "carrier_id": 15,
+        "article_id": 5181,
+        "article_code": "GANRDOUCAR",
+        "article_name": "Grimaldi(ANR 1333) Douala Cameroon, CAR Seafreight",
+        "name": "Car Douala (GANRDOUCAR)",
+        "port_ids": [
+            67
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "car"
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 31
+    },
+    {
+        "id": 12,
+        "carrier_id": 15,
+        "article_id": 5182,
+        "article_code": "GANRDOUHH",
+        "article_name": "Grimaldi(ANR 1333) Douala Cameroon, LM Seafreight",
+        "name": "LM Cargo Douala (GANRDOUHH)",
+        "port_ids": [
+            67
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "trailer",
+            "truck",
+            "truckhead"
+        ],
+        "category_group_ids": null,
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 32
+    },
+    {
+        "id": 14,
+        "carrier_id": 15,
+        "article_id": 5183,
+        "article_code": "GANRDOUSV",
+        "article_name": "Grimaldi(ANR 1333) Douala Cameroon, SMALL VAN Seafreight",
+        "name": "Small Van Douala (GANRDOUSV)",
+        "port_ids": [
+            67
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "small_van"
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 33
+    },
+    {
+        "id": 51,
+        "carrier_id": 15,
+        "article_id": 5188,
+        "article_code": "GANRFREHH",
+        "article_name": "Grimaldi(ANR 1333) Freetown Sierra Leone, LM seafreight",
+        "name": "LM Cargo Freetown (GANRFREHH)",
+        "port_ids": [
+            91
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            7
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 34
+    },
+    {
+        "id": 17,
+        "carrier_id": 15,
+        "article_id": 5189,
+        "article_code": "GANRFRESV",
+        "article_name": "Grimaldi(ANR 1333) Freetown Sierra Leone, SMALL VAN seafreight",
+        "name": "Small Van Freetown (GANRFRESV)",
+        "port_ids": [
+            91
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "small_van"
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 38
+    },
+    {
+        "id": 111,
+        "carrier_id": 15,
+        "article_id": 5161,
+        "article_code": "GANRBATHH",
+        "article_name": "Grimaldi(ANR 1333) Bata Eq Guinea, LM Seafreight",
+        "name": "LM Bata (GANRBATHH)",
+        "port_ids": [
+            132
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            7
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 12
+    },
+    {
+        "id": 8,
+        "carrier_id": 15,
+        "article_id": 5172,
+        "article_code": "GANRCOTBV",
+        "article_name": "Grimaldi(ANR 1333) Cotonou Benin, BIG VAN Seafreight",
+        "name": "Big Van Cotonou (GANRCOTBV)",
+        "port_ids": [
+            64
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "big_van"
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 22
+    },
+    {
+        "id": 9,
+        "carrier_id": 15,
+        "article_id": 5173,
+        "article_code": "GANRCOTCAR",
+        "article_name": "Grimaldi(ANR 1333) Cotonou Benin, CAR Seafreight",
+        "name": "Car Cotonou (GANRCOTCAR)",
+        "port_ids": [
+            64
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "car"
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 23
+    },
+    {
+        "id": 2,
+        "carrier_id": 15,
+        "article_id": 5176,
+        "article_code": "GANRDAKBV",
+        "article_name": "Grimaldi(ANR 1333) Dakar Senegal, BIG VAN Seafreight",
+        "name": "Big Van Dakar (GANRDAKBV)",
+        "port_ids": [
+            65
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "big_van"
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 26
+    },
+    {
+        "id": 1,
+        "carrier_id": 15,
+        "article_id": 5177,
+        "article_code": "GANRDAKCAR",
+        "article_name": "Grimaldi(ANR 1333) Dakar Senegal, CAR Seafreight",
+        "name": "Car Dakar (GANRDAKCAR)",
+        "port_ids": [
+            65
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "car"
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 28
+    },
+    {
+        "id": 3,
+        "carrier_id": 15,
+        "article_id": 5179,
+        "article_code": "GANRDAKSV",
+        "article_name": "Grimaldi(ANR 1333) Dakar Senegal, SMALL VAN Seafreight",
+        "name": "Small Van Dakar (GANRDAKSV)",
+        "port_ids": [
+            65
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "small_van"
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 29
+    },
+    {
+        "id": 94,
+        "carrier_id": 15,
+        "article_id": 5143,
+        "article_code": "GANRABICAR",
+        "article_name": "Grimaldi(ANR 1333) Abidjan Ivory Coast, CAR Seafreight",
+        "name": "Car Grimaldi(ANR 1333) Abidjan Ivory Coast Mapping",
+        "port_ids": [
+            62
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 1
+    },
+    {
+        "id": 11,
+        "carrier_id": 15,
+        "article_id": 5180,
+        "article_code": "GANRDOUBV",
+        "article_name": "Grimaldi(ANR 1333) Douala Cameroon, BIG VAN Seafreight",
+        "name": "Big Van Douala (GANRDOUBV)",
+        "port_ids": [
+            67
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "big_van"
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 30
+    },
+    {
+        "id": 15,
+        "carrier_id": 15,
+        "article_id": 5187,
+        "article_code": "GANRFRECAR",
+        "article_name": "Grimaldi(ANR 1333) Freetown Sierra Leone, CAR seafreight",
+        "name": "Car Freetown (GANRFRECAR)",
+        "port_ids": [
+            91
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "car"
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 36
+    },
+    {
+        "id": 62,
+        "carrier_id": 15,
+        "article_id": 6313,
+        "article_code": "GANRTFNSV",
+        "article_name": "Grimaldi(ANR 1333) Tenerife Spain, Small Van Seafreight",
+        "name": "Small Van Tenerife (GANRTFNSV)",
+        "port_ids": [
+            129
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 85
+    },
+    {
+        "id": 109,
+        "carrier_id": 15,
+        "article_id": 5162,
+        "article_code": "GANRBATSV",
+        "article_name": "Grimaldi(ANR 1333) Bata Eq Guinea, SMALL VAN Seafreight",
+        "name": "SVAN Bata (GANRBATSV)",
+        "port_ids": [
+            132
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 9
+    },
+    {
+        "id": 95,
+        "carrier_id": 15,
+        "article_id": 5145,
+        "article_code": "GANRABISV",
+        "article_name": "Grimaldi(ANR 1333) Abidjan Ivory Coast, SMALL VAN Seafreight",
+        "name": "Small Van Grimaldi(ANR 1333) Abidjan Ivory Coast Mapping",
+        "port_ids": [
+            62
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 2
+    },
+    {
+        "id": 42,
+        "carrier_id": 15,
+        "article_id": 5174,
+        "article_code": "GANRCOTHH",
+        "article_name": "Grimaldi(ANR 1333) Cotonou Benin, LM Seafreight",
+        "name": "LM Cargo Cotonou (GANRCOTHH)",
+        "port_ids": [
+            64
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            7
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 21
+    },
+    {
+        "id": 91,
+        "carrier_id": 15,
+        "article_id": 5197,
+        "article_code": "GRANRJEDCAR",
+        "article_name": "Grimaldi(ANR 1333) Jeddah KSA, CAR Seafreight",
+        "name": "Car Jeddah (GRANRJEDCAR)",
+        "port_ids": [
+            105
+        ],
+        "port_group_ids": null,
+        "vehicle_categories": null,
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 39
+    },
+    {
+        "id": 35,
+        "carrier_id": 15,
+        "article_id": 5201,
+        "article_code": "GANRLAGHH",
+        "article_name": "Grimaldi(ANR 1333) Lagos Nigeria, LM Seafreight",
+        "name": "LM Cargo Lagos (GANRLAGHH)",
+        "port_ids": [
+            16
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            7
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 42
+    },
+    {
+        "id": 19,
+        "carrier_id": 15,
+        "article_id": 5199,
+        "article_code": "GANRLAGBV",
+        "article_name": "Grimaldi(ANR 1333) Lagos Nigeria, BIG VAN Seafreight",
+        "name": "Big Van Lagos (GANRLAGBV)",
+        "port_ids": [
+            16
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "big_van"
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 43
+    },
+    {
+        "id": 20,
+        "carrier_id": 15,
+        "article_id": 5200,
+        "article_code": "GANRLAGCAR",
+        "article_name": "Grimaldi(ANR 1333) Lagos Nigeria, CAR Seafreight",
+        "name": "Car Lagos (GANRLAGCAR)",
+        "port_ids": [
+            16
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "car"
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 44
+    },
+    {
+        "id": 18,
+        "carrier_id": 15,
+        "article_id": 5202,
+        "article_code": "GANRLAGSV",
+        "article_name": "Grimaldi(ANR 1333) Lagos Nigeria, SMALL VAN Seafreight",
+        "name": "Small Van Lagos (GANRLAGSV)",
+        "port_ids": [
+            16
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "small_van"
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 45
+    },
+    {
+        "id": 21,
+        "carrier_id": 15,
+        "article_id": 5203,
+        "article_code": "GANRLIBBV",
+        "article_name": "Grimaldi(ANR 1333) Libreville Gabon, BIG VAN Seafreight",
+        "name": "Big Van Libreville (GANRLIBBV)",
+        "port_ids": [
+            90
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "big_van"
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 46
+    },
+    {
+        "id": 23,
+        "carrier_id": 15,
+        "article_id": 5204,
+        "article_code": "GANRLIBCAR",
+        "article_name": "Grimaldi(ANR 1333) Libreville Gabon, CAR Seafreight",
+        "name": "Car Libreville (GANRLIBCAR)",
+        "port_ids": [
+            90
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "car"
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 47
+    },
+    {
+        "id": 24,
+        "carrier_id": 15,
+        "article_id": 5206,
+        "article_code": "GANRLIBSV",
+        "article_name": "Grimaldi(ANR 1333) Libreville Gabon, SMALL VAN Seafreight",
+        "name": "Small Van Libreville (GANRLIBSV)",
+        "port_ids": [
+            90
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "small_van"
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 49
+    },
+    {
+        "id": 25,
+        "carrier_id": 15,
+        "article_id": 5209,
+        "article_code": "GANRLOMBV",
+        "article_name": "Grimaldi(ANR 1333) Lome Togo, BIG VAN Seafreight",
+        "name": "Big Van Lome (GANRLOMBV)",
+        "port_ids": [
+            69
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "big_van"
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 52
+    },
+    {
+        "id": 67,
+        "carrier_id": 15,
+        "article_id": 5213,
+        "article_code": "GANRLUABV",
+        "article_name": "Grimaldi(ANR 1333) Luanda Angola, BIG VAN Seafreight",
+        "name": "Big Van Luanda (GANRLUABV)",
+        "port_ids": [
+            130
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 54
+    },
+    {
+        "id": 65,
+        "carrier_id": 15,
+        "article_id": 5214,
+        "article_code": "GANRLUACAR",
+        "article_name": "Grimaldi(ANR 1333) Luanda Angola, CAR Seafreight",
+        "name": "Car Luanda (GANRLUACAR)",
+        "port_ids": [
+            130
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 55
+    },
+    {
+        "id": 66,
+        "carrier_id": 15,
+        "article_id": 5216,
+        "article_code": "GANRLUASV",
+        "article_name": "Grimaldi(ANR 1333) Luanda Angola, SMALL VAN Seafreight",
+        "name": "Small Van Luanda (GANRLUASV)",
+        "port_ids": [
+            130
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 57
+    },
+    {
+        "id": 61,
+        "carrier_id": 15,
+        "article_id": 6312,
+        "article_code": "GANRTFNCAR",
+        "article_name": "Grimaldi(ANR 1333) Tenerife Spain, Car Seafreight",
+        "name": "Car Tenerife (GANRTFNCAR)",
+        "port_ids": [
+            129
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 84
+    },
+    {
+        "id": 63,
+        "carrier_id": 15,
+        "article_id": 6314,
+        "article_code": "GANRTFNBV",
+        "article_name": "Grimaldi(ANR 1333) Tenerife Spain, Big Van Seafreight",
+        "name": "Big Van Tenerife (GANRTFNBV)",
+        "port_ids": [
+            129
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 86
+    },
+    {
+        "id": 64,
+        "carrier_id": 15,
+        "article_id": 6315,
+        "article_code": "GANRTFNHH",
+        "article_name": "Grimaldi(ANR 1333) Tenerife Spain, LM Cargo Seafreight",
+        "name": "LM Cargo Tenerife (GANRTFNHH)",
+        "port_ids": [
+            129
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            7
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 87
+    },
+    {
+        "id": 96,
+        "carrier_id": 15,
+        "article_id": 5142,
+        "article_code": "GANRABIBV",
+        "article_name": "Grimaldi(ANR 1333) Abidjan Ivory Coast, BIG VAN Seafreight",
+        "name": "Big van Grimaldi(ANR 1333) Abidjan Ivory Coast Mapping",
+        "port_ids": [
+            62
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 3
+    },
+    {
+        "id": 108,
+        "carrier_id": 15,
+        "article_id": 5160,
+        "article_code": "GANRBATCAR",
+        "article_name": "Grimaldi(ANR 1333) Bata Eq Guinea, CAR Seafreight",
+        "name": "CAR Bata (GANRBATCAR)",
+        "port_ids": [
+            132
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 11
+    },
+    {
+        "id": 4,
+        "carrier_id": 15,
+        "article_id": 5144,
+        "article_code": "GANRABIHH",
+        "article_name": "Grimaldi(ANR 1333) Abidjan Ivory Coast, LM Seafreight",
+        "name": "LM Cargo Abidjan (GANRABIHH)",
+        "port_ids": [
+            62
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            "7",
+            "8"
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 4
+    },
+    {
+        "id": 110,
+        "carrier_id": 15,
+        "article_id": 5159,
+        "article_code": "GANRBATBV",
+        "article_name": "Grimaldi(ANR 1333) Bata Eq Guinea, BIG VAN Seafreight",
+        "name": "BVAN Bata (GANRBATBV)",
+        "port_ids": [
+            132
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 10
+    },
+    {
+        "id": 50,
+        "carrier_id": 15,
+        "article_id": 6209,
+        "article_code": "Surcharges",
+        "article_name": "Waiver (BESC) Dakar - Senegal LM",
+        "name": "LM Cargo Dakar (Surcharges)",
+        "port_ids": [
+            65
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            4
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 27
+    },
+    {
+        "id": 16,
+        "carrier_id": 15,
+        "article_id": 5186,
+        "article_code": "GANRFREBV",
+        "article_name": "Grimaldi(ANR 1333) Freetown Sierra Leone, BIG VAN seafreight",
+        "name": "Big Van Freetown (GANRFREBV)",
+        "port_ids": [
+            91
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "big_van"
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 35
+    },
+    {
+        "id": 77,
+        "carrier_id": 15,
+        "article_id": 5218,
+        "article_code": "GANRMALCAR",
+        "article_name": "Grimaldi(ANR 1333) Malabo Eq Guinea, CAR Seafreight",
+        "name": "Car Malabo (GANRMALCAR)",
+        "port_ids": [
+            133
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 59
+    },
+    {
+        "id": 47,
+        "carrier_id": 15,
+        "article_id": 5188,
+        "article_code": "GANRFREHH",
+        "article_name": "Grimaldi(ANR 1333) Freetown Sierra Leone, LM seafreight",
+        "name": "LM Cargo Freetown (Surcharges)",
+        "port_ids": [
+            91
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            "8",
+            "7"
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 37
+    },
+    {
+        "id": 97,
+        "carrier_id": 15,
+        "article_id": 5169,
+        "article_code": "GANRCONCAR",
+        "article_name": "Grimaldi(ANR 1333) Conakry Guinea, CAR Seafreight",
+        "name": "CAR Conakry (GANRCONCAR)",
+        "port_ids": [
+            63
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 17
+    },
+    {
+        "id": 98,
+        "carrier_id": 15,
+        "article_id": 5171,
+        "article_code": "GANRCONSV",
+        "article_name": "Grimaldi(ANR 1333) Conakry Guinea, SMALL VAN Seafreight",
+        "name": "SVAN Conakry (GANRCONSV)",
+        "port_ids": [
+            63
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 18
+    },
+    {
+        "id": 99,
+        "carrier_id": 15,
+        "article_id": 5168,
+        "article_code": "GANRCONBV",
+        "article_name": "Grimaldi(ANR 1333) Conakry Guinea, BIG VAN Seafreight",
+        "name": "BVAN Conakry (GANRCONBV)",
+        "port_ids": [
+            63
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 19
+    },
+    {
+        "id": 71,
+        "carrier_id": 15,
+        "article_id": 5222,
+        "article_code": "GANRMONBV",
+        "article_name": "Grimaldi(ANR 1333) Monrovia Liberia, BIG VAN Seafreight",
+        "name": "Big Van Monrovia (GANRMONBV)",
+        "port_ids": [
+            131
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 62
+    },
+    {
+        "id": 52,
+        "carrier_id": 15,
+        "article_id": 5178,
+        "article_code": "GANRDAKHH",
+        "article_name": "Grimaldi(ANR 1333) Dakar Senegal, LM Seafreight",
+        "name": "LM Cargo Dakar (GANRDAKHH)",
+        "port_ids": [
+            65
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            7
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 25
+    },
+    {
+        "id": 93,
+        "carrier_id": 15,
+        "article_id": 5196,
+        "article_code": "GRANRJEDBV",
+        "article_name": "Grimaldi(ANR 1333) Jeddah KSA, BIG VAN Seafreight",
+        "name": "Car Jeddah (GRANRJEDCAR)",
+        "port_ids": [
+            105
+        ],
+        "port_group_ids": null,
+        "vehicle_categories": null,
+        "category_group_ids": null,
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 40
+    },
+    {
+        "id": 92,
+        "carrier_id": 15,
+        "article_id": 5198,
+        "article_code": "GRANRJEDSV",
+        "article_name": "Grimaldi(ANR 1333) Jeddah KSA, SMALL VAN Seafreight",
+        "name": "Car Jeddah (GRANRJEDCAR)",
+        "port_ids": [
+            105
+        ],
+        "port_group_ids": null,
+        "vehicle_categories": null,
+        "category_group_ids": null,
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 41
+    },
+    {
+        "id": 22,
+        "carrier_id": 15,
+        "article_id": 5205,
+        "article_code": "GANRLIBHH",
+        "article_name": "Grimaldi(ANR 1333) Libreville Gabon, LM Seafreight",
+        "name": "LM Cargo Libreville (GANRLIBHH)",
+        "port_ids": [
+            90
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "trailer",
+            "truck",
+            "truckhead"
+        ],
+        "category_group_ids": null,
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 48
+    },
+    {
+        "id": 48,
+        "carrier_id": 15,
+        "article_id": 5210,
+        "article_code": "GANRLOMCAR",
+        "article_name": "Grimaldi(ANR 1333) Lome Togo, CAR Seafreight",
+        "name": "Car Lome (GANRLOMCAR)",
+        "port_ids": [
+            69
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 50
+    },
+    {
+        "id": 49,
+        "carrier_id": 15,
+        "article_id": 5211,
+        "article_code": "GANRLOMHH",
+        "article_name": "Grimaldi(ANR 1333) Lome Togo, LM Seafreight",
+        "name": "LM Cargo Lome (GANRLOMHH)",
+        "port_ids": [
+            69
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            7
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 51
+    },
+    {
+        "id": 68,
+        "carrier_id": 15,
+        "article_id": 5215,
+        "article_code": "GANRLUAHH",
+        "article_name": "Grimaldi(ANR 1333) Luanda Angola, LM Seafreight",
+        "name": "LM Cargo Luanda (GANRLUAHH)",
+        "port_ids": [
+            130
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            7
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 56
+    },
+    {
+        "id": 79,
+        "carrier_id": 15,
+        "article_id": 5217,
+        "article_code": "GANRMALBV",
+        "article_name": "Grimaldi(ANR 1333) Malabo Eq Guinea, BIG VAN Seafreight",
+        "name": "Big Van Malabo (GANRMALBV)",
+        "port_ids": [
+            133
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 58
+    },
+    {
+        "id": 80,
+        "carrier_id": 15,
+        "article_id": 5219,
+        "article_code": "GANRMALHH",
+        "article_name": "Grimaldi(ANR 1333) Malabo Eq Guinea, LM Seafreight",
+        "name": "LM Cargo Malabo (GANRMALHH)",
+        "port_ids": [
+            133
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            7
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 60
+    },
+    {
+        "id": 78,
+        "carrier_id": 15,
+        "article_id": 5220,
+        "article_code": "GANRMALSV",
+        "article_name": "Grimaldi(ANR 1333) Malabo Eq Guinea, SMALL VAN Seafreight",
+        "name": "Small Van Malabo (GANRMALSV)",
+        "port_ids": [
+            133
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 61
+    },
+    {
+        "id": 89,
+        "carrier_id": 15,
+        "article_id": 5228,
+        "article_code": "GANRMONCAR",
+        "article_name": "Grimaldi(ANR 1333) Montevideo Uruguay, CAR Seafreight",
+        "name": "Car Monrovia (GANRMONCAR)",
+        "port_ids": [
+            131
+        ],
+        "port_group_ids": null,
+        "vehicle_categories": null,
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 63
+    },
+    {
+        "id": 69,
+        "carrier_id": 15,
+        "article_id": 5223,
+        "article_code": "GANRMONCAR",
+        "article_name": "Grimaldi(ANR 1333) Monrovia Liberia, CAR Seafreight",
+        "name": "Car Monrovia (GANRMONCAR)",
+        "port_ids": [
+            131
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": false,
+        "sort_order": 64
+    },
+    {
+        "id": 72,
+        "carrier_id": 15,
+        "article_id": 5224,
+        "article_code": "GANRMONHH",
+        "article_name": "Grimaldi(ANR 1333) Monrovia Liberia, LM Seafreight",
+        "name": "LM Cargo Monrovia (GANRMONHH)",
+        "port_ids": [
+            131
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            7
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 65
+    },
+    {
+        "id": 70,
+        "carrier_id": 15,
+        "article_id": 5225,
+        "article_code": "GANRMONSV",
+        "article_name": "Grimaldi(ANR 1333) Monrovia Liberia, SMALL VAN Seafreight",
+        "name": "Small Van Monrovia (GANRMONSV)",
+        "port_ids": [
+            131
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": false,
+        "sort_order": 66
+    },
+    {
+        "id": 90,
+        "carrier_id": 15,
+        "article_id": 5229,
+        "article_code": "GANRMONSV",
+        "article_name": "Grimaldi(ANR 1333) Montevideo Uruguay, SMALL VAN Seafreight",
+        "name": "Small Van Monrovia (GANRMONSV)",
+        "port_ids": [
+            131
+        ],
+        "port_group_ids": null,
+        "vehicle_categories": null,
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 67
+    },
+    {
+        "id": 55,
+        "carrier_id": 15,
+        "article_id": 5231,
+        "article_code": "GANRNOUBV",
+        "article_name": "Grimaldi(ANR 1333) Nouakchott Mauritania, BIG VAN Seafreight",
+        "name": "Big Van Nouakchott (GANRNOUBV)",
+        "port_ids": [
+            89
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 68
+    },
+    {
+        "id": 53,
+        "carrier_id": 15,
+        "article_id": 5232,
+        "article_code": "GANRNOUCAR",
+        "article_name": "Grimaldi(ANR 1333) Nouakchott Mauritania, CAR Seafreight",
+        "name": "Car Nouakchott (GANRNOUCAR)",
+        "port_ids": [
+            89
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 69
+    },
+    {
+        "id": 56,
+        "carrier_id": 15,
+        "article_id": 5233,
+        "article_code": "GANRNOUHH",
+        "article_name": "Grimaldi(ANR 1333) Nouakchott Mauritania, LM Seafreight",
+        "name": "LM Cargo Nouakchott (GANRNOUHH)",
+        "port_ids": [
+            89
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            7
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 70
+    },
+    {
+        "id": 54,
+        "carrier_id": 15,
+        "article_id": 5234,
+        "article_code": "GANRNOUSV",
+        "article_name": "Grimaldi(ANR 1333) Nouakchott Mauritania, SMALL VAN Seafreight",
+        "name": "Small Van Nouakchott (GANRNOUSV)",
+        "port_ids": [
+            89
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 71
+    },
+    {
+        "id": 29,
+        "carrier_id": 15,
+        "article_id": 5240,
+        "article_code": "GANRPOIBV",
+        "article_name": "Grimaldi(ANR 1333) Pointe Noire Congo, BIG VAN seafreight",
+        "name": "Big Van Pointe-Noire (GANRPOIBV)",
+        "port_ids": [
+            24
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "big_van"
+        ],
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 72
+    },
+    {
+        "id": 28,
+        "carrier_id": 15,
+        "article_id": 5241,
+        "article_code": "GANRPOICAR",
+        "article_name": "Grimaldi(ANR 1333) Pointe Noire Congo, CAR seafreight",
+        "name": "Car Pointe-Noire (GANRPOICAR)",
+        "port_ids": [
+            24
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "car"
+        ],
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 73
+    },
+    {
+        "id": 30,
+        "carrier_id": 15,
+        "article_id": 5242,
+        "article_code": "GANRPOIHH",
+        "article_name": "Grimaldi(ANR 1333) Pointe Noire Congo, LM seafreight",
+        "name": "LM Cargo Pointe-Noire (GANRPOIHH)",
+        "port_ids": [
+            24
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "trailer",
+            "truck",
+            "truckhead"
+        ],
+        "category_group_ids": null,
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 74
+    },
+    {
+        "id": 27,
+        "carrier_id": 15,
+        "article_id": 5243,
+        "article_code": "GANRPOISV",
+        "article_name": "Grimaldi(ANR 1333) Pointe Noire Congo, SMALL VAN seafreight",
+        "name": "Small Van Pointe-Noire (GANRPOISV)",
+        "port_ids": [
+            24
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "small_van"
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 75
+    },
+    {
+        "id": 81,
+        "carrier_id": 15,
+        "article_id": 5257,
+        "article_code": "GANRTEMCAR",
+        "article_name": "Grimaldi(ANR 1333) Tema Ghana, CAR Seafreight",
+        "name": "Car Tema (GANRTEMCAR)",
+        "port_ids": [
+            134
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 81
+    },
+    {
+        "id": 112,
+        "carrier_id": 15,
+        "article_id": 5170,
+        "article_code": "GANRCONHH",
+        "article_name": "Grimaldi(ANR 1333) Conakry Guinea, LM Seafreight",
+        "name": "LM Conakry (GANRCONHH)",
+        "port_ids": [
+            63
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            7
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 20
+    },
+    {
+        "id": 84,
+        "carrier_id": 15,
+        "article_id": 5258,
+        "article_code": "GANRTEMHH",
+        "article_name": "Grimaldi(ANR 1333) Tema Ghana, LM Seafreight",
+        "name": "LM Cargo Tema (GANRTEMHH)",
+        "port_ids": [
+            134
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            7
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 82
+    },
+    {
+        "id": 87,
+        "carrier_id": 15,
+        "article_id": 5252,
+        "article_code": "GANRTAKBV",
+        "article_name": "Grimaldi(ANR 1333) Takoradi(ANR) - Ghana, BIG VAN Seafreight",
+        "name": "Big Van Takoradi (GANRTAKBV)",
+        "port_ids": [
+            135
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 76
+    },
+    {
+        "id": 85,
+        "carrier_id": 15,
+        "article_id": 5253,
+        "article_code": "GANRTAKCAR",
+        "article_name": "Grimaldi(ANR 1333) Takoradi(ANR) - Ghana, CAR Seafreight",
+        "name": "Car Takoradi (GANRTAKCAR)",
+        "port_ids": [
+            135
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 77
+    },
+    {
+        "id": 88,
+        "carrier_id": 15,
+        "article_id": 5254,
+        "article_code": "GANRTAKHH",
+        "article_name": "Grimaldi(ANR 1333) Takoradi(ANR) - Ghana, LM Seafreight",
+        "name": "LM Cargo Takoradi (GANRTAKHH)",
+        "port_ids": [
+            135
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            7
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 78
+    },
+    {
+        "id": 86,
+        "carrier_id": 15,
+        "article_id": 5255,
+        "article_code": "GANRTAKSV",
+        "article_name": "Grimaldi(ANR 1333) Takoradi(ANR) - Ghana, SMALL VAN Seafreight",
+        "name": "Small Van Takoradi (GANRTAKSV)",
+        "port_ids": [
+            135
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 79
+    },
+    {
+        "id": 83,
+        "carrier_id": 15,
+        "article_id": 5256,
+        "article_code": "GANRTEMBV",
+        "article_name": "Grimaldi(ANR 1333) Tema Ghana, BIG VAN Seafreight",
+        "name": "Big Van Tema (GANRTEMBV)",
+        "port_ids": [
+            134
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 80
+    },
+    {
+        "id": 82,
+        "carrier_id": 15,
+        "article_id": 5259,
+        "article_code": "GANRTEMSV",
+        "article_name": "Grimaldi(ANR 1333) Tema Ghana, SMALL VAN Seafreight",
+        "name": "Small Van Tema (GANRTEMSV)",
+        "port_ids": [
+            134
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 83
+    },
+    {
+        "id": 106,
+        "carrier_id": 15,
+        "article_id": 5154,
+        "article_code": "GANRBANBV",
+        "article_name": "Grimaldi(ANR 1333) Banjul Gambia, BIG VAN Seafreight",
+        "name": "BVAN Banjul (GANRBANBV)",
+        "port_ids": [
+            128
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 5
+    },
+    {
+        "id": 107,
+        "carrier_id": 15,
+        "article_id": 5156,
+        "article_code": "GANRBANHH",
+        "article_name": "Grimaldi(ANR 1333) Banjul Gambia, LM Seafreight",
+        "name": "LM Banjul (GANRBANHH)",
+        "port_ids": [
+            128
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            7
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 6
+    },
+    {
+        "id": 104,
+        "carrier_id": 15,
+        "article_id": 5155,
+        "article_code": "GANRBANCAR",
+        "article_name": "Grimaldi(ANR 1333) Banjul Gambia, CAR Seafreight",
+        "name": "CAR Banjul (GANRBANCAR)",
+        "port_ids": [
+            128
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 7
+    },
+    {
+        "id": 105,
+        "carrier_id": 15,
+        "article_id": 5157,
+        "article_code": "GANRBANSV",
+        "article_name": "Grimaldi(ANR 1333) Banjul Gambia, SMALL VAN Seafreight",
+        "name": "SVAN Banjul (GANRBANSV)",
+        "port_ids": [
+            128
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 8
+    },
+    {
+        "id": 102,
+        "carrier_id": 15,
+        "article_id": 5164,
+        "article_code": "GANRCASBV",
+        "article_name": "Grimaldi(ANR 1333) Casablanca Morocco, BIG VAN Seafreight",
+        "name": "BVAN Casablanca (GANRCASBV)",
+        "port_ids": [
+            86
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            3
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 13
+    },
+    {
+        "id": 100,
+        "carrier_id": 15,
+        "article_id": 5165,
+        "article_code": "GANRCASCAR",
+        "article_name": "Grimaldi(ANR 1333) Casablanca Morocco, CAR Seafreight",
+        "name": "CAR Casablanca (GANRCASCAR)",
+        "port_ids": [
+            86
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            1
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 14
+    },
+    {
+        "id": 101,
+        "carrier_id": 15,
+        "article_id": 5167,
+        "article_code": "GANRCASSV",
+        "article_name": "Grimaldi(ANR 1333) Casablanca Morocco, SMALL VAN Seafreight",
+        "name": "SVAN Casablanca (GANRCASSV)",
+        "port_ids": [
+            86
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 15
+    },
+    {
+        "id": 103,
+        "carrier_id": 15,
+        "article_id": 5166,
+        "article_code": "GANRCASHH",
+        "article_name": "Grimaldi(ANR 1333) Casablanca Morocco, LM Seafreight",
+        "name": "LM Casablanca (GANRCASHH)",
+        "port_ids": [
+            86
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": null,
+        "category_group_ids": [
+            7
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 16
+    },
+    {
+        "id": 26,
+        "carrier_id": 15,
+        "article_id": 5212,
+        "article_code": "GANRLOMSV",
+        "article_name": "Grimaldi(ANR 1333) Lome Togo, SMALL VAN Seafreight",
+        "name": "Small Van Lome (GANRLOMSV)",
+        "port_ids": [
+            69
+        ],
+        "port_group_ids": [
+            1
+        ],
+        "vehicle_categories": [
+            "small_van"
+        ],
+        "category_group_ids": [
+            2
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "is_active": true,
+        "sort_order": 53
+    }
+]

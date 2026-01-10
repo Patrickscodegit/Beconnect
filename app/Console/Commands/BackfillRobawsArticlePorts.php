@@ -3,22 +3,17 @@
 namespace App\Console\Commands;
 
 use App\Models\RobawsArticleCache;
-use App\Services\Robaws\ArticleNameParser;
-use App\Services\Robaws\ArticleSyncEnhancementService;
-use App\Services\Robaws\ArticleTransportModeResolver;
+use App\Services\Ports\PortResolutionService;
 use Illuminate\Console\Command;
-use Illuminate\Support\Arr;
 
 class BackfillRobawsArticlePorts extends Command
 {
-    protected $signature = 'robaws:articles:backfill-ports {--chunk=200 : Number of records processed per chunk} {--dry-run : Preview changes without saving}';
+    protected $signature = 'ports:backfill-robaws-article-ports {--chunk=200 : Number of records processed per chunk} {--dry-run : Preview changes without saving}';
 
-    protected $description = 'Populate missing POL/POD strings and codes on robaws_articles_cache records';
+    protected $description = 'Backfill pol_port_id and pod_port_id foreign keys from existing pol_code and pod_code using PortResolutionService';
 
     public function __construct(
-        protected ArticleNameParser $parser,
-        protected ArticleSyncEnhancementService $enhancementService,
-        protected ArticleTransportModeResolver $transportModeResolver
+        protected PortResolutionService $portResolver
     ) {
         parent::__construct();
     }
@@ -27,161 +22,133 @@ class BackfillRobawsArticlePorts extends Command
     {
         $chunkSize = (int) $this->option('chunk');
         $dryRun = (bool) $this->option('dry-run');
-        $updated = 0;
+
+        $stats = [
+            'total' => 0,
+            'pol_resolved' => 0,
+            'pod_resolved' => 0,
+            'flagged' => 0,
+            'unresolved_codes' => [],
+        ];
+
+        $this->info('Starting backfill of port foreign keys...');
+        if ($dryRun) {
+            $this->warn('DRY-RUN mode: No changes will be saved');
+        }
 
         RobawsArticleCache::query()
             ->select([
                 'id',
                 'robaws_article_id',
-                'article_name',
                 'article_code',
-                'description',
-                'category',
-                'shipping_line',
-                'commodity_type',
-                'transport_mode',
-                'pol',
-                'pod',
+                'article_name',
                 'pol_code',
                 'pod_code',
-                'pol_terminal',
+                'pol_port_id',
+                'pod_port_id',
+                'requires_manual_review',
             ])
-            ->chunkById($chunkSize, function ($articles) use (&$updated, $dryRun) {
+            ->chunkById($chunkSize, function ($articles) use (&$stats, $dryRun, $chunkSize) {
                 foreach ($articles as $article) {
-                    $updates = $this->buildUpdates($article->toArray());
+                    $stats['total']++;
+                    $updates = [];
 
-                    if (empty($updates)) {
-                        continue;
+                    // Resolve POL port if pol_code exists and pol_port_id is null
+                    if ($article->pol_port_id === null && !empty($article->pol_code)) {
+                        $polPort = $this->portResolver->resolveOne($article->pol_code, 'SEA');
+                        if ($polPort) {
+                            $updates['pol_port_id'] = $polPort->id;
+                            $stats['pol_resolved']++;
+                        } else {
+                            // Track unresolved code
+                            $code = strtoupper(trim($article->pol_code));
+                            if (!in_array($code, $stats['unresolved_codes'])) {
+                                $stats['unresolved_codes'][] = $code;
+                            }
+                        }
                     }
 
-                    $updated++;
-
-                    if ($dryRun) {
-                        $this->line(sprintf(
-                            '[DRY-RUN] Article %s (%s): %s',
-                            $article->robaws_article_id,
-                            $article->article_name,
-                            json_encode($updates)
-                        ));
-                        continue;
+                    // Resolve POD port if pod_code exists and pod_port_id is null
+                    if ($article->pod_port_id === null && !empty($article->pod_code)) {
+                        $podPort = $this->portResolver->resolveOne($article->pod_code, 'SEA');
+                        if ($podPort) {
+                            $updates['pod_port_id'] = $podPort->id;
+                            $stats['pod_resolved']++;
+                        } else {
+                            // Track unresolved code
+                            $code = strtoupper(trim($article->pod_code));
+                            if (!in_array($code, $stats['unresolved_codes'])) {
+                                $stats['unresolved_codes'][] = $code;
+                            }
+                        }
                     }
 
-                    $article->forceFill($updates);
-                    $article->save();
+                    // Set requires_manual_review flag
+                    $hasPolCode = !empty($article->pol_code);
+                    $hasPodCode = !empty($article->pod_code);
+                    $polResolved = isset($updates['pol_port_id']) ? true : ($article->pol_port_id !== null);
+                    $podResolved = isset($updates['pod_port_id']) ? true : ($article->pod_port_id !== null);
+
+                    $needsReview = ($hasPolCode && !$polResolved) || ($hasPodCode && !$podResolved);
+                    
+                    if ($needsReview) {
+                        $updates['requires_manual_review'] = true;
+                        if ($article->requires_manual_review !== true) {
+                            $stats['flagged']++;
+                        }
+                    } elseif ((!$hasPolCode && !$hasPodCode) || ($polResolved && (!$hasPodCode || $podResolved))) {
+                        // Both resolved (or no codes to resolve) - clear flag
+                        $updates['requires_manual_review'] = false;
+                    }
+
+                    // Update article if there are changes
+                    if (!empty($updates)) {
+                        if ($dryRun) {
+                            $this->line(sprintf(
+                                '[DRY-RUN] Article %s (%s): %s',
+                                $article->robaws_article_id,
+                                $article->article_code ?? 'N/A',
+                                json_encode($updates, JSON_PRETTY_PRINT)
+                            ));
+                        } else {
+                            $article->forceFill($updates);
+                            $article->save();
+                        }
+                    }
+                }
+
+                // Progress indicator
+                if ($stats['total'] % ($chunkSize * 5) === 0) {
+                    $this->info("Processed {$stats['total']} articles...");
                 }
             });
 
-        $this->info(sprintf(
-            $dryRun ? 'Dry run complete. %d records would be updated.' : 'Backfill complete. %d records updated.',
-            $updated
-        ));
+        // Output summary
+        $this->newLine();
+        $this->info('Backfill Summary:');
+        $this->line("  Total processed: {$stats['total']}");
+        $this->line("  POL resolved: {$stats['pol_resolved']}");
+        $this->line("  POD resolved: {$stats['pod_resolved']}");
+        $this->line("  Flagged for manual review: {$stats['flagged']}");
+        
+        if (!empty($stats['unresolved_codes'])) {
+            $this->warn('  Unresolved codes (' . count($stats['unresolved_codes']) . '):');
+            foreach (array_slice($stats['unresolved_codes'], 0, 20) as $code) {
+                $this->line("    - {$code}");
+            }
+            if (count($stats['unresolved_codes']) > 20) {
+                $remaining = count($stats['unresolved_codes']) - 20;
+                $this->line("    ... and {$remaining} more");
+            }
+            $this->info('  Consider adding these codes to the port_aliases table and re-running the command.');
+        }
+
+        if ($dryRun) {
+            $this->warn('DRY-RUN complete. Run without --dry-run to apply changes.');
+        } else {
+            $this->info('Backfill complete!');
+        }
 
         return Command::SUCCESS;
     }
-
-    protected function buildUpdates(array $article): array
-    {
-        $updates = [];
-
-        $pol = Arr::get($article, 'pol');
-        $pod = Arr::get($article, 'pod');
-        $polCode = Arr::get($article, 'pol_code');
-        $podCode = Arr::get($article, 'pod_code');
-        $polTerminal = Arr::get($article, 'pol_terminal');
-
-        // Attempt to parse from article name when missing
-        $parsed = $this->parserData($article['article_name'] ?? '');
-
-        if (empty($pol) && !empty($parsed['pol'])) {
-            $updates['pol'] = $parsed['pol'];
-        }
-
-        if (empty($pod) && !empty($parsed['pod'])) {
-            $updates['pod'] = $parsed['pod'];
-        }
-
-        if (empty($polTerminal) && !empty($parsed['pol_terminal'])) {
-            $updates['pol_terminal'] = $parsed['pol_terminal'];
-        }
-
-        // Codes: prefer enhancement service to normalize format
-        $polSource = $updates['pol'] ?? $pol ?? $parsed['pol'] ?? null;
-        $podSource = $updates['pod'] ?? $pod ?? $parsed['pod'] ?? null;
-
-        if ($this->needsCodeNormalization($polCode)) {
-            $code = $this->enhancementService->extractPolCode($polSource);
-            if (!empty($code)) {
-                $updates['pol_code'] = $code;
-            }
-        }
-
-        if ($this->needsCodeNormalization($podCode)) {
-            $code = $this->enhancementService->extractPodCode($podSource);
-            if (!empty($code)) {
-                $updates['pod_code'] = $code;
-            }
-        }
-
-        $context = [
-            'transport_mode' => Arr::get($article, 'transport_mode'),
-            'shipping_line' => Arr::get($article, 'shipping_line'),
-            'commodity_type' => Arr::get($article, 'commodity_type'),
-            'category' => Arr::get($article, 'category'),
-            'description' => Arr::get($article, 'description'),
-            'article_code' => Arr::get($article, 'article_code'),
-        ];
-
-        $resolvedMode = $this->transportModeResolver->resolve($article['article_name'] ?? '', $context);
-        if ($resolvedMode && $resolvedMode !== Arr::get($article, 'transport_mode')) {
-            $updates['transport_mode'] = $resolvedMode;
-        }
-
-        return $updates;
-    }
-
-    protected function parserData(string $articleName): array
-    {
-        $data = [];
-
-        if (empty($articleName)) {
-            return $data;
-        }
-
-        $polData = $this->parser->extractPOL($articleName);
-        if ($polData) {
-            $data['pol'] = $polData['formatted'] ?? $polData['code'] ?? null;
-            $data['pol_code'] = $polData['code'] ?? null;
-            if (!empty($polData['terminal'])) {
-                $data['pol_terminal'] = $polData['terminal'];
-            }
-        }
-
-        $podData = $this->parser->extractPOD($articleName);
-        if ($podData) {
-            $data['pod'] = $podData['formatted'] ?? $podData['code'] ?? null;
-            $data['pod_code'] = $podData['code'] ?? null;
-        }
-
-        return $data;
-    }
-
-    protected function needsCodeNormalization(?string $value): bool
-    {
-        if (empty($value)) {
-            return true;
-        }
-
-        $trimmed = trim($value);
-
-        if (strlen($trimmed) > 4) {
-            return true;
-        }
-
-        if (preg_match('/[^A-Z]/', $trimmed)) {
-            return true;
-        }
-
-        return false;
-    }
 }
-

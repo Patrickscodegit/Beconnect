@@ -1,0 +1,182 @@
+[
+    {
+        "id": 8,
+        "code": "LM_CARGO_TRAILERS",
+        "display_name": "LM Cargo (Trailers)",
+        "aliases": [],
+        "priority": 0,
+        "sort_order": 5,
+        "effective_from": null,
+        "effective_to": null,
+        "is_active": true,
+        "members": [
+            {
+                "vehicle_category": "tank_trailer",
+                "is_active": true
+            },
+            {
+                "vehicle_category": "trailer_stack",
+                "is_active": true
+            },
+            {
+                "vehicle_category": "trailer",
+                "is_active": true
+            }
+        ]
+    },
+    {
+        "id": 1,
+        "code": "CARS",
+        "display_name": "Cars",
+        "aliases": [
+            "Car",
+            "Passenger Car",
+            "Automobile"
+        ],
+        "priority": 10,
+        "sort_order": 1,
+        "effective_from": "2024-12-18",
+        "effective_to": null,
+        "is_active": true,
+        "members": [
+            {
+                "vehicle_category": "car",
+                "is_active": true
+            },
+            {
+                "vehicle_category": "suv",
+                "is_active": true
+            }
+        ]
+    },
+    {
+        "id": 2,
+        "code": "SMALL_VANS",
+        "display_name": "Small Vans",
+        "aliases": [
+            "Small Van",
+            "Van"
+        ],
+        "priority": 9,
+        "sort_order": 2,
+        "effective_from": "2024-12-18",
+        "effective_to": null,
+        "is_active": true,
+        "members": [
+            {
+                "vehicle_category": "small_van",
+                "is_active": true
+            },
+            {
+                "vehicle_category": "suv",
+                "is_active": true
+            }
+        ]
+    },
+    {
+        "id": 3,
+        "code": "BIG_VANS",
+        "display_name": "Big Vans",
+        "aliases": [
+            "Big Van",
+            "Large Van"
+        ],
+        "priority": 8,
+        "sort_order": 3,
+        "effective_from": "2024-12-18",
+        "effective_to": null,
+        "is_active": true,
+        "members": [
+            {
+                "vehicle_category": "big_van",
+                "is_active": true
+            }
+        ]
+    },
+    {
+        "id": 5,
+        "code": "HH",
+        "display_name": "High & Heavy",
+        "aliases": [
+            "High and Heavy",
+            "HH",
+            "Heavy Machinery"
+        ],
+        "priority": 6,
+        "sort_order": 6,
+        "effective_from": "2024-12-18",
+        "effective_to": null,
+        "is_active": false,
+        "members": [
+            {
+                "vehicle_category": "high_and_heavy",
+                "is_active": true
+            }
+        ]
+    },
+    {
+        "id": 7,
+        "code": "LM_CARGO_TRUCKS",
+        "display_name": "LM Cargo (Trucks)",
+        "aliases": [],
+        "priority": 0,
+        "sort_order": 4,
+        "effective_from": null,
+        "effective_to": null,
+        "is_active": true,
+        "members": [
+            {
+                "vehicle_category": "truck",
+                "is_active": true
+            },
+            {
+                "vehicle_category": "truckhead",
+                "is_active": true
+            },
+            {
+                "vehicle_category": "truck_chassis",
+                "is_active": true
+            },
+            {
+                "vehicle_category": "tipper_truck",
+                "is_active": true
+            },
+            {
+                "vehicle_category": "platform_truck",
+                "is_active": true
+            },
+            {
+                "vehicle_category": "box_truck",
+                "is_active": true
+            },
+            {
+                "vehicle_category": "vacuum_truck",
+                "is_active": true
+            },
+            {
+                "vehicle_category": "refuse_truck",
+                "is_active": true
+            },
+            {
+                "vehicle_category": "bus",
+                "is_active": true
+            },
+            {
+                "vehicle_category": "concrete_mixer",
+                "is_active": true
+            },
+            {
+                "vehicle_category": "truck_trailer_combination",
+                "is_active": true
+            },
+            {
+                "vehicle_category": "loaded_truck_trailer",
+                "is_active": true
+            },
+            {
+                "vehicle_category": "tank_truck",
+                "is_active": true
+            }
+        ]
+    }
+]

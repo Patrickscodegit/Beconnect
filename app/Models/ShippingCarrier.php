@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ShippingCarrier extends Model
@@ -13,6 +14,7 @@ class ShippingCarrier extends Model
     protected $fillable = [
         'name',
         'code',
+        'robaws_supplier_id',
         'website_url',
         'api_endpoint',
         'specialization',
@@ -90,5 +92,21 @@ class ShippingCarrier extends Model
     {
         return $this->hasMany(CarrierArticleMapping::class, 'carrier_id')
             ->orderBy('sort_order');
+    }
+
+    /**
+     * Relationship to Robaws supplier
+     */
+    public function robawsSupplier(): BelongsTo
+    {
+        return $this->belongsTo(RobawsSupplierCache::class, 'robaws_supplier_id', 'robaws_supplier_id');
+    }
+
+    /**
+     * Get Robaws supplier (accessor for easy access)
+     */
+    public function getRobawsSupplierAttribute()
+    {
+        return $this->robawsSupplier()->first();
     }
 }

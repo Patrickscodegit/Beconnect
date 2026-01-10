@@ -41,6 +41,12 @@ class PortSeeder extends Seeder
             ['name' => 'Abidjan', 'code' => 'ABJ', 'country' => 'Ivory Coast', 'region' => 'Africa'],
             ['name' => 'Matadi', 'code' => 'MAT', 'country' => 'Congo', 'region' => 'Africa'],
             ['name' => 'Pointe-Noire', 'code' => 'PNR', 'country' => 'Congo', 'region' => 'Africa'],
+            // Additional African ports from article cache
+            ['name' => 'Dakar', 'code' => 'DKR', 'country' => 'Senegal', 'region' => 'Africa'],
+            ['name' => 'Conakry', 'code' => 'CKY', 'country' => 'Guinea', 'region' => 'Africa'],
+            ['name' => 'Cotonou', 'code' => 'COO', 'country' => 'Benin', 'region' => 'Africa'],
+            ['name' => 'Douala', 'code' => 'DLA', 'country' => 'Cameroon', 'region' => 'Africa'],
+            ['name' => 'Lomé', 'code' => 'LFW', 'country' => 'Togo', 'region' => 'Africa'],
 
             // Caribbean Ports
             ['name' => 'Port of Spain', 'code' => 'POS', 'country' => 'Trinidad and Tobago', 'region' => 'Caribbean'],

@@ -9,6 +9,7 @@ use App\Services\Robaws\ArticleNameParser;
 use App\Services\Robaws\ArticleSyncEnhancementService;
 use App\Services\Robaws\RobawsFieldMapper;
 use App\Services\Robaws\ArticleTransportModeResolver;
+use App\Services\Ports\PortResolutionService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -467,8 +468,40 @@ class RobawsArticlesSyncService
             }
             $data['pod_code'] = Str::upper(trim($data['pod_code']));
         }
+
+        // Resolve port foreign keys using PortResolutionService
+        $portResolver = app(PortResolutionService::class);
+
+        // Resolve POL port
+        if (!empty($data['pol_code'])) {
+            $polPort = $portResolver->resolveOne($data['pol_code'], 'SEA');
+            $data['pol_port_id'] = $polPort?->id;
+        } else {
+            $data['pol_port_id'] = null;
+        }
+
+        // Resolve POD port
+        if (!empty($data['pod_code'])) {
+            $podPort = $portResolver->resolveOne($data['pod_code'], 'SEA');
+            $data['pod_port_id'] = $podPort?->id;
+        } else {
+            $data['pod_port_id'] = null;
+        }
+
+        // Set requires_manual_review flag
+        $hasPolCode = !empty($data['pol_code']);
+        $hasPodCode = !empty($data['pod_code']);
+        $polResolved = !empty($data['pol_port_id']);
+        $podResolved = !empty($data['pod_port_id']);
+
+        if (($hasPolCode && !$polResolved) || ($hasPodCode && !$podResolved)) {
+            $data['requires_manual_review'] = true;
+        } elseif ((!$hasPolCode && !$hasPodCode) || ($polResolved && (!$hasPodCode || $podResolved))) {
+            // Both resolved (or no codes to resolve) - clear flag
+            $data['requires_manual_review'] = false;
+        }
         
-        // Upsert the article with all metadata
+        // Upsert the article with all metadata (including pol_port_id, pod_port_id, requires_manual_review)
         $article = RobawsArticleCache::updateOrCreate(
             ['robaws_article_id' => $data['robaws_article_id']],
             $data

@@ -48,6 +48,8 @@ class CarrierPurchaseTariff extends Model
         'ets_unit',
         'port_additional_amount',
         'port_additional_unit',
+        'freight_tax_amount',
+        'freight_tax_unit',
         'admin_fxe_amount',
         'admin_fxe_unit',
         'thc_amount',
@@ -72,6 +74,7 @@ class CarrierPurchaseTariff extends Model
         'baf_amount' => 'decimal:2',
         'ets_amount' => 'decimal:2',
         'port_additional_amount' => 'decimal:2',
+        'freight_tax_amount' => 'decimal:2',
         'admin_fxe_amount' => 'decimal:2',
         'thc_amount' => 'decimal:2',
         'measurement_costs_amount' => 'decimal:2',
@@ -109,6 +112,7 @@ class CarrierPurchaseTariff extends Model
         if ($this->baf_amount) $total += (float) $this->baf_amount;
         if ($this->ets_amount) $total += (float) $this->ets_amount;
         if ($this->port_additional_amount) $total += (float) $this->port_additional_amount;
+        if ($this->freight_tax_amount) $total += (float) $this->freight_tax_amount;
         if ($this->admin_fxe_amount) $total += (float) $this->admin_fxe_amount;
         if ($this->thc_amount) $total += (float) $this->thc_amount;
         if ($this->measurement_costs_amount) $total += (float) $this->measurement_costs_amount;
@@ -133,6 +137,7 @@ class CarrierPurchaseTariff extends Model
         return ($this->baf_amount && $this->baf_amount > 0)
             || ($this->ets_amount && $this->ets_amount > 0)
             || ($this->port_additional_amount && $this->port_additional_amount > 0)
+            || ($this->freight_tax_amount && $this->freight_tax_amount > 0)
             || ($this->admin_fxe_amount && $this->admin_fxe_amount > 0)
             || ($this->thc_amount && $this->thc_amount > 0)
             || ($this->measurement_costs_amount && $this->measurement_costs_amount > 0)

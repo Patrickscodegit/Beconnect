@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\RobawsArticleResource\Pages;
 use App\Models\RobawsArticleCache;
+use App\Models\Port;
 use App\Services\Robaws\RobawsArticleProvider;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -12,15 +13,16 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class RobawsArticleResource extends Resource
 {
     protected static ?string $model = RobawsArticleCache::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-squares-2x2';
+    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
     
-    protected static ?string $navigationLabel = 'Article Cache';
+    protected static ?string $navigationLabel = 'Robaws Articles';
     
     protected static ?string $modelLabel = 'Article';
     
@@ -74,87 +76,51 @@ class RobawsArticleResource extends Resource
                                 '40FT FR' => '40FT FR',
                                 '40FT HC' => '40FT HC',
                                 '40FT OT' => '40FT OT',
-                                'CBM' => 'CBM',
-                                'Chassis nr' => 'Chassis nr',
-                                'Cont.' => 'Cont.',
-                                'Day' => 'Day',
-                                'Doc' => 'Doc',
-                                'FRT' => 'FRT',
-                                'Hour' => 'Hour',
+                                '45FT HC' => '45FT HC',
+                                '20GP' => '20GP',
+                                '40GP' => '40GP',
+                                '40HQ' => '40HQ',
                                 'LM' => 'LM',
-                                'Lumps.' => 'Lumps.',
-                                'M3' => 'M3',
-                                'Meter' => 'Meter',
-                                'Rit' => 'Rit',
-                                'RT' => 'RT',
-                                'Shipm.' => 'Shipm.',
-                                'SQM' => 'SQM',
-                                'stacked unit' => 'stacked unit',
-                                'Teu' => 'Teu',
-                                'Ton' => 'Ton',
-                                'Truck' => 'Truck',
-                                'Unit' => 'Unit',
-                                'Vehicle' => 'Vehicle',
-                                'w/m' => 'w/m',
+                                'kg' => 'kg',
+                                'm3' => 'm³',
+                                'piece' => 'piece',
+                                'shipment' => 'shipment',
+                                'container' => 'container',
+                                'unit' => 'unit',
                             ])
                             ->searchable()
-                            ->default('Unit')
-                            ->columnSpan(1),
-                            
-                        Forms\Components\Select::make('category')
-                            ->options([
-                                'seafreight' => 'Seafreight',
-                                'precarriage' => 'Precarriage',
-                                'oncarriage' => 'Oncarriage',
-                                'customs' => 'Customs',
-                                'warehouse' => 'Warehouse',
-                                'insurance' => 'Insurance',
-                                'administration' => 'Administration',
-                                'miscellaneous' => 'Miscellaneous',
-                                'general' => 'General',
-                            ])
-                            ->default('general')
                             ->columnSpan(1),
                     ])
-                    ->columns(2),
-                    
-                Forms\Components\Section::make('Classification')
-                    ->schema([
-                        Forms\Components\CheckboxList::make('applicable_services')
-                            ->options(function () {
-                                $serviceTypes = config('quotation.service_types', []);
-                                $options = [];
-                                foreach ($serviceTypes as $key => $value) {
-                                    if (is_array($value)) {
-                                        $options[$key] = $value['name'] ?? $key;
-                                    } else {
-                                        $options[$key] = $value;
-                                    }
-                                }
-                                return $options;
-                            })
-                            ->columns(3)
-                            ->columnSpanFull(),
-                            
-                        // customer_type removed - it's a quotation property, not article property
-                        // carriers/applicable_carriers removed - use shipping_line instead
-                        
-                        Forms\Components\Toggle::make('is_parent_article')
-                            ->label('Is Parent Article')
-                            ->columnSpan(1),
-                            
-                        Forms\Components\Toggle::make('is_surcharge')
-                            ->label('Is Surcharge/Add-on')
-                            ->columnSpan(1),
-                    ])
-                    ->columns(2),
+                    ->columns(3),
                     
                 Forms\Components\Section::make('Smart Article Selection Fields')
                     ->description('Fields used for intelligent article filtering and suggestions')
                     ->schema([
-                        Forms\Components\TextInput::make('shipping_line')
+                        Forms\Components\Select::make('shipping_carrier_id')
                             ->label('Shipping Line')
-                            ->maxLength(100)
+                            ->relationship('shippingCarrier', 'name', function ($query) {
+                                return $query->where('is_active', true)
+                                    ->orderBy('name');
+                            })
+                            ->getOptionLabelFromRecordUsing(function ($record) {
+                                return $record->name . ($record->code ? ' (' . $record->code . ')' : '');
+                            })
+                            ->searchable()
+                            ->preload()
+                            ->nullable()
+                            ->helperText('Select carrier/supplier from Robaws suppliers. This ensures consistent carrier values across the system.')
+                            ->afterStateUpdated(function ($set, $state, $get) {
+                                // Auto-update shipping_line from carrier name when carrier is selected
+                                if ($state) {
+                                    $carrier = \App\Models\ShippingCarrier::find($state);
+                                    if ($carrier) {
+                                        $set('shipping_line', $carrier->name);
+                                    }
+                                } else {
+                                    // Clear shipping_line if carrier is cleared
+                                    $set('shipping_line', null);
+                                }
+                            })
                             ->columnSpan(1),
 
                         Forms\Components\Select::make('transport_mode')
@@ -176,16 +142,13 @@ class RobawsArticleResource extends Resource
                                 'OTHER' => 'OTHER',
                             ])
                             ->searchable()
+                            ->placeholder('Select Transport Mode')
                             ->columnSpan(1),
-
+                            
                         Forms\Components\TextInput::make('service_type')
                             ->label('Service Type')
                             ->maxLength(100)
-                            ->columnSpan(1),
-                            
-                        Forms\Components\TextInput::make('pol_terminal')
-                            ->label('POL Terminal')
-                            ->maxLength(100)
+                            ->placeholder('e.g., IMPORT, EXPORT, OTHER')
                             ->columnSpan(1),
                             
                         Forms\Components\Select::make('commodity_type')
@@ -205,66 +168,161 @@ class RobawsArticleResource extends Resource
                             ->placeholder('Select Commodity Type')
                             ->columnSpan(1),
                             
-                        Forms\Components\Select::make('pol')
+                        Forms\Components\Select::make('pol_port_id')
                             ->label('POL')
-                            ->options([
-                                'Antwerp (ANR), Belgium' => 'Antwerp (ANR), Belgium',
-                                'Zeebrugge (ZEE), Belgium' => 'Zeebrugge (ZEE), Belgium',
-                                'Flushing (FLU), Belgium' => 'Flushing (FLU), Belgium',
-                                'Flushing (FLU), Netherlands' => 'Flushing (FLU), Netherlands',
-                                'Jebel Ali (JEA), United Arab Emirates' => 'Jebel Ali (JEA), United Arab Emirates',
-                                'Al Maktoum International (DWC), United Arab Emirates' => 'Al Maktoum International (DWC), United Arab Emirates',
-                                'Dubai International (DXB), United Arab Emirates' => 'Dubai International (DXB), United Arab Emirates',
-                            ])
                             ->searchable()
-                            ->placeholder('Select POL')
+                            ->getSearchResultsUsing(function (string $search) {
+                                // Use database-agnostic case-insensitive matching (matches existing codebase pattern)
+                                $useIlike = DB::getDriverName() === 'pgsql';
+                                
+                                return Port::query()
+                                    ->where(function($q) use ($search, $useIlike) {
+                                        if ($useIlike) {
+                                            $q->where('name', 'ILIKE', "%{$search}%")
+                                              ->orWhere('code', 'ILIKE', "%{$search}%");
+                                        } else {
+                                            $q->whereRaw('LOWER(name) LIKE ?', ['%' . strtolower($search) . '%'])
+                                              ->orWhereRaw('LOWER(code) LIKE ?', ['%' . strtolower($search) . '%']);
+                                        }
+                                    })
+                                    ->where('is_active', true)
+                                    ->limit(50)
+                                    ->get()
+                                    ->mapWithKeys(fn ($port) => [$port->id => "{$port->name} ({$port->code})"]);
+                            })
+                            ->getOptionLabelUsing(function ($value) {
+                                // Use static cache to prevent N+1 queries
+                                static $portsCache = [];
+                                
+                                if (!isset($portsCache[$value])) {
+                                    $port = Port::find($value);
+                                    $portsCache[$value] = $port ? "{$port->name} ({$port->code})" : null;
+                                }
+                                
+                                return $portsCache[$value];
+                            })
+                            ->afterStateUpdated(function ($state, callable $set, Forms\Get $get) {
+                                if ($state) {
+                                    $port = Port::find($state);
+                                    if ($port) {
+                                        // Get existing code BEFORE setting new one (for validation logging)
+                                        $existingCode = $get('pol_code');
+                                        
+                                        // Optional: Log warning if pol_code was manually changed (for data integrity)
+                                        if ($existingCode && $existingCode !== $port->code) {
+                                            \Log::warning('Port code mismatch detected during selection', [
+                                                'pol_port_id' => $state,
+                                                'existing_pol_code' => $existingCode,
+                                                'port_code' => $port->code
+                                            ]);
+                                        }
+                                        
+                                        // Sync pol_code when port is selected (for traceability)
+                                        $set('pol_code', $port->code);
+                                    }
+                                } else {
+                                    $set('pol_code', null);
+                                }
+                            })
+                            ->placeholder('Select POL Port')
                             ->columnSpan(1),
 
                         Forms\Components\TextInput::make('pol_code')
                             ->label('POL Code')
-                            ->maxLength(10)
+                            ->disabled()
+                            ->dehydrated()
                             ->columnSpan(1),
                             
-                        Forms\Components\Select::make('pod')
+                        Forms\Components\Select::make('pod_port_id')
                             ->label('POD')
-                            ->options([
-                                'Pointe-Noire (PNR), Congo' => 'Pointe-Noire (PNR), Congo',
-                                'Dakar (DKR), Senegal' => 'Dakar (DKR), Senegal',
-                                'Cotonou (COO), Benin' => 'Cotonou (COO), Benin',
-                                'Conakry (CKY), Guinea' => 'Conakry (CKY), Guinea',
-                                'Dar es Salaam (DAR), Tanzania' => 'Dar es Salaam (DAR), Tanzania',
-                                'Douala (DLA), Cameroon' => 'Douala (DLA), Cameroon',
-                                'Durban (DUR), South Africa' => 'Durban (DUR), South Africa',
-                                'East London (ELS), South Africa' => 'East London (ELS), South Africa',
-                                'Lagos (LOS), Nigeria' => 'Lagos (LOS), Nigeria',
-                                'Lomé (LFW), Togo' => 'Lomé (LFW), Togo',
-                                'Nouakchott (NKC), Mauritania' => 'Nouakchott (NKC), Mauritania',
-                                'Libreville (LBV), Gabon' => 'Libreville (LBV), Gabon',
-                                'Freetown (FNA), Sierra Leone' => 'Freetown (FNA), Sierra Leone',
-                                'Abidjan (ABJ), Ivory Coast' => 'Abidjan (ABJ), Ivory Coast',
-                                'Antwerp (ANR), Belgium' => 'Antwerp (ANR), Belgium',
-                                'Zeebrugge (ZEE), Belgium' => 'Zeebrugge (ZEE), Belgium',
-                                'Flushing (FLU), Belgium' => 'Flushing (FLU), Belgium',
-                                'Jebel Ali (JEA), United Arab Emirates' => 'Jebel Ali (JEA), United Arab Emirates',
-                                'Al Maktoum International (DWC), United Arab Emirates' => 'Al Maktoum International (DWC), United Arab Emirates',
-                                'Dubai International (DXB), United Arab Emirates' => 'Dubai International (DXB), United Arab Emirates',
-                            ])
                             ->searchable()
-                            ->placeholder('Select POD')
+                            ->getSearchResultsUsing(function (string $search) {
+                                // Use database-agnostic case-insensitive matching (matches existing codebase pattern)
+                                $useIlike = DB::getDriverName() === 'pgsql';
+                                
+                                return Port::query()
+                                    ->where(function($q) use ($search, $useIlike) {
+                                        if ($useIlike) {
+                                            $q->where('name', 'ILIKE', "%{$search}%")
+                                              ->orWhere('code', 'ILIKE', "%{$search}%");
+                                        } else {
+                                            $q->whereRaw('LOWER(name) LIKE ?', ['%' . strtolower($search) . '%'])
+                                              ->orWhereRaw('LOWER(code) LIKE ?', ['%' . strtolower($search) . '%']);
+                                        }
+                                    })
+                                    ->where('is_active', true)
+                                    ->limit(50)
+                                    ->get()
+                                    ->mapWithKeys(fn ($port) => [$port->id => "{$port->name} ({$port->code})"]);
+                            })
+                            ->getOptionLabelUsing(function ($value) {
+                                // Use static cache to prevent N+1 queries
+                                static $portsCache = [];
+                                
+                                if (!isset($portsCache[$value])) {
+                                    $port = Port::find($value);
+                                    $portsCache[$value] = $port ? "{$port->name} ({$port->code})" : null;
+                                }
+                                
+                                return $portsCache[$value];
+                            })
+                            ->afterStateUpdated(function ($state, callable $set, Forms\Get $get) {
+                                if ($state) {
+                                    $port = Port::find($state);
+                                    if ($port) {
+                                        // Get existing code BEFORE setting new one (for validation logging)
+                                        $existingCode = $get('pod_code');
+                                        
+                                        // Optional: Log warning if pod_code was manually changed (for data integrity)
+                                        if ($existingCode && $existingCode !== $port->code) {
+                                            \Log::warning('Port code mismatch detected during selection', [
+                                                'pod_port_id' => $state,
+                                                'existing_pod_code' => $existingCode,
+                                                'port_code' => $port->code
+                                            ]);
+                                        }
+                                        
+                                        // Sync pod_code when port is selected (for traceability)
+                                        $set('pod_code', $port->code);
+                                    }
+                                } else {
+                                    $set('pod_code', null);
+                                }
+                            })
+                            ->placeholder('Select POD Port')
                             ->columnSpan(1),
-
+                            
                         Forms\Components\TextInput::make('pod_code')
                             ->label('POD Code')
-                            ->maxLength(10)
+                            ->disabled()
+                            ->dehydrated()
+                            ->columnSpan(1),
+                            
+                        Forms\Components\TextInput::make('pol_terminal')
+                            ->label('POL Terminal')
+                            ->maxLength(100)
+                            ->placeholder('e.g., Terminal 1, Terminal 2')
                             ->columnSpan(1),
                     ])
-                    ->columns(3)
-                    ->collapsible()
-                    ->collapsed(false),
-
-                Forms\Components\Section::make('Robaws Extra Fields')
-                    ->description('Direct mappings from Robaws extra fields; kept to track metadata quality.')
+                    ->columns(3),
+                    
+                Forms\Components\Section::make('Classification & Metadata')
                     ->schema([
+                        Forms\Components\Select::make('category')
+                            ->options([
+                                'seafreight' => 'Seafreight',
+                                'precarriage' => 'Precarriage',
+                                'oncarriage' => 'Oncarriage',
+                                'customs' => 'Customs',
+                                'warehouse' => 'Warehouse',
+                                'insurance' => 'Insurance',
+                                'administration' => 'Administration',
+                                'miscellaneous' => 'Miscellaneous',
+                                'general' => 'General',
+                            ])
+                            ->searchable()
+                            ->columnSpan(1),
+                            
                         Forms\Components\Select::make('article_type')
                             ->label('Article Type')
                             ->options([
@@ -277,9 +335,8 @@ class RobawsArticleResource extends Resource
                                 'ADMINISTRATIVE / MISC. SURCHARGES' => 'ADMINISTRATIVE / MISC. SURCHARGES',
                             ])
                             ->searchable()
-                            ->placeholder('Select Article Type')
                             ->columnSpan(1),
-
+                            
                         Forms\Components\Select::make('cost_side')
                             ->label('Cost Side')
                             ->options([
@@ -292,90 +349,91 @@ class RobawsArticleResource extends Resource
                                 'WAREHOUSE' => 'WAREHOUSE',
                             ])
                             ->searchable()
-                            ->placeholder('Select Cost Side')
                             ->columnSpan(1),
-
+                            
+                        Forms\Components\Toggle::make('is_parent_article')
+                            ->label('Parent Article')
+                            ->helperText('Parent article status from Robaws API')
+                            ->columnSpan(1),
+                            
+                        Forms\Components\Toggle::make('is_surcharge')
+                            ->label('Surcharge Add-on')
+                            ->columnSpan(1),
+                            
                         Forms\Components\Toggle::make('is_mandatory')
-                            ->label('Is Mandatory')
-                            ->inline(false)
+                            ->label('Mandatory')
                             ->columnSpan(1),
-
-                        Forms\Components\TextInput::make('mandatory_condition')
-                            ->label('Mandatory Condition')
-                            ->maxLength(255)
-                            ->columnSpan(2),
-
-                        Forms\Components\Textarea::make('notes')
-                            ->rows(2)
-                            ->columnSpan(2),
-
-                        Forms\Components\Textarea::make('article_info')
-                            ->label('Article Info (raw)')
-                            ->rows(2)
-                            ->columnSpanFull(),
-
+                            
+                        Forms\Components\Toggle::make('requires_manual_review')
+                            ->label('Requires Review')
+                            ->columnSpan(1),
+                            
+                        Forms\Components\Toggle::make('is_parent_item')
+                            ->label('Parent Item Flag')
+                            ->columnSpan(1),
+                            
+                        Forms\Components\Toggle::make('is_active')
+                            ->label('Active')
+                            ->default(true)
+                            ->columnSpan(1),
+                    ])
+                    ->columns(3),
+                    
+                Forms\Components\Section::make('Dates & Pricing')
+                    ->schema([
                         Forms\Components\DatePicker::make('update_date')
                             ->label('Update Date')
                             ->native(false)
-                            ->displayFormat('d-m-Y')
-                            ->placeholder('Select update date')
-                            ->columnSpan(1),
-
+                            ->displayFormat('d-m-Y'),
+                            
                         Forms\Components\DatePicker::make('validity_date')
                             ->label('Validity Date')
                             ->native(false)
-                            ->displayFormat('d-m-Y')
-                            ->placeholder('Select validity date')
-                            ->columnSpan(1),
+                            ->displayFormat('d-m-Y'),
+                            
+                        Forms\Components\TextInput::make('sale_price')
+                            ->label('Sale Price')
+                            ->numeric()
+                            ->prefix('€'),
+                            
+                        Forms\Components\TextInput::make('cost_price')
+                            ->label('Cost Price')
+                            ->numeric()
+                            ->prefix('€'),
                     ])
-                    ->columns(2)
-                    ->collapsible()
-                    ->collapsed(false),
+                    ->columns(2),
                     
-                Forms\Components\Section::make('Quantity & Pricing')
+                Forms\Components\Section::make('Additional Information')
                     ->schema([
-                        Forms\Components\TextInput::make('min_quantity')
-                            ->numeric()
-                            ->default(1)
-                            ->columnSpan(1),
+                        Forms\Components\Textarea::make('description')
+                            ->rows(3)
+                            ->columnSpanFull(),
                             
-                        Forms\Components\TextInput::make('max_quantity')
-                            ->numeric()
-                            ->default(1)
-                            ->columnSpan(1),
+                        Forms\Components\TextInput::make('mandatory_condition')
+                            ->label('Mandatory Condition')
+                            ->maxLength(500)
+                            ->columnSpanFull(),
                             
-                        Forms\Components\TextInput::make('tier_label')
-                            ->maxLength(50)
-                            ->placeholder('e.g., 2-pack, 3-pack')
-                            ->columnSpan(1),
+                        Forms\Components\Textarea::make('notes')
+                            ->rows(2)
+                            ->columnSpanFull(),
                             
-                        Forms\Components\KeyValue::make('pricing_formula')
-                            ->label('Pricing Formula (JSON)')
+                        Forms\Components\Textarea::make('article_info')
+                            ->label('Article Info (Raw)')
+                            ->rows(3)
+                            ->disabled()
                             ->columnSpanFull(),
                     ])
-                    ->columns(3)
-                    ->collapsible(),
-                    
-                Forms\Components\Section::make('Metadata')
-                    ->schema([
-                        Forms\Components\Toggle::make('requires_manual_review')
-                            ->label('Requires Manual Review')
-                            ->columnSpan(1),
-                            
-                        Forms\Components\DateTimePicker::make('last_synced_at')
-                            ->label('Last Synced')
-                            ->disabled()
-                            ->columnSpan(1),
-                    ])
-                    ->columns(2)
-                    ->collapsible()
                     ->collapsed(),
             ]);
     }
 
     public static function table(Table $table): Table
     {
-        return $table
+        $tableResult = $table
+            ->modifyQueryUsing(function (Builder $query) {
+                return $query;
+            })
             ->defaultPaginationPageOption(25)
             ->columns([
                 Tables\Columns\TextColumn::make('article_code')
@@ -388,18 +446,21 @@ class RobawsArticleResource extends Resource
                     ->searchable()
                     ->sortable()
                     ->limit(50)
-                    ->tooltip(function (Tables\Columns\TextColumn $column): ?string {
-                        $state = $column->getState();
-                        if (strlen($state) > 50) {
-                            return $state;
+                    ->tooltip(function ($state, $record = null): ?string {
+                        try {
+                            if (is_string($state) && strlen($state) > 50) {
+                                return $state;
+                            }
+                            return null;
+                        } catch (\Exception $e) {
+                            return null;
                         }
-                        return null;
                     }),
                     
                 Tables\Columns\TextColumn::make('unit_price')
                     ->money('EUR')
                     ->sortable(),
-                    
+                
                 Tables\Columns\TextColumn::make('sales_name')
                     ->label('Sales Name')
                     ->searchable()
@@ -484,7 +545,7 @@ class RobawsArticleResource extends Resource
                     ->label('POL Code')
                     ->formatStateUsing(fn ($state) => $state ?: '—')
                     ->toggleable(isToggledHiddenByDefault: true),
-                    
+
                 Tables\Columns\TextColumn::make('pol_terminal')
                     ->label('POL Terminal')
                     ->formatStateUsing(fn ($state) => $state ?: 'N/A')
@@ -505,7 +566,7 @@ class RobawsArticleResource extends Resource
                     ->label('POD Code')
                     ->formatStateUsing(fn ($state) => $state ?: '—')
                     ->toggleable(isToggledHiddenByDefault: true),
-                    
+
                 Tables\Columns\BadgeColumn::make('commodity_type')
                     ->label('Commodity Type')
                     ->formatStateUsing(fn ($state) => $state ?: 'N/A')
@@ -558,55 +619,97 @@ class RobawsArticleResource extends Resource
                     ->limit(30)
                     ->toggleable(isToggledHiddenByDefault: true),
                     
+                // FIXED: Access database columns directly instead of using accessor property
                 Tables\Columns\TextColumn::make('effective_validity_date')
-                    ->date('M d, Y')
                     ->label('Valid Until')
+                    ->getStateUsing(function ($record) {
+                        try {
+                            // Access columns directly instead of accessor to avoid issues
+                            return $record->validity_date_override ?? $record->validity_date ?? null;
+                        } catch (\Exception $e) {
+                            return null;
+                        }
+                    })
+                    ->date('M d, Y')
                     ->placeholder('Not set')
-                    ->color(fn ($state) => $state && $state >= now() ? 'success' : 'gray')
+                    ->color(function ($state) {
+                        try {
+                            return $state && $state >= now() ? 'success' : 'gray';
+                        } catch (\Exception $e) {
+                            return 'gray';
+                        }
+                    })
                     ->toggleable(),
                     
-            Tables\Columns\TextColumn::make('applicable_services')
-                ->badge()
-                ->separator(',')
-                ->formatStateUsing(function ($state, $record) {
-                    $services = is_string($state) ? json_decode($state, true) : $state;
-                    
-                    if (is_array($services) && count($services) > 0) {
-                        // Return as string for Filament to handle properly
-                        return implode(', ', $services);
-                    }
-                    
-                    // Fallback: show service_type if available
-                    if ($record->service_type) {
-                        return $record->service_type;
-                    }
-                    
-                    return 'Not specified';
-                })
-                ->color('success')
-                ->limit(50) // Limit characters, not array items
-                ->tooltip(function ($state, $record) {
-                    $services = is_string($state) ? json_decode($state, true) : $state;
-                    
-                    if (is_array($services) && count($services) > 2) {
-                        return implode(', ', $services);
-                    }
-                    
-                    // Show direction hint
-                    if ($record->pol && $record->pod) {
-                        return 'Direction-aware services based on POL/POD routing';
-                    }
-                    
-                    return 'Service types this article applies to';
-                })
-                ->toggleable(),
-                    
-                Tables\Columns\TextColumn::make('children_count')
-                    ->counts('children')
-                    ->label('Children')
+                // FIXED: Simplified callbacks with better error handling
+                Tables\Columns\TextColumn::make('applicable_services')
                     ->badge()
-                    ->color('info')
+                    ->formatStateUsing(function ($state, $record = null) {
+                        try {
+                            if ($state === null || $state === '') {
+                                if ($record && $record->service_type) {
+                                    return str_replace('_', ' ', $record->service_type);
+                                }
+                                return 'Not specified';
+                            }
+                            
+                            if (is_string($state)) {
+                                $decoded = json_decode($state, true);
+                                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                                    $services = $decoded;
+                                } else {
+                                    return str_replace('_', ' ', $state);
+                                }
+                            } else if (is_array($state)) {
+                                $services = $state;
+                            } else {
+                                if ($record && $record->service_type) {
+                                    return str_replace('_', ' ', $record->service_type);
+                                }
+                                return 'Not specified';
+                            }
+                            
+                            if (isset($services) && is_array($services) && count($services) > 0) {
+                                return implode(', ', array_map(fn($s) => str_replace('_', ' ', $s), $services));
+                            }
+                            
+                            if ($record && $record->service_type) {
+                                return str_replace('_', ' ', $record->service_type);
+                            }
+                            
+                            return 'Not specified';
+                        } catch (\Exception $e) {
+                            return 'Error';
+                        }
+                    })
+                    ->color('success')
+                    ->limit(50)
+                    ->tooltip(function ($state, $record = null) {
+                        if (!$record) {
+                            return 'Service types this article applies to';
+                        }
+                        try {
+                            $rawServices = method_exists($record, 'getRawOriginal') ? $record->getRawOriginal('applicable_services') : $record->applicable_services;
+                            if (is_string($rawServices)) {
+                                $decoded = json_decode($rawServices, true);
+                                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                                    $rawServices = $decoded;
+                                }
+                            }
+                            if (is_array($rawServices) && count($rawServices) > 2) {
+                                return implode(', ', array_map(fn($s) => str_replace('_', ' ', $s), $rawServices));
+                            }
+                            if ($record->pol && $record->pod) {
+                                return 'Direction-aware services based on POL/POD routing';
+                            }
+                            return 'Service types this article applies to';
+                        } catch (\Exception $e) {
+                            return 'Service types this article applies to';
+                        }
+                    })
                     ->toggleable(),
+                    
+                // children_count column disabled - was causing issues with withCount/relationships
                     
                 // customer_type column removed - it's a quotation property
                     
@@ -625,13 +728,6 @@ class RobawsArticleResource extends Resource
                     ->dateTime()
                     ->since()
                     ->sortable()
-                    ->toggleable(),
-
-                Tables\Columns\BadgeColumn::make('metadata_source')
-                    ->label('Sync Source')
-                    ->state(fn (RobawsArticleCache $record) => str_contains((string) $record->article_info, 'Extracted from description') ? 'Fallback' : 'API')
-                    ->color(fn (RobawsArticleCache $record) => str_contains((string) $record->article_info, 'Extracted from description') ? 'warning' : 'success')
-                    ->tooltip(fn (RobawsArticleCache $record) => str_contains((string) $record->article_info, 'Extracted from description') ? 'Populated via name parsing fallback' : 'Fetched directly from Robaws API')
                     ->toggleable(),
             ])
             ->filters([
@@ -683,6 +779,22 @@ class RobawsArticleResource extends Resource
                         ->whereNotNull('pol_terminal')
                         ->pluck('pol_terminal', 'pol_terminal')
                         ->toArray()),
+
+                Tables\Filters\SelectFilter::make('pol_port_id')
+                    ->label('POL Port')
+                    ->options(function () {
+                        try {
+                            $ports = Port::where('is_active', true)
+                                ->orderBy('name')
+                                ->get();
+                            
+                            return $ports->mapWithKeys(fn ($port) => [
+                                $port->id => "{$port->name} ({$port->code})"
+                            ]);
+                        } catch (\Exception $e) {
+                            return [];
+                        }
+                    }),
                         
                 Tables\Filters\SelectFilter::make('pod')
                     ->label('POD')
@@ -697,6 +809,22 @@ class RobawsArticleResource extends Resource
                         ->whereNotNull('pod_code')
                         ->pluck('pod_code', 'pod_code')
                         ->toArray()),
+
+                Tables\Filters\SelectFilter::make('pod_port_id')
+                    ->label('POD Port')
+                    ->options(function () {
+                        try {
+                            $ports = Port::where('is_active', true)
+                                ->orderBy('name')
+                                ->get();
+                            
+                            return $ports->mapWithKeys(fn ($port) => [
+                                $port->id => "{$port->name} ({$port->code})"
+                            ]);
+                        } catch (\Exception $e) {
+                            return [];
+                        }
+                    }),
                     
                 Tables\Filters\TernaryFilter::make('is_parent_item')
                     ->label('Parent Items Only')
@@ -1029,10 +1157,9 @@ class RobawsArticleResource extends Resource
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ])
-            ->headerActions([
-                // Old article sync removed - metadata sync now handled via bulk/row actions
-            ])
-            ->defaultSort('last_synced_at', 'desc');
+            ->defaultSort('id', 'desc');
+        
+        return $tableResult;
     }
     
     public static function getRelations(): array
@@ -1062,4 +1189,3 @@ class RobawsArticleResource extends Resource
         return 'warning';
     }
 }
-

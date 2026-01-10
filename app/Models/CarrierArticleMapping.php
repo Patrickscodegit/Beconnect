@@ -56,6 +56,30 @@ class CarrierArticleMapping extends Model
                     }
                 }
             }
+            
+            // Validate that article's carrier matches mapping's carrier
+            if ($model->article_id && $model->carrier_id) {
+                $article = RobawsArticleCache::find($model->article_id);
+                if ($article && $article->shipping_carrier_id !== null) {
+                    // Article has a specific carrier - it must match the mapping's carrier
+                    if ($article->shipping_carrier_id != $model->carrier_id) {
+                        $articleCode = $article->article_code ?? 'N/A';
+                        $articleName = $article->article_name ?? 'Unknown';
+                        $articleCarrier = ShippingCarrier::find($article->shipping_carrier_id);
+                        $mappingCarrier = ShippingCarrier::find($model->carrier_id);
+                        
+                        $mappingCarrierName = $mappingCarrier?->name ?? $model->carrier_id;
+                        $articleCarrierName = $articleCarrier?->name ?? $article->shipping_carrier_id;
+                        
+                        throw new \Illuminate\Database\Eloquent\ModelNotFoundException(
+                            "Cannot map article '{$articleCode}' ({$articleName}) to carrier '{$mappingCarrierName}'. " .
+                            "Article belongs to carrier '{$articleCarrierName}'. " .
+                            "Universal articles (no carrier) can be mapped to any carrier."
+                        );
+                    }
+                }
+                // If article has null shipping_carrier_id, it's universal and can be mapped to any carrier - no validation needed
+            }
         });
     }
 

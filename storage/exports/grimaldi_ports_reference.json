@@ -1,0 +1,107 @@
+[
+    {
+        "id": 105,
+        "code": "JED",
+        "name": "Jeddah"
+    },
+    {
+        "id": 24,
+        "code": "PNR",
+        "name": "Pointe-Noire"
+    },
+    {
+        "id": 128,
+        "code": "BJL",
+        "name": "Banjul"
+    },
+    {
+        "id": 129,
+        "code": "TFN",
+        "name": "Tenerife"
+    },
+    {
+        "id": 130,
+        "code": "LAD",
+        "name": "Luanda"
+    },
+    {
+        "id": 131,
+        "code": "ROB",
+        "name": "Monrovia"
+    },
+    {
+        "id": 132,
+        "code": "BTA",
+        "name": "Bata"
+    },
+    {
+        "id": 133,
+        "code": "MAL",
+        "name": "Malabo"
+    },
+    {
+        "id": 134,
+        "code": "TEM",
+        "name": "Tema"
+    },
+    {
+        "id": 64,
+        "code": "COO",
+        "name": "Cotonou"
+    },
+    {
+        "id": 65,
+        "code": "DKR",
+        "name": "Dakar"
+    },
+    {
+        "id": 67,
+        "code": "DLA",
+        "name": "Douala"
+    },
+    {
+        "id": 69,
+        "code": "LFW",
+        "name": "Lom\u00e9"
+    },
+    {
+        "id": 89,
+        "code": "NKC",
+        "name": "Nouakchott"
+    },
+    {
+        "id": 86,
+        "code": "CAS",
+        "name": "Casablanca"
+    },
+    {
+        "id": 63,
+        "code": "CKY",
+        "name": "Conakry"
+    },
+    {
+        "id": 135,
+        "code": "TKR",
+        "name": "Takoradi"
+    },
+    {
+        "id": 90,
+        "code": "LBV",
+        "name": "Libreville"
+    },
+    {
+        "id": 16,
+        "code": "LOS",
+        "name": "Lagos"
+    },
+    {
+        "id": 62,
+        "code": "ABJ",
+        "name": "Abidjan"
+    },
+    {
+        "id": 91,
+        "code": "FNA",
+        "name": "Freetown"
+    }
+]

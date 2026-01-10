@@ -4,9 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use App\Models\Port;
 
 class RobawsArticleCache extends Model
 {
@@ -37,6 +39,7 @@ class RobawsArticleCache extends Model
         'last_modified_at',
         // Article metadata from Robaws ARTICLE INFO
         'shipping_line',
+        'shipping_carrier_id',
         'service_type',
         'transport_mode',
         'pol_terminal',
@@ -45,6 +48,8 @@ class RobawsArticleCache extends Model
         'cost_side',
         'pol_code',
         'pod_code',
+        'pol_port_id',
+        'pod_port_id',
         // Article metadata from Robaws IMPORTANT INFO
         'article_info',
         'update_date',
@@ -57,6 +62,7 @@ class RobawsArticleCache extends Model
         'last_pushed_dates_at',
         'last_pushed_update_date',
         'last_pushed_validity_date',
+        'last_pushed_to_robaws_at',
         // Port information in full Robaws format: "Antwerp (ANR), Belgium"
         'pol',
         'pod',
@@ -112,6 +118,7 @@ class RobawsArticleCache extends Model
         'last_pushed_dates_at' => 'datetime',
         'last_pushed_update_date' => 'date',
         'last_pushed_validity_date' => 'date',
+        'last_pushed_to_robaws_at' => 'datetime',
         // Standard Robaws field casts
         'sale_price' => 'decimal:2',
         'cost_price' => 'decimal:2',
@@ -145,19 +152,19 @@ class RobawsArticleCache extends Model
         return $query->where('is_active', true);
     }
 
-    public function scopeForCarrier(Builder $query, string $carrierCode): Builder
+    public function scopeForCarrier(Builder $query, int|string $carrier): Builder
     {
-        // Match articles by shipping_line (case-insensitive)
-        // Use database-agnostic case-insensitive matching
-        $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
-        
-        if ($useIlike) {
-            return $query->where('shipping_line', 'ILIKE', '%' . $carrierCode . '%')
-                         ->orWhereNull('shipping_line');
-        } else {
-            return $query->whereRaw('LOWER(shipping_line) LIKE ?', ['%' . strtolower($carrierCode) . '%'])
-                         ->orWhereNull('shipping_line');
+        // If numeric, treat as carrier ID
+        if (is_numeric($carrier)) {
+            return $query->where('shipping_carrier_id', $carrier)
+                         ->orWhereNull('shipping_carrier_id');
         }
+        
+        // String: lookup by code or name via relationship
+        return $query->whereHas('shippingCarrier', function ($q) use ($carrier) {
+            $q->where('code', $carrier)
+              ->orWhereRaw('LOWER(name) LIKE ?', ['%' . strtolower($carrier) . '%']);
+        })->orWhereNull('shipping_carrier_id');
     }
 
     public function scopeForService(Builder $query, string $serviceType): Builder
@@ -181,13 +188,34 @@ class RobawsArticleCache extends Model
     /**
      * Check if article is applicable for a specific carrier
      */
-    public function isApplicableForCarrier(string $carrierCode): bool
+    public function isApplicableForCarrier(int|string $carrier): bool
     {
-        if (empty($this->shipping_line)) {
+        // If no carrier specified, article is universal
+        if (!$this->shipping_carrier_id && empty($this->shipping_line)) {
             return true; // No restrictions
         }
 
-        return stripos($this->shipping_line, $carrierCode) !== false;
+        // PRIORITY 1: Check shipping_carrier_id first (preferred method)
+        if ($this->shipping_carrier_id) {
+            // If numeric, check by ID directly
+            if (is_numeric($carrier)) {
+                return $this->shipping_carrier_id == $carrier;
+            }
+            
+            // String: check via relationship (load if not already loaded)
+            $carrierModel = $this->shippingCarrier;
+            if ($carrierModel) {
+                return strcasecmp($carrierModel->code, $carrier) === 0
+                    || stripos($carrierModel->name, $carrier) !== false;
+            }
+        }
+
+        // PRIORITY 2: Fallback to shipping_line string matching (backward compatibility)
+        if (!empty($this->shipping_line)) {
+            return stripos($this->shipping_line, $carrier) !== false;
+        }
+
+        return false;
     }
 
     /**
@@ -255,6 +283,95 @@ class RobawsArticleCache extends Model
         return $this->belongsToMany(QuotationRequest::class, 'quotation_request_articles', 'article_cache_id', 'quotation_request_id')
             ->withPivot(['parent_article_id', 'item_type', 'quantity', 'unit_price', 'unit_type', 'selling_price', 'subtotal', 'currency', 'formula_inputs', 'calculated_price', 'notes'])
             ->withTimestamps();
+    }
+
+    /**
+     * Shipping carrier for this article
+     */
+    public function shippingCarrier(): BelongsTo
+    {
+        return $this->belongsTo(ShippingCarrier::class, 'shipping_carrier_id');
+    }
+
+    /**
+     * POL port for this article
+     */
+    public function polPort(): BelongsTo
+    {
+        return $this->belongsTo(Port::class, 'pol_port_id');
+    }
+
+    /**
+     * POD port for this article
+     */
+    public function podPort(): BelongsTo
+    {
+        return $this->belongsTo(Port::class, 'pod_port_id');
+    }
+
+    /**
+     * Get shipping_line attribute - computed from shipping_carrier_id for consistency
+     * If shipping_carrier_id is set, return carrier name; otherwise fallback to stored value
+     */
+    public function getShippingLineAttribute($value)
+    {
+        // If shipping_carrier_id is set, use carrier name
+        if ($this->shipping_carrier_id && $this->relationLoaded('shippingCarrier')) {
+            return $this->shippingCarrier->name ?? $value;
+        }
+        
+        // If shipping_carrier_id is set but relationship not loaded, load it
+        if ($this->shipping_carrier_id) {
+            $carrier = $this->shippingCarrier;
+            if ($carrier) {
+                return $carrier->name;
+            }
+        }
+        
+        // Fallback to stored value for backward compatibility
+        return $value;
+    }
+
+    /**
+     * Get POL display attribute - shows port name and code if resolved, otherwise falls back to raw code or formatted string
+     * This does NOT override the real pol column accessor
+     */
+    public function getPolDisplayAttribute(): string
+    {
+        if ($this->polPort) {
+            return "{$this->polPort->name} ({$this->polPort->code})";
+        }
+        return $this->pol_code ?? $this->pol ?? '—';
+    }
+
+    /**
+     * Get POD display attribute - shows port name and code if resolved, otherwise falls back to raw code or formatted string
+     * This does NOT override the real pod column accessor
+     */
+    public function getPodDisplayAttribute(): string
+    {
+        if ($this->podPort) {
+            return "{$this->podPort->name} ({$this->podPort->code})";
+        }
+        return $this->pod_code ?? $this->pod ?? '—';
+    }
+
+    /**
+     * Get POL code resolved attribute - returns port code from FK if available, otherwise raw code
+     * This does NOT override the real pol_code column accessor
+     */
+    public function getPolCodeResolvedAttribute(): ?string
+    {
+        return $this->polPort?->code ?? $this->pol_code;
+    }
+
+    /**
+     * Get POD code resolved attribute - returns port code from FK if available, otherwise raw code
+     * This does NOT override the real pod_code column accessor
+     */
+    public function getPodCodeResolvedAttribute(): ?string
+    {
+        return $this->podPort?->code ?? $this->pod_code;
     }
 
     /**
@@ -434,10 +551,35 @@ class RobawsArticleCache extends Model
     
     /**
      * Scope for filtering by shipping line
+     * Accepts carrier ID, carrier code, or shipping line name
+     * Prefers shipping_carrier_id over shipping_line for consistency
      */
-    public function scopeForShippingLine(Builder $query, string $shippingLine): Builder
+    public function scopeForShippingLine(Builder $query, string|int $shippingLine): Builder
     {
-        return $query->where('shipping_line', $shippingLine);
+        // If numeric, treat as carrier ID
+        if (is_numeric($shippingLine)) {
+            return $query->where('shipping_carrier_id', $shippingLine)
+                         ->orWhereNull('shipping_carrier_id');
+        }
+        
+        // Try to find carrier by code or name first
+        $carrier = \App\Services\Carrier\CarrierLookupService::class;
+        $carrierLookup = app($carrier);
+        $foundCarrier = $carrierLookup->findByCodeOrName($shippingLine);
+        
+        if ($foundCarrier) {
+            // Use shipping_carrier_id if carrier found
+            return $query->where(function ($q) use ($foundCarrier) {
+                $q->where('shipping_carrier_id', $foundCarrier->id)
+                  ->orWhereNull('shipping_carrier_id'); // Allow universal articles
+            });
+        }
+        
+        // Fallback to shipping_line for backward compatibility
+        return $query->where(function ($q) use ($shippingLine) {
+            $q->where('shipping_line', 'LIKE', '%' . $shippingLine . '%')
+              ->orWhereNull('shipping_line');
+        });
     }
 
     /**
@@ -466,13 +608,23 @@ class RobawsArticleCache extends Model
     /**
      * Scope for filtering articles by schedule metadata
      * Filters by carrier, service type, and POL terminal from schedule
+     * Prefers shipping_carrier_id over shipping_line for consistency
      */
     public function scopeForSchedule(Builder $query, \App\Models\ShippingSchedule $schedule): Builder
     {
         $query->where(function ($q) use ($schedule) {
-            // Filter by carrier/shipping line
-            if ($schedule->carrier) {
-                $q->where('shipping_line', 'LIKE', '%' . $schedule->carrier->name . '%');
+            // Filter by carrier - prefer shipping_carrier_id
+            if ($schedule->carrier_id) {
+                $q->where(function ($qq) use ($schedule) {
+                    $qq->where('shipping_carrier_id', $schedule->carrier_id)
+                       ->orWhereNull('shipping_carrier_id'); // Allow universal articles
+                });
+            } elseif ($schedule->carrier) {
+                // Fallback to shipping_line if carrier_id not available
+                $q->where(function ($qq) use ($schedule) {
+                    $qq->where('shipping_line', 'LIKE', '%' . $schedule->carrier->name . '%')
+                       ->orWhereNull('shipping_line');
+                });
             }
             
             // Filter by POL terminal if available
@@ -791,29 +943,23 @@ class RobawsArticleCache extends Model
             });
         }
 
-        // Apply shipping line filter if schedule is selected - Include NULL shipping_line (universal articles)
+        // Apply shipping line filter if schedule is selected - Include NULL shipping_carrier_id (universal articles)
         if ($quotation->selected_schedule_id && $quotation->selectedSchedule) {
             $schedule = $quotation->selectedSchedule;
-            if ($schedule->carrier) {
-                $query->where(function ($q) use ($schedule, $useIlike) {
-                    $carrierName = $schedule->carrier->name;
-                    // Extract base carrier name (e.g., "Grimaldi" from "Grimaldi GNET")
-                    // This handles cases where article has "GRIMALDI LINES" but carrier is "Grimaldi GNET"
-                    $baseCarrierName = explode(' ', $carrierName)[0]; // Get first word
-                    
-                    if ($useIlike) {
-                        // Try exact match first, then fall back to base name, or NULL (universal articles)
-                        $q->where('shipping_line', 'ILIKE', '%' . $carrierName . '%')
-                          ->orWhere('shipping_line', 'ILIKE', '%' . $baseCarrierName . '%')
-                          ->orWhereNull('shipping_line');
-                    } else {
-                        // Try exact match first, then fall back to base name, or NULL (universal articles)
-                        $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%' . strtolower($carrierName) . '%'])
-                          ->orWhereRaw('LOWER(shipping_line) LIKE ?', ['%' . strtolower($baseCarrierName) . '%'])
-                          ->orWhereNull('shipping_line');
-                    }
+            if ($schedule->carrier_id) {
+                $query->where(function ($q) use ($schedule) {
+                    $q->where('shipping_carrier_id', $schedule->carrier_id)
+                      ->orWhereNull('shipping_carrier_id');
                 });
             }
+        }
+        
+        // Also check preferred_carrier_id if set
+        if ($quotation->preferred_carrier_id) {
+            $query->where(function ($q) use ($quotation) {
+                $q->where('shipping_carrier_id', $quotation->preferred_carrier_id)
+                  ->orWhereNull('shipping_carrier_id');
+            });
         }
 
         // PHASE 4: Check for article mappings (ALLOWLIST strategy)
@@ -1107,5 +1253,37 @@ class RobawsArticleCache extends Model
     public function getEffectiveValidityDateAttribute()
     {
         return $this->validity_date_override ?? $this->validity_date;
+    }
+
+    /**
+     * Get fields that have changed since last push to Robaws
+     * Returns array of field keys that can be pushed
+     */
+    public function getChangedFieldsSinceLastPush(): array
+    {
+        $pushService = app(\App\Services\Robaws\RobawsArticlePushService::class);
+        return $pushService->getChangedFieldsSinceLastPush($this);
+    }
+
+    /**
+     * Check if article has been pushed to Robaws
+     */
+    public function hasBeenPushedToRobaws(): bool
+    {
+        return $this->last_pushed_to_robaws_at !== null;
+    }
+
+    /**
+     * Check if article has local changes that haven't been pushed
+     */
+    public function hasUnpushedChanges(): bool
+    {
+        if (!$this->last_pushed_to_robaws_at) {
+            // Never pushed, check if any pushable fields have values
+            return !empty($this->getChangedFieldsSinceLastPush());
+        }
+
+        // Check if updated after last push
+        return $this->updated_at && $this->updated_at->gt($this->last_pushed_to_robaws_at);
     }
 }

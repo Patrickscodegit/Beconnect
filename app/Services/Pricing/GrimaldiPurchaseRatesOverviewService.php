@@ -7,6 +7,7 @@ use App\Models\CarrierPurchaseTariff;
 use App\Models\Port;
 use App\Models\ShippingCarrier;
 use App\Filament\Resources\CarrierRuleResource;
+use App\Services\Carrier\CarrierLookupService;
 
 class GrimaldiPurchaseRatesOverviewService
 {
@@ -15,18 +16,19 @@ class GrimaldiPurchaseRatesOverviewService
      */
     public function getRatesMatrix(): array
     {
-        // Find Grimaldi carrier - use database-agnostic case-insensitive matching
-        $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
-
-        $carrier = ShippingCarrier::where('code', 'GRIMALDI');
+        // Find Grimaldi carrier using CarrierLookupService
+        $carrier = app(CarrierLookupService::class)->findGrimaldi();
         
-        if ($useIlike) {
-            $carrier = $carrier->orWhere('name', 'ILIKE', '%grimaldi%');
-        } else {
-            $carrier = $carrier->orWhereRaw('LOWER(name) LIKE ?', ['%grimaldi%']);
+        if (!$carrier) {
+            // Return empty matrix if carrier not found (instead of throwing)
+            return [
+                'ports' => [],
+                'category_order' => ['CAR', 'SVAN', 'BVAN', 'LM'],
+                'effective_date' => null,
+                'has_congestion' => false,
+                'has_iccm' => false,
+            ];
         }
-        
-        $carrier = $carrier->firstOrFail();
 
         // Load all Grimaldi mappings with eager loading
         $mappings = CarrierArticleMapping::where('carrier_id', $carrier->id)
@@ -308,7 +310,7 @@ class GrimaldiPurchaseRatesOverviewService
         if ($mapping->article) {
             $article = $mapping->article;
             
-            // Try pod_code first
+            // Try pod_code first - check database first, then use directly if not found
             if ($article->pod_code) {
                 $port = Port::where('code', $article->pod_code)->first();
                 if ($port) {
@@ -317,13 +319,31 @@ class GrimaldiPurchaseRatesOverviewService
                         'name' => $port->name,
                     ];
                 }
+                // Port record doesn't exist, but we have the code - extract name from pod field if available
+                if ($article->pod) {
+                    // Try to extract name from format like "Cotonou (COO), Benin"
+                    if (preg_match('/^([^(]+)\s*\(([A-Z]{3,4})\)/', $article->pod, $matches)) {
+                        $portName = trim($matches[1]);
+                        return [
+                            'code' => $article->pod_code,
+                            'name' => $portName,
+                        ];
+                    }
+                }
+                // Fallback: use pod_code as both code and name
+                return [
+                    'code' => $article->pod_code,
+                    'name' => $article->pod_code,
+                ];
             }
 
             // Try extracting from pod field (format: "Port Name (CODE), Country")
             if ($article->pod) {
-                // Extract code from format like "Abidjan (ABJ), Côte d'Ivoire"
-                if (preg_match('/\(([A-Z]{3,4})\)/', $article->pod, $matches)) {
-                    $portCode = $matches[1];
+                // Extract code and name from format like "Cotonou (COO), Benin" or "Abidjan (ABJ), Côte d'Ivoire"
+                if (preg_match('/^([^(]+)\s*\(([A-Z]{3,4})\)/', $article->pod, $matches)) {
+                    $portName = trim($matches[1]);
+                    $portCode = $matches[2];
+                    // Try database lookup first
                     $port = Port::where('code', $portCode)->first();
                     if ($port) {
                         return [
@@ -331,6 +351,11 @@ class GrimaldiPurchaseRatesOverviewService
                             'name' => $port->name,
                         ];
                     }
+                    // Port record doesn't exist, but we have code and name from pod field
+                    return [
+                        'code' => $portCode,
+                        'name' => $portName,
+                    ];
                 }
             }
         }

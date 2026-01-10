@@ -81,6 +81,19 @@ Schedule::command('robaws:sync-customers --push')
     ->daily()
     ->at('22:00');
 
+// Schedule Robaws suppliers incremental sync daily at 4 AM
+Schedule::command('robaws:sync-suppliers --incremental')
+    ->dailyAt('04:00')
+    ->timezone('Europe/Brussels')
+    ->withoutOverlapping();
+
+// Schedule Robaws suppliers full sync weekly (safety net)
+Schedule::command('robaws:sync-suppliers --full')
+    ->weekly()
+    ->sundays()
+    ->at('04:30')
+    ->timezone('Europe/Brussels');
+
 // Schedule webhook health check hourly (with alerts)
 Schedule::command('robaws:check-webhook-health --alert')->hourly();
 
