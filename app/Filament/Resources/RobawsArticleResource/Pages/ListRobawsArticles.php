@@ -10,11 +10,63 @@ use Filament\Resources\Pages\ListRecords;
 use Filament\Resources\Components\Tab;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Contracts\Pagination\Paginator;
 
 class ListRobawsArticles extends ListRecords
 {
     protected static string $resource = RobawsArticleResource::class;
+
+    /**
+     * Override getTableQuery to ensure query is correct
+     */
+    protected function getTableQuery(): Builder
+    {
+        try {
+            return parent::getTableQuery();
+        } catch (\Exception $e) {
+            \Log::error('getTableQuery failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Override paginateTableQuery to add error handling and logging
+     */
+    protected function paginateTableQuery(Builder $query): Paginator
+    {
+        try {
+            // Log the query for verification (temporary for debugging)
+            \Log::info('paginateTableQuery called', [
+                'sql' => $query->toSql(),
+                'bindings' => $query->getBindings(),
+                'bindings_count' => count($query->getBindings()),
+            ]);
+            
+            $result = parent::paginateTableQuery($query);
+            
+            \Log::info('paginateTableQuery result', [
+                'total' => $result->total(),
+                'count' => $result->count(),
+                'per_page' => $result->perPage(),
+                'current_page' => $result->currentPage(),
+                'last_page' => $result->lastPage(),
+                'has_more_pages' => $result->hasMorePages(),
+            ]);
+            
+            return $result;
+        } catch (\Exception $e) {
+            \Log::error('paginateTableQuery failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'sql' => $query->toSql(),
+                'bindings' => $query->getBindings(),
+            ]);
+            throw $e;
+        }
+    }
 
     protected function getHeaderActions(): array
     {
@@ -178,8 +230,8 @@ class ListRobawsArticles extends ListRecords
     public function getTabs(): array
     {
         return [
-            'all' => Tab::make('All Articles')
-                ->badge(fn () => static::getModel()::count()),
+            // FIXED: "All Articles" tab should NOT have modifyQueryUsing - tabs without query modifications default to showing all records
+            'all' => Tab::make('All Articles'),
             
             'parent' => Tab::make('Parent Articles')
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('is_parent_item', true))

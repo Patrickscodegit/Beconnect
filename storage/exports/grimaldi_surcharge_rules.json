@@ -1,0 +1,165 @@
+[
+    {
+        "id": 5,
+        "carrier_id": 15,
+        "port_id": null,
+        "vehicle_category": null,
+        "category_group_id": null,
+        "vessel_name": null,
+        "vessel_class": null,
+        "event_code": "TOWING",
+        "name": "Towing Surcharge",
+        "calc_mode": "PER_UNIT",
+        "params": {
+            "amount": 150
+        },
+        "priority": 10,
+        "effective_from": "2024-12-18T00:00:00.000000Z",
+        "effective_to": null,
+        "is_active": true,
+        "created_at": "2025-12-31T12:47:28.000000Z",
+        "updated_at": "2026-01-06T11:17:47.000000Z",
+        "port_ids": null,
+        "vehicle_categories": null,
+        "vessel_names": null,
+        "vessel_classes": null,
+        "sort_order": 1,
+        "port_group_ids": null,
+        "category_group_ids": null
+    },
+    {
+        "id": 1,
+        "carrier_id": 15,
+        "port_id": null,
+        "vehicle_category": null,
+        "category_group_id": null,
+        "vessel_name": null,
+        "vessel_class": null,
+        "event_code": "TRACKING_PERCENT",
+        "name": "Tracking Surcharge",
+        "calc_mode": "PERCENT_OF_BASIC_FREIGHT",
+        "params": {
+            "percentage": 10
+        },
+        "priority": 10,
+        "effective_from": "2024-12-18T00:00:00.000000Z",
+        "effective_to": null,
+        "is_active": true,
+        "created_at": "2025-12-27T12:45:51.000000Z",
+        "updated_at": "2026-01-06T11:17:47.000000Z",
+        "port_ids": null,
+        "vehicle_categories": null,
+        "vessel_names": null,
+        "vessel_classes": null,
+        "sort_order": 2,
+        "port_group_ids": null,
+        "category_group_ids": null
+    },
+    {
+        "id": 2,
+        "carrier_id": 15,
+        "port_id": 63,
+        "vehicle_category": null,
+        "category_group_id": null,
+        "vessel_name": null,
+        "vessel_class": null,
+        "event_code": "CONAKRY_WEIGHT_TIER",
+        "name": "Conakry Weight Tier Surcharge",
+        "calc_mode": "WEIGHT_TIER",
+        "params": {
+            "tiers": [
+                {
+                    "max_kg": 10000,
+                    "amount": 120
+                },
+                {
+                    "max_kg": 20000,
+                    "amount": 155
+                },
+                {
+                    "min_kg": 20000,
+                    "amount": 155,
+                    "per_ton_over": 11,
+                    "max_kg": null
+                }
+            ]
+        },
+        "priority": 15,
+        "effective_from": "2024-12-18T00:00:00.000000Z",
+        "effective_to": null,
+        "is_active": true,
+        "created_at": "2025-12-27T12:45:51.000000Z",
+        "updated_at": "2026-01-06T11:17:47.000000Z",
+        "port_ids": null,
+        "vehicle_categories": [
+            "trailer",
+            "tank_trailer",
+            "trailer_stack"
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "sort_order": 3,
+        "port_group_ids": null,
+        "category_group_ids": null
+    },
+    {
+        "id": 3,
+        "carrier_id": 15,
+        "port_id": null,
+        "vehicle_category": null,
+        "category_group_id": null,
+        "vessel_name": null,
+        "vessel_class": null,
+        "event_code": "TOWING_WAF",
+        "name": "Towing Surcharge",
+        "calc_mode": "PER_UNIT",
+        "params": {
+            "amount": 150
+        },
+        "priority": 10,
+        "effective_from": "2024-12-05T00:00:00.000000Z",
+        "effective_to": null,
+        "is_active": true,
+        "created_at": "2025-12-27T12:45:51.000000Z",
+        "updated_at": "2026-01-06T11:17:47.000000Z",
+        "port_ids": null,
+        "vehicle_categories": [
+            "trailer",
+            "trailer_stack",
+            "tank_trailer"
+        ],
+        "vessel_names": null,
+        "vessel_classes": null,
+        "sort_order": 4,
+        "port_group_ids": null,
+        "category_group_ids": null
+    },
+    {
+        "id": 4,
+        "carrier_id": 15,
+        "port_id": null,
+        "vehicle_category": "tank_truck",
+        "category_group_id": null,
+        "vessel_name": null,
+        "vessel_class": null,
+        "event_code": "TANK_INSPECTION",
+        "name": "Tank Inspection Surcharge",
+        "calc_mode": "PER_TANK",
+        "params": {
+            "amount": 220
+        },
+        "priority": 10,
+        "effective_from": "2024-12-18T00:00:00.000000Z",
+        "effective_to": null,
+        "is_active": true,
+        "created_at": "2025-12-27T12:45:51.000000Z",
+        "updated_at": "2026-01-06T11:17:47.000000Z",
+        "port_ids": null,
+        "vehicle_categories": null,
+        "vessel_names": null,
+        "vessel_classes": null,
+        "sort_order": 5,
+        "port_group_ids": null,
+        "category_group_ids": null
+    }
+]

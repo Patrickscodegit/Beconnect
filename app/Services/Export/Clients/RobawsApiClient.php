@@ -538,6 +538,145 @@ final class RobawsApiClient implements RobawsApiClientInterface
     }
 
     /**
+     * List suppliers from Robaws API
+     */
+    public function listSuppliers(int $page = 0, int $size = 100): array
+    {
+        return $this->getHttpClient()
+            ->get('/api/v2/suppliers', ['page' => $page, 'size' => min($size, 100), 'sort' => 'name:asc'])
+            ->throw()
+            ->json();
+    }
+
+    /**
+     * Get single supplier by ID
+     */
+    public function getSupplier(string $id, array $include = []): ?array
+    {
+        $res = $this->getHttpClient()
+            ->get("/api/v2/suppliers/{$id}", ['include' => implode(',', $include)])
+            ->throw()
+            ->json();
+        return $res ?: null;
+    }
+
+    /**
+     * Create supplier in Robaws
+     */
+    public function createSupplier(array $supplierData): ?array
+    {
+        try {
+            $res = $this->getHttpClient()
+                ->post('/api/v2/suppliers', $supplierData)
+                ->throw()
+                ->json();
+            return $res ?: null;
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to create supplier in Robaws', [
+                'error' => $e->getMessage(),
+                'data' => $supplierData,
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Update supplier in Robaws
+     */
+    public function updateSupplier(string $id, array $supplierData): ?array
+    {
+        try {
+            $res = $this->getHttpClient()
+                ->patch("/api/v2/suppliers/{$id}", $supplierData)
+                ->throw()
+                ->json();
+            return $res ?: null;
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to update supplier in Robaws', [
+                'supplier_id' => $id,
+                'error' => $e->getMessage(),
+                'data' => $supplierData,
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * List supplier contacts
+     */
+    public function listSupplierContacts(string $supplierId, int $page = 0, int $size = 100): array
+    {
+        return $this->getHttpClient()
+            ->get("/api/v2/suppliers/{$supplierId}/contacts", ['page' => $page, 'size' => min($size, 100)])
+            ->throw()
+            ->json();
+    }
+
+    /**
+     * Get single supplier contact
+     */
+    public function getSupplierContact(string $supplierId, string $contactId): ?array
+    {
+        try {
+            $res = $this->getHttpClient()
+                ->get("/api/v2/suppliers/{$supplierId}/contacts/{$contactId}")
+                ->throw()
+                ->json();
+            return $res ?: null;
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to get supplier contact', [
+                'supplier_id' => $supplierId,
+                'contact_id' => $contactId,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Create supplier contact
+     */
+    public function createSupplierContact(string $supplierId, array $contactData): ?array
+    {
+        try {
+            $res = $this->getHttpClient()
+                ->post("/api/v2/suppliers/{$supplierId}/contacts", $contactData)
+                ->throw()
+                ->json();
+            return $res ?: null;
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to create supplier contact', [
+                'supplier_id' => $supplierId,
+                'error' => $e->getMessage(),
+                'data' => $contactData,
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Update supplier contact
+     */
+    public function updateSupplierContact(string $supplierId, string $contactId, array $contactData): ?array
+    {
+        try {
+            $res = $this->getHttpClient()
+                ->patch("/api/v2/suppliers/{$supplierId}/contacts/{$contactId}", $contactData)
+                ->throw()
+                ->json();
+            return $res ?: null;
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to update supplier contact', [
+                'supplier_id' => $supplierId,
+                'contact_id' => $contactId,
+                'error' => $e->getMessage(),
+                'data' => $contactData,
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
      * Backward compatibility method that internally uses v2-only ClientResolver
      * This ensures existing code continues to work with the unified approach
      */

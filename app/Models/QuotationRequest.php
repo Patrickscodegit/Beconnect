@@ -48,6 +48,7 @@ class QuotationRequest extends Model
         'special_requirements',
         'selected_schedule_id',
         'preferred_carrier',
+        'preferred_carrier_id',
         'preferred_departure_date',
         'robaws_offer_id',
         'robaws_offer_number',
@@ -231,6 +232,11 @@ class QuotationRequest extends Model
     public function selectedSchedule(): BelongsTo
     {
         return $this->belongsTo(ShippingSchedule::class, 'selected_schedule_id');
+    }
+
+    public function preferredCarrier(): BelongsTo
+    {
+        return $this->belongsTo(ShippingCarrier::class, 'preferred_carrier_id');
     }
 
     public function intake(): BelongsTo

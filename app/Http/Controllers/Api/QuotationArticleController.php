@@ -34,14 +34,26 @@ class QuotationArticleController extends Controller
             });
         }
         
-        // Filter by carrier if provided (using shipping_line field)
+        // Filter by carrier if provided (prefer shipping_carrier_id, fallback to shipping_line)
         if ($request->has('carrier_code') && $request->carrier_code !== 'null' && $request->carrier_code !== '') {
             $carrierCode = $request->carrier_code;
             \Log::info('🚢 Filtering by carrier', ['carrier_code' => $carrierCode]);
-            $query->where(function ($q) use ($carrierCode) {
-                // Match against shipping_line (each article has one shipping line)
+            
+            // Try to find carrier by code first
+            $carrier = \App\Models\ShippingCarrier::where('code', $carrierCode)
+                ->orWhere('name', 'LIKE', '%' . $carrierCode . '%')
+                ->first();
+            
+            $query->where(function ($q) use ($carrierCode, $carrier) {
+                // Prefer shipping_carrier_id if carrier found
+                if ($carrier) {
+                    $q->where('shipping_carrier_id', $carrier->id)
+                      ->orWhereNull('shipping_carrier_id'); // Allow universal articles
+                } else {
+                    // Fallback to shipping_line for backward compatibility
                 $q->where('shipping_line', 'LIKE', '%' . $carrierCode . '%')
                   ->orWhereNull('shipping_line');
+                }
             });
         }
         

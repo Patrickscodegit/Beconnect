@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\RobawsWebhookLog;
 use App\Services\Quotation\RobawsArticlesSyncService;
 use App\Services\Robaws\RobawsCustomerSyncService;
+use App\Services\Robaws\RobawsSupplierSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -14,7 +15,8 @@ class RobawsWebhookController extends Controller
 {
     public function __construct(
         private RobawsArticlesSyncService $syncService,
-        private RobawsCustomerSyncService $customerSyncService
+        private RobawsCustomerSyncService $customerSyncService,
+        private RobawsSupplierSyncService $supplierSyncService
     ) {}
     
     public function handleArticle(Request $request)
@@ -160,6 +162,83 @@ class RobawsWebhookController extends Controller
             Log::error('Customer webhook processing failed', [
                 'event' => $event,
                 'client_id' => $data['id'] ?? null,
+                'error' => $e->getMessage()
+            ]);
+            
+            // Still return 200 to prevent Robaws from retrying
+            // Log the error for manual review
+        }
+        
+        // Step 4: Return 2XX within 2 seconds (Robaws requirement)
+        return response()->json(['status' => 'success'], 200);
+    }
+    
+    public function handleSupplier(Request $request)
+    {
+        // Step 1: Verify signature (CRITICAL for security)
+        if (!$this->verifySignature($request, 'robaws_suppliers')) {
+            Log::warning('Invalid supplier webhook signature', [
+                'ip' => $request->ip(),
+                'signature' => $request->header('Robaws-Signature'),
+                'body' => $request->getContent()
+            ]);
+            return response()->json(['error' => 'Invalid signature'], 401);
+        }
+        
+        // Step 2: Parse event
+        $event = $request->input('event'); // supplier.created, supplier.updated
+        $data = $request->input('data'); // Full supplier data
+        $webhookId = $request->input('id'); // Webhook event ID
+        
+        Log::info('Supplier webhook received', [
+            'event' => $event,
+            'webhook_id' => $webhookId,
+            'supplier_id' => $data['id'] ?? null
+        ]);
+        
+        // Create webhook log entry
+        $webhookLog = RobawsWebhookLog::create([
+            'event_type' => $event,
+            'robaws_id' => $webhookId,
+            'article_id' => null, // Not applicable for suppliers
+            'payload' => $request->all(),
+            'status' => 'received',
+        ]);
+        
+        // Step 3: Process supplier update (synchronous)
+        $startTime = microtime(true);
+        
+        try {
+            $supplier = $this->supplierSyncService->processSupplierFromWebhook([
+                'event' => $event,
+                'data' => $data
+            ]);
+            
+            // Calculate processing duration
+            $duration = (int) ((microtime(true) - $startTime) * 1000); // ms
+            
+            // Mark as processed
+            $webhookLog->update([
+                'status' => 'processed',
+                'processed_at' => now(),
+                'processing_duration_ms' => $duration,
+            ]);
+            
+            Log::info('Supplier webhook processed successfully', [
+                'event' => $event,
+                'supplier_id' => $data['id'] ?? null,
+                'supplier_name' => $supplier->name,
+                'supplier_type' => $supplier->supplier_type,
+                'supplier_code' => $supplier->code
+            ]);
+            
+        } catch (\Exception $e) {
+            // Mark as failed
+            $webhookLog->markAsFailed($e->getMessage());
+            
+            Log::error('Supplier webhook processing failed', [
+                'event' => $event,
+                'supplier_id' => $data['id'] ?? null,
                 'error' => $e->getMessage()
             ]);
             

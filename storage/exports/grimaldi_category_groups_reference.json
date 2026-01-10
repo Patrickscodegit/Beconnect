@@ -1,0 +1,27 @@
+[
+    {
+        "id": 8,
+        "code": "LM_CARGO_TRAILERS",
+        "display_name": "LM Cargo (Trailers)"
+    },
+    {
+        "id": 1,
+        "code": "CARS",
+        "display_name": "Cars"
+    },
+    {
+        "id": 2,
+        "code": "SMALL_VANS",
+        "display_name": "Small Vans"
+    },
+    {
+        "id": 3,
+        "code": "BIG_VANS",
+        "display_name": "Big Vans"
+    },
+    {
+        "id": 7,
+        "code": "LM_CARGO_TRUCKS",
+        "display_name": "LM Cargo (Trucks)"
+    }
+]

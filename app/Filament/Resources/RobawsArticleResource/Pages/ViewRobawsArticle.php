@@ -19,6 +19,16 @@ class ViewRobawsArticle extends ViewRecord
             Actions\DeleteAction::make(),
         ];
     }
+
+    public function mount(int | string $record): void
+    {
+        parent::mount($record);
+        
+        // Eager load port relationships for the single record view
+        if ($this->record) {
+            $this->record->load(['polPort', 'podPort']);
+        }
+    }
     
     public function infolist(Infolist $infolist): Infolist
     {
@@ -111,18 +121,42 @@ class ViewRobawsArticle extends ViewRecord
 
                 Infolists\Components\Section::make('Routing & Ports')
                     ->schema([
+                        Infolists\Components\TextEntry::make('pol_port_id')
+                            ->label('POL Port')
+                            ->formatStateUsing(function ($state, $record) {
+                                if ($record->polPort) {
+                                    return "{$record->polPort->name} ({$record->polPort->code})";
+                                }
+                                return $record->pol_code ?? $record->pol ?? '—';
+                            })
+                            ->badge(fn ($state) => $state !== '—')
+                            ->color(fn ($state) => $state !== '—' ? 'success' : 'gray')
+                            ->placeholder('Not set'),
                         Infolists\Components\TextEntry::make('pol')
-                            ->label('Port of Loading')
-                            ->placeholder('N/A'),
+                            ->label('POL (Raw)')
+                            ->placeholder('N/A')
+                            ->visible(fn ($record) => !empty($record->pol)),
                         Infolists\Components\TextEntry::make('pol_code')
                             ->label('POL Code')
                             ->placeholder('—'),
                         Infolists\Components\TextEntry::make('pol_terminal')
                             ->label('POL Terminal')
                             ->placeholder('N/A'),
+                        Infolists\Components\TextEntry::make('pod_port_id')
+                            ->label('POD Port')
+                            ->formatStateUsing(function ($state, $record) {
+                                if ($record->podPort) {
+                                    return "{$record->podPort->name} ({$record->podPort->code})";
+                                }
+                                return $record->pod_code ?? $record->pod ?? '—';
+                            })
+                            ->badge(fn ($state) => $state !== '—')
+                            ->color(fn ($state) => $state !== '—' ? 'success' : 'gray')
+                            ->placeholder('Not set'),
                         Infolists\Components\TextEntry::make('pod')
-                            ->label('Port of Discharge')
-                            ->placeholder('N/A'),
+                            ->label('POD (Raw)')
+                            ->placeholder('N/A')
+                            ->visible(fn ($record) => !empty($record->pod)),
                         Infolists\Components\TextEntry::make('pod_code')
                             ->label('POD Code')
                             ->placeholder('—'),

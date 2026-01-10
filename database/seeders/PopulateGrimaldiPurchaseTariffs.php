@@ -412,6 +412,7 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
                 'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
                 'port_additional' => null, // Not in PDF for Cotonou
+                'freight_tax' => ['amount' => 5, 'unit' => 'LUMPSUM'], // Freight Tax
                 'admin_fxe' => 26,
                 'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
                 'measurement_costs' => 0,
@@ -423,6 +424,7 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
                 'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
                 'port_additional' => null, // Not in PDF for Cotonou
+                'freight_tax' => ['amount' => 5, 'unit' => 'LUMPSUM'], // Freight Tax
                 'admin_fxe' => 26,
                 'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
                 'measurement_costs' => 0,
@@ -434,6 +436,7 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 'baf' => ['amount' => 150, 'unit' => 'LUMPSUM'],
                 'ets' => ['amount' => 58.0, 'unit' => 'LUMPSUM'],
                 'port_additional' => null, // Not in PDF for Cotonou
+                'freight_tax' => ['amount' => 5, 'unit' => 'LUMPSUM'], // Freight Tax
                 'admin_fxe' => 26,
                 'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
                 'measurement_costs' => 20,
@@ -445,6 +448,7 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 'baf' => ['amount' => 75, 'unit' => 'LM'],
                 'ets' => ['amount' => 17.3, 'unit' => 'LM'],
                 'port_additional' => null, // Not in PDF for Cotonou
+                'freight_tax' => ['amount' => 15, 'unit' => 'LUMPSUM'], // Freight Tax
                 'admin_fxe' => 26,
                 'thc' => ['amount' => 20, 'unit' => 'LM'],
                 'measurement_costs' => 25,
@@ -871,7 +875,8 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 'base_freight' => 590,
                 'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
                 'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
-                'port_additional' => 55, // Port addit. (50) + Freight Tax (5) = 55
+                'port_additional' => 50, // Port Additional (separated from Freight Tax)
+                'freight_tax' => ['amount' => 5, 'unit' => 'LUMPSUM'], // Freight Tax
                 'admin_fxe' => 26,
                 'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
                 'measurement_costs' => 0,
@@ -882,7 +887,8 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 'base_freight' => 700,
                 'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
                 'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
-                'port_additional' => 55, // Port addit. (50) + Freight Tax (5) = 55
+                'port_additional' => 50, // Port Additional (separated from Freight Tax)
+                'freight_tax' => ['amount' => 5, 'unit' => 'LUMPSUM'], // Freight Tax
                 'admin_fxe' => 26,
                 'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
                 'measurement_costs' => 0,
@@ -893,7 +899,8 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 'base_freight' => 1491,
                 'baf' => ['amount' => 150, 'unit' => 'LUMPSUM'],
                 'ets' => ['amount' => 58.0, 'unit' => 'LUMPSUM'],
-                'port_additional' => 55, // Port addit. (50) + Freight Tax (5) = 55
+                'port_additional' => 50, // Port Additional (separated from Freight Tax)
+                'freight_tax' => ['amount' => 5, 'unit' => 'LUMPSUM'], // Freight Tax
                 'admin_fxe' => 26,
                 'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
                 'measurement_costs' => 25,
@@ -904,7 +911,8 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 'base_freight' => 500,
                 'baf' => ['amount' => 75, 'unit' => 'LM'],
                 'ets' => ['amount' => 17.3, 'unit' => 'LM'],
-                'port_additional' => 120, // Port addit. (100) + Freight Tax (20) = 120
+                'port_additional' => 100, // Port Additional (separated from Freight Tax)
+                'freight_tax' => ['amount' => 20, 'unit' => 'LUMPSUM'], // Freight Tax
                 'admin_fxe' => 26,
                 'thc' => ['amount' => 20, 'unit' => 'LM'],
                 'measurement_costs' => 25,
@@ -917,7 +925,8 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 'base_freight' => 590,
                 'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
                 'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
-                'port_additional' => 55, // Port addit. (50) + Freight Tax (5) = 55
+                'port_additional' => 50, // Port Additional (separated from Freight Tax)
+                'freight_tax' => ['amount' => 5, 'unit' => 'LUMPSUM'], // Freight Tax
                 'admin_fxe' => 26,
                 'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
                 'measurement_costs' => 0,
@@ -928,7 +937,8 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 'base_freight' => 700,
                 'baf' => ['amount' => 75, 'unit' => 'LUMPSUM'],
                 'ets' => ['amount' => 29.0, 'unit' => 'LUMPSUM'],
-                'port_additional' => 55, // Port addit. (50) + Freight Tax (5) = 55
+                'port_additional' => 50, // Port Additional (separated from Freight Tax)
+                'freight_tax' => ['amount' => 5, 'unit' => 'LUMPSUM'], // Freight Tax
                 'admin_fxe' => 26,
                 'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
                 'measurement_costs' => 0,
@@ -939,7 +949,8 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 'base_freight' => 1491,
                 'baf' => ['amount' => 150, 'unit' => 'LUMPSUM'],
                 'ets' => ['amount' => 58.0, 'unit' => 'LUMPSUM'],
-                'port_additional' => 55, // Port addit. (50) + Freight Tax (5) = 55
+                'port_additional' => 50, // Port Additional (separated from Freight Tax)
+                'freight_tax' => ['amount' => 5, 'unit' => 'LUMPSUM'], // Freight Tax
                 'admin_fxe' => 26,
                 'thc' => ['amount' => 10, 'unit' => 'LUMPSUM'],
                 'measurement_costs' => 25,
@@ -950,7 +961,8 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 'base_freight' => 500,
                 'baf' => ['amount' => 75, 'unit' => 'LM'],
                 'ets' => ['amount' => 17.3, 'unit' => 'LM'],
-                'port_additional' => 120, // Port addit. (100) + Freight Tax (20) = 120
+                'port_additional' => 100, // Port Additional (separated from Freight Tax)
+                'freight_tax' => ['amount' => 20, 'unit' => 'LUMPSUM'], // Freight Tax
                 'admin_fxe' => 26,
                 'thc' => ['amount' => 20, 'unit' => 'LM'],
                 'measurement_costs' => 25,
@@ -1092,6 +1104,7 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 $baf = $this->normalizeValue($categoryData['baf'] ?? null, 'LUMPSUM');
                 $ets = $this->normalizeValue($categoryData['ets'] ?? null, 'LUMPSUM');
                 $portAdditional = $this->normalizeValue($categoryData['port_additional'] ?? null, 'LUMPSUM');
+                $freightTax = $this->normalizeValue($categoryData['freight_tax'] ?? null, 'LUMPSUM');
                 $adminFxe = $this->normalizeValue($categoryData['admin_fxe'] ?? null, 'LUMPSUM');
                 $thc = $this->normalizeValue($categoryData['thc'] ?? null, 'LUMPSUM');
                 $measurementCosts = $this->normalizeValue($categoryData['measurement_costs'] ?? null, 'LUMPSUM');
@@ -1100,7 +1113,7 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 
                 // Build tariff data array
                 $tariffData = $this->buildTariffData(
-                    $baseFreight, $baf, $ets, $portAdditional, $adminFxe, 
+                    $baseFreight, $baf, $ets, $portAdditional, $freightTax, $adminFxe, 
                     $thc, $measurementCosts, $congestion, $iccm
                 );
                 
@@ -1195,6 +1208,7 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 $baf = $this->normalizeValue($categoryData['baf'] ?? null, 'LUMPSUM');
                 $ets = $this->normalizeValue($categoryData['ets'] ?? null, 'LUMPSUM');
                 $portAdditional = $this->normalizeValue($categoryData['port_additional'] ?? null, 'LUMPSUM');
+                $freightTax = $this->normalizeValue($categoryData['freight_tax'] ?? null, 'LUMPSUM');
                 $adminFxe = $this->normalizeValue($categoryData['admin_fxe'] ?? null, 'LUMPSUM');
                 $thc = $this->normalizeValue($categoryData['thc'] ?? null, 'LUMPSUM');
                 $measurementCosts = $this->normalizeValue($categoryData['measurement_costs'] ?? null, 'LUMPSUM');
@@ -1202,7 +1216,7 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
                 $iccm = $this->normalizeValue($categoryData['iccm'] ?? null, 'LUMPSUM');
                 
                 $tariffData = $this->buildTariffData(
-                    $baseFreight, $baf, $ets, $portAdditional, $adminFxe, 
+                    $baseFreight, $baf, $ets, $portAdditional, $freightTax, $adminFxe, 
                     $thc, $measurementCosts, $congestion, $iccm
                 );
                 
@@ -1547,6 +1561,7 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
         array $baf,
         array $ets,
         array $portAdditional,
+        array $freightTax,
         array $adminFxe,
         array $thc,
         array $measurementCosts,
@@ -1580,6 +1595,12 @@ class PopulateGrimaldiPurchaseTariffs extends Seeder
         $tariffData['port_additional_amount'] = $portAdditional['amount'];
         if (\Illuminate\Support\Facades\Schema::hasColumn('carrier_purchase_tariffs', 'port_additional_unit')) {
             $tariffData['port_additional_unit'] = $portAdditional['unit'];
+        }
+        
+        // Set Freight Tax
+        $tariffData['freight_tax_amount'] = $freightTax['amount'];
+        if (\Illuminate\Support\Facades\Schema::hasColumn('carrier_purchase_tariffs', 'freight_tax_unit')) {
+            $tariffData['freight_tax_unit'] = $freightTax['unit'];
         }
         
         // Set Admin FXE

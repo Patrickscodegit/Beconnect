@@ -1,0 +1,120 @@
+[
+    {
+        "id": 1,
+        "code": "Grimaldi_WAF",
+        "display_name": "Grimaldi WAF",
+        "aliases": [],
+        "priority": 0,
+        "sort_order": 1,
+        "effective_from": "2024-12-18",
+        "effective_to": null,
+        "is_active": true,
+        "members": [
+            {
+                "port_id": 86,
+                "is_active": true
+            },
+            {
+                "port_id": 63,
+                "is_active": true
+            },
+            {
+                "port_id": 64,
+                "is_active": true
+            },
+            {
+                "port_id": 65,
+                "is_active": true
+            },
+            {
+                "port_id": 67,
+                "is_active": true
+            },
+            {
+                "port_id": 91,
+                "is_active": true
+            },
+            {
+                "port_id": 16,
+                "is_active": true
+            },
+            {
+                "port_id": 90,
+                "is_active": true
+            },
+            {
+                "port_id": 69,
+                "is_active": true
+            },
+            {
+                "port_id": 24,
+                "is_active": true
+            },
+            {
+                "port_id": 89,
+                "is_active": true
+            },
+            {
+                "port_id": 62,
+                "is_active": true
+            },
+            {
+                "port_id": 129,
+                "is_active": true
+            },
+            {
+                "port_id": 128,
+                "is_active": true
+            },
+            {
+                "port_id": 132,
+                "is_active": true
+            },
+            {
+                "port_id": 133,
+                "is_active": true
+            },
+            {
+                "port_id": 130,
+                "is_active": true
+            },
+            {
+                "port_id": 131,
+                "is_active": true
+            },
+            {
+                "port_id": 134,
+                "is_active": true
+            },
+            {
+                "port_id": 135,
+                "is_active": true
+            }
+        ]
+    },
+    {
+        "id": 2,
+        "code": "Grimaldi_MED",
+        "display_name": "Grimaldi MED",
+        "aliases": [],
+        "priority": 0,
+        "sort_order": 2,
+        "effective_from": "2024-12-18",
+        "effective_to": null,
+        "is_active": true,
+        "members": [
+            {
+                "port_id": 87,
+                "is_active": true
+            },
+            {
+                "port_id": 79,
+                "is_active": true
+            },
+            {
+                "port_id": 82,
+                "is_active": true
+            }
+        ]
+    }
+]

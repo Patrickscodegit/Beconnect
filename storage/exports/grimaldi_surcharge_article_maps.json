@@ -1,0 +1,32 @@
+[
+    {
+        "id": 1,
+        "carrier_id": 15,
+        "port_id": null,
+        "vehicle_category": null,
+        "category_group_id": null,
+        "vessel_name": null,
+        "vessel_class": null,
+        "event_code": "TOWING_WAF",
+        "article_id": 6145,
+        "qty_mode": "PER_UNIT",
+        "params": [],
+        "effective_from": "2025-12-05T00:00:00.000000Z",
+        "effective_to": null,
+        "is_active": true,
+        "created_at": "2025-12-27T12:53:26.000000Z",
+        "updated_at": "2026-01-06T11:17:47.000000Z",
+        "port_ids": null,
+        "vehicle_categories": null,
+        "vessel_names": null,
+        "vessel_classes": null,
+        "sort_order": 1,
+        "port_group_ids": null,
+        "category_group_ids": null,
+        "article": {
+            "id": 6145,
+            "article_code": "Surcharges"
+        },
+        "article_code": "Surcharges"
+    }
+]

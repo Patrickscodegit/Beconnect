@@ -732,7 +732,9 @@ class QuotationRequestResource extends Resource
                             ->afterStateUpdated(function ($state, Forms\Set $set) {
                                 if ($state) {
                                     $schedule = \App\Models\ShippingSchedule::with('carrier')->find($state);
-                                    if ($schedule) {
+                                    if ($schedule && $schedule->carrier_id) {
+                                        $set('preferred_carrier_id', $schedule->carrier_id);
+                                        // Keep preferred_carrier for backward compatibility
                                         $set('preferred_carrier', $schedule->carrier->code);
                                     }
                                 }
@@ -768,6 +770,15 @@ class QuotationRequestResource extends Resource
                             })
                             ->visible(fn (Forms\Get $get) => $get('selected_schedule_id'))
                             ->columnSpanFull(),
+                            
+                        Forms\Components\Select::make('preferred_carrier_id')
+                            ->label('Preferred Carrier')
+                            ->relationship('preferredCarrier', 'name')
+                            ->searchable()
+                            ->preload()
+                            ->helperText('Carriers synced from Robaws suppliers')
+                            ->visible(fn (Forms\Get $get) => !$get('selected_schedule_id'))
+                            ->columnSpanFull(),
                     ])
                     ->collapsible()
                     ->collapsed(false),
@@ -776,7 +787,9 @@ class QuotationRequestResource extends Resource
                     ->schema([
                         ArticleSelector::make('articles')
                             ->serviceType(fn ($get) => $get('service_type'))
-                            ->carrierCode(fn ($get) => $get('preferred_carrier'))
+                            ->carrierCode(fn ($get) => $get('preferred_carrier_id') 
+                                ? \App\Models\ShippingCarrier::find($get('preferred_carrier_id'))?->code 
+                                : $get('preferred_carrier'))
                             ->quotationId(fn ($record) => $record?->id)
                             ->columnSpanFull(),
                             

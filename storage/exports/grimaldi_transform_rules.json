@@ -1,0 +1,56 @@
+[
+    {
+        "id": 1,
+        "carrier_id": 15,
+        "port_id": null,
+        "vehicle_category": null,
+        "category_group_id": null,
+        "vessel_name": null,
+        "vessel_class": null,
+        "transform_code": "OVERWIDTH_LM_RECALC",
+        "params": {
+            "trigger_width_gt_cm": 260,
+            "divisor_cm": 250
+        },
+        "priority": 10,
+        "effective_from": "2024-12-18T00:00:00.000000Z",
+        "effective_to": null,
+        "is_active": true,
+        "created_at": "2025-12-27T12:45:51.000000Z",
+        "updated_at": "2026-01-06T11:17:47.000000Z",
+        "port_ids": null,
+        "vehicle_categories": null,
+        "vessel_names": null,
+        "vessel_classes": null,
+        "sort_order": 1,
+        "port_group_ids": null,
+        "category_group_ids": null
+    },
+    {
+        "id": 2,
+        "carrier_id": 15,
+        "port_id": 62,
+        "vehicle_category": null,
+        "category_group_id": null,
+        "vessel_name": null,
+        "vessel_class": null,
+        "transform_code": "OVERWIDTH_LM_RECALC",
+        "params": {
+            "trigger_width_gt_cm": 255,
+            "divisor_cm": 250
+        },
+        "priority": 15,
+        "effective_from": "2024-12-18T00:00:00.000000Z",
+        "effective_to": null,
+        "is_active": true,
+        "created_at": "2025-12-27T12:45:51.000000Z",
+        "updated_at": "2026-01-06T11:17:47.000000Z",
+        "port_ids": null,
+        "vehicle_categories": null,
+        "vessel_names": null,
+        "vessel_classes": null,
+        "sort_order": 2,
+        "port_group_ids": null,
+        "category_group_ids": null
+    }
+]

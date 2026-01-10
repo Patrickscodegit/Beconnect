@@ -1086,7 +1086,37 @@ class RobawsArticleProvider
             $metadata['update_date'] = $this->normalizeRobawsDate($metadata['update_date'] ?? null, 'update_date');
             $metadata['validity_date'] = $this->normalizeRobawsDate($metadata['validity_date'] ?? null, 'validity_date');
 
-            // Update article with metadata
+            // Resolve port foreign keys using PortResolutionService
+            // Resolve POL port
+            if (!empty($metadata['pol_code'])) {
+                $polPort = $this->portResolver->resolveOne($metadata['pol_code'], 'SEA');
+                $metadata['pol_port_id'] = $polPort?->id;
+            } else {
+                $metadata['pol_port_id'] = null;
+            }
+
+            // Resolve POD port
+            if (!empty($metadata['pod_code'])) {
+                $podPort = $this->portResolver->resolveOne($metadata['pod_code'], 'SEA');
+                $metadata['pod_port_id'] = $podPort?->id;
+            } else {
+                $metadata['pod_port_id'] = null;
+            }
+
+            // Set requires_manual_review flag
+            $hasPolCode = !empty($metadata['pol_code']);
+            $hasPodCode = !empty($metadata['pod_code']);
+            $polResolved = !empty($metadata['pol_port_id']);
+            $podResolved = !empty($metadata['pod_port_id']);
+
+            if (($hasPolCode && !$polResolved) || ($hasPodCode && !$podResolved)) {
+                $metadata['requires_manual_review'] = true;
+            } elseif ((!$hasPolCode && !$hasPodCode) || ($polResolved && (!$hasPodCode || $podResolved))) {
+                // Both resolved (or no codes to resolve) - clear flag
+                $metadata['requires_manual_review'] = false;
+            }
+
+            // Update article with metadata (including pol_port_id, pod_port_id, requires_manual_review)
             $article->update($metadata);
 
             // Ensure parent flag stays in sync
@@ -1310,7 +1340,37 @@ class RobawsArticleProvider
             $metadata['update_date'] = $this->normalizeRobawsDate($metadata['update_date'] ?? null, 'update_date');
             $metadata['validity_date'] = $this->normalizeRobawsDate($metadata['validity_date'] ?? null, 'validity_date');
 
-            // Update article with metadata
+            // Resolve port foreign keys using PortResolutionService
+            // Resolve POL port
+            if (!empty($metadata['pol_code'])) {
+                $polPort = $this->portResolver->resolveOne($metadata['pol_code'], 'SEA');
+                $metadata['pol_port_id'] = $polPort?->id;
+            } else {
+                $metadata['pol_port_id'] = null;
+            }
+
+            // Resolve POD port
+            if (!empty($metadata['pod_code'])) {
+                $podPort = $this->portResolver->resolveOne($metadata['pod_code'], 'SEA');
+                $metadata['pod_port_id'] = $podPort?->id;
+            } else {
+                $metadata['pod_port_id'] = null;
+            }
+
+            // Set requires_manual_review flag
+            $hasPolCode = !empty($metadata['pol_code']);
+            $hasPodCode = !empty($metadata['pod_code']);
+            $polResolved = !empty($metadata['pol_port_id']);
+            $podResolved = !empty($metadata['pod_port_id']);
+
+            if (($hasPolCode && !$polResolved) || ($hasPodCode && !$podResolved)) {
+                $metadata['requires_manual_review'] = true;
+            } elseif ((!$hasPolCode && !$hasPodCode) || ($polResolved && (!$hasPodCode || $podResolved))) {
+                // Both resolved (or no codes to resolve) - clear flag
+                $metadata['requires_manual_review'] = false;
+            }
+
+            // Update article with metadata (including pol_port_id, pod_port_id, requires_manual_review)
             $article->update($metadata);
 
             // Ensure parent flag stays in sync
@@ -1453,7 +1513,14 @@ class RobawsArticleProvider
         if ($shippingLine !== null) {
             $info['shipping_line'] = $shippingLine;
             
-            // Map shipping line to carrier code for applicable_carriers
+            // Try to find carrier using CarrierLookupService
+            $carrierLookup = app(\App\Services\Carrier\CarrierLookupService::class);
+            $carrier = $carrierLookup->findByCodeOrName($shippingLine);
+            if ($carrier) {
+                $info['shipping_carrier_id'] = $carrier->id;
+            }
+            
+            // Map shipping line to carrier code for applicable_carriers (backward compatibility)
             $carrierCode = $this->mapShippingLineToCarrierCode($shippingLine);
             if ($carrierCode) {
                 $info['applicable_carriers'] = [$carrierCode];
@@ -1547,7 +1614,19 @@ class RobawsArticleProvider
 
         // Fallback: try to extract from description or metadata
         if (empty($info['shipping_line'])) {
-            $info['shipping_line'] = $this->extractShippingLineFromDescription($rawData['description'] ?? $rawData['name'] ?? '');
+            $extractedLine = $this->extractShippingLineFromDescription($rawData['description'] ?? $rawData['name'] ?? '');
+            if ($extractedLine) {
+                $info['shipping_line'] = $extractedLine;
+                
+                // Try to find carrier for extracted shipping line
+                if (empty($info['shipping_carrier_id'])) {
+                    $carrierLookup = app(\App\Services\Carrier\CarrierLookupService::class);
+                    $carrier = $carrierLookup->findByCodeOrName($extractedLine);
+                    if ($carrier) {
+                        $info['shipping_carrier_id'] = $carrier->id;
+                    }
+                }
+            }
         }
 
         if (empty($info['transport_mode'])) {

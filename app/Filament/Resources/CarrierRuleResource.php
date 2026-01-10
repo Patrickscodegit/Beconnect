@@ -365,9 +365,14 @@ class CarrierRuleResource extends Resource
                                             ->options(function (Forms\Get $get, $livewire) {
                                                 try {
                                                     $carrierId = null;
-                                                    if (isset($livewire) && method_exists($livewire, 'getRecord')) {
-                                                        $record = $livewire->getRecord();
-                                                        $carrierId = $record ? $record->id : null;
+                                                    // Check if livewire is an object before calling method_exists
+                                                    if (isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
+                                                        try {
+                                                            $record = $livewire->getRecord();
+                                                            $carrierId = $record ? $record->id : null;
+                                                        } catch (\Throwable $e) {
+                                                            // Livewire getRecord failed, will return empty array below
+                                                        }
                                                     }
                                                     
                                                     if (!$carrierId) {
@@ -412,7 +417,7 @@ class CarrierRuleResource extends Resource
                                             ->preload()
                                             ->helperText('Select one or more vehicle categories. Leave empty for all categories. Note: If Category Group is selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('category_group_ids'))),
+                                            ->disabled(fn ($get) => !empty($get('category_group_ids')) && empty($get('vehicle_categories'))),
 
                                         Forms\Components\Hidden::make('vehicle_category')
                                             ->dehydrated(false),
@@ -424,9 +429,14 @@ class CarrierRuleResource extends Resource
                                                     $carrierId = null;
                                                     
                                                     // Get carrier ID from livewire's record
-                                                    if (isset($livewire) && method_exists($livewire, 'getRecord')) {
-                                                        $record = $livewire->getRecord();
-                                                        $carrierId = $record ? $record->id : null;
+                                                    // Check if livewire is an object before calling method_exists
+                                                    if (isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
+                                                        try {
+                                                            $record = $livewire->getRecord();
+                                                            $carrierId = $record ? $record->id : null;
+                                                        } catch (\Throwable $e) {
+                                                            // Livewire getRecord failed, fall through to $get
+                                                        }
                                                     }
                                                     
                                                     if (!$carrierId) {
@@ -458,7 +468,7 @@ class CarrierRuleResource extends Resource
                                             ->preload()
                                             ->helperText('OR use one or more category groups. Note: If Vehicle Categories are selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')))
+                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')) && empty($get('category_group_ids')))
                                             ->reactive(),
 
                                         Forms\Components\Select::make('vessel_names')
@@ -849,9 +859,14 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->options(function (Forms\Get $get, $livewire) {
                                                 try {
                                                     $carrierId = null;
-                                                    if (isset($livewire) && method_exists($livewire, 'getRecord')) {
-                                                        $record = $livewire->getRecord();
-                                                        $carrierId = $record ? $record->id : null;
+                                                    // Check if livewire is an object before calling method_exists
+                                                    if (isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
+                                                        try {
+                                                            $record = $livewire->getRecord();
+                                                            $carrierId = $record ? $record->id : null;
+                                                        } catch (\Throwable $e) {
+                                                            // Livewire getRecord failed, will return empty array below
+                                                        }
                                                     }
                                                     
                                                     if (!$carrierId) {
@@ -896,7 +911,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->preload()
                                             ->helperText('Select one or more vehicle categories. Leave empty for all categories. Note: If Category Group is selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('category_group_ids'))),
+                                            ->disabled(fn ($get) => !empty($get('category_group_ids')) && empty($get('vehicle_categories'))),
 
                                         Forms\Components\Hidden::make('vehicle_category')
                                             ->dehydrated(false),
@@ -950,7 +965,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->preload()
                                             ->helperText('OR use one or more category groups. Note: If Vehicle Categories are selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')))
+                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')) && empty($get('category_group_ids')))
                                             ->reactive(),
 
                                         Forms\Components\Select::make('vessel_names')
@@ -1147,9 +1162,14 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->options(function (Forms\Get $get, $livewire) {
                                                 try {
                                                     $carrierId = null;
-                                                    if (isset($livewire) && method_exists($livewire, 'getRecord')) {
-                                                        $record = $livewire->getRecord();
-                                                        $carrierId = $record ? $record->id : null;
+                                                    // Check if livewire is an object before calling method_exists
+                                                    if (isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
+                                                        try {
+                                                            $record = $livewire->getRecord();
+                                                            $carrierId = $record ? $record->id : null;
+                                                        } catch (\Throwable $e) {
+                                                            // Livewire getRecord failed, will return empty array below
+                                                        }
                                                     }
                                                     
                                                     if (!$carrierId) {
@@ -1194,7 +1214,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->preload()
                                             ->helperText('Select one or more vehicle categories. Leave empty for all categories. Note: If Category Group is selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('category_group_ids'))),
+                                            ->disabled(fn ($get) => !empty($get('category_group_ids')) && empty($get('vehicle_categories'))),
 
                                         Forms\Components\Hidden::make('vehicle_category')
                                             ->dehydrated(false),
@@ -1233,7 +1253,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->preload()
                                             ->helperText('OR use one or more category groups. Note: If Vehicle Categories are selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')))
+                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')) && empty($get('category_group_ids')))
                                             ->reactive(),
 
                                         Forms\Components\Select::make('vessel_names')
@@ -1551,9 +1571,14 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->options(function (Forms\Get $get, $livewire) {
                                                 try {
                                                     $carrierId = null;
-                                                    if (isset($livewire) && method_exists($livewire, 'getRecord')) {
-                                                        $record = $livewire->getRecord();
-                                                        $carrierId = $record ? $record->id : null;
+                                                    // Check if livewire is an object before calling method_exists
+                                                    if (isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
+                                                        try {
+                                                            $record = $livewire->getRecord();
+                                                            $carrierId = $record ? $record->id : null;
+                                                        } catch (\Throwable $e) {
+                                                            // Livewire getRecord failed, will return empty array below
+                                                        }
                                                     }
                                                     
                                                     if (!$carrierId) {
@@ -1598,7 +1623,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->preload()
                                             ->helperText('Select one or more vehicle categories. Leave empty for all categories. Note: If Category Group is selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('category_group_ids'))),
+                                            ->disabled(fn ($get) => !empty($get('category_group_ids')) && empty($get('vehicle_categories'))),
 
                                         Forms\Components\Hidden::make('vehicle_category')
                                             ->dehydrated(false),
@@ -1637,7 +1662,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->preload()
                                             ->helperText('OR use one or more category groups. Note: If Vehicle Categories are selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')))
+                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')) && empty($get('category_group_ids')))
                                             ->reactive(),
 
                                         Forms\Components\Select::make('vessel_names')
@@ -1887,9 +1912,49 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
 
                                         Forms\Components\Select::make('article_id')
                                             ->label('Article')
-                                            ->relationship('article', 'article_name', function ($query) {
-                                                return $query->where('is_parent_article', true)
+                                            ->options(function ($livewire) {
+                                                $carrierId = null;
+                                                
+                                                // Get carrier_id from livewire record (parent carrier)
+                                                if (isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
+                                                    try {
+                                                        $record = $livewire->getRecord();
+                                                        $carrierId = $record ? $record->id : null;
+                                                    } catch (\Throwable $e) {
+                                                        // Silent fail, will return all articles if carrier not found
+                                                    }
+                                                }
+                                                
+                                                // Build query
+                                                $query = \App\Models\RobawsArticleCache::query()
+                                                    ->where('is_parent_article', true)
                                                     ->where('is_active', true);
+                                                
+                                                // Filter articles by carrier to prevent wrong carrier mappings
+                                                // Universal articles (null shipping_carrier_id) can be mapped to any carrier
+                                                if ($carrierId) {
+                                                    $query->where(function ($q) use ($carrierId) {
+                                                        $q->where('shipping_carrier_id', $carrierId)
+                                                          ->orWhereNull('shipping_carrier_id'); // Allow universal articles
+                                                    });
+                                                }
+                                                
+                                                return $query->orderBy('article_name')
+                                                    ->get()
+                                                    ->mapWithKeys(function ($article) {
+                                                        return [$article->id => $article->article_name . ' (' . ($article->article_code ?? 'N/A') . ')'];
+                                                    });
+                                            })
+                                            ->getOptionLabelUsing(function ($value) {
+                                                if (!$value) {
+                                                    return null;
+                                                }
+                                                try {
+                                                    $article = \App\Models\RobawsArticleCache::find($value);
+                                                    return $article ? ($article->article_name . ' (' . ($article->article_code ?? 'N/A') . ')') : null;
+                                                } catch (\Throwable $e) {
+                                                    return null;
+                                                }
                                             })
                                             ->searchable()
                                             ->required()
@@ -2080,7 +2145,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->multiple()
                                             ->helperText('Select one or more vehicle categories. Leave empty for all categories. Note: If Category Group is selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('category_group_ids')))
+                                            ->disabled(fn ($get) => !empty($get('category_group_ids')) && empty($get('vehicle_categories')))
                                             ->live(),
 
                                         Forms\Components\Select::make('category_group_ids')
@@ -2128,7 +2193,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->multiple()
                                             ->helperText('OR use one or more category groups. Note: If Vehicle Categories are selected, this field should be empty.')
                                             ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')))
+                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')) && empty($get('category_group_ids')))
                                             ->live(),
 
                                         Forms\Components\TagsInput::make('vessel_names')

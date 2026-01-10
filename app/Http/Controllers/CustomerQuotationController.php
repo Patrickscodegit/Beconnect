@@ -378,7 +378,8 @@ class CustomerQuotationController extends Controller
             'preferred_departure_date' => $request->preferred_departure_date,
             'customer_reference' => $request->customer_reference,
             'selected_schedule_id' => $request->selected_schedule_id,
-            'preferred_carrier' => $request->preferred_carrier,
+            'preferred_carrier' => $request->preferred_carrier, // Keep for backward compatibility
+            'preferred_carrier_id' => $request->preferred_carrier_id,
             'pricing_currency' => 'EUR',
             'robaws_sync_status' => 'pending',
             'status' => 'pending',

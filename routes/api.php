@@ -20,3 +20,7 @@ Route::post('/webhooks/robaws/articles', [RobawsWebhookController::class, 'handl
 Route::post('/webhooks/robaws/customers', [RobawsWebhookController::class, 'handleCustomer'])
     ->middleware('throttle:60,1') // 60 requests per minute
     ->name('webhooks.robaws.customers');
+
+Route::post('/webhooks/robaws/suppliers', [RobawsWebhookController::class, 'handleSupplier'])
+    ->middleware('throttle:60,1') // 60 requests per minute
+    ->name('webhooks.robaws.suppliers');

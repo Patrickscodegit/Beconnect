@@ -96,6 +96,15 @@ class SyncArticleExtraFields extends Command
                         if ($shippingLineValue !== null) {
                             $updateData['shipping_line'] = $shippingLineValue;
                             // Note: applicable_carriers removed - each article has one shipping_line
+                            
+                            // Try to link to carrier using CarrierLookupService
+                            if (empty($updateData['shipping_carrier_id'])) {
+                                $carrierLookup = app(\App\Services\Carrier\CarrierLookupService::class);
+                                $carrier = $carrierLookup->findByCodeOrName($shippingLineValue);
+                                if ($carrier) {
+                                    $updateData['shipping_carrier_id'] = $carrier->id;
+                                }
+                            }
                         }
                         
                         // Service Type - Use flexible field mapping
