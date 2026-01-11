@@ -1008,6 +1008,13 @@ class GrimaldiPurchaseRatesOverview extends Page
                 ->send();
                 
         } catch (\Exception $e) {
+            \Log::error('Failed to create mapping', [
+                'port_code' => $this->createMappingPortCode,
+                'category' => $this->createMappingCategory,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
             Notification::make()
                 ->title('Error')
                 ->body('Failed to create mapping: ' . $e->getMessage())

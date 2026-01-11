@@ -1221,15 +1221,31 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
 
                                         Forms\Components\Select::make('category_group_ids')
                                             ->label('Category Groups')
-                                            ->options(function (Forms\Get $get) {
+                                            ->options(function (Forms\Get $get, $livewire) {
                                                 try {
-                                                    $carrierId = $get('../../../../id');
+                                                    $carrierId = null;
+                                                    
+                                                    // Get carrier ID from livewire's record (same pattern as article mappings)
+                                                    if (isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
+                                                        try {
+                                                            $record = $livewire->getRecord();
+                                                            $carrierId = $record ? $record->id : null;
+                                                        } catch (\Throwable $e) {
+                                                            // Livewire getRecord failed, fall through to $get
+                                                        }
+                                                    }
+                                                    
+                                                    // Fallback to $get if livewire method didn't work
+                                                    if (!$carrierId) {
+                                                        $carrierId = $get('../../../../id');
+                                                    }
                                                     
                                                     if (!$carrierId) {
                                                         return [];
                                                     }
                                                     
                                                     return \App\Models\CarrierCategoryGroup::where('carrier_id', $carrierId)
+                                                        ->where('is_active', true)
                                                         ->orderBy('display_name')
                                                         ->pluck('display_name', 'id')
                                                         ->toArray();
@@ -1630,15 +1646,31 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
 
                                         Forms\Components\Select::make('category_group_ids')
                                             ->label('Category Groups')
-                                            ->options(function (Forms\Get $get) {
+                                            ->options(function (Forms\Get $get, $livewire) {
                                                 try {
-                                                    $carrierId = $get('../../../../id');
+                                                    $carrierId = null;
+                                                    
+                                                    // Get carrier ID from livewire's record (same pattern as article mappings)
+                                                    if (isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
+                                                        try {
+                                                            $record = $livewire->getRecord();
+                                                            $carrierId = $record ? $record->id : null;
+                                                        } catch (\Throwable $e) {
+                                                            // Livewire getRecord failed, fall through to $get
+                                                        }
+                                                    }
+                                                    
+                                                    // Fallback to $get if livewire method didn't work
+                                                    if (!$carrierId) {
+                                                        $carrierId = $get('../../../../id');
+                                                    }
                                                     
                                                     if (!$carrierId) {
                                                         return [];
                                                     }
                                                     
                                                     return \App\Models\CarrierCategoryGroup::where('carrier_id', $carrierId)
+                                                        ->where('is_active', true)
                                                         ->orderBy('display_name')
                                                         ->pluck('display_name', 'id')
                                                         ->toArray();
