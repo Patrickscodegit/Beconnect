@@ -141,7 +141,13 @@ class RobawsArticleCache extends Model
                 $article->article_code = $article->article_name ? substr($article->article_name, 0, 20) : 'UNKNOWN';
             }
         });
-        
+
+        // Sync is_parent_article from is_parent_item (source of truth)
+        static::saving(function ($article) {
+            // Always sync is_parent_article from is_parent_item
+            // Treat NULL is_parent_item as false
+            $article->is_parent_article = $article->is_parent_item ?? false;
+        });
     }
 
     /**

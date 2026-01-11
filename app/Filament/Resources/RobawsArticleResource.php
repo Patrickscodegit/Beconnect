@@ -351,11 +351,6 @@ class RobawsArticleResource extends Resource
                             ->searchable()
                             ->columnSpan(1),
                             
-                        Forms\Components\Toggle::make('is_parent_article')
-                            ->label('Parent Article')
-                            ->helperText('Parent article status from Robaws API')
-                            ->columnSpan(1),
-                            
                         Forms\Components\Toggle::make('is_surcharge')
                             ->label('Surcharge Add-on')
                             ->columnSpan(1),
@@ -369,7 +364,8 @@ class RobawsArticleResource extends Resource
                             ->columnSpan(1),
                             
                         Forms\Components\Toggle::make('is_parent_item')
-                            ->label('Parent Item Flag')
+                            ->label('Parent Item')
+                            ->helperText('Maps to Robaws PARENT ITEM field. Automatically syncs with parent article flag.')
                             ->columnSpan(1),
                             
                         Forms\Components\Toggle::make('is_active')
@@ -580,14 +576,14 @@ class RobawsArticleResource extends Resource
                     ->color(fn ($state) => $state ? 'secondary' : 'gray')
                     ->toggleable(),
                     
-                Tables\Columns\IconColumn::make('is_parent_article')
+                Tables\Columns\IconColumn::make('is_parent_item')
                     ->boolean()
                     ->label('Parent')
                     ->trueIcon('heroicon-o-check-circle')
                     ->falseIcon('heroicon-o-x-circle')
                     ->trueColor('success')
                     ->falseColor('danger')
-                    ->tooltip('Parent article status from Robaws API')
+                    ->tooltip('Parent item status from Robaws API')
                     ->toggleable(),
 
                 Tables\Columns\IconColumn::make('is_mandatory')
@@ -868,12 +864,6 @@ class RobawsArticleResource extends Resource
                         ->whereNotNull('cost_side')
                         ->pluck('cost_side', 'cost_side')
                         ->toArray()),
-                    
-                Tables\Filters\TernaryFilter::make('is_parent_article')
-                    ->label('Is Parent Article')
-                    ->placeholder('All articles')
-                    ->trueLabel('Only parent articles')
-                    ->falseLabel('Only child articles'),
 
                 Tables\Filters\TernaryFilter::make('is_mandatory')
                     ->label('Is Mandatory')
@@ -910,6 +900,78 @@ class RobawsArticleResource extends Resource
                     ->modalHeading('Sync article metadata')
                     ->modalDescription('This will fetch shipping line, service type, POL terminal, and composite items from Robaws.')
                     ->modalSubmitActionLabel('Sync'),
+                    
+                Tables\Actions\Action::make('push_to_robaws')
+                    ->label('Push to Robaws')
+                    ->icon('heroicon-o-arrow-up-tray')
+                    ->color('warning')
+                    ->requiresConfirmation()
+                    ->modalHeading('Push article changes to Robaws?')
+                    ->modalDescription(function (RobawsArticleCache $record) {
+                        $pushService = app(\App\Services\Robaws\RobawsArticlePushService::class);
+                        $changedFields = $pushService->getChangedFieldsSinceLastPush($record);
+                        
+                        if (empty($changedFields)) {
+                            return 'No changes detected since last push. All current field values will be pushed.';
+                        }
+                        
+                        $pushableFields = $pushService->getPushableFields();
+                        $fieldLabels = array_column($pushableFields, 'label', 'key');
+                        $changedLabels = array_map(fn($key) => $fieldLabels[$key] ?? $key, $changedFields);
+                        
+                        return 'The following fields have changed: ' . implode(', ', $changedLabels);
+                    })
+                    ->form(function (RobawsArticleCache $record) {
+                        $pushService = app(\App\Services\Robaws\RobawsArticlePushService::class);
+                        $pushableFields = $pushService->getPushableFields();
+                        $changedFields = $pushService->getChangedFieldsSinceLastPush($record);
+                        
+                        $options = [];
+                        $descriptions = [];
+                        foreach ($pushableFields as $field) {
+                            $options[$field['key']] = $field['label'];
+                            $descriptions[$field['key']] = $field['robaws_field'] . ' (' . $field['group'] . ')';
+                        }
+                        
+                        return [
+                            Forms\Components\CheckboxList::make('fields_to_push')
+                                ->label('Fields to Push')
+                                ->options($options)
+                                ->default($changedFields ?: array_keys($options))
+                                ->required()
+                                ->descriptions($descriptions)
+                                ->columns(2)
+                                ->helperText('Select which fields to push to Robaws. Changed fields are pre-selected.'),
+                        ];
+                    })
+                    ->action(function (RobawsArticleCache $record, array $data) {
+                        $pushService = app(\App\Services\Robaws\RobawsArticlePushService::class);
+                        $result = $pushService->pushArticleToRobaws(
+                            $record,
+                            $data['fields_to_push'],
+                            0, // sleepMs
+                            true, // retryOnFailure
+                            2 // maxRetries
+                        );
+                        
+                        if ($result['success']) {
+                            $fieldsPushed = !empty($result['fields_pushed']) 
+                                ? implode(', ', $result['fields_pushed']) 
+                                : 'selected fields';
+                            Notification::make()
+                                ->title('Article pushed successfully')
+                                ->body("Pushed {$fieldsPushed} for: {$record->article_name}")
+                                ->success()
+                                ->send();
+                        } else {
+                            Notification::make()
+                                ->title('Push failed')
+                                ->body($result['error'])
+                                ->danger()
+                                ->send();
+                        }
+                    })
+                    ->visible(fn (RobawsArticleCache $record) => !empty($record->robaws_article_id)),
                     
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
@@ -954,6 +1016,78 @@ class RobawsArticleResource extends Resource
                         ->modalDescription('This will fast-sync metadata (POL/POD, service type, shipping line) for the selected articles using name extraction. No API calls needed - instant processing.')
                         ->modalSubmitActionLabel('Sync Now')
                         ->deselectRecordsAfterCompletion(),
+                    Tables\Actions\BulkAction::make('push_to_robaws')
+                        ->label('Push to Robaws')
+                        ->icon('heroicon-o-arrow-up-tray')
+                        ->color('warning')
+                        ->requiresConfirmation()
+                        ->modalHeading('Push selected articles to Robaws?')
+                        ->modalDescription(function (\Illuminate\Support\Collection $records) {
+                            $validCount = $records->filter(fn($r) => !empty($r->robaws_article_id))->count();
+                            $invalidCount = $records->count() - $validCount;
+                            
+                            $message = "Pushing {$validCount} article(s) to Robaws.";
+                            if ($invalidCount > 0) {
+                                $message .= " {$invalidCount} article(s) without Robaws ID will be skipped.";
+                            }
+                            
+                            return $message;
+                        })
+                        ->form(function (\Illuminate\Support\Collection $records) {
+                            $pushService = app(\App\Services\Robaws\RobawsArticlePushService::class);
+                            $pushableFields = $pushService->getPushableFields();
+                            
+                            $options = [];
+                            $descriptions = [];
+                            foreach ($pushableFields as $field) {
+                                $options[$field['key']] = $field['label'];
+                                $descriptions[$field['key']] = $field['robaws_field'] . ' (' . $field['group'] . ')';
+                            }
+                            
+                            return [
+                                Forms\Components\CheckboxList::make('fields_to_push')
+                                    ->label('Fields to Push')
+                                    ->options($options)
+                                    ->default(array_keys($options))
+                                    ->required()
+                                    ->descriptions($descriptions)
+                                    ->columns(2)
+                                    ->helperText('Select which fields to push to Robaws for all selected articles.'),
+                            ];
+                        })
+                        ->action(function (\Illuminate\Support\Collection $records, array $data) {
+                            $pushService = app(\App\Services\Robaws\RobawsArticlePushService::class);
+                            $validRecords = $records->filter(fn($r) => !empty($r->robaws_article_id));
+                            
+                            $result = $pushService->pushBulkArticles(
+                                $validRecords,
+                                $data['fields_to_push'],
+                                100, // sleepMs (100ms = 10 req/sec, safe rate limiting)
+                                true // retryOnFailure
+                            );
+                            
+                            if ($result['success'] > 0) {
+                                $fieldsPushed = !empty($result['fields_pushed']) 
+                                    ? implode(', ', $result['fields_pushed']) 
+                                    : 'selected fields';
+                                Notification::make()
+                                    ->title('Articles pushed successfully')
+                                    ->body("Pushed {$result['success']} article(s). Fields: {$fieldsPushed}")
+                                    ->success()
+                                    ->duration(8000)
+                                    ->send();
+                            }
+                            
+                            if ($result['failed'] > 0) {
+                                Notification::make()
+                                    ->title('Some pushes failed')
+                                    ->body("{$result['failed']} article(s) failed to push. Check logs for details.")
+                                    ->warning()
+                                    ->duration(10000)
+                                    ->send();
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
                     Tables\Actions\BulkAction::make('bulk_update_fields')
                         ->label('Update Fields')
                         ->icon('heroicon-o-pencil-square')
@@ -972,13 +1106,6 @@ class RobawsArticleResource extends Resource
                             Forms\Components\Textarea::make('article_info')
                                 ->label('Article Info (raw)')
                                 ->rows(3)
-                                ->placeholder('Leave unchanged'),
-                            Forms\Components\Select::make('is_parent_article')
-                                ->label('Parent Article?')
-                                ->options([
-                                    '1' => 'Yes',
-                                    '0' => 'No',
-                                ])
                                 ->placeholder('Leave unchanged'),
                             Forms\Components\Select::make('is_surcharge')
                                 ->label('Surcharge Add-on?')
@@ -1118,7 +1245,7 @@ class RobawsArticleResource extends Resource
 
                             $updates = $fields->toArray();
 
-                            foreach (['is_parent_article', 'is_surcharge', 'is_mandatory', 'requires_manual_review', 'is_parent_item'] as $booleanField) {
+                            foreach (['is_surcharge', 'is_mandatory', 'requires_manual_review', 'is_parent_item'] as $booleanField) {
                                 if (array_key_exists($booleanField, $updates)) {
                                     $updates[$booleanField] = $updates[$booleanField] === '1';
                                 }
