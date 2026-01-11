@@ -80,7 +80,7 @@ class ArticleSelector extends Field
                     'unit_price' => $suggestion['article']->unit_price,
                     'unit_type' => $suggestion['article']->unit_type,
                     'currency' => $suggestion['article']->currency,
-                    'is_parent_article' => $suggestion['article']->is_parent_article,
+                    'is_parent_item' => $suggestion['article']->is_parent_item,
                     'match_score' => $suggestion['match_score'],
                     'match_percentage' => $suggestion['match_percentage'],
                     'match_reasons' => $suggestion['match_reasons'],

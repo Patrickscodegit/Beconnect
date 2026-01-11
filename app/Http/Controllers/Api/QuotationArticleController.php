@@ -68,7 +68,7 @@ class QuotationArticleController extends Controller
                 'robaws_articles_cache.unit_price',
                 'robaws_articles_cache.unit_type',
                 'robaws_articles_cache.currency',
-                'robaws_articles_cache.is_parent_article',
+                'robaws_articles_cache.is_parent_item',
             ]);
         }])
         ->select([
@@ -81,7 +81,7 @@ class QuotationArticleController extends Controller
             'unit_type',
             'currency',
             'category',
-            'is_parent_article',
+            'is_parent_item',
             'is_surcharge',
         ])
         ->orderBy('article_name')

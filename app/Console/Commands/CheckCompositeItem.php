@@ -29,7 +29,7 @@ class CheckCompositeItem extends Command
         $this->line("  ID: {$article->id}");
         $this->line("  Code: {$article->article_code}");
         $this->line("  Name: {$article->article_name}");
-        $this->line("  Is Parent: " . ($article->is_parent_article ? 'YES' : 'NO'));
+        $this->line("  Is Parent: " . ($article->is_parent_item ? 'YES' : 'NO'));
         $this->newLine();
         
         $children = $article->children;

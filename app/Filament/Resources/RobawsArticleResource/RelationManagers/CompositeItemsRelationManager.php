@@ -50,7 +50,7 @@ class CompositeItemsRelationManager extends RelationManager
                                         }
                                     });
                             })
-                            ->where('is_parent_article', false)
+                            ->where('is_parent_item', false)
                             ->whereNotIn('id', $excludeIds)
                             ->get()
                             ->mapWithKeys(function ($article) {
@@ -78,7 +78,7 @@ class CompositeItemsRelationManager extends RelationManager
                                         }
                                     });
                             })
-                            ->where('is_parent_article', false)
+                            ->where('is_parent_item', false)
                             ->where(function ($query) use ($search, $useIlike) {
                                 if ($useIlike) {
                                     $query->where('article_code', 'ILIKE', "%{$search}%")
@@ -296,7 +296,7 @@ class CompositeItemsRelationManager extends RelationManager
                                                 }
                                             });
                                     })
-                                    ->where('is_parent_article', false)
+                                    ->where('is_parent_item', false)
                                     ->whereNotIn('id', $excludeIds)
                                     ->orderBy('article_code')
                                     ->get()
@@ -344,7 +344,7 @@ class CompositeItemsRelationManager extends RelationManager
                                                 }
                                             });
                                     })
-                                    ->where('is_parent_article', false)
+                                    ->where('is_parent_item', false)
                                     ->whereNotIn('id', $excludeIds)
                                     ->where(function ($query) use ($search, $useIlike) {
                                         if ($useIlike) {

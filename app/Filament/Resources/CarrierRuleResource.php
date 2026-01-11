@@ -1959,7 +1959,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                                 
                                                 // Build query
                                                 $query = \App\Models\RobawsArticleCache::query()
-                                                    ->where('is_parent_article', true)
+                                                    ->where('is_parent_item', true)
                                                     ->where('is_active', true);
                                                 
                                                 // Filter articles by carrier to prevent wrong carrier mappings

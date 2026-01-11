@@ -66,8 +66,8 @@ class QuotationRequestArticle extends Model
             }
             
             $articleCache = $model->articleCache;
-            $isParentArticle = $articleCache ? $articleCache->is_parent_article : false;
-            
+            $isParentItem = $articleCache ? $articleCache->is_parent_item : false;
+
             \Log::info('QuotationRequestArticle saved', [
                 'id' => $model->id,
                 'quotation_request_id' => $model->quotation_request_id,
@@ -75,13 +75,13 @@ class QuotationRequestArticle extends Model
                 'article_cache_id' => $model->article_cache_id,
                 'parent_article_id' => $model->parent_article_id,
                 'has_article_cache' => $articleCache !== null,
-                'is_parent_article' => $isParentArticle,
+                'is_parent_item' => $isParentItem,
                 'article_name' => $articleCache->article_name ?? 'N/A',
             ]);
-            
+
             // Auto-correct item_type if article is actually a parent but was saved as standalone
             // This can happen if the article was updated to be a parent after being added to quotation
-            // Also check if article has children even if is_parent_article flag is not set
+            // Also check if article has children even if is_parent_item flag is not set
             $hasChildren = false;
             if ($articleCache && !$articleCache->relationLoaded('children')) {
                 $articleCache->load('children');
@@ -93,14 +93,14 @@ class QuotationRequestArticle extends Model
             if ($model->item_type !== 'parent' 
                 && $model->item_type !== 'child' 
                 && $articleCache 
-                && ($isParentArticle || $hasChildren)
+                && ($isParentItem || $hasChildren)
                 && !$model->parent_article_id) {
                 \Log::info('Auto-correcting item_type from standalone to parent', [
                     'quotation_request_article_id' => $model->id,
                     'article_id' => $model->article_cache_id,
                     'old_item_type' => $model->item_type,
                     'new_item_type' => 'parent',
-                    'is_parent_article_flag' => $isParentArticle,
+                    'is_parent_item_flag' => $isParentItem,
                     'has_children' => $hasChildren,
                 ]);
                 $model->item_type = 'parent';
@@ -109,7 +109,7 @@ class QuotationRequestArticle extends Model
             }
             
             // When parent article is added, automatically add children
-            // Check both is_parent_article flag and if article has children (fallback)
+            // Check both is_parent_item flag and if article has children (fallback)
             $hasChildren = false;
             if ($articleCache) {
                 if (!$articleCache->relationLoaded('children')) {
@@ -118,14 +118,14 @@ class QuotationRequestArticle extends Model
                 $hasChildren = $articleCache->children()->count() > 0;
             }
             
-            $shouldAddChildren = ($model->item_type === 'parent' && $articleCache && ($isParentArticle || $hasChildren));
+            $shouldAddChildren = ($model->item_type === 'parent' && $articleCache && ($isParentItem || $hasChildren));
             
             \Log::info('Checking if should add child articles', [
                 'quotation_request_article_id' => $model->id,
                 'item_type' => $model->item_type,
                 'item_type_is_parent' => $model->item_type === 'parent',
                 'has_article_cache' => $articleCache !== null,
-                'is_parent_article' => $isParentArticle,
+                'is_parent_item' => $isParentItem,
                 'has_children' => $hasChildren,
                 'should_add_children' => $shouldAddChildren,
             ]);
@@ -139,10 +139,10 @@ class QuotationRequestArticle extends Model
             } else {
                 \Log::info('Skipping addChildArticles()', [
                     'quotation_request_article_id' => $model->id,
-                    'reason' => $model->item_type !== 'parent' ? 'item_type is not parent' : ($articleCache === null ? 'articleCache is null' : (!$isParentArticle && !$hasChildren ? 'is_parent_article is false and no children found' : 'unknown')),
+                    'reason' => $model->item_type !== 'parent' ? 'item_type is not parent' : ($articleCache === null ? 'articleCache is null' : (!$isParentItem && !$hasChildren ? 'is_parent_item is false and no children found' : 'unknown')),
                     'item_type' => $model->item_type,
                     'has_article_cache' => $articleCache !== null,
-                    'is_parent_article' => $isParentArticle,
+                    'is_parent_item' => $isParentItem,
                     'has_children' => $hasChildren,
                 ]);
             }
@@ -542,7 +542,7 @@ class QuotationRequestArticle extends Model
             'article_cache_id' => $this->article_cache_id,
             'item_type' => $this->item_type,
             'article_name' => $this->articleCache->article_name ?? 'N/A',
-            'is_parent_article' => $this->articleCache->is_parent_article ?? false,
+            'is_parent_item' => $this->articleCache->is_parent_item ?? false,
         ]);
         
         // Ensure children relationship is loaded with pivot data
