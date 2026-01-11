@@ -383,10 +383,28 @@ class GrimaldiPurchaseRatesOverviewService
     /**
      * Get port information from mapping
      * Returns array{code: string, name: string}|null
+     * 
+     * Prioritizes mapping->port_ids over article->pod_code because the mapping
+     * explicitly defines which ports it applies to, which should be the source of truth.
      */
     protected function getPortFromMapping(CarrierArticleMapping $mapping): ?array
     {
-        // Prefer POD from article
+        // Prioritize mapping->port_ids first (mapping explicitly defines ports it applies to)
+        $portIds = $mapping->port_ids ?? [];
+        if (!empty($portIds) && is_array($portIds)) {
+            $firstPortId = is_array($portIds) ? ($portIds[0] ?? null) : $portIds;
+            if ($firstPortId) {
+                $port = Port::find($firstPortId);
+                if ($port) {
+                    return [
+                        'code' => $port->code,
+                        'name' => $port->name,
+                    ];
+                }
+            }
+        }
+
+        // Fallback: Prefer POD from article if mapping has no explicit port_ids
         if ($mapping->article) {
             $article = $mapping->article;
             
@@ -435,21 +453,6 @@ class GrimaldiPurchaseRatesOverviewService
                     return [
                         'code' => $portCode,
                         'name' => $portName,
-                    ];
-                }
-            }
-        }
-
-        // Fallback to first port in port_ids array
-        $portIds = $mapping->port_ids ?? [];
-        if (!empty($portIds) && is_array($portIds)) {
-            $firstPortId = is_array($portIds) ? ($portIds[0] ?? null) : $portIds;
-            if ($firstPortId) {
-                $port = Port::find($firstPortId);
-                if ($port) {
-                    return [
-                        'code' => $port->code,
-                        'name' => $port->name,
                     ];
                 }
             }
