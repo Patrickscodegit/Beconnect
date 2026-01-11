@@ -504,20 +504,20 @@ class QuotationRequest extends Model
             $sellingPrice = $article->getPriceForRole($role, $formulaInputs ?: null);
         }
         
-        // Check if article is a parent: use is_parent_article flag or check if it has children
+        // Check if article is a parent: use is_parent_item flag or check if it has children
         $hasChildren = false;
         if (!$article->relationLoaded('children')) {
             $article->load('children');
         }
         $hasChildren = $article->children()->count() > 0;
         
-        $itemType = ($article->is_parent_article || $hasChildren) ? 'parent' : 'standalone';
+        $itemType = ($article->is_parent_item || $hasChildren) ? 'parent' : 'standalone';
         
         \Log::info('QuotationRequest::addArticle() called', [
             'quotation_request_id' => $this->id,
             'article_id' => $article->id,
             'article_name' => $article->article_name,
-            'is_parent_article' => $article->is_parent_article,
+            'is_parent_item' => $article->is_parent_item,
             'has_children' => $hasChildren,
             'item_type_set_to' => $itemType,
         ]);

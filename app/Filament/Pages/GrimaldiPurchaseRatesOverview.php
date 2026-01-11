@@ -1141,7 +1141,7 @@ class GrimaldiPurchaseRatesOverview extends Page
             \Filament\Forms\Components\Select::make('article_id')
                 ->label('Article')
                 ->options(function () {
-                    return \App\Models\RobawsArticleCache::where('is_parent_article', true)
+                    return \App\Models\RobawsArticleCache::where('is_parent_item', true)
                         ->where('is_active', true)
                         ->orderBy('article_name')
                         ->get()
@@ -1152,7 +1152,7 @@ class GrimaldiPurchaseRatesOverview extends Page
                 })
                 ->searchable()
                 ->getSearchResultsUsing(function (string $search) {
-                    return \App\Models\RobawsArticleCache::where('is_parent_article', true)
+                    return \App\Models\RobawsArticleCache::where('is_parent_item', true)
                         ->where('is_active', true)
                         ->where(function ($query) use ($search) {
                             $query->whereRaw('LOWER(article_name) LIKE ?', ['%' . strtolower($search) . '%'])
@@ -1347,7 +1347,7 @@ class GrimaldiPurchaseRatesOverview extends Page
             \Filament\Forms\Components\Select::make('article_id')
                 ->label('Article')
                 ->options(function () {
-                    return \App\Models\RobawsArticleCache::where('is_parent_article', true)
+                    return \App\Models\RobawsArticleCache::where('is_parent_item', true)
                         ->where('is_active', true)
                         ->orderBy('article_name')
                         ->get()
@@ -1358,7 +1358,7 @@ class GrimaldiPurchaseRatesOverview extends Page
                 })
                 ->searchable()
                 ->getSearchResultsUsing(function (string $search) {
-                    return \App\Models\RobawsArticleCache::where('is_parent_article', true)
+                    return \App\Models\RobawsArticleCache::where('is_parent_item', true)
                         ->where('is_active', true)
                         ->where(function ($query) use ($search) {
                             $query->whereRaw('LOWER(article_name) LIKE ?', ['%' . strtolower($search) . '%'])

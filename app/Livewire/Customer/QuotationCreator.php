@@ -668,7 +668,7 @@ class QuotationCreator extends Component
         foreach ($parentQuotationArticles as $parentQuotationArticle) {
             $parent = $parentQuotationArticle->articleCache;
             
-            if (!$parent || !$parent->is_parent_article) {
+            if (!$parent || !$parent->is_parent_item) {
                 continue;
             }
             
@@ -724,7 +724,7 @@ class QuotationCreator extends Component
             foreach ($parentQuotationArticles as $parentQuotationArticle) {
                 $parent = $parentQuotationArticle->articleCache;
                 
-                if (!$parent || !$parent->is_parent_article) {
+                if (!$parent || !$parent->is_parent_item) {
                     continue;
                 }
                 

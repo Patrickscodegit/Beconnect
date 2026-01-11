@@ -12,6 +12,12 @@ class RobawsArticlePushService
 {
     private RobawsApiClient $apiClient;
     
+    private function debugLog(string $location, string $message, array $data = []): void
+    {
+        // Use Laravel Log facade for production compatibility
+        Log::debug($message, array_merge(['location' => $location], $data));
+    }
+    
     /**
      * Field mapping configuration for Robaws extraFields
      */
@@ -30,13 +36,7 @@ class RobawsArticlePushService
             'getter' => 'effective_validity_date',
             'formatter' => 'format_mdy',
         ],
-        'sales_price' => [
-            'robaws_field' => 'SALES PRICE',
-            'type' => 'NUMBER',
-            'group' => 'ARTICLE INFO',
-            'getter' => 'unit_price',
-            'formatter' => 'float',
-        ],
+        // Note: SALES PRICE removed - price is stored in main article 'price' field, not extraFields
         'shipping_line' => [
             'robaws_field' => 'SHIPPING LINE',
             'type' => 'SELECT',
@@ -63,15 +63,17 @@ class RobawsArticlePushService
             'robaws_field' => 'POL',
             'type' => 'SELECT',
             'group' => 'ARTICLE INFO',
-            'getter' => 'pol',
+            'getter' => 'polPort.formatFull',
             'formatter' => 'string',
+            'fallback' => 'pol',
         ],
         'pod' => [
             'robaws_field' => 'POD',
             'type' => 'SELECT',
             'group' => 'ARTICLE INFO',
-            'getter' => 'pod',
+            'getter' => 'podPort.formatFull',
             'formatter' => 'string',
+            'fallback' => 'pod',
         ],
         'parent_item' => [
             'robaws_field' => 'PARENT ITEM',
@@ -92,6 +94,55 @@ class RobawsArticlePushService
             'type' => 'SELECT',
             'group' => 'ARTICLE INFO',
             'getter' => 'article_type',
+            'formatter' => 'string',
+        ],
+        'transport_mode' => [
+            'robaws_field' => 'TRANSPORT MODE',
+            'type' => 'SELECT',
+            'group' => 'ARTICLE INFO',
+            'getter' => 'transport_mode',
+            'formatter' => 'string',
+        ],
+        'pol_code' => [
+            'robaws_field' => 'POL CODE',
+            'type' => 'SELECT',
+            'group' => 'ARTICLE INFO',
+            'getter' => 'pol_code',
+            'formatter' => 'string',
+        ],
+        'pod_code' => [
+            'robaws_field' => 'POD CODE',
+            'type' => 'SELECT',
+            'group' => 'ARTICLE INFO',
+            'getter' => 'pod_code',
+            'formatter' => 'string',
+        ],
+        'is_mandatory' => [
+            'robaws_field' => 'IS MANDATORY',
+            'type' => 'CHECKBOX',
+            'group' => 'ARTICLE INFO',
+            'getter' => 'is_mandatory',
+            'formatter' => 'boolean',
+        ],
+        'mandatory_condition' => [
+            'robaws_field' => 'MANDATORY CONDITION',
+            'type' => 'TEXT',
+            'group' => 'ARTICLE INFO',
+            'getter' => 'mandatory_condition',
+            'formatter' => 'string',
+        ],
+        'notes' => [
+            'robaws_field' => 'NOTES',
+            'type' => 'TEXT',
+            'group' => 'ARTICLE INFO',
+            'getter' => 'notes',
+            'formatter' => 'string',
+        ],
+        'article_info' => [
+            'robaws_field' => 'INFO',
+            'type' => 'TEXT',
+            'group' => 'IMPORTANT INFO',
+            'getter' => 'article_info',
             'formatter' => 'string',
         ],
     ];
@@ -125,7 +176,6 @@ class RobawsArticlePushService
         $labels = [
             'update_date' => 'Update Date',
             'validity_date' => 'Validity Date',
-            'sales_price' => 'Sales Price',
             'shipping_line' => 'Shipping Line',
             'service_type' => 'Service Type',
             'pol_terminal' => 'POL Terminal',
@@ -134,6 +184,13 @@ class RobawsArticlePushService
             'parent_item' => 'Parent Item',
             'cost_side' => 'Cost Side',
             'article_type' => 'Article Type',
+            'transport_mode' => 'Transport Mode',
+            'pol_code' => 'POL Code',
+            'pod_code' => 'POD Code',
+            'is_mandatory' => 'Is Mandatory',
+            'mandatory_condition' => 'Mandatory Condition',
+            'notes' => 'Notes',
+            'article_info' => 'Article Info',
         ];
 
         return $labels[$key] ?? ucfirst(str_replace('_', ' ', $key));
@@ -144,6 +201,15 @@ class RobawsArticlePushService
      */
     public function buildExtraFieldsPayload(RobawsArticleCache $article, array $fieldsToPush): array
     {
+        // #region agent log
+        $this->debugLog('RobawsArticlePushService.php:194', 'buildExtraFieldsPayload entry', [
+            'article_id' => $article->id,
+            'robaws_article_id' => $article->robaws_article_id,
+            'fields_to_push' => $fieldsToPush,
+            'hypothesisId' => 'A,B,C',
+        ]);
+        // #endregion
+        
         $extraFields = [];
 
         foreach ($fieldsToPush as $fieldKey) {
@@ -155,7 +221,26 @@ class RobawsArticlePushService
             $config = self::FIELD_MAPPING[$fieldKey];
             $value = $this->getFieldValue($article, $config);
 
+            // #region agent log
+            $this->debugLog('RobawsArticlePushService.php:205', 'Field value retrieved', [
+                'field_key' => $fieldKey,
+                'robaws_field' => $config['robaws_field'],
+                'raw_value' => $value,
+                'value_type' => gettype($value),
+                'is_null' => $value === null,
+                'is_empty_string' => $value === '',
+                'hypothesisId' => 'A',
+            ]);
+            // #endregion
+
             if ($value === null && !isset($config['allow_null'])) {
+                // #region agent log
+                $this->debugLog('RobawsArticlePushService.php:207', 'Skipping null field', [
+                    'field_key' => $fieldKey,
+                    'robaws_field' => $config['robaws_field'],
+                    'hypothesisId' => 'A',
+                ]);
+                // #endregion
                 continue; // Skip null values unless explicitly allowed
             }
 
@@ -164,6 +249,7 @@ class RobawsArticlePushService
             ];
 
             // Add group if specified
+            // SELECT fields DO need group when updating (see PushRobawsCostSide for reference)
             if (isset($config['group'])) {
                 $fieldData['group'] = $config['group'];
             }
@@ -186,25 +272,74 @@ class RobawsArticlePushService
 
                 case 'float':
                 case 'number':
-                    $fieldData['numberValue'] = (float) $value;
+                    $floatValue = (float) $value;
+                    // Skip invalid numbers (NaN, infinite, or empty string coerced to 0)
+                    if (!is_finite($floatValue) || ($value === '' && $floatValue === 0.0)) {
+                        continue 2; // Skip this field
+                    }
+                    // Robaws API expects decimalValue or integerValue, not numberValue
+                    // Use decimalValue if it has a decimal point, otherwise integerValue
+                    if (is_float($floatValue) || strpos((string) $value, '.') !== false) {
+                        $fieldData['decimalValue'] = $floatValue;
+                    } else {
+                        $fieldData['integerValue'] = (int) $floatValue;
+                    }
                     break;
 
                 case 'boolean':
-                    $fieldData['booleanValue'] = (bool) $value;
+                    // For checkboxes, we need to handle both true and false
+                    // Checkboxes that are false might need to be unset in Robaws (if currently true)
+                    // We'll build the field data here and let the comparison logic decide
+                    if ((bool) $value === false) {
+                        // For false checkboxes, we still need to check if they're true in Robaws
+                        // If they're true in Robaws but false in Bconnect, we need to unset them
+                        // Store false value for comparison - we'll handle sending it later
+                        $fieldData['booleanValue'] = false;
+                    } else {
+                        $fieldData['booleanValue'] = true;
+                    }
                     break;
 
                 case 'string_upper':
-                    $fieldData['stringValue'] = strtoupper((string) $value);
+                    $stringValue = strtoupper(trim((string) $value));
+                    // Skip empty strings unless explicitly allowed
+                    if (empty($stringValue) && !isset($config['allow_empty'])) {
+                        continue 2; // Skip this field
+                    }
+                    $fieldData['stringValue'] = $stringValue;
                     break;
 
                 case 'string':
                 default:
-                    $fieldData['stringValue'] = (string) $value;
+                    $stringValue = trim((string) $value);
+                    // Skip empty strings unless explicitly allowed
+                    if (empty($stringValue) && !isset($config['allow_empty'])) {
+                        continue 2; // Skip this field
+                    }
+                    $fieldData['stringValue'] = $stringValue;
                     break;
             }
 
+            // #region agent log
+            $this->debugLog('RobawsArticlePushService.php:276', 'Field added to payload', [
+                'field_key' => $fieldKey,
+                'robaws_field' => $config['robaws_field'],
+                'field_data' => $fieldData,
+                'hypothesisId' => 'B',
+            ]);
+            // #endregion
+
             $extraFields[$config['robaws_field']] = $fieldData;
         }
+
+        // #region agent log
+        $this->debugLog('RobawsArticlePushService.php:283', 'buildExtraFieldsPayload exit', [
+            'article_id' => $article->id,
+            'extra_fields_count' => count($extraFields),
+            'extra_fields_keys' => array_keys($extraFields),
+            'hypothesisId' => 'C',
+        ]);
+        // #endregion
 
         return $extraFields;
     }
@@ -216,7 +351,7 @@ class RobawsArticlePushService
     {
         $getter = $config['getter'];
 
-        // Handle relationship access (e.g., 'shippingCarrier.name')
+        // Handle relationship access (e.g., 'shippingCarrier.name', 'polPort.formatFull')
         if (str_contains($getter, '.')) {
             [$relation, $attribute] = explode('.', $getter, 2);
             
@@ -227,6 +362,44 @@ class RobawsArticlePushService
                 }
                 
                 // Fallback to shipping_line if carrier not linked
+                if (isset($config['fallback'])) {
+                    return $article->{$config['fallback']};
+                }
+                
+                return null;
+            }
+            
+            if ($relation === 'polPort') {
+                $port = $article->polPort;
+                if ($port) {
+                    // Handle method calls like 'formatFull'
+                    if (method_exists($port, $attribute)) {
+                        return $port->$attribute();
+                    }
+                    // Handle attribute access
+                    return $port->$attribute;
+                }
+                
+                // Fallback to pol column if port not linked
+                if (isset($config['fallback'])) {
+                    return $article->{$config['fallback']};
+                }
+                
+                return null;
+            }
+            
+            if ($relation === 'podPort') {
+                $port = $article->podPort;
+                if ($port) {
+                    // Handle method calls like 'formatFull'
+                    if (method_exists($port, $attribute)) {
+                        return $port->$attribute();
+                    }
+                    // Handle attribute access
+                    return $port->$attribute;
+                }
+                
+                // Fallback to pod column if port not linked
                 if (isset($config['fallback'])) {
                     return $article->{$config['fallback']};
                 }
@@ -249,6 +422,16 @@ class RobawsArticlePushService
      */
     public function pushArticleToRobaws(RobawsArticleCache $article, array $fieldsToPush, int $sleepMs = 0, bool $retryOnFailure = false, int $maxRetries = 1): array
     {
+        // #region agent log
+        $this->debugLog('RobawsArticlePushService.php:326', 'pushArticleToRobaws entry', [
+            'article_id' => $article->id,
+            'robaws_article_id' => $article->robaws_article_id,
+            'article_code' => $article->article_code,
+            'fields_to_push' => $fieldsToPush,
+            'hypothesisId' => 'A,B,C,D',
+        ]);
+        // #endregion
+        
         // Validation
         if (!$article->robaws_article_id) {
             return [
@@ -299,7 +482,192 @@ class RobawsArticlePushService
                     }
                 }
 
-                $payload = ['extraFields' => $extraFields];
+                // Fetch current article state from Robaws for comparison
+                $currentArticle = null;
+                $currentExtraFields = null;
+                try {
+                    $currentResponse = $this->apiClient->getArticle($article->robaws_article_id, ['extraFields']);
+                    if ($currentResponse['success'] ?? false) {
+                        $currentArticle = $currentResponse['data'] ?? null;
+                        $currentExtraFields = $currentArticle['extraFields'] ?? [];
+                        // #region agent log
+                        $this->debugLog('RobawsArticlePushService.php:385', 'Current Robaws article fetched', [
+                            'article_id' => $article->id,
+                            'current_extraFields_keys' => array_keys($currentExtraFields ?? []),
+                            'current_extraFields' => $currentExtraFields,
+                            'hypothesisId' => 'D',
+                        ]);
+                        // #endregion
+                    }
+                } catch (\Exception $e) {
+                    // #region agent log
+                    $this->debugLog('RobawsArticlePushService.php:389', 'Failed to fetch current article', [
+                        'article_id' => $article->id,
+                        'error' => $e->getMessage(),
+                        'hypothesisId' => 'D',
+                    ]);
+                    // #endregion
+                    // Ignore fetch errors
+                }
+                
+                // Filter out fields that are already set to the same value in Robaws
+                // CRITICAL: SELECT fields that don't exist in Robaws cannot be created - Robaws silently rejects them
+                // Only push SELECT fields if they already exist in Robaws (can be updated) or if we're updating an existing value
+                $filteredExtraFields = [];
+                foreach ($extraFields as $fieldName => $fieldData) {
+                    // Check if field exists in Robaws (key exists, even if value is null)
+                    $fieldExistsInRobaws = array_key_exists($fieldName, $currentExtraFields);
+                    $currentField = $currentExtraFields[$fieldName] ?? null;
+                    
+                    // For SELECT fields that don't exist in Robaws (key doesn't exist), skip them
+                    // Robaws requires SELECT field values to be predefined options - you can't create new ones via API
+                    // TEXT and CHECKBOX fields can be created if they don't exist
+                    // Note: A SELECT field can exist in Robaws with a null value, so we check key existence, not value null
+                    if ($fieldData['type'] === 'SELECT' && !$fieldExistsInRobaws) {
+                        // #region agent log
+                        $this->debugLog('RobawsArticlePushService.php:489', 'Skipping SELECT field (does not exist in Robaws)', [
+                            'field_name' => $fieldName,
+                            'field_type' => $fieldData['type'],
+                            'new_value' => $fieldData['stringValue'] ?? null,
+                            'field_exists_in_robaws' => $fieldExistsInRobaws,
+                            'current_field_value' => $currentField,
+                            'hypothesisId' => 'E',
+                        ]);
+                        // #endregion
+                        continue;
+                    }
+                    
+                    $currentValue = null;
+                    $newValue = null;
+                    
+                    // Extract current value
+                    if ($currentField && isset($currentField['stringValue'])) {
+                        $currentValue = $currentField['stringValue'];
+                    } elseif ($currentField && isset($currentField['decimalValue'])) {
+                        $currentValue = $currentField['decimalValue'];
+                    } elseif ($currentField && isset($currentField['integerValue'])) {
+                        $currentValue = $currentField['integerValue'];
+                    } elseif ($currentField && isset($currentField['numberValue'])) {
+                        // Fallback for old format
+                        $currentValue = $currentField['numberValue'];
+                    } elseif ($currentField && isset($currentField['booleanValue'])) {
+                        $currentValue = $currentField['booleanValue'];
+                    }
+                    
+                    // Extract new value
+                    if (isset($fieldData['stringValue'])) {
+                        $newValue = $fieldData['stringValue'];
+                    } elseif (isset($fieldData['decimalValue'])) {
+                        $newValue = $fieldData['decimalValue'];
+                    } elseif (isset($fieldData['integerValue'])) {
+                        $newValue = $fieldData['integerValue'];
+                    } elseif (isset($fieldData['numberValue'])) {
+                        // Fallback for old format
+                        $newValue = $fieldData['numberValue'];
+                    } elseif (isset($fieldData['booleanValue'])) {
+                        $newValue = $fieldData['booleanValue'];
+                    }
+                    
+                    // Special handling for CHECKBOX fields
+                    // If checkbox is false in Bconnect, check if it needs to be unset in Robaws
+                    if ($fieldData['type'] === 'CHECKBOX' && isset($fieldData['booleanValue']) && $fieldData['booleanValue'] === false) {
+                        // Checkbox is false in Bconnect
+                        if ($currentValue === true) {
+                            // Checkbox is true in Robaws but false in Bconnect - attempt to unset it
+                            // NOTE: Robaws API may reject booleanValue: false, but we'll try anyway
+                            // The API call will fail if it doesn't accept false, and we'll log the error
+                            // #region agent log
+                            $this->debugLog('RobawsArticlePushService.php:595', 'Checkbox needs to be unchecked (true→false)', [
+                                'field_name' => $fieldName,
+                                'current_value_robaws' => $currentValue,
+                                'new_value_bconnect' => $newValue,
+                                'will_attempt' => true,
+                                'hypothesisId' => 'F',
+                            ]);
+                            // #endregion
+                            // Include it to attempt unsetting - let the API tell us if it rejects
+                            $filteredExtraFields[$fieldName] = $fieldData;
+                            continue;
+                        } else {
+                            // Checkbox is false in both - no change needed
+                            // #region agent log
+                            $this->debugLog('RobawsArticlePushService.php:605', 'Checkbox filtered out (false in both)', [
+                                'field_name' => $fieldName,
+                                'current_value' => $currentValue,
+                                'new_value' => $newValue,
+                                'hypothesisId' => 'D',
+                            ]);
+                            // #endregion
+                            continue;
+                        }
+                    }
+                    
+                    // Only include if value changed or field doesn't exist in Robaws (for non-SELECT fields)
+                    if ($currentValue !== $newValue || $currentField === null) {
+                        $filteredExtraFields[$fieldName] = $fieldData;
+                        // #region agent log
+                        $this->debugLog('RobawsArticlePushService.php:618', 'Field included (changed or new)', [
+                            'field_name' => $fieldName,
+                            'field_type' => $fieldData['type'],
+                            'current_value' => $currentValue,
+                            'new_value' => $newValue,
+                            'current_field_exists' => $currentField !== null,
+                            'hypothesisId' => 'D',
+                        ]);
+                        // #endregion
+                    } else {
+                        // #region agent log
+                        $this->debugLog('RobawsArticlePushService.php:628', 'Field filtered out (unchanged)', [
+                            'field_name' => $fieldName,
+                            'current_value' => $currentValue,
+                            'new_value' => $newValue,
+                            'values_match' => $currentValue === $newValue,
+                            'hypothesisId' => 'D',
+                        ]);
+                        // #endregion
+                    }
+                }
+                
+                if (empty($filteredExtraFields)) {
+                    // #region agent log
+                    $this->debugLog('RobawsArticlePushService.php:450', 'No fields to update - all unchanged', [
+                        'article_id' => $article->id,
+                        'original_count' => count($extraFields),
+                        'filtered_count' => count($filteredExtraFields),
+                        'hypothesisId' => 'D',
+                    ]);
+                    // #endregion
+                    return [
+                        'success' => false,
+                        'error' => 'No fields to update (all values match current state in Robaws)',
+                        'article_code' => $article->article_code,
+                    ];
+                }
+                
+                $payload = ['extraFields' => $filteredExtraFields];
+                
+                // Enhanced logging for production debugging
+                Log::info('Robaws push payload structure', [
+                    'article_id' => $article->id,
+                    'robaws_article_id' => $article->robaws_article_id,
+                    'article_code' => $article->article_code,
+                    'payload_structure' => $payload,
+                    'payload_json' => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT),
+                    'filtered_fields_count' => count($filteredExtraFields),
+                    'filtered_fields_keys' => array_keys($filteredExtraFields),
+                    'filtered_fields_detail' => $filteredExtraFields,
+                ]);
+                
+                // #region agent log
+                $this->debugLog('RobawsArticlePushService.php:465', 'Payload before API call', [
+                    'article_id' => $article->id,
+                    'payload' => $payload,
+                    'payload_json' => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                    'filtered_fields_count' => count($filteredExtraFields),
+                    'filtered_fields_keys' => array_keys($filteredExtraFields),
+                    'hypothesisId' => 'C,D',
+                ]);
+                // #endregion
                 
                 // Rate limiting: check if we need to wait
                 // The RobawsApiClient handles rate limiting internally, but we add additional delay here
@@ -309,8 +677,57 @@ class RobawsArticlePushService
 
                 // Make API call
                 $response = $this->apiClient->updateArticle($article->robaws_article_id, $payload);
+                
+                // Enhanced error logging
+                if (!($response['success'] ?? false)) {
+                    Log::error('Robaws push API call failed', [
+                        'article_id' => $article->id,
+                        'robaws_article_id' => $article->robaws_article_id,
+                        'status' => $response['status'] ?? null,
+                        'error' => $response['error'] ?? null,
+                        'response_body' => $response['body'] ?? null,
+                        'payload_sent' => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                    ]);
+                }
+
+                // #region agent log
+                $this->debugLog('RobawsArticlePushService.php:475', 'API response received', [
+                    'article_id' => $article->id,
+                    'response_success' => $response['success'] ?? false,
+                    'response_status' => $response['status'] ?? null,
+                    'response_error' => $response['error'] ?? null,
+                    'response_body' => $response['body'] ?? null,
+                    'hypothesisId' => 'A,B,C,D,E',
+                ]);
+                // #endregion
 
                 if ($response['success'] ?? false) {
+                    // Verify the update by fetching the article again
+                    $verificationFields = null;
+                    try {
+                        $verifyResponse = $this->apiClient->getArticle($article->robaws_article_id, ['extraFields']);
+                        if ($verifyResponse['success'] ?? false) {
+                            $verifyData = $verifyResponse['data'] ?? null;
+                            $verificationFields = $verifyData['extraFields'] ?? [];
+                            // #region agent log
+                            $this->debugLog('RobawsArticlePushService.php:490', 'Verification fetch after push', [
+                                'article_id' => $article->id,
+                                'verification_extraFields' => $verificationFields,
+                                'fields_we_sent' => array_keys($filteredExtraFields),
+                                'hypothesisId' => 'E',
+                            ]);
+                            // #endregion
+                        }
+                    } catch (\Exception $e) {
+                        // #region agent log
+                        $this->debugLog('RobawsArticlePushService.php:500', 'Verification fetch failed', [
+                            'article_id' => $article->id,
+                            'error' => $e->getMessage(),
+                            'hypothesisId' => 'E',
+                        ]);
+                        // #endregion
+                    }
+                    
                     // Update tracking timestamp
                     $article->update(['last_pushed_to_robaws_at' => now()]);
 

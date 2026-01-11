@@ -532,7 +532,7 @@ class RobawsArticleCache extends Model
      */
     public function scopeParentsOnly(Builder $query): Builder
     {
-        return $query->where('is_parent_article', true);
+        return $query->where('is_parent_item', true);
     }
 
     /**
@@ -757,17 +757,17 @@ class RobawsArticleCache extends Model
 
         // Only show parent items when dataset contains them; otherwise fall back to all active articles.
         $hasParentItems = static::query()
-            ->where('is_parent_article', true)
+            ->where('is_parent_item', true)
             ->limit(1)
             ->exists();
 
         if ($hasParentItems) {
-            $query->where('is_parent_article', true);
+            $query->where('is_parent_item', true);
         }
 
         // Include non-surcharge parents when surcharge flag is missing, but always prefer surcharges when available.
         $hasParentSurcharges = static::query()
-            ->where('is_parent_article', true)
+            ->where('is_parent_item', true)
             ->where('is_surcharge', true)
             ->limit(1)
             ->exists();

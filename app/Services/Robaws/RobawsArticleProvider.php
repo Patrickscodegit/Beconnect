@@ -1379,8 +1379,7 @@ class RobawsArticleProvider
             }
 
             // Sync composite items for parent articles
-            $shouldSyncChildren = $article->is_parent_article
-                || (!empty($metadata['is_parent_article']))
+            $shouldSyncChildren = $article->is_parent_item
                 || (!empty($metadata['is_parent_item']));
 
             if ($shouldSyncChildren) {

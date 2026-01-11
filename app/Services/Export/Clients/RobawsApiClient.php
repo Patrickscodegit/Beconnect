@@ -2263,12 +2263,13 @@ final class RobawsApiClient implements RobawsApiClientInterface
 
             $responseBody = $response->body();
             $responseJson = $response->json();
+            $responseStatus = $response->status();
 
             if ($response->successful()) {
                 return [
                     'success' => true,
                     'data' => $responseJson,
-                    'status' => $response->status(),
+                    'status' => $responseStatus,
                     'body' => $responseBody, // Include body for debugging
                 ];
             }
@@ -2276,7 +2277,8 @@ final class RobawsApiClient implements RobawsApiClientInterface
             return [
                 'success' => false,
                 'error' => $responseBody,
-                'status' => $response->status(),
+                'status' => $responseStatus,
+                'body' => $responseBody, // Include body for better error messages
             ];
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('Failed to update Robaws article', [
