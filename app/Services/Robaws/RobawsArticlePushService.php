@@ -148,7 +148,7 @@ class RobawsArticlePushService
         'purchase_price' => [
             'robaws_field' => 'PURCHASE PRICE',
             'type' => 'TEXT',
-            'group' => 'ARTICLE INFO',
+            'group' => 'IMPORTANT INFO',
             'getter' => 'purchase_price_breakdown',
             'formatter' => 'format_purchase_price_breakdown',
         ],
