@@ -52,8 +52,8 @@ class SyncPurchasePricesToArticles extends Command
         // Filter to only articles missing breakdown if requested
         if ($missingOnly) {
             $articlesWithBreakdown = \App\Models\RobawsArticleCache::whereNotNull('purchase_price_breakdown')
-                ->whereRaw("purchase_price_breakdown != 'null'")
-                ->whereRaw("purchase_price_breakdown != '[]'")
+                ->whereRaw("purchase_price_breakdown::text != 'null'")
+                ->whereRaw("purchase_price_breakdown::text != '[]'")
                 ->pluck('id')
                 ->toArray();
             
