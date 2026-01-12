@@ -290,7 +290,7 @@ class RobawsArticlesSyncService
             'article_name' => $articleName,
             'description' => $article['description'] ?? $article['notes'] ?? null,
             'category' => $article['category'] ?? 'general',
-            'unit_price' => $article['price'] ?? $article['unitPrice'] ?? $article['salePrice'] ?? 0,
+            'unit_price' => $article['salePrice'] ?? $article['price'] ?? $article['unitPrice'] ?? 0,
             'currency' => $article['currency'] ?? 'EUR',
             'unit_type' => $article['unit'] ?? $article['unitType'] ?? 'piece',
             'is_active' => $article['active'] ?? true,
@@ -305,7 +305,6 @@ class RobawsArticlesSyncService
             'article_number' => $article['articleNumber'] ?? null,
             
             // Detailed pricing
-            'sale_price' => $article['salePrice'] ?? null,
             'cost_price' => $article['costPrice'] ?? null,
             'sale_price_strategy' => $article['salePriceStrategy'] ?? null,
             'cost_price_strategy' => $article['costPriceStrategy'] ?? null,

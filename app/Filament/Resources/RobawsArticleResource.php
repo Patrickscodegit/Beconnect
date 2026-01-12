@@ -387,11 +387,6 @@ class RobawsArticleResource extends Resource
                             ->native(false)
                             ->displayFormat('d-m-Y'),
                             
-                        Forms\Components\TextInput::make('sale_price')
-                            ->label('Sale Price')
-                            ->numeric()
-                            ->prefix('€'),
-                            
                         Forms\Components\TextInput::make('cost_price')
                             ->label('Cost Price')
                             ->numeric()
@@ -475,12 +470,6 @@ class RobawsArticleResource extends Resource
                     ->toggleable(),
                     
                 Tables\Columns\TextColumn::make('barcode')
-                    ->toggleable(isToggledHiddenByDefault: true),
-                    
-                Tables\Columns\TextColumn::make('sale_price')
-                    ->label('Sale Price')
-                    ->money('EUR')
-                    ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
                     
                 Tables\Columns\TextColumn::make('cost_price')
@@ -1169,10 +1158,6 @@ class RobawsArticleResource extends Resource
                                 ->label('Unit Price')
                                 ->numeric()
                                 ->placeholder('Leave unchanged'),
-                            Forms\Components\TextInput::make('sale_price')
-                                ->label('Sale Price')
-                                ->numeric()
-                                ->placeholder('Leave unchanged'),
                             Forms\Components\TextInput::make('cost_price')
                                 ->label('Cost Price')
                                 ->numeric()
@@ -1257,7 +1242,7 @@ class RobawsArticleResource extends Resource
                                 }
                             }
 
-                            foreach (['unit_price', 'sale_price', 'cost_price'] as $numericField) {
+                            foreach (['unit_price', 'cost_price'] as $numericField) {
                                 if (array_key_exists($numericField, $updates)) {
                                     $updates[$numericField] = $updates[$numericField] === '' ? null : (float) $updates[$numericField];
                                 }

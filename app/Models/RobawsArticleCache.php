@@ -75,7 +75,6 @@ class RobawsArticleCache extends Model
         'brand',
         'barcode',
         'article_number',
-        'sale_price',
         'cost_price',
         'sale_price_strategy',
         'cost_price_strategy',
@@ -120,7 +119,6 @@ class RobawsArticleCache extends Model
         'last_pushed_validity_date' => 'date',
         'last_pushed_to_robaws_at' => 'datetime',
         // Standard Robaws field casts
-        'sale_price' => 'decimal:2',
         'cost_price' => 'decimal:2',
         'margin' => 'decimal:2',
         'weight_kg' => 'decimal:2',
