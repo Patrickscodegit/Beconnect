@@ -38,7 +38,7 @@ class PurchasePriceSyncService
             $totalCost = $this->calculateTotalPurchaseCost($mostRecentTariff);
 
             // Build detailed breakdown
-            $breakdown = $this->buildPurchasePriceBreakdown($mostRecentTariff);
+            $breakdown = $this->buildPurchasePriceBreakdown($mostRecentTariff, $article);
 
             // Update article
             $article->cost_price = $totalCost;
@@ -94,7 +94,7 @@ class PurchasePriceSyncService
     /**
      * Build detailed purchase price breakdown structure
      */
-    public function buildPurchasePriceBreakdown(CarrierPurchaseTariff $tariff): array
+    public function buildPurchasePriceBreakdown(CarrierPurchaseTariff $tariff, RobawsArticleCache $article): array
     {
         $mapping = $tariff->carrierArticleMapping;
         $carrier = $mapping ? $mapping->carrier : null;
@@ -115,6 +115,8 @@ class PurchasePriceSyncService
             'effective_to' => $tariff->effective_to ? $tariff->effective_to->format('Y-m-d') : null,
             'last_synced_at' => Carbon::now()->toIso8601String(),
             'source' => $tariff->source ?? 'manual',
+            'update_date' => $article->effective_update_date ? $article->effective_update_date->format('Y-m-d') : null,
+            'validity_date' => $article->effective_validity_date ? $article->effective_validity_date->format('Y-m-d') : null,
         ];
 
         // Add surcharges

@@ -145,6 +145,13 @@ class RobawsArticlePushService
             'getter' => 'article_info',
             'formatter' => 'string',
         ],
+        'purchase_price' => [
+            'robaws_field' => 'PURCHASE PRICE',
+            'type' => 'TEXT',
+            'group' => 'ARTICLE INFO',
+            'getter' => 'purchase_price_breakdown',
+            'formatter' => 'format_purchase_price_breakdown',
+        ],
     ];
 
     public function __construct(RobawsApiClient $apiClient)
@@ -159,6 +166,11 @@ class RobawsArticlePushService
         'unit_price' => [
             'robaws_field' => 'salePrice',
             'label' => 'Unit Price',
+            'group' => 'PRICING',
+        ],
+        'cost_price' => [
+            'robaws_field' => 'costPrice',
+            'label' => 'Cost Price',
             'group' => 'PRICING',
         ],
     ];
@@ -227,6 +239,7 @@ class RobawsArticlePushService
             'notes' => 'Notes',
             'article_info' => 'Article Info',
             'unit_price' => 'Unit Price',
+            'purchase_price' => 'Purchase Price',
         ];
 
         return $labels[$key] ?? ucfirst(str_replace('_', ' ', $key));
@@ -345,6 +358,14 @@ class RobawsArticlePushService
                     $fieldData['stringValue'] = $stringValue;
                     break;
 
+                case 'format_purchase_price_breakdown':
+                    $text = $this->formatPurchasePriceBreakdown($value);
+                    if (empty($text)) {
+                        continue 2; // Skip if no content
+                    }
+                    $fieldData['stringValue'] = $text;
+                    break;
+
                 case 'string':
                 default:
                     $stringValue = trim((string) $value);
@@ -402,11 +423,11 @@ class RobawsArticlePushService
             // Get value from article
             $value = $article->$fieldKey;
             
-            // Handle unit_price → salePrice
-            if ($fieldKey === 'unit_price') {
+            // Handle unit_price → salePrice and cost_price → costPrice
+            if ($fieldKey === 'unit_price' || $fieldKey === 'cost_price') {
                 // Allow 0, but skip null
                 if ($value === null) {
-                    Log::warning('unit_price is null, skipping from push', [
+                    Log::warning("{$fieldKey} is null, skipping from push", [
                         'article_id' => $article->id,
                         'robaws_article_id' => $article->robaws_article_id,
                     ]);
@@ -493,6 +514,108 @@ class RobawsArticlePushService
 
         // Direct attribute access
         return $article->$getter ?? null;
+    }
+
+    /**
+     * Format purchase price breakdown as readable text
+     */
+    private function formatPurchasePriceBreakdown($breakdown): string
+    {
+        if (empty($breakdown) || !is_array($breakdown)) {
+            return '';
+        }
+
+        $lines = [];
+        $currency = $breakdown['currency'] ?? 'EUR';
+        
+        // Total
+        if (isset($breakdown['total'])) {
+            $total = number_format((float) $breakdown['total'], 2, '.', '');
+            $lines[] = "Total: {$currency} {$total}";
+            $lines[] = ''; // Empty line
+        }
+        
+        // Base Freight
+        $baseFreight = $breakdown['base_freight'] ?? null;
+        if ($baseFreight && isset($baseFreight['amount'])) {
+            $amount = number_format((float) $baseFreight['amount'], 2, '.', '');
+            $unit = $baseFreight['unit'] ?? 'LUMPSUM';
+            $lines[] = "Base Freight: {$currency} {$amount} ({$unit})";
+            $lines[] = ''; // Empty line
+        }
+        
+        // Surcharges
+        $surcharges = $breakdown['surcharges'] ?? [];
+        if (!empty($surcharges)) {
+            $lines[] = 'Surcharges:';
+            $labels = [
+                'baf' => 'BAF',
+                'ets' => 'ETS',
+                'port_additional' => 'Port Additional',
+                'admin_fxe' => 'Admin Fee',
+                'thc' => 'THC',
+                'measurement_costs' => 'Measurement Costs',
+                'congestion_surcharge' => 'Congestion Surcharge',
+                'iccm' => 'ICCM',
+            ];
+            
+            foreach ($surcharges as $key => $surcharge) {
+                if (isset($surcharge['amount']) && $surcharge['amount'] > 0) {
+                    $amount = number_format((float) $surcharge['amount'], 2, '.', '');
+                    $unit = $surcharge['unit'] ?? 'LUMPSUM';
+                    $label = $labels[$key] ?? ucfirst(str_replace('_', ' ', $key));
+                    $lines[] = "- {$label}: {$currency} {$amount} ({$unit})";
+                }
+            }
+            $lines[] = ''; // Empty line after surcharges
+        }
+        
+        // Metadata
+        if (!empty($breakdown['carrier_name'])) {
+            $lines[] = "Carrier: {$breakdown['carrier_name']}";
+        }
+        
+        if (!empty($breakdown['effective_from'])) {
+            try {
+                $date = Carbon::parse($breakdown['effective_from'])->format('d-m-Y');
+                $lines[] = "Effective From: {$date}";
+            } catch (\Exception $e) {
+                $lines[] = "Effective From: {$breakdown['effective_from']}";
+            }
+        }
+        
+        if (!empty($breakdown['effective_to'])) {
+            try {
+                $date = Carbon::parse($breakdown['effective_to'])->format('d-m-Y');
+                $lines[] = "Effective To: {$date}";
+            } catch (\Exception $e) {
+                $lines[] = "Effective To: {$breakdown['effective_to']}";
+            }
+        }
+        
+        if (!empty($breakdown['source'])) {
+            $lines[] = "Source: " . ucfirst($breakdown['source']);
+        }
+        
+        if (!empty($breakdown['update_date'])) {
+            try {
+                $date = Carbon::parse($breakdown['update_date'])->format('d-m-Y');
+                $lines[] = "Update Date: {$date}";
+            } catch (\Exception $e) {
+                $lines[] = "Update Date: {$breakdown['update_date']}";
+            }
+        }
+        
+        if (!empty($breakdown['validity_date'])) {
+            try {
+                $date = Carbon::parse($breakdown['validity_date'])->format('d-m-Y');
+                $lines[] = "Validity Date: {$date}";
+            } catch (\Exception $e) {
+                $lines[] = "Validity Date: {$breakdown['validity_date']}";
+            }
+        }
+        
+        return implode("\n", $lines);
     }
 
     /**
@@ -612,7 +735,7 @@ class RobawsArticlePushService
                         
                         // Compare values (handle float comparison)
                         $changed = false;
-                        if ($robawsField === 'salePrice') {
+                        if ($robawsField === 'salePrice' || $robawsField === 'costPrice') {
                             if ($currentValue === null) {
                                 // If current value is null but new value is not, it's a change
                                 $changed = $newValue !== null;
