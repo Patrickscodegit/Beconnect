@@ -153,19 +153,49 @@ class RobawsArticlePushService
     }
 
     /**
+     * Main article fields mapping (fields that go in the main article payload, not extraFields)
+     */
+    private const MAIN_ARTICLE_FIELDS = [
+        'unit_price' => [
+            'robaws_field' => 'salePrice',
+            'label' => 'Unit Price',
+            'group' => 'PRICING',
+        ],
+    ];
+
+    /**
      * Get list of pushable fields with metadata
      */
     public function getPushableFields(): array
     {
-        return array_map(function ($key, $config) {
-            return [
+        $fields = [];
+        
+        // Add main article fields
+        foreach (self::MAIN_ARTICLE_FIELDS as $key => $config) {
+            $fields[] = [
+                'key' => $key,
+                'label' => $config['label'],
+                'robaws_field' => $config['robaws_field'],
+                'type' => 'MAIN_FIELD',
+                'group' => $config['group'],
+                'is_main_field' => true,
+            ];
+        }
+        
+        // Add extraFields
+        foreach (array_keys(self::FIELD_MAPPING) as $key) {
+            $config = self::FIELD_MAPPING[$key];
+            $fields[] = [
                 'key' => $key,
                 'label' => $this->getFieldLabel($key),
                 'robaws_field' => $config['robaws_field'],
                 'type' => $config['type'],
                 'group' => $config['group'],
+                'is_main_field' => false,
             ];
-        }, array_keys(self::FIELD_MAPPING), self::FIELD_MAPPING);
+        }
+        
+        return $fields;
     }
 
     /**
@@ -173,6 +203,11 @@ class RobawsArticlePushService
      */
     private function getFieldLabel(string $key): string
     {
+        // Check main article fields first
+        if (isset(self::MAIN_ARTICLE_FIELDS[$key])) {
+            return self::MAIN_ARTICLE_FIELDS[$key]['label'];
+        }
+        
         $labels = [
             'update_date' => 'Update Date',
             'validity_date' => 'Validity Date',
@@ -191,6 +226,7 @@ class RobawsArticlePushService
             'mandatory_condition' => 'Mandatory Condition',
             'notes' => 'Notes',
             'article_info' => 'Article Info',
+            'unit_price' => 'Unit Price',
         ];
 
         return $labels[$key] ?? ucfirst(str_replace('_', ' ', $key));
@@ -345,6 +381,48 @@ class RobawsArticlePushService
     }
 
     /**
+     * Build main article payload for Robaws API
+     * Main article fields go at the root level (not in extraFields)
+     * 
+     * @param RobawsArticleCache $article
+     * @param array $fieldsToPush Array of field keys to push
+     * @return array Main article payload (e.g., ['salePrice' => 100.00])
+     */
+    private function buildMainArticlePayload(RobawsArticleCache $article, array $fieldsToPush): array
+    {
+        $mainFields = [];
+        
+        // Filter to only main article fields
+        $mainFieldsToPush = array_intersect($fieldsToPush, array_keys(self::MAIN_ARTICLE_FIELDS));
+        
+        foreach ($mainFieldsToPush as $fieldKey) {
+            $config = self::MAIN_ARTICLE_FIELDS[$fieldKey];
+            $robawsField = $config['robaws_field'];
+            
+            // Get value from article
+            $value = $article->$fieldKey;
+            
+            // Handle unit_price → salePrice
+            if ($fieldKey === 'unit_price') {
+                // Allow 0, but skip null
+                if ($value === null) {
+                    Log::warning('unit_price is null, skipping from push', [
+                        'article_id' => $article->id,
+                        'robaws_article_id' => $article->robaws_article_id,
+                    ]);
+                    continue;
+                }
+                
+                // Ensure it's a float
+                $floatValue = (float) $value;
+                $mainFields[$robawsField] = $floatValue;
+            }
+        }
+        
+        return $mainFields;
+    }
+
+    /**
      * Get field value from article using getter configuration
      */
     private function getFieldValue(RobawsArticleCache $article, array $config)
@@ -449,8 +527,12 @@ class RobawsArticlePushService
             ];
         }
 
-        // Validate field keys
-        $invalidFields = array_diff($fieldsToPush, array_keys(self::FIELD_MAPPING));
+        // Validate field keys (allow both main article fields and extraFields)
+        $validFieldKeys = array_merge(
+            array_keys(self::FIELD_MAPPING),
+            array_keys(self::MAIN_ARTICLE_FIELDS)
+        );
+        $invalidFields = array_diff($fieldsToPush, $validFieldKeys);
         if (!empty($invalidFields)) {
             return [
                 'success' => false,
@@ -459,15 +541,26 @@ class RobawsArticlePushService
             ];
         }
 
+        // Separate main article fields from extraFields
+        $mainArticleFields = array_intersect($fieldsToPush, array_keys(self::MAIN_ARTICLE_FIELDS));
+        $extraFieldKeys = array_intersect($fieldsToPush, array_keys(self::FIELD_MAPPING));
+
         $attempt = 0;
         $lastError = null;
 
         while ($attempt <= $maxRetries) {
             try {
-                // Build payload
-                $extraFields = $this->buildExtraFieldsPayload($article, $fieldsToPush);
+                // Build main article payload
+                $mainArticlePayload = $this->buildMainArticlePayload($article, $mainArticleFields);
+                
+                // Build extraFields payload (only with extraFields, not main fields)
+                $extraFields = [];
+                if (!empty($extraFieldKeys)) {
+                    $extraFields = $this->buildExtraFieldsPayload($article, $extraFieldKeys);
+                }
 
-                if (empty($extraFields)) {
+                // Check if we have any fields to push
+                if (empty($mainArticlePayload) && empty($extraFields)) {
                     return [
                         'success' => false,
                         'error' => 'No valid fields to push (all values are null or invalid)',
@@ -495,6 +588,7 @@ class RobawsArticlePushService
                             'article_id' => $article->id,
                             'current_extraFields_keys' => array_keys($currentExtraFields ?? []),
                             'current_extraFields' => $currentExtraFields,
+                            'current_salePrice' => $currentArticle['salePrice'] ?? null,
                             'hypothesisId' => 'D',
                         ]);
                         // #endregion
@@ -508,6 +602,33 @@ class RobawsArticlePushService
                     ]);
                     // #endregion
                     // Ignore fetch errors
+                }
+                
+                // Filter main article fields by checking for changes
+                $filteredMainArticlePayload = [];
+                if (!empty($mainArticlePayload)) {
+                    foreach ($mainArticlePayload as $robawsField => $newValue) {
+                        $currentValue = $currentArticle[$robawsField] ?? null;
+                        
+                        // Compare values (handle float comparison)
+                        $changed = false;
+                        if ($robawsField === 'salePrice') {
+                            if ($currentValue === null) {
+                                // If current value is null but new value is not, it's a change
+                                $changed = $newValue !== null;
+                            } else {
+                                $currentFloat = (float) $currentValue;
+                                $newFloat = (float) $newValue;
+                                $changed = abs($currentFloat - $newFloat) > 0.01; // Allow for floating point precision
+                            }
+                        } else {
+                            $changed = $currentValue !== $newValue;
+                        }
+                        
+                        if ($changed) {
+                            $filteredMainArticlePayload[$robawsField] = $newValue;
+                        }
+                    }
                 }
                 
                 // Filter out fields that are already set to the same value in Robaws
@@ -628,12 +749,15 @@ class RobawsArticlePushService
                     }
                 }
                 
-                if (empty($filteredExtraFields)) {
+                // Check if we have any fields to push after filtering
+                if (empty($filteredMainArticlePayload) && empty($filteredExtraFields)) {
                     // #region agent log
                     $this->debugLog('RobawsArticlePushService.php:450', 'No fields to update - all unchanged', [
                         'article_id' => $article->id,
-                        'original_count' => count($extraFields),
-                        'filtered_count' => count($filteredExtraFields),
+                        'original_extraFields_count' => count($extraFields),
+                        'filtered_extraFields_count' => count($filteredExtraFields),
+                        'original_mainFields_count' => count($mainArticlePayload),
+                        'filtered_mainFields_count' => count($filteredMainArticlePayload),
                         'hypothesisId' => 'D',
                     ]);
                     // #endregion
@@ -644,7 +768,14 @@ class RobawsArticlePushService
                     ];
                 }
                 
-                $payload = ['extraFields' => $filteredExtraFields];
+                // Build combined payload
+                $payload = [];
+                if (!empty($filteredMainArticlePayload)) {
+                    $payload = array_merge($payload, $filteredMainArticlePayload);
+                }
+                if (!empty($filteredExtraFields)) {
+                    $payload['extraFields'] = $filteredExtraFields;
+                }
                 
                 // Enhanced logging for production debugging
                 Log::info('Robaws push payload structure', [
@@ -653,9 +784,11 @@ class RobawsArticlePushService
                     'article_code' => $article->article_code,
                     'payload_structure' => $payload,
                     'payload_json' => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT),
-                    'filtered_fields_count' => count($filteredExtraFields),
-                    'filtered_fields_keys' => array_keys($filteredExtraFields),
-                    'filtered_fields_detail' => $filteredExtraFields,
+                    'main_fields_count' => count($filteredMainArticlePayload),
+                    'main_fields_keys' => array_keys($filteredMainArticlePayload),
+                    'filtered_extraFields_count' => count($filteredExtraFields),
+                    'filtered_extraFields_keys' => array_keys($filteredExtraFields),
+                    'filtered_extraFields_detail' => $filteredExtraFields,
                 ]);
                 
                 // #region agent log
@@ -663,8 +796,10 @@ class RobawsArticlePushService
                     'article_id' => $article->id,
                     'payload' => $payload,
                     'payload_json' => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-                    'filtered_fields_count' => count($filteredExtraFields),
-                    'filtered_fields_keys' => array_keys($filteredExtraFields),
+                    'main_fields_count' => count($filteredMainArticlePayload),
+                    'main_fields_keys' => array_keys($filteredMainArticlePayload),
+                    'filtered_extraFields_count' => count($filteredExtraFields),
+                    'filtered_extraFields_keys' => array_keys($filteredExtraFields),
                     'hypothesisId' => 'C,D',
                 ]);
                 // #endregion
@@ -731,16 +866,43 @@ class RobawsArticlePushService
                     // Update tracking timestamp
                     $article->update(['last_pushed_to_robaws_at' => now()]);
 
+                    // Build list of pushed fields for response
+                    $pushedFields = [];
+                    if (!empty($filteredMainArticlePayload)) {
+                        // Map Robaws field names back to local field keys
+                        foreach ($filteredMainArticlePayload as $robawsField => $value) {
+                            foreach (self::MAIN_ARTICLE_FIELDS as $localKey => $config) {
+                                if ($config['robaws_field'] === $robawsField) {
+                                    $pushedFields[] = $localKey;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (!empty($filteredExtraFields)) {
+                        // Map Robaws field names back to local field keys for extraFields
+                        foreach ($filteredExtraFields as $robawsField => $value) {
+                            foreach (self::FIELD_MAPPING as $localKey => $config) {
+                                if ($config['robaws_field'] === $robawsField) {
+                                    $pushedFields[] = $localKey;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
                     Log::info('Successfully pushed article to Robaws', [
                         'article_id' => $article->id,
                         'robaws_article_id' => $article->robaws_article_id,
                         'article_code' => $article->article_code,
-                        'fields_pushed' => array_keys($extraFields),
+                        'fields_pushed' => $pushedFields,
+                        'main_fields_pushed' => array_keys($filteredMainArticlePayload),
+                        'extraFields_pushed' => array_keys($filteredExtraFields),
                     ]);
 
                     return [
                         'success' => true,
-                        'fields_pushed' => array_keys($extraFields),
+                        'fields_pushed' => $pushedFields,
                         'article_code' => $article->article_code,
                         'attempts' => $attempt + 1,
                     ];
@@ -886,6 +1048,14 @@ class RobawsArticlePushService
 
         if (!$article->last_pushed_to_robaws_at) {
             // Never pushed, return all fields that have values
+            // Include main article fields
+            foreach (array_keys(self::MAIN_ARTICLE_FIELDS) as $fieldKey) {
+                $value = $article->$fieldKey;
+                if ($value !== null) {
+                    $changedFields[] = $fieldKey;
+                }
+            }
+            // Include extraFields
             foreach (array_keys(self::FIELD_MAPPING) as $fieldKey) {
                 $config = self::FIELD_MAPPING[$fieldKey];
                 $value = $this->getFieldValue($article, $config);
@@ -901,6 +1071,14 @@ class RobawsArticlePushService
         if ($article->updated_at && $article->updated_at->gt($article->last_pushed_to_robaws_at)) {
             // For simplicity, return all fields that have values
             // In a more sophisticated implementation, we could track which specific fields changed
+            // Include main article fields
+            foreach (array_keys(self::MAIN_ARTICLE_FIELDS) as $fieldKey) {
+                $value = $article->$fieldKey;
+                if ($value !== null) {
+                    $changedFields[] = $fieldKey;
+                }
+            }
+            // Include extraFields
             foreach (array_keys(self::FIELD_MAPPING) as $fieldKey) {
                 $config = self::FIELD_MAPPING[$fieldKey];
                 $value = $this->getFieldValue($article, $config);
