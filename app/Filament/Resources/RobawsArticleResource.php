@@ -503,6 +503,105 @@ class RobawsArticleResource extends Resource
                             ->visible(fn ($record) => !empty($record?->purchase_price_breakdown) && is_array($record->purchase_price_breakdown))
                             ->columnSpanFull()
                             ->dehydrated(false),
+                        Forms\Components\Placeholder::make('max_dimensions_breakdown_display')
+                            ->label('Max Dimensions & Weight')
+                            ->content(function ($record) {
+                                $breakdown = $record->max_dimensions_breakdown ?? [];
+                                if (empty($breakdown) || !is_array($breakdown)) {
+                                    return new \Illuminate\Support\HtmlString('<p class="text-gray-500">No max dimensions data available</p>');
+                                }
+                                
+                                $html = '<div class="space-y-3">';
+                                
+                                // Max Dimensions
+                                if (isset($breakdown['max_length_cm']) || isset($breakdown['max_width_cm']) || isset($breakdown['max_height_cm'])) {
+                                    $dims = [];
+                                    if (isset($breakdown['max_length_cm'])) {
+                                        $dims[] = 'L: ' . number_format((float) $breakdown['max_length_cm'], 0, ',', '') . 'cm';
+                                    }
+                                    if (isset($breakdown['max_width_cm'])) {
+                                        $dims[] = 'W: ' . number_format((float) $breakdown['max_width_cm'], 0, ',', '') . 'cm';
+                                    }
+                                    if (isset($breakdown['max_height_cm'])) {
+                                        $dims[] = 'H: ' . number_format((float) $breakdown['max_height_cm'], 0, ',', '') . 'cm';
+                                    }
+                                    if (!empty($dims)) {
+                                        $html .= '<div class="border-b border-gray-200 dark:border-gray-700 pb-2">';
+                                        $html .= '<div class="font-semibold text-gray-700 dark:text-gray-300 mb-1">Max Dimensions</div>';
+                                        $html .= '<div class="text-sm text-gray-900 dark:text-gray-100">' . htmlspecialchars(implode(' × ', $dims)) . '</div>';
+                                        $html .= '</div>';
+                                    }
+                                }
+                                
+                                // Max Weight
+                                if (isset($breakdown['max_weight_kg'])) {
+                                    $weight = number_format((float) $breakdown['max_weight_kg'], 0, ',', '');
+                                    $html .= '<div class="border-b border-gray-200 dark:border-gray-700 pb-2">';
+                                    $html .= '<div class="font-semibold text-gray-700 dark:text-gray-300 mb-1">Max Weight</div>';
+                                    $html .= '<div class="text-sm text-gray-900 dark:text-gray-100">' . htmlspecialchars("{$weight}kg") . '</div>';
+                                    $html .= '</div>';
+                                }
+                                
+                                // Max CBM
+                                if (isset($breakdown['max_cbm'])) {
+                                    $cbm = number_format((float) $breakdown['max_cbm'], 2, ',', '');
+                                    $html .= '<div class="border-b border-gray-200 dark:border-gray-700 pb-2">';
+                                    $html .= '<div class="font-semibold text-gray-700 dark:text-gray-300 mb-1">Max CBM</div>';
+                                    $html .= '<div class="text-sm text-gray-900 dark:text-gray-100">' . htmlspecialchars($cbm) . '</div>';
+                                    $html .= '</div>';
+                                }
+                                
+                                // Metadata
+                                $html .= '<div class="grid grid-cols-2 gap-2 text-sm">';
+                                if (!empty($breakdown['carrier_name'])) {
+                                    $html .= '<div><span class="text-gray-600 dark:text-gray-400">Carrier:</span> <span class="font-medium text-gray-900 dark:text-gray-100">' . htmlspecialchars($breakdown['carrier_name']) . '</span></div>';
+                                }
+                                if (!empty($breakdown['port_name'])) {
+                                    $html .= '<div><span class="text-gray-600 dark:text-gray-400">Port:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($breakdown['port_name']) . '</span></div>';
+                                }
+                                if (!empty($breakdown['vehicle_category'])) {
+                                    $html .= '<div><span class="text-gray-600 dark:text-gray-400">Vehicle Category:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars(ucfirst(str_replace('_', ' ', $breakdown['vehicle_category']))) . '</span></div>';
+                                }
+                                if (!empty($breakdown['effective_from'])) {
+                                    try {
+                                        $date = \Carbon\Carbon::parse($breakdown['effective_from'])->format('d-m-Y');
+                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Effective From:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($date) . '</span></div>';
+                                    } catch (\Exception $e) {
+                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Effective From:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($breakdown['effective_from']) . '</span></div>';
+                                    }
+                                }
+                                if (!empty($breakdown['effective_to'])) {
+                                    try {
+                                        $date = \Carbon\Carbon::parse($breakdown['effective_to'])->format('d-m-Y');
+                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Effective To:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($date) . '</span></div>';
+                                    } catch (\Exception $e) {
+                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Effective To:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($breakdown['effective_to']) . '</span></div>';
+                                    }
+                                }
+                                if (!empty($breakdown['update_date'])) {
+                                    try {
+                                        $date = \Carbon\Carbon::parse($breakdown['update_date'])->format('d-m-Y');
+                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Update Date:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($date) . '</span></div>';
+                                    } catch (\Exception $e) {
+                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Update Date:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($breakdown['update_date']) . '</span></div>';
+                                    }
+                                }
+                                if (!empty($breakdown['validity_date'])) {
+                                    try {
+                                        $date = \Carbon\Carbon::parse($breakdown['validity_date'])->format('d-m-Y');
+                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Validity Date:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($date) . '</span></div>';
+                                    } catch (\Exception $e) {
+                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Validity Date:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($breakdown['validity_date']) . '</span></div>';
+                                    }
+                                }
+                                $html .= '</div>';
+                                
+                                $html .= '</div>';
+                                return new \Illuminate\Support\HtmlString($html);
+                            })
+                            ->visible(fn ($record) => !empty($record?->max_dimensions_breakdown) && is_array($record->max_dimensions_breakdown))
+                            ->columnSpanFull()
+                            ->dehydrated(false),
                     ])
                     ->columns(2),
                     

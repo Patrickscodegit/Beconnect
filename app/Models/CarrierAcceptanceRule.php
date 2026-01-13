@@ -113,6 +113,18 @@ class CarrierAcceptanceRule extends Model
                 }
             }
         });
+
+        // Sync to articles when rule is saved (created or updated)
+        static::saved(function ($rule) {
+            $syncService = app(\App\Services\CarrierRules\MaxDimensionsSyncService::class);
+            $syncService->syncRuleToArticles($rule);
+        });
+
+        // When rule is deleted, re-sync affected articles
+        static::deleted(function ($rule) {
+            $syncService = app(\App\Services\CarrierRules\MaxDimensionsSyncService::class);
+            $syncService->syncRuleToArticles($rule);
+        });
     }
 
     public function carrier(): BelongsTo

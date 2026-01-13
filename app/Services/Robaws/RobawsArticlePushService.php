@@ -152,6 +152,13 @@ class RobawsArticlePushService
             'getter' => 'purchase_price_breakdown',
             'formatter' => 'format_purchase_price_breakdown',
         ],
+        'max_dimensions' => [
+            'robaws_field' => 'MAX DIM AND WEIGHT',
+            'type' => 'TEXT',
+            'group' => 'IMPORTANT INFO',
+            'getter' => 'max_dimensions_breakdown',
+            'formatter' => 'format_max_dimensions_breakdown',
+        ],
     ];
 
     public function __construct(RobawsApiClient $apiClient)
@@ -240,6 +247,7 @@ class RobawsArticlePushService
             'article_info' => 'Article Info',
             'unit_price' => 'Unit Price',
             'purchase_price' => 'Purchase Price',
+            'max_dimensions' => 'Max Dimensions & Weight',
         ];
 
         return $labels[$key] ?? ucfirst(str_replace('_', ' ', $key));
@@ -360,6 +368,14 @@ class RobawsArticlePushService
 
                 case 'format_purchase_price_breakdown':
                     $text = $this->formatPurchasePriceBreakdown($value);
+                    if (empty($text)) {
+                        continue 2; // Skip if no content
+                    }
+                    $fieldData['stringValue'] = $text;
+                    break;
+
+                case 'format_max_dimensions_breakdown':
+                    $text = $this->formatMaxDimensionsBreakdown($value);
                     if (empty($text)) {
                         continue 2; // Skip if no content
                     }
@@ -615,6 +631,101 @@ class RobawsArticlePushService
             }
         }
         
+        return implode("\n", $lines);
+    }
+
+    /**
+     * Format max dimensions breakdown as readable text
+     */
+    private function formatMaxDimensionsBreakdown($breakdown): string
+    {
+        if (empty($breakdown) || !is_array($breakdown)) {
+            return '';
+        }
+
+        $lines = [];
+        
+        // Max Dimensions
+        if (isset($breakdown['max_length_cm']) || isset($breakdown['max_width_cm']) || isset($breakdown['max_height_cm'])) {
+            $dims = [];
+            if (isset($breakdown['max_length_cm'])) {
+                $dims[] = 'L: ' . number_format((float) $breakdown['max_length_cm'], 0, '.', '') . 'cm';
+            }
+            if (isset($breakdown['max_width_cm'])) {
+                $dims[] = 'W: ' . number_format((float) $breakdown['max_width_cm'], 0, '.', '') . 'cm';
+            }
+            if (isset($breakdown['max_height_cm'])) {
+                $dims[] = 'H: ' . number_format((float) $breakdown['max_height_cm'], 0, '.', '') . 'cm';
+            }
+            if (!empty($dims)) {
+                $lines[] = 'Max Dimensions: ' . implode(' × ', $dims);
+                $lines[] = ''; // Empty line
+            }
+        }
+        
+        // Max Weight
+        if (isset($breakdown['max_weight_kg'])) {
+            $weight = number_format((float) $breakdown['max_weight_kg'], 0, '.', '');
+            $lines[] = "Max Weight: {$weight}kg";
+            $lines[] = ''; // Empty line
+        }
+        
+        // Max CBM
+        if (isset($breakdown['max_cbm'])) {
+            $cbm = number_format((float) $breakdown['max_cbm'], 2, '.', '');
+            $lines[] = "Max CBM: {$cbm}";
+            $lines[] = ''; // Empty line
+        }
+        
+        // Metadata
+        if (!empty($breakdown['carrier_name'])) {
+            $lines[] = "Carrier: {$breakdown['carrier_name']}";
+        }
+        
+        if (!empty($breakdown['port_name'])) {
+            $lines[] = "Port: {$breakdown['port_name']}";
+        }
+        
+        if (!empty($breakdown['vehicle_category'])) {
+            $lines[] = "Vehicle Category: " . ucfirst(str_replace('_', ' ', $breakdown['vehicle_category']));
+        }
+        
+        if (!empty($breakdown['effective_from'])) {
+            try {
+                $date = Carbon::parse($breakdown['effective_from'])->format('d-m-Y');
+                $lines[] = "Effective From: {$date}";
+            } catch (\Exception $e) {
+                $lines[] = "Effective From: {$breakdown['effective_from']}";
+            }
+        }
+        
+        if (!empty($breakdown['effective_to'])) {
+            try {
+                $date = Carbon::parse($breakdown['effective_to'])->format('d-m-Y');
+                $lines[] = "Effective To: {$date}";
+            } catch (\Exception $e) {
+                $lines[] = "Effective To: {$breakdown['effective_to']}";
+            }
+        }
+        
+        if (!empty($breakdown['update_date'])) {
+            try {
+                $date = Carbon::parse($breakdown['update_date'])->format('d-m-Y');
+                $lines[] = "Update Date: {$date}";
+            } catch (\Exception $e) {
+                $lines[] = "Update Date: {$breakdown['update_date']}";
+            }
+        }
+        
+        if (!empty($breakdown['validity_date'])) {
+            try {
+                $date = Carbon::parse($breakdown['validity_date'])->format('d-m-Y');
+                $lines[] = "Validity Date: {$date}";
+            } catch (\Exception $e) {
+                $lines[] = "Validity Date: {$breakdown['validity_date']}";
+            }
+        }
+
         return implode("\n", $lines);
     }
 

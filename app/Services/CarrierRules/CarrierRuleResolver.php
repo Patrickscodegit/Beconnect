@@ -86,7 +86,8 @@ class CarrierRuleResolver
                     // Port groups (if any found)
                     if (!empty($portGroupIds)) {
                         foreach ($portGroupIds as $groupId) {
-                            $q->orWhereJsonContains('port_group_ids', $groupId);
+                            $q->orWhereJsonContains('port_group_ids', $groupId)
+                              ->orWhereJsonContains('port_group_ids', (string)$groupId);
                         }
                     }
                 }

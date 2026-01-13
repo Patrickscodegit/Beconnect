@@ -79,6 +79,7 @@ class RobawsArticleCache extends Model
         'sale_price_strategy',
         'cost_price_strategy',
         'purchase_price_breakdown',
+        'max_dimensions_breakdown',
         'margin',
         'weight_kg',
         'vat_tariff_id',
@@ -128,6 +129,7 @@ class RobawsArticleCache extends Model
         'wappy' => 'boolean',
         'composite_items' => 'array',
         'purchase_price_breakdown' => 'array',
+        'max_dimensions_breakdown' => 'array',
     ];
 
     protected static function boot()
