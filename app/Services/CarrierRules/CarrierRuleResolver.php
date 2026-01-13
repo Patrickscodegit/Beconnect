@@ -279,6 +279,8 @@ class CarrierRuleResolver
         $portGroupIds = [];
         if ($portId !== null) {
             $portGroupIds = $this->resolvePortGroupIdsForPort($carrierId, $portId);
+            // Convert to strings since JSON stores them as strings
+            $portGroupIds = array_map('strval', $portGroupIds);
         }
 
         return CarrierSurchargeRule::where('carrier_id', $carrierId)
@@ -369,6 +371,8 @@ class CarrierRuleResolver
         $portGroupIds = [];
         if ($portId !== null) {
             $portGroupIds = $this->resolvePortGroupIdsForPort($carrierId, $portId);
+            // Convert to strings since JSON stores them as strings
+            $portGroupIds = array_map('strval', $portGroupIds);
         }
 
         $maps = CarrierSurchargeArticleMap::where('carrier_id', $carrierId)
