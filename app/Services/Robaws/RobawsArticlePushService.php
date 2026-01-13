@@ -591,24 +591,6 @@ class RobawsArticlePushService
             $lines[] = "Carrier: {$breakdown['carrier_name']}";
         }
         
-        if (!empty($breakdown['effective_from'])) {
-            try {
-                $date = Carbon::parse($breakdown['effective_from'])->format('d-m-Y');
-                $lines[] = "Effective From: {$date}";
-            } catch (\Exception $e) {
-                $lines[] = "Effective From: {$breakdown['effective_from']}";
-            }
-        }
-        
-        if (!empty($breakdown['effective_to'])) {
-            try {
-                $date = Carbon::parse($breakdown['effective_to'])->format('d-m-Y');
-                $lines[] = "Effective To: {$date}";
-            } catch (\Exception $e) {
-                $lines[] = "Effective To: {$breakdown['effective_to']}";
-            }
-        }
-        
         if (!empty($breakdown['source'])) {
             $lines[] = "Source: " . ucfirst($breakdown['source']);
         }
@@ -688,24 +670,6 @@ class RobawsArticlePushService
         
         if (!empty($breakdown['vehicle_category'])) {
             $lines[] = "Vehicle Category: " . ucfirst(str_replace('_', ' ', $breakdown['vehicle_category']));
-        }
-        
-        if (!empty($breakdown['effective_from'])) {
-            try {
-                $date = Carbon::parse($breakdown['effective_from'])->format('d-m-Y');
-                $lines[] = "Effective From: {$date}";
-            } catch (\Exception $e) {
-                $lines[] = "Effective From: {$breakdown['effective_from']}";
-            }
-        }
-        
-        if (!empty($breakdown['effective_to'])) {
-            try {
-                $date = Carbon::parse($breakdown['effective_to'])->format('d-m-Y');
-                $lines[] = "Effective To: {$date}";
-            } catch (\Exception $e) {
-                $lines[] = "Effective To: {$breakdown['effective_to']}";
-            }
         }
         
         if (!empty($breakdown['update_date'])) {

@@ -323,22 +323,6 @@ class ViewRobawsArticle extends ViewRecord
                                 if (!empty($breakdown['carrier_name'])) {
                                     $html .= '<div><span class="text-gray-600 dark:text-gray-400">Carrier:</span> <span class="font-medium text-gray-900 dark:text-gray-100">' . htmlspecialchars($breakdown['carrier_name']) . '</span></div>';
                                 }
-                                if (!empty($breakdown['effective_from'])) {
-                                    try {
-                                        $date = \Carbon\Carbon::parse($breakdown['effective_from'])->format('d-m-Y');
-                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Effective From:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($date) . '</span></div>';
-                                    } catch (\Exception $e) {
-                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Effective From:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($breakdown['effective_from']) . '</span></div>';
-                                    }
-                                }
-                                if (!empty($breakdown['effective_to'])) {
-                                    try {
-                                        $date = \Carbon\Carbon::parse($breakdown['effective_to'])->format('d-m-Y');
-                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Effective To:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($date) . '</span></div>';
-                                    } catch (\Exception $e) {
-                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Effective To:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($breakdown['effective_to']) . '</span></div>';
-                                    }
-                                }
                                 if (!empty($breakdown['last_synced_at'])) {
                                     try {
                                         $date = \Carbon\Carbon::parse($breakdown['last_synced_at'])->format('d-m-Y H:i:s');
@@ -424,22 +408,6 @@ class ViewRobawsArticle extends ViewRecord
                                 }
                                 if (!empty($breakdown['vehicle_category'])) {
                                     $html .= '<div><span class="text-gray-600 dark:text-gray-400">Vehicle Category:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars(ucfirst(str_replace('_', ' ', $breakdown['vehicle_category']))) . '</span></div>';
-                                }
-                                if (!empty($breakdown['effective_from'])) {
-                                    try {
-                                        $date = \Carbon\Carbon::parse($breakdown['effective_from'])->format('d-m-Y');
-                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Effective From:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($date) . '</span></div>';
-                                    } catch (\Exception $e) {
-                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Effective From:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($breakdown['effective_from']) . '</span></div>';
-                                    }
-                                }
-                                if (!empty($breakdown['effective_to'])) {
-                                    try {
-                                        $date = \Carbon\Carbon::parse($breakdown['effective_to'])->format('d-m-Y');
-                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Effective To:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($date) . '</span></div>';
-                                    } catch (\Exception $e) {
-                                        $html .= '<div><span class="text-gray-600 dark:text-gray-400">Effective To:</span> <span class="text-gray-900 dark:text-gray-100">' . htmlspecialchars($breakdown['effective_to']) . '</span></div>';
-                                    }
                                 }
                                 if (!empty($breakdown['update_date'])) {
                                     try {
