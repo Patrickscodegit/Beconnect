@@ -14,6 +14,11 @@ class ViewCarrierRule extends ViewRecord
     {
         return [
             Actions\EditAction::make(),
+            Actions\Action::make('manageMappings')
+                ->label('Manage Freight Mappings')
+                ->icon('heroicon-o-squares-2x2')
+                ->url(fn () => static::getResource()::getUrl('edit-mappings', ['record' => $this->record]))
+                ->color('primary'),
         ];
     }
 }

@@ -169,7 +169,7 @@ class GrimaldiPurchaseRatesOverviewService
             // Build edit URL
             $editUrl = null;
             if ($mapping->carrier_id) {
-                $editUrl = CarrierRuleResource::getUrl('edit', [
+                $editUrl = CarrierRuleResource::getUrl('edit-mappings', [
                     'record' => $mapping->carrier_id
                 ]) . '?mapping_id=' . $mapping->id;
             }
@@ -271,9 +271,9 @@ class GrimaldiPurchaseRatesOverviewService
                         'mapping_id' => null,
                         'carrier_id' => $carrier->id,
                         'edit_url' => null,
-                        'create_url' => CarrierRuleResource::getUrl('edit', [
+                        'create_url' => CarrierRuleResource::getUrl('edit-mappings', [
                             'record' => $carrier->id
-                        ]) . '?port_code=' . urlencode($portCode) . '&category=' . urlencode($category) . '#article_mappings',
+                        ]) . '?port_code=' . urlencode($portCode) . '&category=' . urlencode($category),
                         'article' => null,
                     ];
                 }

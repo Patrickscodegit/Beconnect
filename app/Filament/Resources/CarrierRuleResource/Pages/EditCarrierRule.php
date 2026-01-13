@@ -16,34 +16,11 @@ class EditCarrierRule extends EditRecord
     protected static string $view = 'filament.resources.carrier-rule-resource.pages.edit-carrier-rule';
 
     /**
-     * Mapping ID to focus when page loads (from query parameter)
-     */
-    public ?int $focusMappingId = null;
-    
-    /**
      * Override mount to track record loading and optimize eager loading
      */
     public function mount(int | string $record): void
     {
         parent::mount($record);
-        
-        // Read mapping_id from query parameter for deep linking
-        // In Filament/Livewire, query params might be available after parent::mount()
-        // Try multiple methods to get query parameter
-        $mappingIdParam = request()->input('mapping_id') 
-            ?? request()->get('mapping_id') 
-            ?? request()->query('mapping_id')
-            ?? (isset($_GET['mapping_id']) ? $_GET['mapping_id'] : null);
-        
-        // If still null, try parsing from request URI (handle URL encoding)
-        if (!$mappingIdParam) {
-            $requestUri = urldecode(request()->getRequestUri());
-            if (preg_match('/[?&]mapping_id=(\d+)/', $requestUri, $matches)) {
-                $mappingIdParam = $matches[1];
-            }
-        }
-        
-        $this->focusMappingId = $mappingIdParam ? (int) $mappingIdParam : null;
     }
     
     /**
@@ -51,69 +28,8 @@ class EditCarrierRule extends EditRecord
      */
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        if ($this->record) {
-            // Get mapping_id from query parameter (try multiple methods)
-            $mappingId = request()->input('mapping_id') 
-                ?? request()->get('mapping_id') 
-                ?? request()->query('mapping_id')
-                ?? (isset($_GET['mapping_id']) ? $_GET['mapping_id'] : null);
-            
-            // If still null, try parsing from request URI
-            if (!$mappingId) {
-                $requestUri = urldecode(request()->getRequestUri());
-                if (preg_match('/[?&]mapping_id=(\d+)/', $requestUri, $matches)) {
-                    $mappingId = $matches[1];
-                }
-            }
-            
-            // Check if port_code and category are provided (for creating new mappings)
-            $portCode = request()->input('port_code') 
-                ?? request()->get('port_code') 
-                ?? request()->query('port_code');
-            $category = request()->input('category') 
-                ?? request()->get('category') 
-                ?? request()->query('category');
-            
-            if ($mappingId) {
-                // When deep linking to a specific mapping, load ALL mappings to prevent deletion
-                // Filament Repeater with relationship() uses sync behavior, so if we only load
-                // one mapping, it will delete all others when saving
-                $this->record->load([
-                    'articleMappings' => function ($query) {
-                        $query->orderBy('sort_order', 'asc');
-                        // Do NOT load purchaseTariffs
-                    }
-                ]);
-                
-                // Set active tab to "Freight Mapping" (article_mappings) when mapping_id is present
-                // Filament Tabs store active tab in form state with the tabs component name as key
-                $data['carrier_rules_tabs'] = 'article_mappings';
-            } elseif ($portCode || $category) {
-                // Port code or category provided - user wants to create a new mapping
-                // Load ALL mappings to prevent deletion of existing ones when saving
-                $this->record->load([
-                    'articleMappings' => function ($query) {
-                        $query->orderBy('sort_order', 'asc');
-                        // Do NOT load purchaseTariffs
-                    }
-                ]);
-                
-                // Set active tab to "Freight Mapping"
-                $data['carrier_rules_tabs'] = 'article_mappings';
-                // Store port_code and category for potential use in the form
-                $data['_create_mapping_port_code'] = $portCode;
-                $data['_create_mapping_category'] = $category;
-            } else {
-                // Load all mappings
-                $this->record->load([
-                    'articleMappings' => function ($query) {
-                        $query->orderBy('sort_order', 'asc');
-                        // Do NOT load purchaseTariffs
-                    }
-                ]);
-            }
-        }
-        
+        // Article Mappings are now handled in a separate page (EditCarrierRuleMappings)
+        // No need to load them here to improve page load performance
         return $data;
     }
     
@@ -163,23 +79,17 @@ class EditCarrierRule extends EditRecord
      */
     protected ?array $clausesOrder = null;
     
-    /**
-     * Temporary storage for article mappings order (for sort_order updates)
-     */
-    protected ?array $articleMappingsOrder = null;
 
     protected function getHeaderActions(): array
     {
         return [
             Actions\ViewAction::make(),
             Actions\DeleteAction::make(),
-            Actions\Action::make('sortArticleMappingsByPort')
-                ->label('Sort Freight Mappings')
-                ->icon('heroicon-o-arrows-up-down')
-                ->color('gray')
-                ->action(function () {
-                    $this->sortArticleMappingsByPort();
-                }),
+            Actions\Action::make('manageMappings')
+                ->label('Manage Freight Mappings')
+                ->icon('heroicon-o-squares-2x2')
+                ->url(fn () => static::getResource()::getUrl('edit-mappings', ['record' => $this->record]))
+                ->color('primary'),
         ];
     }
 
@@ -189,13 +99,6 @@ class EditCarrierRule extends EditRecord
      */
     protected function mutateFormDataUsing(array $data): array
     {
-        // If mapping_id is present, ensure the Freight Mapping tab is active
-        if ($this->focusMappingId) {
-            // Set active tab to "Freight Mapping" (article_mappings)
-            // Try in mutateFormDataUsing as well (runs after form fill)
-            $data['carrier_rules_tabs'] = 'article_mappings';
-        }
-        
         // For each category group, populate member_categories from members relationship
         if (isset($data['categoryGroups']) && is_array($data['categoryGroups'])) {
             foreach ($data['categoryGroups'] as $key => $group) {
@@ -300,7 +203,6 @@ class EditCarrierRule extends EditRecord
         $surchargeRulesData = $this->getFormStateData('surchargeRules');
         $surchargeArticleMapsData = $this->getFormStateData('surchargeArticleMaps');
         $clausesData = $this->getFormStateData('clauses');
-        $articleMappingsData = $this->getFormStateData('articleMappings');
         $portGroupsData = $this->getFormStateData('portGroups');
 
         // Store member_categories temporarily in the record for afterSave processing
@@ -426,24 +328,6 @@ class EditCarrierRule extends EditRecord
             }
             
             $this->clausesOrder = $clausesOrder;
-        }
-        
-        // Capture article mappings order
-        if ($articleMappingsData && is_array($articleMappingsData)) {
-            $articleMappingsOrder = [];
-            $orderedMappings = array_values($articleMappingsData);
-            
-            foreach ($orderedMappings as $index => $mapping) {
-                $mappingArray = is_array($mapping) ? $mapping : (array) $mapping;
-                if (isset($mappingArray['id'])) {
-                    $articleMappingsOrder[] = [
-                        'id' => $mappingArray['id'],
-                        'sort_order' => $index + 1,
-                    ];
-                }
-            }
-            
-            $this->articleMappingsOrder = $articleMappingsOrder;
         }
         
         // Store member_ports temporarily for port groups
@@ -589,20 +473,6 @@ class EditCarrierRule extends EditRecord
             }
         }
         
-        // Update article mappings sort_order based on form state order
-        if ($this->articleMappingsOrder && is_array($this->articleMappingsOrder) && count($this->articleMappingsOrder) > 0) {
-            $mappingIds = array_column($this->articleMappingsOrder, 'id');
-            $mappings = \App\Models\CarrierArticleMapping::whereIn('id', $mappingIds)->get()->keyBy('id');
-            
-            foreach ($this->articleMappingsOrder as $orderData) {
-                $mapping = $mappings->get($orderData['id']);
-                if ($mapping && $mapping->sort_order != $orderData['sort_order']) {
-                    $mapping->sort_order = $orderData['sort_order'];
-                    $mapping->save();
-                }
-            }
-        }
-
         // Get the stored member_categories data from class property
         $memberCategoriesData = $this->memberCategoriesData;
 
@@ -779,57 +649,6 @@ class EditCarrierRule extends EditRecord
         $this->redirect($this->getResource()::getUrl('edit', ['record' => $this->record]));
     }
 
-    /**
-     * Sort article mappings (freight mappings) alphabetically by port name
-     */
-    public function sortArticleMappingsByPort(): void
-    {
-        $items = $this->record->articleMappings()->with('article')->orderBy('sort_order')->get();
-        
-        $sorted = $items->sortBy(function ($item) {
-            // Get the first port ID from port_ids array
-            $portIds = $item->port_ids ?? [];
-            if (empty($portIds)) {
-                return 'ZZZ'; // Items without ports go to end
-            }
-            
-            // Get the first port name
-            $port = \App\Models\Port::find($portIds[0]);
-            return $port ? $port->name : 'ZZZ';
-        }, SORT_NATURAL | SORT_FLAG_CASE)->values();
-        
-        foreach ($sorted as $index => $item) {
-            $item->sort_order = $index + 1;
-            $item->save();
-        }
-        
-        Notification::make()
-            ->title('Freight Mappings sorted by port name')
-            ->success()
-            ->send();
-        
-        // Redirect to refresh the form with updated sort order
-        $this->redirect($this->getResource()::getUrl('edit', ['record' => $this->record]));
-    }
-
-    /**
-     * Get footer actions - inject auto-focus script
-     */
-    protected function getFooterActions(): array
-    {
-        $actions = parent::getFooterActions() ?? [];
-        return $actions;
-    }
-
-    /**
-     * Get view data - pass focusMappingId to view
-     */
-    public function getViewData(): array
-    {
-        return array_merge(parent::getViewData() ?? [], [
-            'focusMappingId' => $this->focusMappingId,
-        ]);
-    }
 }
 
 
