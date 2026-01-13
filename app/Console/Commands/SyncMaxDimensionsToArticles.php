@@ -53,11 +53,21 @@ class SyncMaxDimensionsToArticles extends Command
         
         // Filter to only articles missing breakdown if requested
         if ($missingOnly) {
-            $articlesWithBreakdown = \App\Models\RobawsArticleCache::whereNotNull('max_dimensions_breakdown')
-                ->whereRaw("max_dimensions_breakdown::text != 'null'")
-                ->whereRaw("max_dimensions_breakdown::text != '[]'")
-                ->pluck('id')
-                ->toArray();
+            $driver = \DB::getDriverName();
+            if ($driver === 'pgsql') {
+                $articlesWithBreakdown = \App\Models\RobawsArticleCache::whereNotNull('max_dimensions_breakdown')
+                    ->whereRaw("max_dimensions_breakdown::text != 'null'")
+                    ->whereRaw("max_dimensions_breakdown::text != '[]'")
+                    ->pluck('id')
+                    ->toArray();
+            } else {
+                // SQLite/MySQL - check JSON is not null and not empty array
+                $articlesWithBreakdown = \App\Models\RobawsArticleCache::whereNotNull('max_dimensions_breakdown')
+                    ->whereRaw("json_type(max_dimensions_breakdown) IS NOT NULL")
+                    ->whereRaw("json_type(max_dimensions_breakdown) != 'null'")
+                    ->pluck('id')
+                    ->toArray();
+            }
             
             $query->whereNotIn('id', $articlesWithBreakdown);
             

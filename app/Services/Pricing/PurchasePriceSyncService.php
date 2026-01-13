@@ -40,13 +40,13 @@ class PurchasePriceSyncService
             // Build detailed breakdown
             $breakdown = $this->buildPurchasePriceBreakdown($mostRecentTariff, $article);
 
-            // Update article
+            // Update article (use saveQuietly to prevent triggering model events and infinite loops)
             $article->cost_price = $totalCost;
             if (!$article->currency && $mostRecentTariff->currency) {
                 $article->currency = $mostRecentTariff->currency;
             }
             $article->purchase_price_breakdown = $breakdown;
-            $article->save();
+            $article->saveQuietly();
         } else {
             // No active tariffs, clear purchase price data
             $this->clearPurchasePriceForArticle($article);
@@ -60,7 +60,7 @@ class PurchasePriceSyncService
     {
         $article->cost_price = null;
         $article->purchase_price_breakdown = null;
-        $article->save();
+        $article->saveQuietly();
     }
 
     /**

@@ -148,6 +148,40 @@ class RobawsArticleCache extends Model
             // Treat NULL is_parent_item as false
             $article->is_parent_article = $article->is_parent_item ?? false;
         });
+
+        // Auto-sync max dimensions and purchase price breakdown when article is created/updated
+        static::saved(function ($article) {
+            // Track if critical fields changed
+            $criticalFieldsChanged = $article->wasRecentlyCreated 
+                || $article->wasChanged('shipping_carrier_id')
+                || $article->wasChanged('pod_port_id')
+                || $article->wasChanged('commodity_type');
+            
+            // Only sync if article has required fields
+            if ($criticalFieldsChanged && $article->shipping_carrier_id && $article->pod_port_id) {
+                // Sync max dimensions
+                try {
+                    $maxDimensionsService = app(\App\Services\CarrierRules\MaxDimensionsSyncService::class);
+                    $maxDimensionsService->syncActiveRuleForArticle($article);
+                } catch (\Exception $e) {
+                    \Log::warning('Failed to sync max dimensions for article', [
+                        'article_id' => $article->id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+                
+                // Sync purchase price breakdown
+                try {
+                    $purchasePriceService = app(\App\Services\Pricing\PurchasePriceSyncService::class);
+                    $purchasePriceService->syncActiveTariffForArticle($article);
+                } catch (\Exception $e) {
+                    \Log::warning('Failed to sync purchase price breakdown for article', [
+                        'article_id' => $article->id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+        });
     }
 
     /**
