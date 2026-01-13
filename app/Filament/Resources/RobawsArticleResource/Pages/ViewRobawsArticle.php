@@ -254,7 +254,7 @@ class ViewRobawsArticle extends ViewRecord
                     ->columns(3)
                     ->collapsible(),
 
-                Infolists\Components\Section::make('Purchase price - max dimensions - max weight')
+                Infolists\Components\Section::make('Purchase Price')
                     ->schema([
                         Infolists\Components\TextEntry::make('cost_price')
                             ->label('Total Purchase Cost')
@@ -358,6 +358,14 @@ class ViewRobawsArticle extends ViewRecord
                             ->html()
                             ->columnSpanFull()
                             ->visible(fn ($record): bool => !empty($record->purchase_price_breakdown) && is_array($record->purchase_price_breakdown)),
+                    ])
+                    ->columns(1)
+                    ->collapsible()
+                    ->collapsed(false)
+                    ->visible(fn ($record): bool => $record->cost_price !== null || (!empty($record->purchase_price_breakdown) && is_array($record->purchase_price_breakdown))),
+
+                Infolists\Components\Section::make('Max Dimensions & Weight')
+                    ->schema([
                         Infolists\Components\TextEntry::make('max_dimensions_breakdown')
                             ->label('Max Dimensions & Weight')
                             ->getStateUsing(function ($record) {
@@ -461,7 +469,7 @@ class ViewRobawsArticle extends ViewRecord
                     ->columns(1)
                     ->collapsible()
                     ->collapsed(false)
-                    ->visible(fn ($record): bool => $record->cost_price !== null || (!empty($record->purchase_price_breakdown) && is_array($record->purchase_price_breakdown))),
+                    ->visible(fn ($record): bool => !empty($record->max_dimensions_breakdown) && is_array($record->max_dimensions_breakdown)),
 
                 Infolists\Components\Section::make('Notes & Extra Information')
                     ->schema([
