@@ -59,9 +59,10 @@ class MaxDimensionsSyncService
             // Build detailed breakdown
             $breakdown = $this->buildMaxDimensionsBreakdown($rule, $article);
 
-            // Update article (use saveQuietly to prevent triggering model events and infinite loops)
-            $article->max_dimensions_breakdown = $breakdown;
-            $article->saveQuietly();
+            // Update article (use updateQuietly with explicit field list to prevent triggering model events and only update intended fields)
+            $article->updateQuietly([
+                'max_dimensions_breakdown' => $breakdown,
+            ]);
         } else {
             // No active rule, clear max dimensions data
             $this->clearMaxDimensionsForArticle($article);
@@ -73,8 +74,9 @@ class MaxDimensionsSyncService
      */
     public function clearMaxDimensionsForArticle(RobawsArticleCache $article): void
     {
-        $article->max_dimensions_breakdown = null;
-        $article->saveQuietly();
+        $article->updateQuietly([
+            'max_dimensions_breakdown' => null,
+        ]);
     }
 
     /**
