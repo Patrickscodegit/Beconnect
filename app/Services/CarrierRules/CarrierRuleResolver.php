@@ -66,6 +66,8 @@ class CarrierRuleResolver
         $portGroupIds = [];
         if ($portId !== null) {
             $portGroupIds = $this->resolvePortGroupIdsForPort($carrierId, $portId);
+            // Convert to strings since JSON stores them as strings
+            $portGroupIds = array_map('strval', $portGroupIds);
         }
 
         $rules = CarrierAcceptanceRule::where('carrier_id', $carrierId)
@@ -84,10 +86,10 @@ class CarrierRuleResolver
                       ->orWhereJsonContains('port_ids', $portId);
                     
                     // Port groups (if any found)
+                    // portGroupIds are already converted to strings above
                     if (!empty($portGroupIds)) {
                         foreach ($portGroupIds as $groupId) {
-                            $q->orWhereJsonContains('port_group_ids', $groupId)
-                              ->orWhereJsonContains('port_group_ids', (string)$groupId);
+                            $q->orWhereJsonContains('port_group_ids', $groupId);
                         }
                     }
                 }
@@ -103,13 +105,17 @@ class CarrierRuleResolver
                 }
             })
             ->where(function($q) use ($categoryGroupId) {
-                $q->where(function ($q2) {
-                    $q2->whereNull('category_group_id')->whereNull('category_group_ids');
-                });
-                if ($categoryGroupId !== null) {
-                    $q->orWhere('category_group_id', $categoryGroupId)
-                      ->orWhereJsonContains('category_group_ids', (string)$categoryGroupId)
-                      ->orWhereJsonContains('category_group_ids', (int)$categoryGroupId);
+                // If categoryGroupId is null, match all rules (don't filter by category group)
+                if ($categoryGroupId === null) {
+                    $q->whereRaw('1 = 1'); // Always true - match all
+                } else {
+                    // Match rules with null category_group OR rules that match the provided categoryGroupId
+                    $q->where(function ($q2) {
+                        $q2->whereNull('category_group_id')->whereNull('category_group_ids');
+                    })
+                    ->orWhere('category_group_id', $categoryGroupId)
+                    ->orWhereJsonContains('category_group_ids', (string)$categoryGroupId)
+                    ->orWhereJsonContains('category_group_ids', (int)$categoryGroupId);
                 }
             })
             ->where(function ($q) use ($vesselName) {
@@ -308,13 +314,17 @@ class CarrierRuleResolver
                 }
             })
             ->where(function($q) use ($categoryGroupId) {
-                $q->where(function ($q2) {
-                    $q2->whereNull('category_group_id')->whereNull('category_group_ids');
-                });
-                if ($categoryGroupId !== null) {
-                    $q->orWhere('category_group_id', $categoryGroupId)
-                      ->orWhereJsonContains('category_group_ids', (string)$categoryGroupId)
-                      ->orWhereJsonContains('category_group_ids', (int)$categoryGroupId);
+                // If categoryGroupId is null, match all rules (don't filter by category group)
+                if ($categoryGroupId === null) {
+                    $q->whereRaw('1 = 1'); // Always true - match all
+                } else {
+                    // Match rules with null category_group OR rules that match the provided categoryGroupId
+                    $q->where(function ($q2) {
+                        $q2->whereNull('category_group_id')->whereNull('category_group_ids');
+                    })
+                    ->orWhere('category_group_id', $categoryGroupId)
+                    ->orWhereJsonContains('category_group_ids', (string)$categoryGroupId)
+                    ->orWhereJsonContains('category_group_ids', (int)$categoryGroupId);
                 }
             })
             ->where(function ($q) use ($vesselName) {
@@ -395,13 +405,17 @@ class CarrierRuleResolver
                 }
             })
             ->where(function($q) use ($categoryGroupId) {
-                $q->where(function ($q2) {
-                    $q2->whereNull('category_group_id')->whereNull('category_group_ids');
-                });
-                if ($categoryGroupId !== null) {
-                    $q->orWhere('category_group_id', $categoryGroupId)
-                      ->orWhereJsonContains('category_group_ids', (string)$categoryGroupId)
-                      ->orWhereJsonContains('category_group_ids', (int)$categoryGroupId);
+                // If categoryGroupId is null, match all rules (don't filter by category group)
+                if ($categoryGroupId === null) {
+                    $q->whereRaw('1 = 1'); // Always true - match all
+                } else {
+                    // Match rules with null category_group OR rules that match the provided categoryGroupId
+                    $q->where(function ($q2) {
+                        $q2->whereNull('category_group_id')->whereNull('category_group_ids');
+                    })
+                    ->orWhere('category_group_id', $categoryGroupId)
+                    ->orWhereJsonContains('category_group_ids', (string)$categoryGroupId)
+                    ->orWhereJsonContains('category_group_ids', (int)$categoryGroupId);
                 }
             })
             ->where(function ($q) use ($vesselName) {

@@ -3,6 +3,7 @@
 namespace App\Services\CarrierRules;
 
 use App\Models\CarrierAcceptanceRule;
+use App\Models\CarrierPortGroupMember;
 use App\Models\RobawsArticleCache;
 use App\Services\CarrierRules\CarrierRuleResolver;
 use Carbon\Carbon;
@@ -145,8 +146,11 @@ class MaxDimensionsSyncService
         } elseif ($rule->port_ids && is_array($rule->port_ids) && !empty($rule->port_ids)) {
             $query->whereIn('pod_port_id', $rule->port_ids);
         } elseif ($rule->port_group_ids && is_array($rule->port_group_ids) && !empty($rule->port_group_ids)) {
-            // For port groups, we'd need to resolve port IDs from groups
-            // For now, skip port group filtering (can be enhanced later)
+            // Resolve port IDs from port groups
+            $portIdsFromGroups = $this->getPortIdsFromPortGroups($rule->carrier_id, $rule->port_group_ids);
+            if (!empty($portIdsFromGroups)) {
+                $query->whereIn('pod_port_id', $portIdsFromGroups);
+            }
         }
 
         // Filter by vehicle category if rule has vehicle category scope
@@ -186,5 +190,29 @@ class MaxDimensionsSyncService
         ];
 
         return $reverseMapping[$vehicleCategory] ?? [];
+    }
+
+    /**
+     * Get all port IDs that belong to the given port group IDs
+     */
+    private function getPortIdsFromPortGroups(int $carrierId, array $portGroupIds): array
+    {
+        return CarrierPortGroupMember::query()
+            ->join('carrier_port_groups', 'carrier_port_group_members.carrier_port_group_id', '=', 'carrier_port_groups.id')
+            ->where('carrier_port_groups.carrier_id', $carrierId)
+            ->whereIn('carrier_port_groups.id', $portGroupIds)
+            ->where('carrier_port_group_members.is_active', true)
+            ->where('carrier_port_groups.is_active', true)
+            ->where(function ($q) {
+                $q->whereNull('carrier_port_groups.effective_from')
+                  ->orWhere('carrier_port_groups.effective_from', '<=', now());
+            })
+            ->where(function ($q) {
+                $q->whereNull('carrier_port_groups.effective_to')
+                  ->orWhere('carrier_port_groups.effective_to', '>=', now());
+            })
+            ->pluck('carrier_port_group_members.port_id')
+            ->unique()
+            ->toArray();
     }
 }
