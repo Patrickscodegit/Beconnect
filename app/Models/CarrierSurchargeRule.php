@@ -71,6 +71,16 @@ class CarrierSurchargeRule extends Model
                 }
             }
         });
+
+        // Auto-set is_surcharge flag on article when assigned to surcharge rule
+        static::saved(function ($rule) {
+            if ($rule->article_id) {
+                $article = RobawsArticleCache::find($rule->article_id);
+                if ($article && !$article->is_surcharge) {
+                    $article->updateQuietly(['is_surcharge' => true]);
+                }
+            }
+        });
     }
 
     public function carrier(): BelongsTo

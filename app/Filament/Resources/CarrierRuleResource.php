@@ -1384,6 +1384,21 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->preload()
                                             ->nullable()
                                             ->helperText('Select the Robaws article to use for this surcharge')
+                                            ->suffixAction(
+                                                Forms\Components\Actions\Action::make('viewArticle')
+                                                    ->icon('heroicon-o-arrow-top-right-on-square')
+                                                    ->iconButton()
+                                                    ->url(function ($get) {
+                                                        $articleId = $get('article_id');
+                                                        if ($articleId) {
+                                                            return \App\Filament\Resources\RobawsArticleResource::getUrl('view', ['record' => $articleId]);
+                                                        }
+                                                        return null;
+                                                    })
+                                                    ->openUrlInNewTab()
+                                                    ->visible(fn ($get) => !empty($get('article_id')))
+                                                    ->tooltip('View article')
+                                            )
                                             ->columnSpan(1),
 
                                         Forms\Components\TextInput::make('name')
