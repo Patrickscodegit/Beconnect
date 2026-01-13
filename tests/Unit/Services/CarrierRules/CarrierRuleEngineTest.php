@@ -5,7 +5,6 @@ namespace Tests\Unit\Services\CarrierRules;
 use App\Models\CarrierAcceptanceRule;
 use App\Models\CarrierCategoryGroup;
 use App\Models\CarrierCategoryGroupMember;
-use App\Models\CarrierSurchargeArticleMap;
 use App\Models\CarrierSurchargeRule;
 use App\Models\CarrierTransformRule;
 use App\Models\Port;
@@ -229,7 +228,7 @@ class CarrierRuleEngineTest extends TestCase
             'last_synced_at' => now(),
         ]);
 
-        // Create surcharge rule
+        // Create surcharge rule with article_id
         CarrierSurchargeRule::create([
             'carrier_id' => $this->carrier->id,
             'event_code' => 'TOWING',
@@ -237,16 +236,7 @@ class CarrierRuleEngineTest extends TestCase
             'calc_mode' => 'PER_UNIT',
             'params' => ['amount' => 150],
             'priority' => 10,
-            'is_active' => true,
-            'effective_from' => now()->subYear(),
-        ]);
-
-        // Create article map
-        CarrierSurchargeArticleMap::create([
-            'carrier_id' => $this->carrier->id,
-            'event_code' => 'TOWING',
             'article_id' => $article->id,
-            'qty_mode' => 'PER_UNIT',
             'is_active' => true,
             'effective_from' => now()->subYear(),
         ]);

@@ -10,7 +10,6 @@ use App\Models\CarrierPortGroup;
 use App\Models\CarrierAcceptanceRule;
 use App\Models\CarrierTransformRule;
 use App\Models\CarrierSurchargeRule;
-use App\Models\CarrierSurchargeArticleMap;
 use App\Models\CarrierClause;
 use App\Models\RobawsArticleCache;
 use App\Models\ShippingCarrier;
@@ -54,7 +53,6 @@ class ImportGrimaldiFromProduction extends Command
         $acceptanceRulesFile = $inputDir . '/grimaldi_acceptance_rules.json';
         $transformRulesFile = $inputDir . '/grimaldi_transform_rules.json';
         $surchargeRulesFile = $inputDir . '/grimaldi_surcharge_rules.json';
-        $surchargeArticleMapsFile = $inputDir . '/grimaldi_surcharge_article_maps.json';
         $clausesFile = $inputDir . '/grimaldi_clauses.json';
 
         if (!file_exists($mappingsFile)) {
@@ -73,7 +71,6 @@ class ImportGrimaldiFromProduction extends Command
         $acceptanceRulesData = file_exists($acceptanceRulesFile) ? json_decode(file_get_contents($acceptanceRulesFile), true) : [];
         $transformRulesData = file_exists($transformRulesFile) ? json_decode(file_get_contents($transformRulesFile), true) : [];
         $surchargeRulesData = file_exists($surchargeRulesFile) ? json_decode(file_get_contents($surchargeRulesFile), true) : [];
-        $surchargeArticleMapsData = file_exists($surchargeArticleMapsFile) ? json_decode(file_get_contents($surchargeArticleMapsFile), true) : [];
         $clausesData = file_exists($clausesFile) ? json_decode(file_get_contents($clausesFile), true) : [];
 
         $this->info("✅ Loaded " . count($mappingsData) . " mappings");
@@ -83,7 +80,6 @@ class ImportGrimaldiFromProduction extends Command
         $this->info("✅ Loaded " . count($acceptanceRulesData) . " acceptance rules");
         $this->info("✅ Loaded " . count($transformRulesData) . " transform rules");
         $this->info("✅ Loaded " . count($surchargeRulesData) . " surcharge rules");
-        $this->info("✅ Loaded " . count($surchargeArticleMapsData) . " surcharge article maps");
         $this->info("✅ Loaded " . count($clausesData) . " clauses");
         $this->newLine();
 
@@ -375,8 +371,6 @@ class ImportGrimaldiFromProduction extends Command
         $transformRulesUpdated = 0;
         $surchargeRulesCreated = 0;
         $surchargeRulesUpdated = 0;
-        $surchargeMapsCreated = 0;
-        $surchargeMapsUpdated = 0;
         $clausesCreated = 0;
         $clausesUpdated = 0;
 
@@ -449,7 +443,7 @@ class ImportGrimaldiFromProduction extends Command
             $this->newLine();
         }
 
-        // Import surcharge rules
+        // Import surcharge rules (includes article_id)
         if (!empty($surchargeRulesData)) {
             $this->info('💰 Importing surcharge rules...');
             $surchargeRulesCreated = 0;
@@ -462,6 +456,14 @@ class ImportGrimaldiFromProduction extends Command
                 }
 
                 $mappedData = $this->mapRuleData($ruleData, $portsRef, $portCodeToLocalId, $portGroupCodeToLocalId, $categoryGroupCodeToLocalId, $categoryGroupsRef, $portGroupsRefData);
+
+                // Map article_id from article_code if present
+                if (!empty($ruleData['article_code'])) {
+                    $article = RobawsArticleCache::where('article_code', $ruleData['article_code'])->first();
+                    if ($article) {
+                        $mappedData['article_id'] = $article->id;
+                    }
+                }
 
                 $rule = CarrierSurchargeRule::updateOrCreate(
                     [
@@ -481,53 +483,6 @@ class ImportGrimaldiFromProduction extends Command
             }
 
             $this->info("✅ Surcharge rules: {$surchargeRulesCreated} created, {$surchargeRulesUpdated} updated");
-            $this->newLine();
-        }
-
-        // Import surcharge article maps
-        if (!empty($surchargeArticleMapsData)) {
-            $this->info('📋 Importing surcharge article maps...');
-            $surchargeMapsCreated = 0;
-            $surchargeMapsUpdated = 0;
-
-            foreach ($surchargeArticleMapsData as $mapData) {
-                if ($dryRun) {
-                    $surchargeMapsCreated++;
-                    continue;
-                }
-
-                // Find article by code
-                $article = null;
-                if (!empty($mapData['article_code'])) {
-                    $article = RobawsArticleCache::where('article_code', $mapData['article_code'])->first();
-                }
-
-                if (!$article) {
-                    continue;
-                }
-
-                $mappedData = $this->mapRuleData($mapData, $portsRef, $portCodeToLocalId, $portGroupCodeToLocalId, $categoryGroupCodeToLocalId);
-
-                $map = CarrierSurchargeArticleMap::updateOrCreate(
-                    [
-                        'carrier_id' => $carrier->id,
-                        'article_id' => $article->id,
-                        'event_code' => $mapData['event_code'],
-                    ],
-                    array_merge($mappedData, [
-                        'carrier_id' => $carrier->id,
-                        'article_id' => $article->id,
-                    ])
-                );
-
-                if ($map->wasRecentlyCreated) {
-                    $surchargeMapsCreated++;
-                } else {
-                    $surchargeMapsUpdated++;
-                }
-            }
-
-            $this->info("✅ Surcharge article maps: {$surchargeMapsCreated} created, {$surchargeMapsUpdated} updated");
             $this->newLine();
         }
 
@@ -611,10 +566,6 @@ class ImportGrimaldiFromProduction extends Command
         if (!empty($surchargeRulesData)) {
             $summary[] = ['Surcharge Rules Created', $surchargeRulesCreated ?? 0];
             $summary[] = ['Surcharge Rules Updated', $surchargeRulesUpdated ?? 0];
-        }
-        if (!empty($surchargeArticleMapsData)) {
-            $summary[] = ['Surcharge Maps Created', $surchargeMapsCreated ?? 0];
-            $summary[] = ['Surcharge Maps Updated', $surchargeMapsUpdated ?? 0];
         }
         if (!empty($clausesData)) {
             $summary[] = ['Clauses Created', $clausesCreated ?? 0];

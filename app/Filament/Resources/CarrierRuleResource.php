@@ -1335,6 +1335,57 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->helperText('Unique identifier for this surcharge event')
                                             ->columnSpan(1),
 
+                                        Forms\Components\Select::make('article_id')
+                                            ->label('Robaws Article')
+                                            ->options(function ($get, $livewire) {
+                                                $carrierId = null;
+                                                
+                                                // Get carrier_id from livewire record (parent carrier)
+                                                if (isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
+                                                    try {
+                                                        $record = $livewire->getRecord();
+                                                        $carrierId = $record ? $record->id : null;
+                                                    } catch (\Throwable $e) {
+                                                        // Silent fail, will return all articles if carrier not found
+                                                    }
+                                                }
+                                                
+                                                // Build query - allow all active articles (surcharge articles are typically not parent items)
+                                                $query = \App\Models\RobawsArticleCache::query()
+                                                    ->where('is_active', true);
+                                                
+                                                // Filter articles by carrier to prevent wrong carrier mappings
+                                                // Universal articles (null shipping_carrier_id) can be mapped to any carrier
+                                                if ($carrierId) {
+                                                    $query->where(function ($q) use ($carrierId) {
+                                                        $q->where('shipping_carrier_id', $carrierId)
+                                                          ->orWhereNull('shipping_carrier_id'); // Allow universal articles
+                                                    });
+                                                }
+                                                
+                                                return $query->orderBy('article_name')
+                                                    ->get()
+                                                    ->mapWithKeys(function ($article) {
+                                                        return [$article->id => $article->article_name . ' (' . ($article->article_code ?? 'N/A') . ')'];
+                                                    });
+                                            })
+                                            ->getOptionLabelUsing(function ($value) {
+                                                if (!$value) {
+                                                    return null;
+                                                }
+                                                try {
+                                                    $article = \App\Models\RobawsArticleCache::find($value);
+                                                    return $article ? ($article->article_name . ' (' . ($article->article_code ?? 'N/A') . ')') : null;
+                                                } catch (\Throwable $e) {
+                                                    return null;
+                                                }
+                                            })
+                                            ->searchable()
+                                            ->preload()
+                                            ->nullable()
+                                            ->helperText('Select the Robaws article to use for this surcharge')
+                                            ->columnSpan(1),
+
                                         Forms\Components\TextInput::make('name')
                                             ->label('Surcharge Name')
                                             ->required()
@@ -1526,292 +1577,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                     ->columnSpanFull(),
                             ]),
 
-                        // Tab 6: Article Mapping
-                        Forms\Components\Tabs\Tab::make('article_mapping')
-                            ->label('Article Mapping')
-                            ->icon('heroicon-o-link')
-                            ->schema([
-                                Forms\Components\Repeater::make('surchargeArticleMaps')
-                                    ->relationship('surchargeArticleMaps')
-                                    ->reorderable('sort_order')
-                                    ->collapsible()
-                                    ->collapsed()
-                                    ->mutateRelationshipDataBeforeSaveUsing(function (array $data): array {
-                                        if (!empty($data['category_group_ids'])) {
-                                            $data['vehicle_categories'] = null;
-                                            $data['category_group_id'] = null; // Clear legacy field
-                                        }
-                                        if (!empty($data['vehicle_categories'])) {
-                                            $data['category_group_ids'] = null;
-                                            $data['category_group_id'] = null; // Clear legacy field
-                                        }
-                                        return $data;
-                                    })
-                                    ->schema([
-                                        Forms\Components\Select::make('port_ids')
-                                            ->label('Ports (POD)')
-                                            ->options(function () {
-                                                return \App\Models\Port::orderBy('name')
-                                                    ->get()
-                                                    ->mapWithKeys(function ($port) {
-                                                        return [$port->id => $port->formatFull()];
-                                                    });
-                                            })
-                                            ->searchable()
-                                            ->getSearchResultsUsing(function (string $search) {
-                                                $searchLower = strtolower($search);
-                                                $ports = \App\Models\Port::where(function($q) use ($searchLower) {
-                                                    $q->whereRaw('LOWER(name) LIKE ?', ["%{$searchLower}%"])
-                                                      ->orWhereRaw('LOWER(code) LIKE ?', ["%{$searchLower}%"]);
-                                                })
-                                                ->orWhereHas('aliases', function($q) use ($searchLower) {
-                                                    $q->where('alias_normalized', 'LIKE', "%{$searchLower}%")
-                                                      ->where('is_active', true);
-                                                })
-                                                ->orderBy('name')
-                                                ->get()
-                                                ->unique('id')
-                                                ->mapWithKeys(function ($port) {
-                                                    return [$port->id => $port->formatFull()];
-                                                });
-                                                
-                                                return $ports->all();
-                                            })
-                                            ->multiple()
-                                            ->preload()
-                                            ->helperText('Select one or more ports. Leave empty for global rule. Search includes aliases.')
-                                            ->columnSpan(1),
-
-                                        Forms\Components\Select::make('port_group_ids')
-                                            ->label('Port Groups')
-                                            ->options(function (Forms\Get $get, $livewire) {
-                                                try {
-                                                    $carrierId = null;
-                                                    // Check if livewire is an object before calling method_exists
-                                                    if (isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
-                                                        try {
-                                                            $record = $livewire->getRecord();
-                                                            $carrierId = $record ? $record->id : null;
-                                                        } catch (\Throwable $e) {
-                                                            // Livewire getRecord failed, will return empty array below
-                                                        }
-                                                    }
-                                                    
-                                                    if (!$carrierId) {
-                                                        return [];
-                                                    }
-                                                    
-                                                    return \App\Models\CarrierPortGroup::where('carrier_id', $carrierId)
-                                                        ->active()
-                                                        ->orderBy('sort_order')
-                                                        ->pluck('display_name', 'id')
-                                                        ->toArray();
-                                                } catch (\Throwable $e) {
-                                                    return [];
-                                                }
-                                            })
-                                            ->getOptionLabelUsing(function ($value) {
-                                                if (!$value) {
-                                                    return null;
-                                                }
-                                                try {
-                                                    $group = \App\Models\CarrierPortGroup::find($value);
-                                                    return $group ? $group->display_name : null;
-                                                } catch (\Throwable $e) {
-                                                    return null;
-                                                }
-                                            })
-                                            ->multiple()
-                                            ->preload()
-                                            ->helperText('Select port groups (e.g., WAF, MED). If both Ports and Port Groups are set, rule matches if either matches.')
-                                            ->columnSpan(1),
-
-                                        Forms\Components\Hidden::make('port_id')
-                                            ->dehydrated(false),
-
-                                        Forms\Components\Select::make('vehicle_categories')
-                                            ->label('Vehicle Categories')
-                                            ->options(function () {
-                                                return config('quotation.commodity_types.vehicles.categories', []);
-                                            })
-                                            ->searchable()
-                                            ->multiple()
-                                            ->preload()
-                                            ->helperText('Select one or more vehicle categories. Leave empty for all categories. Note: If Category Group is selected, this field should be empty.')
-                                            ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('category_group_ids')) && empty($get('vehicle_categories'))),
-
-                                        Forms\Components\Hidden::make('vehicle_category')
-                                            ->dehydrated(false),
-
-                                        Forms\Components\Select::make('category_group_ids')
-                                            ->label('Category Groups')
-                                            ->options(function (Forms\Get $get, $livewire) {
-                                                try {
-                                                    $carrierId = null;
-                                                    
-                                                    // Get carrier ID from livewire's record (same pattern as article mappings)
-                                                    if (isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
-                                                        try {
-                                                            $record = $livewire->getRecord();
-                                                            $carrierId = $record ? $record->id : null;
-                                                        } catch (\Throwable $e) {
-                                                            // Livewire getRecord failed, fall through to $get
-                                                        }
-                                                    }
-                                                    
-                                                    // Fallback to $get if livewire method didn't work
-                                                    if (!$carrierId) {
-                                                        $carrierId = $get('../../../../id');
-                                                    }
-                                                    
-                                                    if (!$carrierId) {
-                                                        return [];
-                                                    }
-                                                    
-                                                    return \App\Models\CarrierCategoryGroup::where('carrier_id', $carrierId)
-                                                        ->where('is_active', true)
-                                                        ->orderBy('display_name')
-                                                        ->pluck('display_name', 'id')
-                                                        ->toArray();
-                                                } catch (\Throwable $e) {
-                                                    \Log::error('Category group options error: ' . $e->getMessage());
-                                                    return [];
-                                                }
-                                            })
-                                            ->getOptionLabelUsing(function ($value) {
-                                                if (!$value) {
-                                                    return null;
-                                                }
-                                                try {
-                                                    $group = \App\Models\CarrierCategoryGroup::find($value);
-                                                    return $group ? $group->display_name : null;
-                                                } catch (\Throwable $e) {
-                                                    return null;
-                                                }
-                                            })
-                                            ->multiple()
-                                            ->preload()
-                                            ->helperText('OR use one or more category groups. Note: If Vehicle Categories are selected, this field should be empty.')
-                                            ->columnSpan(1)
-                                            ->disabled(fn ($get) => !empty($get('vehicle_categories')) && empty($get('category_group_ids')))
-                                            ->reactive(),
-
-                                        Forms\Components\Select::make('vessel_names')
-                                            ->label('Vessel Names')
-                                            ->options(function ($get) {
-                                                try {
-                                                    $carrierId = $get('../../../../id');
-                                                    
-                                                    if (!$carrierId) {
-                                                        return [];
-                                                    }
-                                                    
-                                                    return \App\Models\ShippingSchedule::where('carrier_id', $carrierId)
-                                                        ->whereNotNull('vessel_name')
-                                                        ->distinct()
-                                                        ->orderBy('vessel_name')
-                                                        ->pluck('vessel_name', 'vessel_name');
-                                                } catch (\Throwable $e) {
-                                                    return [];
-                                                }
-                                            })
-                                            ->multiple()
-                                            ->helperText('Select one or more vessel names. Leave empty for all vessels.')
-                                            ->columnSpan(1),
-
-                                        Forms\Components\Hidden::make('vessel_name')
-                                            ->dehydrated(false),
-
-                                        Forms\Components\CheckboxList::make('vessel_classes')
-                                            ->label('Vessel Classes')
-                                            ->options(function ($get) {
-                                                try {
-                                                    $carrierId = $get('../../../../id');
-                                                    
-                                                    if (!$carrierId) {
-                                                        return [];
-                                                    }
-                                                    
-                                                    return \App\Models\ShippingSchedule::where('carrier_id', $carrierId)
-                                                        ->whereNotNull('vessel_class')
-                                                        ->distinct()
-                                                        ->orderBy('vessel_class')
-                                                        ->pluck('vessel_class', 'vessel_class');
-                                                } catch (\Throwable $e) {
-                                                    return [];
-                                                }
-                                            })
-                                            ->searchable()
-                                            ->bulkToggleable()
-                                            ->gridDirection('row')
-                                            ->helperText('Select one or more vessel classes. Leave empty for all vessel classes.')
-                                            ->columnSpan(1)
-                                            ->dehydrated(true),
-
-                                        Forms\Components\Hidden::make('vessel_class')
-                                            ->dehydrated(false),
-
-                                        Forms\Components\TextInput::make('event_code')
-                                            ->label('Event Code')
-                                            ->required()
-                                            ->maxLength(50)
-                                            ->helperText('Must match a surcharge rule event_code')
-                                            ->columnSpan(1),
-
-                                        Forms\Components\Select::make('article_id')
-                                            ->label('Robaws Article')
-                                            ->relationship('article', 'article_name')
-                                            ->searchable()
-                                            ->preload()
-                                            ->required()
-                                            ->columnSpan(1),
-
-                                        Forms\Components\Select::make('qty_mode')
-                                            ->label('Quantity Mode')
-                                            ->required()
-                                            ->options([
-                                                'FLAT' => 'Flat',
-                                                'PER_UNIT' => 'Per Unit',
-                                                'PERCENT_OF_BASIC_FREIGHT' => 'Percent of Basic Freight',
-                                                'WEIGHT_TIER' => 'Weight Tier',
-                                                'PER_TON_ABOVE' => 'Per Ton Above',
-                                                'PER_TANK' => 'Per Tank',
-                                                'PER_LM' => 'Per LM',
-                                                'WIDTH_STEP_BLOCKS' => 'Width Step Blocks',
-                                                'WIDTH_LM_BASIS' => 'Width LM Basis',
-                                            ])
-                                            ->columnSpan(1),
-
-                                        Forms\Components\KeyValue::make('params')
-                                            ->label('Override Parameters (JSON)')
-                                            ->helperText('Optional: override default params from surcharge rule')
-                                            ->columnSpanFull(),
-
-                                        Forms\Components\DatePicker::make('effective_from')
-                                            ->label('Effective From')
-                                            ->columnSpan(1),
-
-                                        Forms\Components\DatePicker::make('effective_to')
-                                            ->label('Effective To')
-                                            ->columnSpan(1),
-
-                                        Forms\Components\Toggle::make('is_active')
-                                            ->label('Active')
-                                            ->default(true)
-                                            ->columnSpan(1),
-                                    ])
-                                    ->label('Article Mappings')
-                                    ->defaultItems(0)
-                                    ->itemLabel(fn (array $state): ?string => 
-                                        ($state['event_code'] ?? 'New') . ' → ' . ($state['article_id'] ?? 'Article')
-                                    )
-                                    ->collapsible()
-                                    ->cloneable()
-                                    ->columnSpanFull(),
-                            ]),
-
-                        // Tab 7: Clauses
+                        // Tab 6: Clauses
                         Forms\Components\Tabs\Tab::make('clauses')
                             ->label('Clauses')
                             ->icon('heroicon-o-document-text')

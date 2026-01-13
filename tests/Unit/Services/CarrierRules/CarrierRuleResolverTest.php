@@ -5,7 +5,6 @@ namespace Tests\Unit\Services\CarrierRules;
 use App\Models\CarrierAcceptanceRule;
 use App\Models\CarrierCategoryGroup;
 use App\Models\CarrierCategoryGroupMember;
-use App\Models\CarrierSurchargeArticleMap;
 use App\Models\CarrierSurchargeRule;
 use App\Models\CarrierTransformRule;
 use App\Models\Port;
@@ -298,43 +297,5 @@ class CarrierRuleResolverTest extends TestCase
         $this->assertTrue($rules->contains('event_code', 'TOWING'));
     }
 
-    /** @test */
-    public function it_resolves_article_map_for_event_code()
-    {
-        // Create article
-        $article = RobawsArticleCache::create([
-            'robaws_article_id' => 'TEST001',
-            'article_code' => 'TEST001',
-            'article_name' => 'Test Surcharge',
-            'category' => 'general',
-            'unit_price' => 100,
-            'currency' => 'EUR',
-            'last_synced_at' => now(),
-        ]);
-
-        // Create article map
-        $map = CarrierSurchargeArticleMap::create([
-            'carrier_id' => $this->carrier->id,
-            'event_code' => 'TRACKING_PERCENT',
-            'article_id' => $article->id,
-            'qty_mode' => 'PERCENT_OF_BASIC_FREIGHT',
-            'is_active' => true,
-            'effective_from' => now()->subYear(),
-        ]);
-
-        $result = $this->resolver->resolveArticleMap(
-            $this->carrier->id,
-            null,
-            null,
-            null,
-            'TRACKING_PERCENT',
-            null,
-            null
-        );
-
-        $this->assertNotNull($result);
-        $this->assertEquals($map->id, $result->id);
-        $this->assertEquals($article->id, $result->article_id);
-    }
 }
 

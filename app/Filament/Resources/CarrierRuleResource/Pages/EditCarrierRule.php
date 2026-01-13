@@ -69,10 +69,6 @@ class EditCarrierRule extends EditRecord
      */
     protected ?array $surchargeRulesOrder = null;
     
-    /**
-     * Temporary storage for surcharge article maps order (for sort_order updates)
-     */
-    protected ?array $surchargeArticleMapsOrder = null;
     
     /**
      * Temporary storage for clauses order (for sort_order updates)
@@ -132,7 +128,7 @@ class EditCarrierRule extends EditRecord
         }
 
         // For each rule type's repeater data, migrate single values to arrays if arrays are empty/null
-        foreach (['acceptanceRules', 'transformRules', 'surchargeRules', 'surchargeArticleMaps'] as $ruleType) {
+        foreach (['acceptanceRules', 'transformRules', 'surchargeRules'] as $ruleType) {
             if (isset($data[$ruleType]) && is_array($data[$ruleType])) {
                 foreach ($data[$ruleType] as $key => $rule) {
                     // Migrate single values to arrays if arrays are empty/null
@@ -201,7 +197,6 @@ class EditCarrierRule extends EditRecord
         $acceptanceRulesData = $this->getFormStateData('acceptanceRules');
         $transformRulesData = $this->getFormStateData('transformRules');
         $surchargeRulesData = $this->getFormStateData('surchargeRules');
-        $surchargeArticleMapsData = $this->getFormStateData('surchargeArticleMaps');
         $clausesData = $this->getFormStateData('clauses');
         $portGroupsData = $this->getFormStateData('portGroups');
 
@@ -294,23 +289,6 @@ class EditCarrierRule extends EditRecord
             $this->surchargeRulesOrder = $surchargeRulesOrder;
         }
         
-        // Capture surcharge article maps order
-        if ($surchargeArticleMapsData && is_array($surchargeArticleMapsData)) {
-            $surchargeArticleMapsOrder = [];
-            $orderedMaps = array_values($surchargeArticleMapsData);
-            
-            foreach ($orderedMaps as $index => $map) {
-                $mapArray = is_array($map) ? $map : (array) $map;
-                if (isset($mapArray['id'])) {
-                    $surchargeArticleMapsOrder[] = [
-                        'id' => $mapArray['id'],
-                        'sort_order' => $index + 1,
-                    ];
-                }
-            }
-            
-            $this->surchargeArticleMapsOrder = $surchargeArticleMapsOrder;
-        }
         
         // Capture clauses order
         if ($clausesData && is_array($clausesData)) {
@@ -441,20 +419,6 @@ class EditCarrierRule extends EditRecord
                 if ($rule && $rule->sort_order != $orderData['sort_order']) {
                     $rule->sort_order = $orderData['sort_order'];
                     $rule->save();
-                }
-            }
-        }
-        
-        // Update surcharge article maps sort_order based on form state order
-        if ($this->surchargeArticleMapsOrder && is_array($this->surchargeArticleMapsOrder) && count($this->surchargeArticleMapsOrder) > 0) {
-            $mapIds = array_column($this->surchargeArticleMapsOrder, 'id');
-            $maps = \App\Models\CarrierSurchargeArticleMap::whereIn('id', $mapIds)->get()->keyBy('id');
-            
-            foreach ($this->surchargeArticleMapsOrder as $orderData) {
-                $map = $maps->get($orderData['id']);
-                if ($map && $map->sort_order != $orderData['sort_order']) {
-                    $map->sort_order = $orderData['sort_order'];
-                    $map->save();
                 }
             }
         }

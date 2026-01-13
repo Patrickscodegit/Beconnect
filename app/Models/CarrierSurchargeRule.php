@@ -34,6 +34,7 @@ class CarrierSurchargeRule extends Model
         'effective_from',
         'effective_to',
         'is_active',
+        'article_id',
     ];
 
     protected $casts = [
@@ -87,9 +88,9 @@ class CarrierSurchargeRule extends Model
         return $this->belongsTo(CarrierCategoryGroup::class);
     }
 
-    public function articleMaps(): HasMany
+    public function article(): BelongsTo
     {
-        return $this->hasMany(CarrierSurchargeArticleMap::class, 'event_code', 'event_code');
+        return $this->belongsTo(RobawsArticleCache::class, 'article_id');
     }
 
     /**

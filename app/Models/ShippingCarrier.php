@@ -70,12 +70,6 @@ class ShippingCarrier extends Model
             ->orderBy('sort_order');
     }
 
-    public function surchargeArticleMaps(): HasMany
-    {
-        return $this->hasMany(CarrierSurchargeArticleMap::class, 'carrier_id')
-            ->orderBy('sort_order');
-    }
-
     public function clauses(): HasMany
     {
         return $this->hasMany(CarrierClause::class, 'carrier_id')

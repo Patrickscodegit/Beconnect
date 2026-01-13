@@ -5,7 +5,6 @@ namespace App\Services\CarrierRules;
 use App\Models\CarrierAcceptanceRule;
 use App\Models\CarrierCategoryGroup;
 use App\Models\CarrierCategoryGroupMember;
-use App\Models\CarrierSurchargeArticleMap;
 use App\Services\CarrierRules\DTOs\CargoInputDTO;
 use App\Services\CarrierRules\DTOs\CarrierRuleResultDTO;
 use Illuminate\Support\Collection;
@@ -18,7 +17,7 @@ use Illuminate\Support\Collection;
  * 2. Resolve acceptance rule and validate limits/operational flags
  * 3. Compute LM via ChargeableMeasureService (base + transforms)
  * 4. Compute surcharge events (with exclusive_group logic)
- * 5. Map events to articles via carrier_surcharge_article_maps → quote_line_drafts
+ * 5. Map events to articles via rule article_id → quote_line_drafts
  */
 class CarrierRuleEngine
 {
@@ -360,27 +359,19 @@ class CarrierRuleEngine
         $drafts = [];
 
         foreach ($surchargeEvents as $event) {
-            $map = $this->resolver->resolveArticleMap(
-                $carrierId,
-                $portId,
-                $vehicleCategory,
-                $categoryGroupId,
-                $event['event_code'],
-                $vesselName,
-                $vesselClass
-            );
+            // Get the rule to access article_id
+            $rule = \App\Models\CarrierSurchargeRule::find($event['matched_rule_id']);
 
-            if (!$map) {
-                continue; // No article mapping found
+            if (!$rule || !$rule->article_id) {
+                continue; // No article assigned to rule
             }
 
             $drafts[] = [
-                'article_id' => $map->article_id,
+                'article_id' => $rule->article_id,
                 'qty' => $event['qty'],
                 'amount_override' => $event['amount'] > 0 ? $event['amount'] : null,
                 'meta' => [
                     'event_code' => $event['event_code'],
-                    'qty_mode' => $map->qty_mode,
                     'reason' => $event['reason'],
                     'matched_rule_id' => $event['matched_rule_id'],
                 ],

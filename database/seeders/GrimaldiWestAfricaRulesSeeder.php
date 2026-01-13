@@ -9,7 +9,6 @@ use App\Models\CarrierCategoryGroupMember;
 use App\Models\CarrierClause;
 use App\Models\CarrierPortGroup;
 use App\Models\CarrierPortGroupMember;
-use App\Models\CarrierSurchargeArticleMap;
 use App\Models\CarrierSurchargeRule;
 use App\Models\CarrierTransformRule;
 use App\Models\Port;
@@ -65,15 +64,11 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
         $this->createTransformRules($carrier, $westAfricaPorts, $categoryGroups);
         $this->command->info("✓ Created transform rules");
 
-        // 5. Create surcharge rules
+        // 5. Create surcharge rules (includes article_id)
         $this->createSurchargeRules($carrier, $westAfricaPorts, $categoryGroups);
         $this->command->info("✓ Created surcharge rules");
 
-        // 6. Create surcharge article mappings (will create placeholders if articles don't exist)
-        $this->createArticleMappings($carrier, $westAfricaPorts, $categoryGroups);
-        $this->command->info("✓ Created surcharge article mappings");
-
-        // 7. Create freight mappings (ALLOWLIST)
+        // 6. Create freight mappings (ALLOWLIST)
         $this->createFreightMappings($carrier, $westAfricaPorts, $categoryGroups);
         $this->command->info("✓ Created freight mappings");
 
@@ -370,7 +365,25 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
      */
     private function createSurchargeRules(ShippingCarrier $carrier, array $ports, array $categoryGroups): void
     {
+        // Helper to find article by name pattern
+        $findArticle = function (string $articleName) use ($carrier) {
+            return RobawsArticleCache::whereRaw('LOWER(article_name) LIKE ?', ['%' . strtolower($articleName) . '%'])
+                ->where('article_code', 'LIKE', 'GANR%') // Only Grimaldi article codes
+                ->whereRaw('LOWER(article_name) NOT LIKE ?', ['%nmt%']) // Exclude NMT articles
+                ->where(function ($q) use ($carrier) {
+                    $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%grimaldi%'])
+                      ->orWhere(function ($q2) {
+                          // Allow NULL shipping_line only if article code starts with GANR
+                          $q2->whereNull('shipping_line')
+                             ->where('article_code', 'LIKE', 'GANR%')
+                             ->whereRaw('LOWER(article_name) NOT LIKE ?', ['%nmt%']);
+                      });
+                })
+                ->first();
+        };
+
         // 1. Tracking surcharge: 10% of basic freight
+        $trackingArticle = $findArticle('Tracking Surcharge');
         CarrierSurchargeRule::updateOrCreate(
             [
                 'carrier_id' => $carrier->id,
@@ -382,6 +395,7 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
                 'calc_mode' => 'PERCENT_OF_BASIC_FREIGHT',
                 'params' => ['percentage' => 10],
                 'priority' => 10,
+                'article_id' => $trackingArticle?->id,
                 'effective_from' => now()->subYear(),
                 'is_active' => true,
             ]
@@ -390,6 +404,7 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
         // 2. Conakry weight tier surcharge
         // Document: <10t = €120, <20t = €155, +20t = €155 + €11/t above 20t
         if (isset($ports['CKY'])) {
+            $conakryArticle = $findArticle('Conakry Weight Surcharge');
             CarrierSurchargeRule::updateOrCreate(
                 [
                     'carrier_id' => $carrier->id,
@@ -409,6 +424,7 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
                         ],
                     ],
                     'priority' => 15,
+                    'article_id' => $conakryArticle?->id,
                     'effective_from' => now()->subYear(),
                     'is_active' => true,
                 ]
@@ -416,6 +432,7 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
         }
 
         // 3. Towing surcharge (per unit)
+        $towingArticle = $findArticle('Towing Surcharge');
         CarrierSurchargeRule::updateOrCreate(
             [
                 'carrier_id' => $carrier->id,
@@ -427,6 +444,7 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
                 'calc_mode' => 'PER_UNIT',
                 'params' => ['amount' => 150],
                 'priority' => 10,
+                'article_id' => $towingArticle?->id,
                 'effective_from' => now()->subYear(),
                 'is_active' => true,
             ]
@@ -434,6 +452,7 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
 
         // 4. Tank inspection surcharge (per tank)
         // Document: Tank trucks/trailers: mandatory inspection on terminal - Eur 220/tank
+        $tankArticle = $findArticle('Tank Inspection');
         CarrierSurchargeRule::updateOrCreate(
             [
                 'carrier_id' => $carrier->id,
@@ -446,6 +465,7 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
                 'calc_mode' => 'PER_TANK',
                 'params' => ['amount' => 220], // Document: Eur 220/tank
                 'priority' => 10,
+                'article_id' => $tankArticle?->id,
                 'effective_from' => now()->subYear(),
                 'is_active' => true,
             ]
@@ -453,71 +473,6 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
 
         // Note: Overwidth is handled via transform rule (LM recalculation), not surcharge rules
         // Document: "Overwidth: as from 2.60m pro rata line meter (L X W / 2.5 m) this is the new length to calculate all charges"
-    }
-
-    /**
-     * Create article mappings
-     */
-    private function createArticleMappings(ShippingCarrier $carrier, array $ports, array $categoryGroups): void
-    {
-        // Try to find existing articles by name pattern, or create placeholders
-        $articleMappings = [
-            'TRACKING_PERCENT' => 'Tracking Surcharge',
-            'CONAKRY_WEIGHT_TIER' => 'Conakry Weight Surcharge',
-            'TOWING' => 'Towing Surcharge',
-            'TANK_INSPECTION' => 'Tank Inspection',
-        ];
-
-        foreach ($articleMappings as $eventCode => $articleName) {
-            // Try to find article by name (case-insensitive, partial match)
-            $article = RobawsArticleCache::whereRaw('LOWER(article_name) LIKE ?', ['%' . strtolower($articleName) . '%'])
-                ->where('article_code', 'LIKE', 'GANR%') // Only Grimaldi article codes
-                ->whereRaw('LOWER(article_name) NOT LIKE ?', ['%nmt%']) // Exclude NMT articles
-                ->where(function ($q) {
-                    $q->whereRaw('LOWER(shipping_line) LIKE ?', ['%grimaldi%'])
-                      ->orWhere(function ($q2) {
-                          // Allow NULL shipping_line only if article code starts with GANR
-                          $q2->whereNull('shipping_line')
-                             ->where('article_code', 'LIKE', 'GANR%')
-                             ->whereRaw('LOWER(article_name) NOT LIKE ?', ['%nmt%']);
-                      });
-                })
-                ->first();
-
-            if (!$article) {
-                // Create placeholder article (will need to be replaced with real article later)
-                $this->command->warn("  ⚠ Article not found for '{$articleName}'. Skipping mapping.");
-                continue;
-            }
-
-            CarrierSurchargeArticleMap::updateOrCreate(
-                [
-                    'carrier_id' => $carrier->id,
-                    'port_id' => null,
-                    'event_code' => $eventCode,
-                    'article_id' => $article->id,
-                ],
-                [
-                    'qty_mode' => $this->getQtyModeForEvent($eventCode),
-                    'effective_from' => now()->subYear(),
-                    'is_active' => true,
-                ]
-            );
-        }
-    }
-
-    /**
-     * Get quantity mode for event code
-     */
-    private function getQtyModeForEvent(string $eventCode): string
-    {
-        return match ($eventCode) {
-            'TRACKING_PERCENT' => 'PERCENT_OF_BASIC_FREIGHT',
-            'CONAKRY_WEIGHT_TIER' => 'WEIGHT_TIER',
-            'TOWING' => 'PER_UNIT',
-            'TANK_INSPECTION' => 'PER_TANK',
-            default => 'FLAT',
-        };
     }
 
     /**

@@ -7,7 +7,6 @@ The Carrier Rules & Surcharge System is a comprehensive rules engine that automa
 - **Acceptance Validation**: Validates cargo against carrier limits (dimensions, weight, operational rules)
 - **LM Transformations**: Applies carrier-aware LM calculations (e.g., overwidth recalculation)
 - **Surcharge Calculation**: Calculates and applies surcharges (tracking, overwidth, weight tiers, etc.)
-- **Article Mapping**: Automatically adds surcharge articles to quotations
 
 ## System Architecture
 
@@ -25,8 +24,7 @@ The Carrier Rules & Surcharge System is a comprehensive rules engine that automa
 - `carrier_category_group_members`: Maps vehicle categories to groups
 - `carrier_acceptance_rules`: Dimension/weight limits and operational requirements
 - `carrier_transform_rules`: LM transformation rules (e.g., overwidth recalculation)
-- `carrier_surcharge_rules`: Surcharge calculation rules
-- `carrier_surcharge_article_maps`: Maps surcharge events to Robaws articles
+- `carrier_surcharge_rules`: Surcharge calculation rules (includes `article_id` for linking to Robaws articles)
 - `carrier_article_mappings`: Maps articles to vehicle categories/category groups for article selection (ALLOWLIST)
 - `carrier_clauses`: Legal, operational, and liability clauses
 
@@ -130,6 +128,7 @@ Surcharge rules calculate surcharge amounts based on various calculation modes.
 2. Click **Add Item**
 3. Fill in:
    - **Event Code**: Unique identifier (e.g., `TRACKING_PERCENT`, `OVERWIDTH_STEP_BLOCKS`)
+   - **Robaws Article**: Select article from dropdown (links surcharge to article)
    - **Name**: Display name
    - **Calculation Mode**: Select from dropdown
    - **Parameters**: Fill in based on selected mode
@@ -182,25 +181,7 @@ Surcharge rules calculate surcharge amounts based on various calculation modes.
 - Qty: 2 blocks × 6.912 LM = 13.824
 - Amount: 50 per block
 
-### 5. Article Mapping
-
-Article mappings connect surcharge events to actual Robaws articles.
-
-**Steps:**
-1. Go to **Article Mapping** tab
-2. Click **Add Item**
-3. Fill in:
-   - **Event Code**: Must match a surcharge rule event_code
-   - **Robaws Article**: Select article from dropdown
-   - **Quantity Mode**: How quantity is calculated
-   - **Override Parameters**: Optional - override default params
-
-**Example:**
-- Event Code: `TOWING`
-- Article: "Towing Surcharge" (from Robaws)
-- Qty Mode: `PER_UNIT`
-
-### 6. Freight Mapping (ALLOWLIST)
+### 5. Freight Mapping (ALLOWLIST)
 
 Freight Mapping allows you to explicitly control which articles are shown for specific vehicle categories, routes, and contexts. This uses an **ALLOWLIST strategy**: when mappings exist and match the quotation context, only the mapped articles (plus universal articles with `commodity_type IS NULL`) are shown.
 
@@ -415,8 +396,8 @@ The system is automatically integrated into the quotation flow:
 
 ### Article Not Adding
 
-1. Verify article mapping exists for event_code
-2. Check article mapping is active
+1. Verify surcharge rule has `article_id` set
+2. Check rule is active
 3. Verify article exists in Robaws cache
 4. Check quantity calculation (may be 0)
 
