@@ -258,7 +258,31 @@ class ViewRobawsArticle extends ViewRecord
                     ->schema([
                         Infolists\Components\TextEntry::make('cost_price')
                             ->label('Total Purchase Cost')
-                            ->money(fn ($record) => is_array($record->purchase_price_breakdown) && isset($record->purchase_price_breakdown['currency']) ? $record->purchase_price_breakdown['currency'] : ($record->currency ?? 'EUR'))
+                            ->formatStateUsing(function ($state, $record) {
+                                if ($state === null) {
+                                    return null;
+                                }
+                                
+                                $currency = is_array($record->purchase_price_breakdown) && isset($record->purchase_price_breakdown['currency']) 
+                                    ? $record->purchase_price_breakdown['currency'] 
+                                    : ($record->currency ?? 'EUR');
+                                
+                                // Get unit type from breakdown (LM or LUMPSUM)
+                                $unitType = $record->purchase_price_breakdown['total_unit_type'] ?? 'LUMPSUM';
+                                
+                                // Format money value manually (FilamentMoney facade not available)
+                                // Use same format as breakdown display: comma for decimals, no thousands separator
+                                $formattedAmount = number_format((float) $state, 2, ',', '');
+                                $currencySymbol = match($currency) {
+                                    'EUR' => '€',
+                                    'USD' => '$',
+                                    'GBP' => '£',
+                                    default => $currency . ' ',
+                                };
+                                $formatted = $currencySymbol . $formattedAmount;
+                                
+                                return $formatted . ' (' . $unitType . ')';
+                            })
                             ->placeholder('No purchase price data')
                             ->weight('bold')
                             ->size('lg')

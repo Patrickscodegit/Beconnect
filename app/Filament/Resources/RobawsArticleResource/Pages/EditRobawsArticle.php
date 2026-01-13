@@ -83,5 +83,37 @@ class EditRobawsArticle extends EditRecord
     {
         return $this->getResource()::getUrl('view', ['record' => $this->getRecord()]);
     }
+    
+    protected function afterSave(): void
+    {
+        $article = $this->record;
+        
+        // Refresh purchase price breakdown
+        // This will use the most recent active tariff and apply correct calculation logic
+        try {
+            $purchasePriceService = app(\App\Services\Pricing\PurchasePriceSyncService::class);
+            $purchasePriceService->syncActiveTariffForArticle($article);
+        } catch (\Exception $e) {
+            \Log::warning('Failed to refresh purchase price breakdown after article save', [
+                'article_id' => $article->id,
+                'error' => $e->getMessage()
+            ]);
+        }
+        
+        // Refresh max dimensions breakdown
+        // This will resolve the most recent active rule and update dimensions
+        try {
+            $maxDimensionsService = app(\App\Services\CarrierRules\MaxDimensionsSyncService::class);
+            $maxDimensionsService->syncActiveRuleForArticle($article);
+        } catch (\Exception $e) {
+            \Log::warning('Failed to refresh max dimensions breakdown after article save', [
+                'article_id' => $article->id,
+                'error' => $e->getMessage()
+            ]);
+        }
+        
+        // Refresh the record to show updated breakdowns
+        $this->record->refresh();
+    }
 }
 

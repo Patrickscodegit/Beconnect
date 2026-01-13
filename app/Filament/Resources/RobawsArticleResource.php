@@ -390,7 +390,15 @@ class RobawsArticleResource extends Resource
                         Forms\Components\TextInput::make('cost_price')
                             ->label('Cost Price')
                             ->numeric()
-                            ->prefix('€'),
+                            ->prefix('€')
+                            ->helperText(function ($record) {
+                                if ($record && $record->cost_price !== null) {
+                                    $breakdown = $record->purchase_price_breakdown ?? [];
+                                    $unitType = $breakdown['total_unit_type'] ?? 'LUMPSUM';
+                                    return 'Total includes ' . $unitType . ' values only';
+                                }
+                                return null;
+                            }),
                             
                         Forms\Components\Placeholder::make('purchase_price_breakdown_display')
                             ->label('Purchase Price Breakdown')
@@ -402,6 +410,15 @@ class RobawsArticleResource extends Resource
                                 
                                 $currency = $breakdown['currency'] ?? 'EUR';
                                 $html = '<div class="space-y-3">';
+                                
+                                // Display Total Purchase Cost with unit type
+                                if (isset($breakdown['total']) && $record && $record->cost_price !== null) {
+                                    $total = number_format((float) $breakdown['total'], 2, ',', '');
+                                    $unitType = $breakdown['total_unit_type'] ?? 'LUMPSUM';
+                                    $html .= '<div class="border-b border-gray-200 dark:border-gray-700 pb-3 mb-3">';
+                                    $html .= '<div class="font-bold text-lg text-gray-900 dark:text-gray-100">Total Purchase Cost: ' . htmlspecialchars("{$currency} {$total} ({$unitType})") . '</div>';
+                                    $html .= '</div>';
+                                }
                                 
                                 // Base Freight
                                 $baseFreight = $breakdown['base_freight'] ?? null;

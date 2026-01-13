@@ -3,6 +3,7 @@
 namespace App\Services\Pricing;
 
 use App\Models\CarrierPurchaseTariff;
+use App\Models\CarrierArticleMapping;
 use App\Models\RobawsArticleCache;
 use Carbon\Carbon;
 
@@ -34,8 +35,10 @@ class PurchasePriceSyncService
         $mostRecentTariff = $this->getMostRecentActiveTariffForArticle($article);
         
         if ($mostRecentTariff) {
-            // Calculate total purchase cost
-            $totalCost = $this->calculateTotalPurchaseCost($mostRecentTariff);
+            $mapping = $mostRecentTariff->carrierArticleMapping;
+            
+            // Calculate total purchase cost (with LM filtering if applicable)
+            $totalCost = $this->calculateTotalPurchaseCost($mostRecentTariff, $mapping);
 
             // Build detailed breakdown
             $breakdown = $this->buildPurchasePriceBreakdown($mostRecentTariff, $article);
@@ -65,29 +68,45 @@ class PurchasePriceSyncService
 
     /**
      * Calculate total purchase cost from tariff
+     * For LM articles, only includes fields with unit='LM'
      */
-    public function calculateTotalPurchaseCost(CarrierPurchaseTariff $tariff): float
+    public function calculateTotalPurchaseCost(CarrierPurchaseTariff $tariff, ?CarrierArticleMapping $mapping = null): float
     {
-        $total = (float) ($tariff->base_freight_amount ?? 0);
+        // Determine category from mapping
+        $category = $this->determineCategoryFromMapping($mapping);
+        $isLM = ($category === 'LM');
         
-        // Add all surcharges
-        $surchargeFields = [
-            'baf_amount',
-            'ets_amount',
-            'port_additional_amount',
-            'admin_fxe_amount',
-            'thc_amount',
-            'measurement_costs_amount',
-            'congestion_surcharge_amount',
-            'iccm_amount',
+        // Field to unit field mapping
+        $fieldToUnitField = [
+            'base_freight_amount' => 'base_freight_unit',
+            'baf_amount' => 'baf_unit',
+            'ets_amount' => 'ets_unit',
+            'port_additional_amount' => 'port_additional_unit',
+            'admin_fxe_amount' => 'admin_fxe_unit',
+            'thc_amount' => 'thc_unit',
+            'measurement_costs_amount' => 'measurement_costs_unit',
+            'congestion_surcharge_amount' => 'congestion_surcharge_unit',
+            'iccm_amount' => 'iccm_unit',
         ];
-
-        foreach ($surchargeFields as $field) {
-            if ($tariff->$field !== null) {
-                $total += (float) $tariff->$field;
+        
+        $total = 0.0;
+        
+        foreach ($fieldToUnitField as $amountField => $unitField) {
+            $value = $tariff->$amountField;
+            
+            // For LM category, only include fields with unit='LM'
+            if ($isLM) {
+                $unitValue = $tariff->$unitField ?? 'LUMPSUM';
+                if ($unitValue !== 'LM') {
+                    continue; // Skip this field
+                }
+            }
+            
+            if ($value !== null && $value >= 0) {
+                $total += (float) $value;
             }
         }
-
+        
         return round($total, 2);
     }
 
@@ -99,13 +118,16 @@ class PurchasePriceSyncService
         $mapping = $tariff->carrierArticleMapping;
         $carrier = $mapping ? $mapping->carrier : null;
 
+        $category = $this->determineCategoryFromMapping($mapping);
+
         $breakdown = [
             'base_freight' => [
                 'amount' => $tariff->base_freight_amount ? (float) $tariff->base_freight_amount : 0,
                 'unit' => $tariff->base_freight_unit ?? 'LUMPSUM',
             ],
             'surcharges' => [],
-            'total' => $this->calculateTotalPurchaseCost($tariff),
+            'total' => $this->calculateTotalPurchaseCost($tariff, $mapping), // Use filtered calculation
+            'total_unit_type' => $category === 'LM' ? 'LM' : 'LUMPSUM', // Indicates if total is LM-only or includes all values
             'currency' => $tariff->currency ?? 'EUR',
             'tariff_id' => $tariff->id,
             'mapping_id' => $mapping ? $mapping->id : null,
@@ -188,6 +210,83 @@ class PurchasePriceSyncService
         }
 
         return true;
+    }
+
+    /**
+     * Determine PDF category from mapping
+     * Returns 'CAR'|'SVAN'|'BVAN'|'LM'|null
+     */
+    protected function determineCategoryFromMapping(?CarrierArticleMapping $mapping): ?string
+    {
+        if (!$mapping) {
+            return null;
+        }
+
+        // Prefer category groups
+        $categoryGroupIds = $mapping->category_group_ids ?? [];
+        if (!empty($categoryGroupIds)) {
+            $categoryGroups = \App\Models\CarrierCategoryGroup::whereIn('id', $categoryGroupIds)
+                ->where('carrier_id', $mapping->carrier_id)
+                ->get();
+
+            foreach ($categoryGroups as $group) {
+                $code = strtoupper($group->code ?? '');
+                if ($code === 'CARS') {
+                    return 'CAR';
+                } elseif ($code === 'SMALL_VANS') {
+                    return 'SVAN';
+                } elseif ($code === 'BIG_VANS') {
+                    return 'BVAN';
+                } elseif ($code === 'LM_CARGO' || strpos($code, 'LM') !== false) {
+                    return 'LM';
+                }
+            }
+        }
+
+        // Fallback to vehicle_categories
+        $vehicleCategories = $mapping->vehicle_categories ?? [];
+        if (!empty($vehicleCategories)) {
+            foreach ($vehicleCategories as $category) {
+                $category = strtolower($category ?? '');
+                if ($category === 'car') {
+                    return 'CAR';
+                } elseif (in_array($category, ['small_van', 'smallvan'])) {
+                    return 'SVAN';
+                } elseif (in_array($category, ['big_van', 'bigvan'])) {
+                    return 'BVAN';
+                } elseif (in_array($category, ['truck', 'truckhead', 'trailer', 'lm', 'roro'])) {
+                    return 'LM';
+                }
+            }
+        }
+
+        // Fallback to article code/name patterns
+        if ($mapping->article) {
+            $articleCode = strtoupper($mapping->article->article_code ?? '');
+            $articleName = strtoupper($mapping->article->article_name ?? '');
+            
+            if (str_ends_with($articleCode, 'CAR') || str_contains($articleCode, 'CAR')) {
+                return 'CAR';
+            } elseif (str_ends_with($articleCode, 'SV') || str_contains($articleCode, 'SV')) {
+                return 'SVAN';
+            } elseif (str_ends_with($articleCode, 'BV') || str_contains($articleCode, 'BV')) {
+                return 'BVAN';
+            } elseif (str_ends_with($articleCode, 'HH') || str_contains($articleCode, 'LM') || str_contains($articleCode, 'HH')) {
+                return 'LM';
+            }
+            
+            if (str_contains($articleName, ' CAR ')) {
+                return 'CAR';
+            } elseif (str_contains($articleName, ' SMALL VAN')) {
+                return 'SVAN';
+            } elseif (str_contains($articleName, ' BIG VAN')) {
+                return 'BVAN';
+            } elseif (str_contains($articleName, ' LM ') || str_contains($articleName, ' LM CARGO') || str_contains($articleName, ' LM SEAFREIGHT')) {
+                return 'LM';
+            }
+        }
+
+        return null;
     }
 }
 
