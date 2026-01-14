@@ -1704,7 +1704,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->columnSpan(1),
 
                                         Forms\Components\Select::make('simulator_category_group')
-                                            ->label('Category Group (Quick Quote)')
+                                            ->label('Category Group')
                                             ->options(function ($record) {
                                                 if (!$record) {
                                                     return [];

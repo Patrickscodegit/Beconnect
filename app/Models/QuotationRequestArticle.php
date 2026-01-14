@@ -52,6 +52,13 @@ class QuotationRequestArticle extends Model
             $calculationService = app(QuantityCalculationService::class);
             $effectiveQuantity = $calculationService->calculateQuantity($model);
             
+            // Update stored quantity to match calculated quantity for LM/CBM articles
+            // This ensures the quantity field reflects the actual calculated value
+            $unitType = strtoupper(trim($model->unit_type ?? ''));
+            if (in_array($unitType, ['LM', 'CBM'])) {
+                $model->quantity = $effectiveQuantity;
+            }
+            
             // Calculate subtotal
             // For LM: effectiveQuantity already includes commodity item quantity multiplication
             // Formula: LM (from calculator, already × item qty) × LM_price

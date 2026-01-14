@@ -17,13 +17,15 @@ class CargoInputDTO
         public float $weightKg,
         public int $unitCount,
         public ?string $commodityType = null, // 'vehicles', 'machinery', etc.
-        public ?string $category = null, // 'car', 'truck', etc. (one of 22 keys) - optional for detailed quote
-        public ?string $quickBucket = null, // 'CARS', 'SMALL_VANS', etc. - optional for quick quote
+        public ?string $category = null, // 'car', 'truck', etc. (one of 22 keys)
         public ?int $categoryGroupId = null, // Category group ID (for acceptance rules, surcharges, etc.)
         public array $flags = [], // ['tank_truck', 'non_self_propelled', 'stacked', 'piggy_back']
         public ?float $basicFreightAmount = null, // Optional: for percentage-based surcharges
         public ?string $vesselName = null, // Optional: for vessel-specific limits
         public ?string $vesselClass = null, // Optional: for vessel-specific limits
+        public ?string $relationshipType = null, // 'separate', 'connected_to', 'loaded_with'
+        public ?int $relatedItemId = null, // ID of related commodity item
+        public ?int $commodityItemId = null, // ID of this commodity item (for relationship checks)
     ) {}
 
     /**
@@ -45,11 +47,13 @@ class CargoInputDTO
             unitCount: $item->stack_unit_count ?? $item->quantity ?? 1,
             commodityType: $item->commodity_type,
             category: $item->category,
-            quickBucket: null, // Will be derived from category groups
             flags: self::extractFlags($item),
             basicFreightAmount: null, // Will be calculated from articles
             vesselName: $schedule?->vessel_name,
             vesselClass: $schedule?->vessel_class,
+            relationshipType: $item->relationship_type ?? 'separate',
+            relatedItemId: $item->related_item_id,
+            commodityItemId: $item->id,
         );
     }
 

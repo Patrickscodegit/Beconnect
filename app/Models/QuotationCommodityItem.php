@@ -504,6 +504,12 @@ class QuotationCommodityItem extends Model
     }
 
     /**
+     * Temporary storage for related item IDs during deletion
+     * Key: deleted_item_id, Value: array of related_item_ids
+     */
+    protected static array $deletedItemRelatedItems = [];
+
+    /**
      * Boot method to auto-calculate CBM before saving
      */
     protected static function boot()
@@ -861,6 +867,111 @@ class QuotationCommodityItem extends Model
                     }
                 });
             }
+        });
+
+        // Handle item deletion: reprocess related items (especially trailers) when a truck is removed
+        static::deleting(function ($item) {
+            // Capture items that are related to this item BEFORE deletion
+            // The foreign key constraint will set their related_item_id to null, so we need to capture them now
+            $relatedItems = static::where('quotation_request_id', $item->quotation_request_id)
+                ->where('related_item_id', $item->id)
+                ->whereIn('relationship_type', ['connected_to', 'loaded_with'])
+                ->get();
+            
+            // Store the IDs in static array so we can access them in the deleted event
+            static::$deletedItemRelatedItems[$item->id] = [
+                'quotation_request_id' => $item->quotation_request_id,
+                'related_item_ids' => $relatedItems->pluck('id')->toArray(),
+            ];
+            
+            \Log::info('QuotationCommodityItem: Item being deleted, found related items to reprocess', [
+                'deleted_item_id' => $item->id,
+                'deleted_item_category' => $item->category,
+                'quotation_request_id' => $item->quotation_request_id,
+                'related_items_count' => $relatedItems->count(),
+                'related_item_ids' => $relatedItems->pluck('id')->toArray(),
+                'related_item_categories' => $relatedItems->pluck('category')->toArray(),
+            ]);
+        });
+
+        static::deleted(function ($item) {
+            // Get the related item IDs that were captured in the deleting event
+            $deletionData = static::$deletedItemRelatedItems[$item->id] ?? null;
+            
+            if (!$deletionData || empty($deletionData['related_item_ids'])) {
+                // Clean up the static array
+                unset(static::$deletedItemRelatedItems[$item->id]);
+                return; // No related items to reprocess
+            }
+
+            $relatedItemIds = $deletionData['related_item_ids'];
+            $quotationRequestId = $deletionData['quotation_request_id'];
+
+            // Clean up the static array
+            unset(static::$deletedItemRelatedItems[$item->id]);
+
+            // Use DB::afterCommit to ensure the deletion transaction is complete
+            \DB::afterCommit(function () use ($item, $relatedItemIds, $quotationRequestId) {
+                $integrationService = app(\App\Services\CarrierRules\CarrierRuleIntegrationService::class);
+                
+                \Log::info('QuotationCommodityItem: Reprocessing related items after deletion', [
+                    'deleted_item_id' => $item->id,
+                    'quotation_request_id' => $quotationRequestId,
+                    'related_item_ids' => $relatedItemIds,
+                ]);
+
+                // Reprocess each related item through carrier rules
+                // This will update towing surcharges if the deleted item was a truck/truckhead
+                // Also recalculates LM when trailer is deleted (truck LM should be recalculated)
+                foreach ($relatedItemIds as $relatedItemId) {
+                    try {
+                        $relatedItem = static::find($relatedItemId);
+                        if ($relatedItem && $relatedItem->quotation_request_id === $quotationRequestId) {
+                            // Clear the relationship (it should already be null due to FK constraint, but ensure it)
+                            if ($relatedItem->related_item_id === $item->id) {
+                                $relatedItem->relationship_type = 'separate';
+                                $relatedItem->related_item_id = null;
+                                $relatedItem->saveQuietly();
+                            }
+                            
+                            // Reprocess through carrier rules to update surcharges (e.g., add towing if trailer is now standalone)
+                            $integrationService->processCommodityItem($relatedItem);
+                            
+                            // Explicitly recalculate LM after reprocessing to ensure it reflects current state
+                            // This is especially important when a trailer is deleted - truck LM should be recalculated
+                            if ($relatedItem->length_cm && $relatedItem->width_cm) {
+                                $oldLm = $relatedItem->lm;
+                                $relatedItem->lm = $relatedItem->calculateLm();
+                                
+                                \Log::info('QuotationCommodityItem: Recalculated LM after deletion', [
+                                    'deleted_item_id' => $item->id,
+                                    'reprocessed_item_id' => $relatedItem->id,
+                                    'old_lm' => $oldLm,
+                                    'new_lm' => $relatedItem->lm,
+                                ]);
+                            }
+                            
+                            // Save normally (not saveQuietly) to trigger saved event which recalculates all articles
+                            // This ensures LM articles are updated when commodity items change
+                            $relatedItem->save();
+                            
+                            \Log::info('QuotationCommodityItem: Reprocessed related item after deletion', [
+                                'deleted_item_id' => $item->id,
+                                'reprocessed_item_id' => $relatedItem->id,
+                                'reprocessed_item_category' => $relatedItem->category,
+                                'lm_recalculated' => $relatedItem->length_cm && $relatedItem->width_cm,
+                            ]);
+                        }
+                    } catch (\Exception $e) {
+                        \Log::error('QuotationCommodityItem: Error reprocessing related item after deletion', [
+                            'deleted_item_id' => $item->id,
+                            'related_item_id' => $relatedItemId,
+                            'error' => $e->getMessage(),
+                        ]);
+                        // Continue with other items even if one fails
+                    }
+                }
+            });
         });
     }
 }

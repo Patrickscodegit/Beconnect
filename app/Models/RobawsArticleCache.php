@@ -785,6 +785,27 @@ class RobawsArticleCache extends Model
      */
     public function scopeForQuotationContext(Builder $query, \App\Models\QuotationRequest $quotation): Builder
     {
+        // #region agent log
+        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'A',
+            'location' => 'RobawsArticleCache.php:786',
+            'message' => 'scopeForQuotationContext entry',
+            'data' => [
+                'quotation_id' => $quotation->id ?? null,
+                'request_number' => $quotation->request_number ?? null,
+                'pol' => $quotation->pol ?? null,
+                'pod' => $quotation->pod ?? null,
+                'service_type' => $quotation->service_type ?? null,
+                'selected_schedule_id' => $quotation->selected_schedule_id ?? null,
+                'commodity_type' => $quotation->commodity_type ?? null,
+                'has_commodity_items' => $quotation->commodityItems ? $quotation->commodityItems->count() : 0,
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
+        
         // Use database-agnostic case-insensitive matching
         // PostgreSQL supports ILIKE, SQLite/MySQL use LOWER() with LIKE
         $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
@@ -794,6 +815,21 @@ class RobawsArticleCache extends Model
             ->where('is_parent_item', true)
             ->limit(1)
             ->exists();
+
+        // #region agent log
+        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'E',
+            'location' => 'RobawsArticleCache.php:793',
+            'message' => 'Parent items check',
+            'data' => [
+                'quotation_id' => $quotation->id ?? null,
+                'has_parent_items' => $hasParentItems,
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
 
         if ($hasParentItems) {
             $query->where('is_parent_item', true);
@@ -863,152 +899,18 @@ class RobawsArticleCache extends Model
             });
         }
 
-        $query->where('is_active', true)
-              ->validAsOf(now());
+        $query->where('is_active', true);
 
-        // Apply POL/POD filtering - EXACT MATCHING ONLY (100% match required)
-        // Extract port codes and compare exactly, fall back to exact string match
-        if ($quotation->pol && $quotation->pod) {
-            $quotationPolCode = $this->extractPortCode($quotation->pol);
-            $quotationPodCode = $this->extractPortCode($quotation->pod);
-
-            // Require both POL and POD to match exactly
-            $query->where(function ($q) use ($quotation, $quotationPolCode, $useIlike) {
-                if ($quotationPolCode) {
-                    // Match by port code in parentheses (more flexible but still exact code match)
-                    $q->where(function ($codeQuery) use ($quotationPolCode, $quotation, $useIlike) {
-                        // Match if article POL contains the port code in parentheses
-                        if ($useIlike) {
-                            $codeQuery->where('pol', 'ILIKE', '%(' . $quotationPolCode . ')%')
-                                ->orWhere('pol', 'ILIKE', $quotation->pol);
-                        } else {
-                            $codeQuery->whereRaw('LOWER(pol) LIKE LOWER(?)', ['%(' . $quotationPolCode . ')%'])
-                                ->orWhereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
-                        }
-                    });
-                } else {
-                    // No code available - exact string match
-                    if ($useIlike) {
-                        $q->where('pol', 'ILIKE', $quotation->pol);
-                    } else {
-                        $q->whereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
-                    }
-                }
-            })->where(function ($q) use ($quotation, $quotationPodCode, $useIlike) {
-                if ($quotationPodCode) {
-                    // Match by port code in parentheses
-                    $q->where(function ($codeQuery) use ($quotationPodCode, $quotation, $useIlike) {
-                        // Match if article POD contains the port code in parentheses
-                        if ($useIlike) {
-                            $codeQuery->where('pod', 'ILIKE', '%(' . $quotationPodCode . ')%')
-                                ->orWhere('pod', 'ILIKE', $quotation->pod);
-                        } else {
-                            $codeQuery->whereRaw('LOWER(pod) LIKE LOWER(?)', ['%(' . $quotationPodCode . ')%'])
-                                ->orWhereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
-                        }
-                    });
-                } else {
-                    // No code available - exact string match
-                    if ($useIlike) {
-                        $q->where('pod', 'ILIKE', $quotation->pod);
-                    } else {
-                        $q->whereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
-                    }
-                }
-            });
-        } elseif ($quotation->pol) {
-            // Only POL specified - require exact POL match
-            $quotationPolCode = $this->extractPortCode($quotation->pol);
-            $query->where(function ($q) use ($quotation, $quotationPolCode, $useIlike) {
-                if ($quotationPolCode) {
-                    // Match by port code in parentheses (more flexible)
-                    $q->where(function ($codeQuery) use ($quotationPolCode, $quotation, $useIlike) {
-                        // Match if article POL contains the port code in parentheses
-                        if ($useIlike) {
-                            $codeQuery->where('pol', 'ILIKE', '%(' . $quotationPolCode . ')%')
-                                ->orWhere('pol', 'ILIKE', $quotation->pol);
-                        } else {
-                            $codeQuery->whereRaw('LOWER(pol) LIKE LOWER(?)', ['%(' . $quotationPolCode . ')%'])
-                                ->orWhereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
-                        }
-                    });
-                } else {
-                    // No code available - exact string match
-                    if ($useIlike) {
-                        $q->where('pol', 'ILIKE', $quotation->pol);
-                    } else {
-                        $q->whereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
-                    }
-                }
-            });
-        } elseif ($quotation->pod) {
-            // Only POD specified - require exact POD match
-            $quotationPodCode = $this->extractPortCode($quotation->pod);
-            $query->where(function ($q) use ($quotation, $quotationPodCode, $useIlike) {
-                if ($quotationPodCode) {
-                    // Match by port code in parentheses
-                    $q->where(function ($codeQuery) use ($quotationPodCode, $quotation, $useIlike) {
-                        // Match if article POD contains the port code in parentheses
-                        if ($useIlike) {
-                            $codeQuery->where('pod', 'ILIKE', '%(' . $quotationPodCode . ')%')
-                                ->orWhere('pod', 'ILIKE', $quotation->pod);
-                        } else {
-                            $codeQuery->whereRaw('LOWER(pod) LIKE LOWER(?)', ['%(' . $quotationPodCode . ')%'])
-                                ->orWhereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
-                        }
-                    });
-                } else {
-                    // No code available - exact string match
-                    if ($useIlike) {
-                        $q->where('pod', 'ILIKE', $quotation->pod);
-                    } else {
-                        $q->whereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
-                    }
-                }
-            });
-        }
-
-        // Apply transport mode filter derived from quotation service type
-        if ($quotation->service_type) {
-            $transportMode = $this->mapQuotationServiceTypeToTransportMode($quotation->service_type);
-            $serviceTypeValue = Str::upper(str_replace(' ', '_', $quotation->service_type));
-
-            $query->where(function ($q) use ($transportMode, $serviceTypeValue) {
-                if ($transportMode) {
-                    $q->where('transport_mode', $transportMode);
-                    $q->orWhere('service_type', $serviceTypeValue);
-                } else {
-                    $q->where('service_type', $serviceTypeValue);
-                }
-            });
-        }
-
-        // Apply shipping line filter if schedule is selected - Include NULL shipping_carrier_id (universal articles)
-        if ($quotation->selected_schedule_id && $quotation->selectedSchedule) {
-            $schedule = $quotation->selectedSchedule;
-            if ($schedule->carrier_id) {
-                $query->where(function ($q) use ($schedule) {
-                    $q->where('shipping_carrier_id', $schedule->carrier_id)
-                      ->orWhereNull('shipping_carrier_id');
-                });
-            }
-        }
-        
-        // Also check preferred_carrier_id if set
-        if ($quotation->preferred_carrier_id) {
-            $query->where(function ($q) use ($quotation) {
-                $q->where('shipping_carrier_id', $quotation->preferred_carrier_id)
-                  ->orWhereNull('shipping_carrier_id');
-            });
-        }
-
-        // PHASE 4: Check for article mappings (ALLOWLIST strategy)
+        // PHASE 4: Check for article mappings EARLY (before validity/POL/POD filtering) to allow bypassing
+        // Initialize variables early to prevent null errors
         $carrierId = null;
         $podPortId = null;
         $vehicleCategory = null;
         $categoryGroupId = null;
         $vesselName = null;
         $vesselClass = null;
+        $mappings = collect([]);
+        $mappedArticleIds = []; // Initialize to empty array to prevent count() errors
 
         // Determine context inputs
         if ($quotation->selected_schedule_id && $quotation->selectedSchedule) {
@@ -1025,14 +927,39 @@ class RobawsArticleCache extends Model
             }
         }
 
-        // Get vehicle category and derive category group from commodity items
+        // Get vehicle categories from ALL commodity items (not just first)
+        // This ensures we get mappings for all types (CAR, LM, etc.)
+        $vehicleCategories = [];
+        $categoryGroupIds = [];
+        $allMappings = collect([]);
+        $mappedArticleIds = [];
+        
         if ($quotation->commodityItems && $quotation->commodityItems->count() > 0) {
-            // Get first commodity item's category (for now - could be enhanced to handle multiple)
+            // Collect all unique categories from commodity items
+            $vehicleCategories = $quotation->commodityItems
+                ->pluck('category')
+                ->filter()
+                ->unique()
+                ->values()
+                ->toArray();
+            
+            // Derive category group IDs for each vehicle category
+            if ($carrierId && !empty($vehicleCategories)) {
+                $members = \App\Models\CarrierCategoryGroupMember::whereHas('categoryGroup', function ($q) use ($carrierId) {
+                    $q->where('carrier_id', $carrierId)->where('is_active', true);
+                })
+                ->whereIn('vehicle_category', $vehicleCategories)
+                ->where('is_active', true)
+                ->get();
+                
+                $categoryGroupIds = $members->pluck('carrier_category_group_id')->unique()->filter()->values()->toArray();
+            }
+            
+            // For backward compatibility, also set first item's category
             $firstItem = $quotation->commodityItems->first();
             $vehicleCategory = $firstItem->category ?? null;
             
-            // Derive category group ID if vehicle category exists and carrier is known
-            if ($vehicleCategory && $carrierId) {
+            if ($vehicleCategory && $carrierId && empty($categoryGroupIds)) {
                 $member = \App\Models\CarrierCategoryGroupMember::whereHas('categoryGroup', function ($q) use ($carrierId) {
                     $q->where('carrier_id', $carrierId)->where('is_active', true);
                 })
@@ -1040,39 +967,588 @@ class RobawsArticleCache extends Model
                 ->where('is_active', true)
                 ->first();
                 
-                $categoryGroupId = $member?->carrier_category_group_id;
+                if ($member) {
+                    $categoryGroupIds[] = $member->carrier_category_group_id;
+                }
             }
         }
 
-        // Call resolver to get article mappings
-        $mappings = collect([]);
+        // Call resolver to get article mappings EARLY (before POL/POD filtering)
+        // Get mappings for ALL vehicle categories, not just the first one
         if ($carrierId) {
             $resolver = app(\App\Services\CarrierRules\CarrierRuleResolver::class);
-            $mappings = $resolver->resolveArticleMappings(
+            
+            // Map vehicle categories to category group IDs for LM cargo
+            // LM cargo articles use category_group_ids instead of vehicle_categories
+            $lmCategoryGroupIds = [];
+            if (in_array('truck', $vehicleCategories) || 
+                in_array('trailer', $vehicleCategories) || 
+                in_array('truckhead', $vehicleCategories)) {
+                $lmCargoTrucks = \App\Models\CarrierCategoryGroup::where('carrier_id', $carrierId)
+                    ->where('code', 'LM_CARGO_TRUCKS')
+                    ->first();
+                $lmCargoTrailers = \App\Models\CarrierCategoryGroup::where('carrier_id', $carrierId)
+                    ->where('code', 'LM_CARGO_TRAILERS')
+                    ->first();
+                
+                if ($lmCargoTrucks) {
+                    $lmCategoryGroupIds[] = $lmCargoTrucks->id;
+                }
+                if ($lmCargoTrailers) {
+                    $lmCategoryGroupIds[] = $lmCargoTrailers->id;
+                }
+            }
+            
+            // Get mappings for each unique vehicle category
+            if (!empty($vehicleCategories)) {
+                foreach ($vehicleCategories as $category) {
+                    $categoryMappings = $resolver->resolveArticleMappings(
+                        $carrierId,
+                        $podPortId,
+                        $category,
+                        null, // Don't filter by category group - get all mappings for this category
+                        $vesselName,
+                        $vesselClass
+                    );
+                    
+                    // Filter mappings to only include those that match the requested port
+                    if ($podPortId !== null) {
+                        $portGroupIds = $resolver->resolvePortGroupIdsForPort($carrierId, $podPortId);
+                        $categoryMappings = $this->filterMappingsByPort($categoryMappings, $podPortId, $portGroupIds);
+                    }
+                    
+                    $allMappings = $allMappings->merge($categoryMappings);
+                }
+            }
+            
+            // Also check category group mappings for LM cargo (truck/trailer/truckhead)
+            // This finds mappings that use category_group_ids instead of vehicle_categories
+            if (!empty($lmCategoryGroupIds)) {
+                foreach ($lmCategoryGroupIds as $categoryGroupId) {
+                    $categoryMappings = $resolver->resolveArticleMappings(
+                        $carrierId,
+                        $podPortId,
+                        null, // No vehicle category when using category groups
+                        $categoryGroupId,
+                        $vesselName,
+                        $vesselClass
+                    );
+                    
+                    if ($podPortId !== null) {
+                        $portGroupIds = $resolver->resolvePortGroupIdsForPort($carrierId, $podPortId);
+                        $categoryMappings = $this->filterMappingsByPort($categoryMappings, $podPortId, $portGroupIds);
+                    }
+                    
+                    $allMappings = $allMappings->merge($categoryMappings);
+                }
+            }
+            
+            // Also get universal mappings (no vehicle category filter)
+            $universalMappings = $resolver->resolveArticleMappings(
                 $carrierId,
                 $podPortId,
-                $vehicleCategory,
-                $categoryGroupId,
+                null, // No vehicle category = universal mappings
+                null,
                 $vesselName,
                 $vesselClass
             );
-
-            // Filter mappings to only include those that match the requested port
+            
             if ($podPortId !== null) {
                 $portGroupIds = $resolver->resolvePortGroupIdsForPort($carrierId, $podPortId);
-                $mappings = $this->filterMappingsByPort($mappings, $podPortId, $portGroupIds);
+                $universalMappings = $this->filterMappingsByPort($universalMappings, $podPortId, $portGroupIds);
+            }
+            
+            $allMappings = $allMappings->merge($universalMappings);
+            
+            // Remove duplicates and get unique article IDs
+            $mappedArticleIds = $allMappings->pluck('article_id')->unique()->toArray();
+            
+            // #region agent log
+            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                'sessionId' => 'debug-session',
+                'runId' => 'run1',
+                'hypothesisId' => 'A',
+                'location' => 'RobawsArticleCache.php:1022',
+                'message' => 'Mappings calculated',
+                'data' => [
+                    'quotation_id' => $quotation->id ?? null,
+                    'carrier_id' => $carrierId ?? null,
+                    'all_mappings_count' => $allMappings->count(),
+                    'mapped_article_ids' => $mappedArticleIds,
+                    'mapped_article_ids_count' => count($mappedArticleIds),
+                    'vehicle_categories' => $vehicleCategories,
+                ],
+                'timestamp' => time() * 1000
+            ]) . "\n", FILE_APPEND);
+            // #endregion
+        } else {
+            // #region agent log
+            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                'sessionId' => 'debug-session',
+                'runId' => 'run1',
+                'hypothesisId' => 'C',
+                'location' => 'RobawsArticleCache.php:1024',
+                'message' => 'No carrier ID - mappings not calculated',
+                'data' => [
+                    'quotation_id' => $quotation->id ?? null,
+                    'carrier_id' => $carrierId ?? null,
+                ],
+                'timestamp' => time() * 1000
+            ]) . "\n", FILE_APPEND);
+            // #endregion
+        }
+
+        // Apply validity date filter
+        $query->validAsOf(now());
+
+        // Apply POL/POD filtering - EXACT MATCHING ONLY (100% match required)
+        // BUT: If article mappings exist, allow mapped articles to bypass strict POL/POD matching
+        // Extract port codes and compare exactly, fall back to exact string match
+        $quotationPolCode = null;
+        $quotationPodCode = null;
+        if ($quotation->pol && $quotation->pod) {
+            $quotationPolCode = $this->extractPortCode($quotation->pol);
+            $quotationPodCode = $this->extractPortCode($quotation->pod);
+            
+            // #region agent log
+            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                'sessionId' => 'debug-session',
+                'runId' => 'run1',
+                'hypothesisId' => 'D',
+                'location' => 'RobawsArticleCache.php:905',
+                'message' => 'POL/POD filtering',
+                'data' => [
+                    'quotation_id' => $quotation->id ?? null,
+                    'quotation_pol' => $quotation->pol ?? null,
+                    'quotation_pod' => $quotation->pod ?? null,
+                    'extracted_pol_code' => $quotationPolCode ?? null,
+                    'extracted_pod_code' => $quotationPodCode ?? null,
+                    'has_mappings' => !empty($mappedArticleIds),
+                    'mapped_article_ids_count' => count($mappedArticleIds),
+                ],
+                'timestamp' => time() * 1000
+            ]) . "\n", FILE_APPEND);
+            // #endregion
+
+            // Require both POL and POD to match exactly, BUT allow mapped articles to bypass
+            $query->where(function ($q) use ($quotation, $quotationPolCode, $quotationPodCode, $useIlike, $mappedArticleIds) {
+                // #region agent log
+                @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                    'sessionId' => 'debug-session',
+                    'runId' => 'run1',
+                    'hypothesisId' => 'A',
+                    'location' => 'RobawsArticleCache.php:1053',
+                    'message' => 'POL/POD filter closure - mappedArticleIds check',
+                    'data' => [
+                        'mapped_article_ids_count' => count($mappedArticleIds),
+                        'mapped_article_ids' => $mappedArticleIds,
+                        'is_empty' => empty($mappedArticleIds),
+                    ],
+                    'timestamp' => time() * 1000
+                ]) . "\n", FILE_APPEND);
+                // #endregion
+                
+                // Allow mapped articles to bypass POL/POD filtering
+                if (!empty($mappedArticleIds)) {
+                    $q->whereIn('id', $mappedArticleIds);
+                    
+                    // #region agent log
+                    @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                        'sessionId' => 'debug-session',
+                        'runId' => 'run1',
+                        'hypothesisId' => 'B',
+                        'location' => 'RobawsArticleCache.php:1056',
+                        'message' => 'POL/POD bypass applied - whereIn added',
+                        'data' => [
+                            'mapped_article_ids' => $mappedArticleIds,
+                        ],
+                        'timestamp' => time() * 1000
+                    ]) . "\n", FILE_APPEND);
+                    // #endregion
+                }
+                
+                // Also include articles that match POL/POD exactly
+                $q->orWhere(function ($polPodQuery) use ($quotation, $quotationPolCode, $quotationPodCode, $useIlike) {
+                    // POL matching
+                    $polPodQuery->where(function ($polQuery) use ($quotation, $quotationPolCode, $useIlike) {
+                        if ($quotationPolCode) {
+                            // Match by port code in parentheses (more flexible but still exact code match)
+                            $polQuery->where(function ($codeQuery) use ($quotationPolCode, $quotation, $useIlike) {
+                                // Match if article POL contains the port code in parentheses
+                                if ($useIlike) {
+                                    $codeQuery->where('pol', 'ILIKE', '%(' . $quotationPolCode . ')%')
+                                        ->orWhere('pol', 'ILIKE', $quotation->pol);
+                                } else {
+                                    $codeQuery->whereRaw('LOWER(pol) LIKE LOWER(?)', ['%(' . $quotationPolCode . ')%'])
+                                        ->orWhereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
+                                }
+                            });
+                        } else {
+                            // No code available - exact string match
+                            if ($useIlike) {
+                                $polQuery->where('pol', 'ILIKE', $quotation->pol);
+                            } else {
+                                $polQuery->whereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
+                            }
+                        }
+                    });
+                    
+                    // POD matching
+                    $polPodQuery->where(function ($podQuery) use ($quotation, $quotationPodCode, $useIlike) {
+                        if ($quotationPodCode) {
+                            // Match by port code in parentheses
+                            $podQuery->where(function ($codeQuery) use ($quotationPodCode, $quotation, $useIlike) {
+                                // Match if article POD contains the port code in parentheses
+                                if ($useIlike) {
+                                    $codeQuery->where('pod', 'ILIKE', '%(' . $quotationPodCode . ')%')
+                                        ->orWhere('pod', 'ILIKE', $quotation->pod);
+                                } else {
+                                    $codeQuery->whereRaw('LOWER(pod) LIKE LOWER(?)', ['%(' . $quotationPodCode . ')%'])
+                                        ->orWhereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
+                                }
+                            });
+                        } else {
+                            // No code available - exact string match
+                            if ($useIlike) {
+                                $podQuery->where('pod', 'ILIKE', $quotation->pod);
+                            } else {
+                                $podQuery->whereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
+                            }
+                        }
+                    });
+                });
+            });
+        } elseif ($quotation->pol) {
+            // Only POL specified - require exact POL match, BUT allow mapped articles to bypass
+            $quotationPolCode = $this->extractPortCode($quotation->pol);
+            $query->where(function ($q) use ($quotation, $quotationPolCode, $useIlike, $mappedArticleIds) {
+                // Allow mapped articles to bypass POL filtering
+                if (!empty($mappedArticleIds)) {
+                    $q->whereIn('id', $mappedArticleIds);
+                }
+                
+                // Also include articles that match POL exactly
+                $q->orWhere(function ($polQuery) use ($quotation, $quotationPolCode, $useIlike) {
+                    if ($quotationPolCode) {
+                        // Match by port code in parentheses (more flexible)
+                        $polQuery->where(function ($codeQuery) use ($quotationPolCode, $quotation, $useIlike) {
+                            // Match if article POL contains the port code in parentheses
+                            if ($useIlike) {
+                                $codeQuery->where('pol', 'ILIKE', '%(' . $quotationPolCode . ')%')
+                                    ->orWhere('pol', 'ILIKE', $quotation->pol);
+                            } else {
+                                $codeQuery->whereRaw('LOWER(pol) LIKE LOWER(?)', ['%(' . $quotationPolCode . ')%'])
+                                    ->orWhereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
+                            }
+                        });
+                    } else {
+                        // No code available - exact string match
+                        if ($useIlike) {
+                            $polQuery->where('pol', 'ILIKE', $quotation->pol);
+                        } else {
+                            $polQuery->whereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
+                        }
+                    }
+                });
+            });
+        } elseif ($quotation->pod) {
+            // Only POD specified - require exact POD match, BUT allow mapped articles to bypass
+            $quotationPodCode = $this->extractPortCode($quotation->pod);
+            $query->where(function ($q) use ($quotation, $quotationPodCode, $useIlike, $mappedArticleIds) {
+                // Allow mapped articles to bypass POD filtering
+                if (!empty($mappedArticleIds)) {
+                    $q->whereIn('id', $mappedArticleIds);
+                }
+                
+                // Also include articles that match POD exactly
+                $q->orWhere(function ($podQuery) use ($quotation, $quotationPodCode, $useIlike) {
+                    if ($quotationPodCode) {
+                        // Match by port code in parentheses
+                        $podQuery->where(function ($codeQuery) use ($quotationPodCode, $quotation, $useIlike) {
+                            // Match if article POD contains the port code in parentheses
+                            if ($useIlike) {
+                                $codeQuery->where('pod', 'ILIKE', '%(' . $quotationPodCode . ')%')
+                                    ->orWhere('pod', 'ILIKE', $quotation->pod);
+                            } else {
+                                $codeQuery->whereRaw('LOWER(pod) LIKE LOWER(?)', ['%(' . $quotationPodCode . ')%'])
+                                    ->orWhereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
+                            }
+                        });
+                    } else {
+                        // No code available - exact string match
+                        if ($useIlike) {
+                            $podQuery->where('pod', 'ILIKE', $quotation->pod);
+                        } else {
+                            $podQuery->whereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
+                        }
+                    }
+                });
+            });
+        }
+
+        // Apply transport mode filter derived from quotation service type
+        // BUT: Allow mapped articles to bypass this filter
+        if ($quotation->service_type) {
+            $transportMode = $this->mapQuotationServiceTypeToTransportMode($quotation->service_type);
+            $serviceTypeValue = Str::upper(str_replace(' ', '_', $quotation->service_type));
+
+            // #region agent log
+            $articlesBeforeTransportFilter = (clone $query)->get();
+            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                'sessionId' => 'debug-session',
+                'runId' => 'run1',
+                'hypothesisId' => 'D',
+                'location' => 'RobawsArticleCache.php:1178',
+                'message' => 'Before transport mode filter',
+                'data' => [
+                    'quotation_id' => $quotation->id ?? null,
+                    'service_type' => $quotation->service_type,
+                    'transport_mode' => $transportMode,
+                    'service_type_value' => $serviceTypeValue,
+                    'articles_count' => $articlesBeforeTransportFilter->count(),
+                ],
+                'timestamp' => time() * 1000
+            ]) . "\n", FILE_APPEND);
+            // #endregion
+
+            $query->where(function ($q) use ($transportMode, $serviceTypeValue, $mappedArticleIds) {
+                // Allow mapped articles to bypass transport mode filter
+                if (!empty($mappedArticleIds)) {
+                    $q->whereIn('id', $mappedArticleIds);
+                }
+                
+                // Also include articles that match transport mode
+                $q->orWhere(function ($transportQuery) use ($transportMode, $serviceTypeValue) {
+                    if ($transportMode) {
+                        $transportQuery->where('transport_mode', $transportMode);
+                        $transportQuery->orWhere('service_type', $serviceTypeValue);
+                    } else {
+                        $transportQuery->where('service_type', $serviceTypeValue);
+                    }
+                });
+            });
+            
+            // #region agent log
+            $articlesAfterTransportFilter = (clone $query)->get();
+            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                'sessionId' => 'debug-session',
+                'runId' => 'run1',
+                'hypothesisId' => 'D',
+                'location' => 'RobawsArticleCache.php:1191',
+                'message' => 'After transport mode filter',
+                'data' => [
+                    'articles_count' => $articlesAfterTransportFilter->count(),
+                    'articles_ids' => $articlesAfterTransportFilter->pluck('id')->toArray(),
+                ],
+                'timestamp' => time() * 1000
+            ]) . "\n", FILE_APPEND);
+            // #endregion
+        }
+
+        // Apply shipping line filter if schedule is selected - Include NULL shipping_carrier_id (universal articles)
+        if ($quotation->selected_schedule_id && $quotation->selectedSchedule) {
+            $schedule = $quotation->selectedSchedule;
+            if ($schedule->carrier_id) {
+                // #region agent log
+                $articlesBeforeCarrierFilter = (clone $query)->get();
+                @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                    'sessionId' => 'debug-session',
+                    'runId' => 'run1',
+                    'hypothesisId' => 'D',
+                    'location' => 'RobawsArticleCache.php:1194',
+                    'message' => 'Before carrier filter',
+                    'data' => [
+                        'quotation_id' => $quotation->id ?? null,
+                        'schedule_id' => $schedule->id ?? null,
+                        'carrier_id' => $schedule->carrier_id ?? null,
+                        'articles_count' => $articlesBeforeCarrierFilter->count(),
+                    ],
+                    'timestamp' => time() * 1000
+                ]) . "\n", FILE_APPEND);
+                // #endregion
+                
+                $query->where(function ($q) use ($schedule, $mappedArticleIds) {
+                    // Allow mapped articles to bypass carrier filter
+                    if (!empty($mappedArticleIds)) {
+                        $q->whereIn('id', $mappedArticleIds);
+                    }
+                    
+                    // Also include articles that match carrier
+                    $q->orWhere(function ($carrierQuery) use ($schedule) {
+                        $carrierQuery->where('shipping_carrier_id', $schedule->carrier_id)
+                          ->orWhereNull('shipping_carrier_id');
+                    });
+                });
+                
+                // #region agent log
+                $articlesAfterCarrierFilter = (clone $query)->get();
+                @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                    'sessionId' => 'debug-session',
+                    'runId' => 'run1',
+                    'hypothesisId' => 'D',
+                    'location' => 'RobawsArticleCache.php:1202',
+                    'message' => 'After carrier filter',
+                    'data' => [
+                        'articles_count' => $articlesAfterCarrierFilter->count(),
+                        'articles_ids' => $articlesAfterCarrierFilter->pluck('id')->toArray(),
+                    ],
+                    'timestamp' => time() * 1000
+                ]) . "\n", FILE_APPEND);
+                // #endregion
             }
         }
+        
+        // Also check preferred_carrier_id if set
+        if ($quotation->preferred_carrier_id) {
+            $query->where(function ($q) use ($quotation) {
+                $q->where('shipping_carrier_id', $quotation->preferred_carrier_id)
+                  ->orWhereNull('shipping_carrier_id');
+            });
+        }
+
+        // PHASE 4: Apply ALLOWLIST strategy if mappings exist (already checked above)
+        // Note: $mappings variable is now $allMappings, but we use $mappedArticleIds for the filter
+        $mappings = $allMappings;
+
+        // #region agent log
+        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'A',
+            'location' => 'RobawsArticleCache.php:1048',
+            'message' => 'Article mappings check',
+            'data' => [
+                'quotation_id' => $quotation->id ?? null,
+                'carrier_id' => $carrierId ?? null,
+                'pod_port_id' => $podPortId ?? null,
+                'vehicle_category' => $vehicleCategory ?? null,
+                'category_group_id' => $categoryGroupId ?? null,
+                'mappings_count' => $mappings->count(),
+                'mapped_article_ids' => $mappings->pluck('article_id')->unique()->toArray(),
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
 
         // If mappings exist, apply ALLOWLIST strategy
         if ($mappings->isNotEmpty()) {
-            $mappedArticleIds = $mappings->pluck('article_id')->unique()->toArray();
+            // Ensure $mappedArticleIds is populated from $mappings if not already set
+            if (empty($mappedArticleIds)) {
+                $mappedArticleIds = $mappings->pluck('article_id')->unique()->toArray();
+            }
+            
+            // #region agent log
+            // Check how many mapped articles pass POL/POD filter before ALLOWLIST
+            $articlesBeforeAllowlist = (clone $query)->get();
+            $mappedArticlesBeforeAllowlist = $articlesBeforeAllowlist->whereIn('id', $mappedArticleIds);
+            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                'sessionId' => 'debug-session',
+                'runId' => 'run1',
+                'hypothesisId' => 'A',
+                'location' => 'RobawsArticleCache.php:1068',
+                'message' => 'ALLOWLIST strategy applied',
+                'data' => [
+                    'quotation_id' => $quotation->id ?? null,
+                    'mapped_article_ids_count' => count($mappedArticleIds),
+                    'mapped_article_ids' => $mappedArticleIds,
+                    'articles_before_allowlist_count' => $articlesBeforeAllowlist->count(),
+                    'mapped_articles_before_allowlist_count' => $mappedArticlesBeforeAllowlist->count(),
+                    'mapped_articles_before_allowlist_ids' => $mappedArticlesBeforeAllowlist->pluck('id')->toArray(),
+                ],
+                'timestamp' => time() * 1000
+            ]) . "\n", FILE_APPEND);
+            // #endregion
             
             // Apply allowlist: only mapped articles + universal articles (commodity_type NULL)
-            $query->where(function ($q) use ($mappedArticleIds) {
-                $q->whereIn('id', $mappedArticleIds)
-                  ->orWhereNull('commodity_type'); // Keep universal articles
+            // BUT: Also filter mapped articles by POD match to ensure they're for the correct destination
+            $query->where(function ($q) use ($mappedArticleIds, $quotation, $quotationPodCode, $useIlike) {
+                // #region agent log
+                @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                    'sessionId' => 'debug-session',
+                    'runId' => 'run1',
+                    'hypothesisId' => 'C',
+                    'location' => 'RobawsArticleCache.php:1266',
+                    'message' => 'ALLOWLIST closure - mappedArticleIds check',
+                    'data' => [
+                        'mapped_article_ids_count' => count($mappedArticleIds),
+                        'mapped_article_ids' => $mappedArticleIds,
+                        'is_empty' => empty($mappedArticleIds),
+                    ],
+                    'timestamp' => time() * 1000
+                ]) . "\n", FILE_APPEND);
+                // #endregion
+                
+                // Mapped articles that also match POD (strict POD matching)
+                // When an article is mapped to a port, its POD field is updated to match that port
+                // So we still need to verify POD matches to ensure strict POD matching
+                if (!empty($mappedArticleIds)) {
+                    $q->where(function ($mappedQuery) use ($mappedArticleIds, $quotation, $quotationPodCode, $useIlike) {
+                        $mappedQuery->whereIn('id', $mappedArticleIds);
+                        
+                        // If quotation has POD, ensure article POD matches (strict matching)
+                        if ($quotation->pod) {
+                            $podCode = $quotationPodCode ?? $this->extractPortCode($quotation->pod);
+                            $mappedQuery->where(function ($podMatchQuery) use ($quotation, $podCode, $useIlike) {
+                                // Article has no POD (universal)
+                                $podMatchQuery->whereNull('pod');
+                                
+                                // Or article POD matches quotation POD (strict match)
+                                if ($podCode) {
+                                    if ($useIlike) {
+                                        $podMatchQuery->orWhere('pod', 'ILIKE', '%(' . $podCode . ')%')
+                                            ->orWhere('pod', 'ILIKE', $quotation->pod);
+                                    } else {
+                                        $podMatchQuery->orWhereRaw('LOWER(pod) LIKE LOWER(?)', ['%(' . $podCode . ')%'])
+                                            ->orWhereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
+                                    }
+                                } else {
+                                    if ($useIlike) {
+                                        $podMatchQuery->orWhere('pod', 'ILIKE', $quotation->pod);
+                                    } else {
+                                        $podMatchQuery->orWhereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
+                                    }
+                                }
+                            });
+                        }
+                    });
+                }
+                
+                // Keep universal articles (commodity_type NULL)
+                $q->orWhereNull('commodity_type');
             });
+            
+            // #region agent log
+            $articlesAfterAllowlist = (clone $query)->get();
+            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                'sessionId' => 'debug-session',
+                'runId' => 'run1',
+                'hypothesisId' => 'C',
+                'location' => 'RobawsArticleCache.php:1272',
+                'message' => 'After ALLOWLIST applied',
+                'data' => [
+                    'quotation_id' => $quotation->id ?? null,
+                    'articles_after_allowlist_count' => $articlesAfterAllowlist->count(),
+                    'articles_after_allowlist_ids' => $articlesAfterAllowlist->pluck('id')->toArray(),
+                ],
+                'timestamp' => time() * 1000
+            ]) . "\n", FILE_APPEND);
+            // #endregion
+        } else {
+            // #region agent log
+            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                'sessionId' => 'debug-session',
+                'runId' => 'run1',
+                'hypothesisId' => 'C',
+                'location' => 'RobawsArticleCache.php:1285',
+                'message' => 'ALLOWLIST NOT applied - mappings empty',
+                'data' => [
+                    'quotation_id' => $quotation->id ?? null,
+                    'mappings_count' => $mappings->count(),
+                    'mappings_is_empty' => $mappings->isEmpty(),
+                ],
+                'timestamp' => time() * 1000
+            ]) . "\n", FILE_APPEND);
+            // #endregion
             
             // Skip commodity type filtering when mappings exist
             return $query;
@@ -1095,6 +1571,24 @@ class RobawsArticleCache extends Model
             
             $commodityTypes = array_merge($commodityTypes, $itemTypes);
         }
+        
+        // #region agent log
+        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'B',
+            'location' => 'RobawsArticleCache.php:1081',
+            'message' => 'Commodity type extraction',
+            'data' => [
+                'quotation_id' => $quotation->id ?? null,
+                'quotation_commodity_type' => $quotation->commodity_type ?? null,
+                'commodity_items_count' => $quotation->commodityItems ? $quotation->commodityItems->count() : 0,
+                'commodity_items_types' => $quotation->commodityItems ? $quotation->commodityItems->pluck('commodity_type')->toArray() : [],
+                'extracted_commodity_types' => $commodityTypes,
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
         
         // Filter by commodity type when selected, but always include universal articles (NULL commodity_type)
         if (!empty($commodityTypes)) {
@@ -1130,8 +1624,56 @@ class RobawsArticleCache extends Model
                 $q->whereRaw("UPPER(TRIM(commodity_type)) IN ($placeholders)", $commodityTypes)
                   ->orWhereNull('commodity_type');
             });
+            
+            // #region agent log
+            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                'sessionId' => 'debug-session',
+                'runId' => 'run1',
+                'hypothesisId' => 'B',
+                'location' => 'RobawsArticleCache.php:1129',
+                'message' => 'Commodity type filter applied',
+                'data' => [
+                    'quotation_id' => $quotation->id ?? null,
+                    'final_commodity_types' => $commodityTypes,
+                ],
+                'timestamp' => time() * 1000
+            ]) . "\n", FILE_APPEND);
+            // #endregion
         }
         // If no commodity selected, show all articles (existing behavior)
+
+        // #region agent log
+        $articleCountBeforeReturn = $query->count();
+        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'C',
+            'location' => 'RobawsArticleCache.php:1136',
+            'message' => 'scopeForQuotationContext exit',
+            'data' => [
+                'quotation_id' => $quotation->id ?? null,
+                'articles_count' => $articleCountBeforeReturn,
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
+
+        // #region agent log
+        $finalArticles = (clone $query)->get();
+        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'E',
+            'location' => 'RobawsArticleCache.php:1561',
+            'message' => 'Final query result',
+            'data' => [
+                'quotation_id' => $quotation->id ?? null,
+                'final_articles_count' => $finalArticles->count(),
+                'final_articles_ids' => $finalArticles->pluck('id')->toArray(),
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
 
         return $query;
     }

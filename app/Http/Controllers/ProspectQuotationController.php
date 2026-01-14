@@ -247,12 +247,9 @@ class ProspectQuotationController extends Controller
             // Service Information
             'simple_service_type' => 'required|string|in:' . implode(',', array_keys(config('quotation.simple_service_types', []))),
             
-            // Legacy Cargo Information (optional if commodity_items provided)
-            'cargo_description' => 'required_without:commodity_items|nullable|string|max:1000',
+            // Legacy Cargo Information (kept for backward compatibility)
+            'cargo_description' => 'nullable|string|max:1000',
             'commodity_type' => 'nullable|string|max:255',
-            'cargo_weight' => 'nullable|numeric|min:0',
-            'cargo_volume' => 'nullable|numeric|min:0',
-            'cargo_dimensions' => 'nullable|string|max:255',
             'cargo_value' => 'nullable|numeric|min:0',
             
             // New Multi-Commodity System
@@ -329,11 +326,8 @@ class ProspectQuotationController extends Controller
             
             // Cargo
             'cargo_description' => $request->cargo_description,
-            'commodity_type' => $request->commodity_type, // Quick Quote mode
+            'commodity_type' => $request->commodity_type, // Legacy field - kept for backward compatibility
             'cargo_details' => [
-                'weight' => $request->cargo_weight,
-                'volume' => $request->cargo_volume,
-                'dimensions' => $request->cargo_dimensions,
                 'value' => $request->cargo_value,
                 'special_requirements' => $request->special_requirements,
             ],

@@ -277,7 +277,8 @@ class CarrierRuleEngine
             $vehicleCategory,
             $categoryGroupId,
             $input->vesselName,
-            $input->vesselClass
+            $input->vesselClass,
+            $input->commodityItemId
         );
 
         $events = [];

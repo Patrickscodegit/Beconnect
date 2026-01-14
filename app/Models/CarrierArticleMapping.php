@@ -81,6 +81,89 @@ class CarrierArticleMapping extends Model
                 // If article has null shipping_carrier_id, it's universal and can be mapped to any carrier - no validation needed
             }
         });
+        
+        // After mapping is saved, update article fields to ensure it shows in quotations
+        static::saved(function ($model) {
+            if ($model->article_id && $model->carrier_id) {
+                $article = RobawsArticleCache::find($model->article_id);
+                if ($article) {
+                    $needsUpdate = false;
+                    
+                    // Ensure carrier_id is set
+                    if ($article->shipping_carrier_id !== $model->carrier_id) {
+                        $article->shipping_carrier_id = $model->carrier_id;
+                        $needsUpdate = true;
+                    }
+                    
+                    // Ensure validity_date is set and valid (at least 1 year from now)
+                    $oneYearFromNow = now()->addYear();
+                    if (!$article->validity_date || $article->validity_date < now()) {
+                        $article->validity_date = $oneYearFromNow->format('Y-m-d');
+                        $needsUpdate = true;
+                    }
+                    
+                    // Ensure transport_mode is set if not already
+                    if (!$article->transport_mode && $model->carrier_id) {
+                        // Default to RORO for Grimaldi, or infer from article name
+                        $carrier = ShippingCarrier::find($model->carrier_id);
+                        if ($carrier && stripos($carrier->name ?? '', 'grimaldi') !== false) {
+                            $article->transport_mode = 'RORO';
+                            $needsUpdate = true;
+                        }
+                    }
+                    
+                    // Ensure service_type is set if not already
+                    if (!$article->service_type && $article->transport_mode) {
+                        $article->service_type = strtoupper($article->transport_mode . '_EXPORT');
+                        $needsUpdate = true;
+                    }
+                    
+                    // Update POD field if mapping has specific port_ids (single port)
+                    // This ensures the article shows up in quotations for that port
+                    // POD must be strict - article POD must match quotation POD
+                    // When mapping to a specific port, update the article's POD to match that port
+                    if (!empty($model->port_ids) && is_array($model->port_ids) && count($model->port_ids) === 1) {
+                        // Single port mapping - update article POD to match that port
+                        $portId = $model->port_ids[0];
+                        $port = \App\Models\Port::find($portId);
+                        if ($port) {
+                            // Format POD as "City (CODE), Country" to match Robaws format
+                            // Use country_name if available, otherwise country_code
+                            $podString = $port->name;
+                            if ($port->code) {
+                                $podString .= ' (' . $port->code . ')';
+                            }
+                            if ($port->country_name) {
+                                $podString .= ', ' . $port->country_name;
+                            } elseif ($port->country_code) {
+                                $podString .= ', ' . $port->country_code;
+                            }
+                            
+                            // Always update POD to match the mapped port (strict POD matching)
+                            if ($article->pod !== $podString) {
+                                $article->pod = $podString;
+                                $needsUpdate = true;
+                            }
+                        }
+                    }
+                    // Note: For multi-port mappings (port_group_ids or multiple port_ids),
+                    // we don't update POD as the article should remain universal for that group
+                    
+                    if ($needsUpdate) {
+                        $article->saveQuietly();
+                        \Log::info('CarrierArticleMapping: Updated article fields after mapping creation', [
+                            'mapping_id' => $model->id,
+                            'article_id' => $article->id,
+                            'carrier_id' => $article->shipping_carrier_id,
+                            'validity_date' => $article->validity_date,
+                            'transport_mode' => $article->transport_mode,
+                            'service_type' => $article->service_type,
+                            'pod' => $article->pod,
+                        ]);
+                    }
+                }
+            }
+        });
     }
 
     public function carrier(): BelongsTo

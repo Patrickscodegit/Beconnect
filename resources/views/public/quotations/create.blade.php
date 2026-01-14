@@ -35,7 +35,7 @@
         <!-- Form -->
         <div class="bg-white rounded-lg shadow-xl overflow-hidden">
             <form action="{{ route('public.quotations.store') }}" method="POST" enctype="multipart/form-data" 
-                  x-data="{ quotationMode: 'detailed', ...quotationForm() }"
+                  x-data="quotationForm()"
                   @submit="syncCommodityItems($event)">
                 @csrf
                 
@@ -293,134 +293,9 @@
                     <h2 class="text-2xl font-bold text-gray-900 mb-6">
                         <i class="fas fa-box mr-2"></i>Cargo Information
                     </h2>
-                    
-                    <!-- Toggle Between Quick Quote and Detailed Quote -->
-                    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg border-2 border-blue-200 mb-6">
-                        <h3 class="text-lg font-semibold text-gray-900 mb-4">
-                            <i class="fas fa-exchange-alt mr-2 text-blue-600"></i>Choose Your Input Method
-                        </h3>
-                        
-                        <div class="space-y-3">
-                            <!-- Quick Quote Option -->
-                            <label class="flex items-start p-4 border-2 rounded-lg cursor-pointer transition-all"
-                                   :class="quotationMode === 'quick' ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-white hover:border-blue-300'">
-                                <input type="radio" x-model="quotationMode" value="quick" class="mt-1 mr-3 w-5 h-5 text-blue-600">
-                                <div class="flex-1">
-                                    <div class="font-semibold text-gray-900">
-                                        <i class="fas fa-bolt text-yellow-500 mr-2"></i>Quick Quote
-                                    </div>
-                                    <p class="text-sm text-gray-600 mt-1">Fast entry for simple shipments with basic cargo details</p>
-                                </div>
-                            </label>
-                            
-                            <!-- Detailed Quote Option -->
-                            <label class="flex items-start p-4 border-2 rounded-lg cursor-pointer transition-all"
-                                   :class="quotationMode === 'detailed' ? 'border-green-500 bg-green-50' : 'border-gray-300 bg-white hover:border-green-300'">
-                                <input type="radio" x-model="quotationMode" value="detailed" class="mt-1 mr-3 w-5 h-5 text-green-600">
-                                <div class="flex-1">
-                                    <div class="font-semibold text-gray-900">
-                                        <i class="fas fa-cubes text-green-600 mr-2"></i>Detailed Quote
-                                        <span class="ml-2 bg-green-500 text-white px-2 py-0.5 rounded-full text-xs font-semibold">RECOMMENDED</span>
-                                    </div>
-                                    <p class="text-sm text-gray-600 mt-1">Multi-commodity breakdown for most accurate pricing and faster processing</p>
-                                </div>
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <!-- Hidden field to track mode -->
-                    <input type="hidden" name="quotation_mode" :value="quotationMode">
-                    
-                    <!-- Quick Quote Form -->
-                    <div x-show="quotationMode === 'quick'" x-cloak>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="md:col-span-2">
-                            <label for="cargo_description" class="block text-sm font-medium text-gray-700 mb-2">
-                                Cargo Description
-                            </label>
-                            <textarea id="cargo_description" name="cargo_description" rows="3"
-                                      class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                                      placeholder="Describe your cargo in detail...">{{ old('cargo_description') }}</textarea>
-                            @error('cargo_description')
-                                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
-                            @enderror
-                        </div>
-                        
-                        <div>
-                            <label for="commodity_type" class="block text-sm font-medium text-gray-700 mb-2">
-                                Commodity Type
-                            </label>
-                            <select id="commodity_type" name="commodity_type"
-                                    class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                                <option value="">Select Type</option>
-                                <option value="cars" {{ old('commodity_type') == 'cars' ? 'selected' : '' }}>Cars/Vehicles</option>
-                                <option value="machinery" {{ old('commodity_type') == 'machinery' ? 'selected' : '' }}>Machinery</option>
-                                <option value="general_cargo" {{ old('commodity_type') == 'general_cargo' ? 'selected' : '' }}>General Cargo</option>
-                                <option value="personal_effects" {{ old('commodity_type') == 'personal_effects' ? 'selected' : '' }}>Personal Effects</option>
-                                <option value="other" {{ old('commodity_type') == 'other' ? 'selected' : '' }}>Other</option>
-                            </select>
-                            @error('commodity_type')
-                                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
-                            @enderror
-                        </div>
-                        
-                        <div>
-                            <label for="cargo_weight" class="block text-sm font-medium text-gray-700 mb-2">
-                                Weight (kg)
-                            </label>
-                            <input type="number" id="cargo_weight" name="cargo_weight" step="0.01" min="0"
-                                   value="{{ old('cargo_weight') }}"
-                                   class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                                   placeholder="e.g., 1500">
-                            @error('cargo_weight')
-                                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
-                            @enderror
-                        </div>
-                        
-                        <div>
-                            <label for="cargo_volume" class="block text-sm font-medium text-gray-700 mb-2">
-                                Volume (m³)
-                            </label>
-                            <input type="number" id="cargo_volume" name="cargo_volume" step="0.01" min="0"
-                                   value="{{ old('cargo_volume') }}"
-                                   class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                                   placeholder="e.g., 25.5">
-                            @error('cargo_volume')
-                                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
-                            @enderror
-                        </div>
-                        
-                        <div>
-                            <label for="cargo_dimensions" class="block text-sm font-medium text-gray-700 mb-2">
-                                Dimensions
-                            </label>
-                            <input type="text" id="cargo_dimensions" name="cargo_dimensions"
-                                   value="{{ old('cargo_dimensions') }}"
-                                   class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                                   placeholder="L x W x H (cm)">
-                            @error('cargo_dimensions')
-                                <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
-                            @enderror
-                        </div>
-                    </div>
-                    
-                    <div class="mt-6">
-                        <label for="special_requirements" class="block text-sm font-medium text-gray-700 mb-2">
-                            Special Requirements
-                        </label>
-                        <textarea id="special_requirements" name="special_requirements" rows="3"
-                                  class="form-input w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                                  placeholder="Any special handling, documentation, or requirements...">{{ old('special_requirements') }}</textarea>
-                        @error('special_requirements')
-                            <p class="text-red-600 text-sm mt-1">{{ $message }}</p>
-                        @enderror
-                    </div>
-                    </div>
-                    <!-- End Quick Quote Form -->
-                </div>
 
                 <!-- Detailed Quote Form (Multi-Commodity Items) -->
-                <div x-show="quotationMode === 'detailed'" x-cloak class="p-8 border-b">
+                <div class="p-8 border-b">
                     @livewire('commodity-items-repeater', [
                         'existingItems' => old('commodity_items') ? json_decode(old('commodity_items'), true) : ($commodityItems ?? []),
                         'serviceType' => old('service_type', $prefill['service_type'] ?? ''),

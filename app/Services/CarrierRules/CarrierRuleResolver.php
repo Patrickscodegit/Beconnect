@@ -272,7 +272,8 @@ class CarrierRuleResolver
         ?string $vehicleCategory = null,
         ?int $categoryGroupId = null,
         ?string $vesselName = null,
-        ?string $vesselClass = null
+        ?string $vesselClass = null,
+        ?int $commodityItemId = null
     ): Collection {
         // Resolve port group IDs once if portId is provided
         $portGroupIds = [];
@@ -282,7 +283,8 @@ class CarrierRuleResolver
             $portGroupIds = array_map('strval', $portGroupIds);
         }
 
-        return CarrierSurchargeRule::where('carrier_id', $carrierId)
+        // Get rules from database (DO NOT return early - we need to filter them)
+        $rules = CarrierSurchargeRule::where('carrier_id', $carrierId)
             ->active()
             ->where(function ($q) use ($portId, $portGroupIds) {
                 $q->where(function ($q2) {
@@ -352,6 +354,163 @@ class CarrierRuleResolver
             ->orderBy('effective_from', 'desc')
             ->orderBy('id', 'desc')
             ->get();
+        
+        // Filter towing rules based on relationship context
+        \Log::info('CarrierRuleResolver::resolveSurchargeRules() - Starting filter', [
+            'total_rules' => $rules->count(),
+            'vehicle_category' => $vehicleCategory,
+            'commodity_item_id' => $commodityItemId,
+        ]);
+        
+        $filteredRules = $rules->filter(function ($rule) use ($vehicleCategory, $commodityItemId) {
+            // Only filter towing rules for trailers (including trailer_stack and tank_trailer)
+            if ($rule->event_code === 'TOWING' || $rule->event_code === 'TOWING_WAF') {
+                \Log::info('CarrierRuleResolver::resolveSurchargeRules() - Found towing rule', [
+                    'rule_id' => $rule->id,
+                    'event_code' => $rule->event_code,
+                    'vehicle_category' => $vehicleCategory,
+                    'commodity_item_id' => $commodityItemId,
+                ]);
+                
+                $trailerCategories = ['trailer', 'trailer_stack', 'tank_trailer'];
+                if (in_array($vehicleCategory, $trailerCategories) && $commodityItemId) {
+                    $shouldApply = $this->shouldApplyTowing($vehicleCategory, $commodityItemId);
+                    \Log::info('CarrierRuleResolver::resolveSurchargeRules() - Filtering towing rule', [
+                        'rule_id' => $rule->id,
+                        'event_code' => $rule->event_code,
+                        'vehicle_category' => $vehicleCategory,
+                        'commodity_item_id' => $commodityItemId,
+                        'should_apply' => $shouldApply,
+                        'rule_kept' => $shouldApply,
+                    ]);
+                    // CRITICAL: Return false to REMOVE the rule when shouldApply is false
+                    if (!$shouldApply) {
+                        \Log::info('CarrierRuleResolver::resolveSurchargeRules() - REMOVING towing rule', [
+                            'rule_id' => $rule->id,
+                            'event_code' => $rule->event_code,
+                        ]);
+                    }
+                    return $shouldApply; // false = remove, true = keep
+                }
+                // If not a trailer category or no commodity item ID, keep the rule (let other filters handle it)
+                \Log::debug('CarrierRuleResolver::resolveSurchargeRules() - Towing rule not filtered (not trailer category or no item ID)', [
+                    'rule_id' => $rule->id,
+                    'event_code' => $rule->event_code,
+                    'vehicle_category' => $vehicleCategory,
+                    'commodity_item_id' => $commodityItemId,
+                ]);
+                return true; // Keep the rule if we can't filter it
+            }
+            return true; // Keep all non-towing rules
+        });
+        
+        \Log::info('CarrierRuleResolver::resolveSurchargeRules() - Rule filtering complete', [
+            'total_rules' => $rules->count(),
+            'filtered_rules' => $filteredRules->count(),
+            'towing_rules_before' => $rules->filter(fn($r) => $r->event_code === 'TOWING' || $r->event_code === 'TOWING_WAF')->count(),
+            'towing_rules_after' => $filteredRules->filter(fn($r) => $r->event_code === 'TOWING' || $r->event_code === 'TOWING_WAF')->count(),
+        ]);
+        
+        return $filteredRules;
+    }
+    
+    /**
+     * Check if towing surcharge should apply to a trailer based on its relationships
+     * 
+     * Towing applies when:
+     * - Trailer is standalone (separate)
+     * - Trailer is loaded but NOT connected to truck/truckhead
+     * 
+     * Towing does NOT apply when:
+     * - Trailer is connected to truck/truckhead (truck pulls it)
+     * - Trailer is loaded AND connected to truck/truckhead
+     */
+    private function shouldApplyTowing(?string $vehicleCategory, ?int $commodityItemId): bool
+    {
+        \Log::info('CarrierRuleResolver::shouldApplyTowing() called', [
+            'vehicle_category' => $vehicleCategory,
+            'commodity_item_id' => $commodityItemId,
+        ]);
+        
+        // Towing only applies to trailers (including trailer_stack and tank_trailer)
+        $trailerCategories = ['trailer', 'trailer_stack', 'tank_trailer'];
+        if (!in_array($vehicleCategory, $trailerCategories)) {
+            \Log::debug('shouldApplyTowing: Not a trailer category, returning false', [
+                'vehicle_category' => $vehicleCategory,
+            ]);
+            return false;
+        }
+        
+        // If commodity item ID provided, check relationship
+        if ($commodityItemId) {
+            $item = \App\Models\QuotationCommodityItem::find($commodityItemId);
+            if ($item) {
+                \Log::info('shouldApplyTowing: Found commodity item', [
+                    'item_id' => $item->id,
+                    'line_number' => $item->line_number,
+                    'category' => $item->category,
+                    'relationship_type' => $item->relationship_type,
+                    'related_item_id' => $item->related_item_id,
+                ]);
+                
+                // If trailer is connected to something, check if it's a truck/truckhead
+                if ($item->isConnected() && $item->related_item_id) {
+                    $relatedItem = \App\Models\QuotationCommodityItem::find($item->related_item_id);
+                    if ($relatedItem) {
+                        $relatedCategory = $relatedItem->category;
+                        \Log::info('shouldApplyTowing: Trailer is connected', [
+                            'related_item_id' => $relatedItem->id,
+                            'related_category' => $relatedCategory,
+                            'is_truck_or_truckhead' => in_array($relatedCategory, ['truck', 'truckhead']),
+                        ]);
+                        
+                        // If connected to truck or truckhead, NO towing (truck pulls it)
+                        if (in_array($relatedCategory, ['truck', 'truckhead'])) {
+                            \Log::info('shouldApplyTowing: Connected to truck/truckhead, NO towing needed');
+                            return false;
+                        }
+                    }
+                }
+                
+                // If trailer is loaded but NOT connected to truck/truckhead, YES towing
+                if ($item->isLoadedWith()) {
+                    // Check if there's a truck/truckhead in the same stack
+                    $stackMembers = $item->getStackMembers();
+                    $hasTruckOrTruckhead = $stackMembers->contains(function ($member) {
+                        return in_array($member->category, ['truck', 'truckhead']);
+                    });
+                    
+                    \Log::info('shouldApplyTowing: Trailer is loaded', [
+                        'stack_members_count' => $stackMembers->count(),
+                        'has_truck_or_truckhead' => $hasTruckOrTruckhead,
+                        'stack_member_categories' => $stackMembers->pluck('category')->toArray(),
+                    ]);
+                    
+                    // If no truck/truckhead in stack, towing is needed
+                    $result = !$hasTruckOrTruckhead;
+                    \Log::info('shouldApplyTowing: Loaded trailer result', ['should_apply' => $result]);
+                    return $result;
+                }
+                
+                // Standalone trailer - YES towing
+                if ($item->isSeparate()) {
+                    \Log::info('shouldApplyTowing: Standalone trailer, YES towing needed');
+                    return true;
+                }
+                
+                \Log::warning('shouldApplyTowing: Trailer item found but relationship type unclear', [
+                    'relationship_type' => $item->relationship_type,
+                ]);
+            } else {
+                \Log::warning('shouldApplyTowing: Commodity item not found', [
+                    'commodity_item_id' => $commodityItemId,
+                ]);
+            }
+        }
+        
+        // Default: apply towing for trailers (will be filtered by relationship check if item ID provided)
+        \Log::info('shouldApplyTowing: Default case, returning true (no commodity item ID provided)');
+        return true;
     }
 
     /**

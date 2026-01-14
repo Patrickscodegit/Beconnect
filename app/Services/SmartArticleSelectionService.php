@@ -46,12 +46,59 @@ class SmartArticleSelectionService
      */
     protected function calculateSuggestions(QuotationRequest $quotation): Collection
     {
+        // #region agent log
+        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'C',
+            'location' => 'SmartArticleSelectionService.php:47',
+            'message' => 'calculateSuggestions entry',
+            'data' => [
+                'quotation_id' => $quotation->id ?? null,
+                'request_number' => $quotation->request_number ?? null,
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
+        
         // Get base query using the model scope (now requires POL/POD match)
         $articles = RobawsArticleCache::forQuotationContext($quotation)->get();
+
+        // #region agent log
+        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'C',
+            'location' => 'SmartArticleSelectionService.php:50',
+            'message' => 'Articles after scopeForQuotationContext',
+            'data' => [
+                'quotation_id' => $quotation->id ?? null,
+                'articles_count' => $articles->count(),
+                'article_ids' => $articles->pluck('id')->toArray(),
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
 
         // NO FALLBACK - only return articles that match POL/POD exactly
         // If no articles match, return empty collection (100% match required)
         if ($articles->isEmpty()) {
+            // #region agent log
+            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                'sessionId' => 'debug-session',
+                'runId' => 'run1',
+                'hypothesisId' => 'D',
+                'location' => 'SmartArticleSelectionService.php:54',
+                'message' => 'No articles found - empty result',
+                'data' => [
+                    'quotation_id' => $quotation->id ?? null,
+                    'pol' => $quotation->pol ?? null,
+                    'pod' => $quotation->pod ?? null,
+                ],
+                'timestamp' => time() * 1000
+            ]) . "\n", FILE_APPEND);
+            // #endregion
+            
             Log::info('No articles matched quotation POL/POD exactly, returning empty results', [
                 'quotation_id' => $quotation->id,
                 'pol' => $quotation->pol,
@@ -455,21 +502,86 @@ class SmartArticleSelectionService
      */
     public function getTopSuggestions(QuotationRequest $quotation, int $limit = 5, int $minScore = 50): Collection
     {
+        // #region agent log
+        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'C',
+            'location' => 'SmartArticleSelectionService.php:503',
+            'message' => 'getTopSuggestions entry',
+            'data' => [
+                'quotation_id' => $quotation->id ?? null,
+                'limit' => $limit,
+                'min_score' => $minScore,
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
+        
         $suggestions = $this->suggestParentArticles($quotation);
         
+        // #region agent log
+        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'C',
+            'location' => 'SmartArticleSelectionService.php:506',
+            'message' => 'After suggestParentArticles',
+            'data' => [
+                'quotation_id' => $quotation->id ?? null,
+                'suggestions_count' => $suggestions->count(),
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
+
         $exactMatches = $suggestions->filter(function ($suggestion) use ($quotation) {
             /** @var \App\Models\RobawsArticleCache $article */
             $article = $suggestion['article'];
             return $article->pol === $quotation->pol && $article->pod === $quotation->pod;
         });
 
+        // #region agent log
+        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'D',
+            'location' => 'SmartArticleSelectionService.php:512',
+            'message' => 'Exact matches filter',
+            'data' => [
+                'quotation_id' => $quotation->id ?? null,
+                'quotation_pol' => $quotation->pol ?? null,
+                'quotation_pod' => $quotation->pod ?? null,
+                'exact_matches_count' => $exactMatches->count(),
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
+
         if ($exactMatches->isNotEmpty()) {
             return $exactMatches->take($limit);
         }
 
         // Fallback: return best matches but ensure a decent score threshold
-        return $suggestions->filter(fn ($suggestion) => ($suggestion['match_score'] ?? 0) >= 80)
+        $filtered = $suggestions->filter(fn ($suggestion) => ($suggestion['match_score'] ?? 0) >= 80)
             ->take($limit);
+            
+        // #region agent log
+        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'C',
+            'location' => 'SmartArticleSelectionService.php:519',
+            'message' => 'getTopSuggestions exit (fallback)',
+            'data' => [
+                'quotation_id' => $quotation->id ?? null,
+                'filtered_count' => $filtered->count(),
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
+        
+        return $filtered;
     }
 }
 

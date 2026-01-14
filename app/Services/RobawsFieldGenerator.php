@@ -18,12 +18,9 @@ class RobawsFieldGenerator
      */
     public function generateCargoField(QuotationRequest $quotation): string
     {
-        if (!$quotation->hasMultiCommodityItems()) {
-            // Fallback to legacy cargo_description
-            return $quotation->cargo_description ?? 'Not specified';
-        }
-
-        $cargoLines = [];
+        // Always use commodity items if available
+        if ($quotation->commodityItems && $quotation->commodityItems->count() > 0) {
+            $cargoLines = [];
         
         foreach ($quotation->commodityItems as $item) {
             $line = "{$item->quantity}x " . ucfirst(str_replace('_', ' ', $item->commodity_type));
@@ -99,6 +96,10 @@ class RobawsFieldGenerator
         }
         
         return implode("\n", $cargoLines);
+        }
+        
+        // Fallback to legacy cargo_description only if no commodity items exist (edge case)
+        return $quotation->cargo_description ?? 'Not specified';
     }
 
     /**
@@ -112,16 +113,9 @@ class RobawsFieldGenerator
      */
     public function generateDimField(QuotationRequest $quotation): string
     {
-        if (!$quotation->hasMultiCommodityItems()) {
-            // Fallback to legacy cargo_dimensions
-            $dims = [];
-            if ($quotation->cargo_dimensions) $dims[] = $quotation->cargo_dimensions;
-            if ($quotation->cargo_weight) $dims[] = "Weight: {$quotation->cargo_weight}kg";
-            if ($quotation->cargo_volume) $dims[] = "Volume: {$quotation->cargo_volume}m³";
-            return $dims ? implode(', ', $dims) : 'Not specified';
-        }
-
-        $dimLines = [];
+        // Always use commodity items if available
+        if ($quotation->commodityItems && $quotation->commodityItems->count() > 0) {
+            $dimLines = [];
         
         foreach ($quotation->commodityItems as $index => $item) {
             $line = "Item " . ($index + 1) . ": ";
@@ -176,6 +170,12 @@ class RobawsFieldGenerator
         }
         
         return implode("\n", $dimLines);
+        }
+        
+        // Fallback to legacy cargo_dimensions only if no commodity items exist (edge case)
+        $dims = [];
+        if ($quotation->cargo_dimensions) $dims[] = $quotation->cargo_dimensions;
+        return $dims ? implode(', ', $dims) : 'Not specified';
     }
 
     /**
@@ -197,17 +197,9 @@ class RobawsFieldGenerator
      */
     public function getCommoditySummary(QuotationRequest $quotation): array
     {
-        if (!$quotation->hasMultiCommodityItems()) {
-            return [
-                'total_items' => 0,
-                'total_quantity' => 0,
-                'total_cbm' => $quotation->cargo_volume ?? 0,
-                'total_weight' => $quotation->cargo_weight ?? 0,
-                'has_hazardous' => false,
-            ];
-        }
-
-        $summary = [
+        // Always use commodity items if available
+        if ($quotation->commodityItems && $quotation->commodityItems->count() > 0) {
+            $summary = [
             'total_items' => $quotation->commodityItems->count(),
             'total_quantity' => $quotation->commodityItems->sum('quantity'),
             'total_cbm' => $quotation->commodityItems->sum('cbm'),
@@ -232,6 +224,16 @@ class RobawsFieldGenerator
         }
 
         return $summary;
+        }
+        
+        // Fallback only if no commodity items exist (edge case)
+        return [
+            'total_items' => 0,
+            'total_quantity' => 0,
+            'total_cbm' => 0,
+            'total_weight' => 0,
+            'has_hazardous' => false,
+        ];
     }
 }
 

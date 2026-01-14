@@ -213,41 +213,10 @@
                         @endforeach
                     </div>
                 @else
-                    {{-- Quick Quote Mode: Show Simple Description --}}
-                    <dl class="space-y-3">
-                        @if($quotationRequest->commodity_type)
-                            <div>
-                                <dt class="text-sm font-medium text-gray-500">Commodity Type</dt>
-                                <dd class="mt-1 text-sm text-gray-900 font-semibold">{{ ucfirst(str_replace('_', ' ', $quotationRequest->commodity_type)) }}</dd>
-                            </div>
-                        @endif
-                        <div>
-                            <dt class="text-sm font-medium text-gray-500">Description</dt>
-                            <dd class="mt-1 text-sm text-gray-900">{{ $quotationRequest->cargo_description ?: 'No description provided' }}</dd>
-                        </div>
-                        @if($quotationRequest->cargo_weight || $quotationRequest->cargo_volume || $quotationRequest->cargo_dimensions)
-                            <div class="grid grid-cols-3 gap-3 pt-3 border-t border-gray-200">
-                                @if($quotationRequest->cargo_weight)
-                                    <div>
-                                        <dt class="text-xs font-medium text-gray-500">Weight</dt>
-                                        <dd class="mt-1 text-sm text-gray-900">{{ number_format($quotationRequest->cargo_weight, 2) }} kg</dd>
-                                    </div>
-                                @endif
-                                @if($quotationRequest->cargo_volume)
-                                    <div>
-                                        <dt class="text-xs font-medium text-gray-500">Volume</dt>
-                                        <dd class="mt-1 text-sm text-gray-900">{{ number_format($quotationRequest->cargo_volume, 2) }} m³</dd>
-                                    </div>
-                                @endif
-                                @if($quotationRequest->cargo_dimensions)
-                                    <div>
-                                        <dt class="text-xs font-medium text-gray-500">Dimensions</dt>
-                                        <dd class="mt-1 text-sm text-gray-900">{{ $quotationRequest->cargo_dimensions }}</dd>
-                                    </div>
-                                @endif
-                            </div>
-                        @endif
-                    </dl>
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-box-open text-4xl mb-2"></i>
+                        <p>No commodity items added yet.</p>
+                    </div>
                 @endif
                 
                 @if($quotationRequest->special_requirements)

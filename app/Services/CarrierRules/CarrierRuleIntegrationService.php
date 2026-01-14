@@ -55,9 +55,30 @@ class CarrierRuleIntegrationService
         $input->carrierId = $schedule->carrier_id;
         $input->podPortId = $schedule->pod_id ?? $podPort->id;
 
+        Log::info('CarrierRuleIntegration: Processing commodity item', [
+            'item_id' => $item->id,
+            'line_number' => $item->line_number,
+            'category' => $item->category,
+            'commodity_type' => $item->commodity_type,
+            'relationship_type' => $item->relationship_type,
+            'related_item_id' => $item->related_item_id,
+            'commodity_item_id_in_input' => $input->commodityItemId,
+            'carrier_id' => $input->carrierId,
+            'pod_port_id' => $input->podPortId,
+        ]);
+
         // Process through engine
         try {
             $result = $this->engine->processCargo($input);
+            
+            Log::info('CarrierRuleIntegration: Engine processed item', [
+                'item_id' => $item->id,
+                'surcharge_events_count' => count($result->surchargeEvents),
+                'surcharge_event_codes' => collect($result->surchargeEvents)->pluck('event_code')->toArray(),
+                'towing_events' => collect($result->surchargeEvents)->filter(fn($e) => 
+                    ($e['event_code'] ?? '') === 'TOWING' || ($e['event_code'] ?? '') === 'TOWING_WAF'
+                )->toArray(),
+            ]);
 
             // Store chargeable LM and meta
             $item->chargeable_lm = $result->chargeableMeasure->chargeableLm;

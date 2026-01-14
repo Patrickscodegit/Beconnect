@@ -57,11 +57,12 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
             }
             
             // Skip if this item is part of a stack and is NOT the base (it points to another item)
+            // The stack base will handle the calculation for the entire stack
             if ($item->isInStack() && !$item->isStackBase()) {
                 continue; // This item's dimensions are included in the stack base's calculation
             }
             
-            // PRIORITY 1: Use stack/overall dimensions if available
+            // PRIORITY 1: Use stack/overall dimensions if available (for stacks)
             if ($item->stack_length_cm && $item->stack_width_cm) {
                 $processedItems[] = $item->id;
                 
@@ -83,7 +84,7 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
                 
                 $totalLm += $lmForStack;
             }
-            // PRIORITY 2: Use individual item dimensions
+            // PRIORITY 2: Use individual item dimensions (for standalone items)
             elseif ($item->length_cm && $item->width_cm) {
                 $processedItems[] = $item->id;
                 
