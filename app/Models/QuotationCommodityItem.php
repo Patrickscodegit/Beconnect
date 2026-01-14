@@ -512,6 +512,25 @@ class QuotationCommodityItem extends Model
 
     public static function recalculateQuotationArticles(int $quotationRequestId, ?int $triggeringItemId = null): void
     {
+        // #region agent log
+        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'C',
+            'location' => 'QuotationCommodityItem.php:recalculateQuotationArticles',
+            'message' => 'recalculate start',
+            'data' => [
+                'quotation_request_id' => $quotationRequestId,
+                'triggering_item_id' => $triggeringItemId,
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
+        \Log::info('Debug: recalculate start', [
+            'quotation_request_id' => $quotationRequestId,
+            'triggering_item_id' => $triggeringItemId,
+        ]);
+
         $quotation = \App\Models\QuotationRequest::find($quotationRequestId);
         if (!$quotation) {
             return;
@@ -762,6 +781,23 @@ class QuotationCommodityItem extends Model
 
         // Recalculate quotation totals
         $quotation->calculateTotals();
+
+        // #region agent log
+        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+            'sessionId' => 'debug-session',
+            'runId' => 'run1',
+            'hypothesisId' => 'C',
+            'location' => 'QuotationCommodityItem.php:recalculateQuotationArticles',
+            'message' => 'recalculate end',
+            'data' => [
+                'quotation_request_id' => $quotationRequestId,
+            ],
+            'timestamp' => time() * 1000
+        ]) . "\n", FILE_APPEND);
+        // #endregion
+        \Log::info('Debug: recalculate end', [
+            'quotation_request_id' => $quotationRequestId,
+        ]);
     }
 
     /**
@@ -804,6 +840,27 @@ class QuotationCommodityItem extends Model
         });
 
         static::saved(function ($item) {
+            // #region agent log
+            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                'sessionId' => 'debug-session',
+                'runId' => 'run1',
+                'hypothesisId' => 'C',
+                'location' => 'QuotationCommodityItem.php:saved',
+                'message' => 'saved handler start',
+                'data' => [
+                    'item_id' => $item->id,
+                    'quotation_request_id' => $item->quotation_request_id,
+                    'relationship_type' => $item->relationship_type ?? null,
+                    'related_item_id' => $item->related_item_id ?? null,
+                ],
+                'timestamp' => time() * 1000
+            ]) . "\n", FILE_APPEND);
+            // #endregion
+            \Log::info('Debug: saved handler start', [
+                'item_id' => $item->id,
+                'quotation_request_id' => $item->quotation_request_id,
+            ]);
+
             // Process through carrier rules engine if schedule/carrier is available
             try {
                 $integrationService = app(\App\Services\CarrierRules\CarrierRuleIntegrationService::class);
@@ -816,54 +873,61 @@ class QuotationCommodityItem extends Model
                 // Continue with other processing even if carrier rules fail
             }
 
-            // Sync bidirectional relationships at database level
-            // When Item A is set to "Connected to Item B", automatically set Item B to "Connected to Item A"
-            if ($item->related_item_id && in_array($item->relationship_type, ['connected_to', 'loaded_with'])) {
-                $relatedItem = static::where('id', $item->related_item_id)
-                    ->where('quotation_request_id', $item->quotation_request_id)
-                    ->first();
-                
-                if ($relatedItem) {
-                    // Check if reverse relationship is already set (to avoid infinite loops)
-                    $needsUpdate = false;
-                    if ($relatedItem->relationship_type !== $item->relationship_type || 
-                        $relatedItem->related_item_id != $item->id) {
-                        $needsUpdate = true;
-                    }
-                    
-                    if ($needsUpdate) {
-                        $relatedItem->relationship_type = $item->relationship_type;
-                        $relatedItem->related_item_id = $item->id;
-                        $relatedItem->saveQuietly(); // Use saveQuietly to avoid triggering saved event again
-                        
-                        \Log::info('QuotationCommodityItem: Synced bidirectional relationship at database level', [
-                            'item_id' => $item->id,
-                            'related_item_id' => $item->related_item_id,
-                            'relationship_type' => $item->relationship_type,
-                        ]);
-                    }
-                }
-            } elseif ($item->relationship_type === 'separate' || !$item->related_item_id) {
-                // When relationship is cleared, clear reverse relationship
-                // Find items that are related to this item
-                $itemsRelatedToThis = static::where('quotation_request_id', $item->quotation_request_id)
-                    ->where('related_item_id', $item->id)
-                    ->whereIn('relationship_type', ['connected_to', 'loaded_with'])
-                    ->get();
-                
-                foreach ($itemsRelatedToThis as $relatedItem) {
-                    // Only clear if the relationship type matches (to avoid clearing wrong relationships)
-                    // Actually, if this item is now separate, we should clear all items related to it
-                    $relatedItem->relationship_type = 'separate';
-                    $relatedItem->related_item_id = null;
-                    $relatedItem->saveQuietly();
-                    
-                    \Log::info('QuotationCommodityItem: Cleared reverse relationship at database level', [
-                        'item_id' => $item->id,
-                        'cleared_item_id' => $relatedItem->id,
-                    ]);
-                }
-            }
+            // DISABLED: Bidirectional relationship sync at database level
+            // This was causing circular dependencies during Livewire component hydration/dehydration,
+            // resulting in timeout errors. Bidirectional relationships are now handled exclusively
+            // by the Livewire component (CommodityItemsRepeater::setReverseRelationship) to prevent conflicts.
+            //
+            // Original logic (commented out):
+            // - When Item A is set to "Connected to Item B", automatically set Item B to "Connected to Item A"
+            // - When relationship is cleared, clear reverse relationship
+            //
+            // if ($item->related_item_id && in_array($item->relationship_type, ['connected_to', 'loaded_with'])) {
+            //     $relatedItem = static::where('id', $item->related_item_id)
+            //         ->where('quotation_request_id', $item->quotation_request_id)
+            //         ->first();
+            //     
+            //     if ($relatedItem) {
+            //         // Check if reverse relationship is already set (to avoid infinite loops)
+            //         $needsUpdate = false;
+            //         if ($relatedItem->relationship_type !== $item->relationship_type || 
+            //             $relatedItem->related_item_id != $item->id) {
+            //             $needsUpdate = true;
+            //         }
+            //         
+            //         if ($needsUpdate) {
+            //             $relatedItem->relationship_type = $item->relationship_type;
+            //             $relatedItem->related_item_id = $item->id;
+            //             $relatedItem->saveQuietly(); // Use saveQuietly to avoid triggering saved event again
+            //             
+            //             \Log::info('QuotationCommodityItem: Synced bidirectional relationship at database level', [
+            //                 'item_id' => $item->id,
+            //                 'related_item_id' => $item->related_item_id,
+            //                 'relationship_type' => $item->relationship_type,
+            //             ]);
+            //         }
+            //     }
+            // } elseif ($item->relationship_type === 'separate' || !$item->related_item_id) {
+            //     // When relationship is cleared, clear reverse relationship
+            //     // Find items that are related to this item
+            //     $itemsRelatedToThis = static::where('quotation_request_id', $item->quotation_request_id)
+            //         ->where('related_item_id', $item->id)
+            //         ->whereIn('relationship_type', ['connected_to', 'loaded_with'])
+            //         ->get();
+            //     
+            //     foreach ($itemsRelatedToThis as $relatedItem) {
+            //         // Only clear if the relationship type matches (to avoid clearing wrong relationships)
+            //         // Actually, if this item is now separate, we should clear all items related to it
+            //         $relatedItem->relationship_type = 'separate';
+            //         $relatedItem->related_item_id = null;
+            //         $relatedItem->saveQuietly();
+            //         
+            //         \Log::info('QuotationCommodityItem: Cleared reverse relationship at database level', [
+            //             'item_id' => $item->id,
+            //             'cleared_item_id' => $relatedItem->id,
+            //         ]);
+            //     }
+            // }
             
             // When commodity item dimensions or quantity change, recalculate ALL articles
             // This ensures article prices update when commodity items change
@@ -877,6 +941,29 @@ class QuotationCommodityItem extends Model
 
                 // Use DB::afterCommit to ensure the transaction is complete before querying
                 \DB::afterCommit(function () use ($quotationRequestId, $triggeringItemId, $useQueue, $debounceSeconds) {
+                    // #region agent log
+                    @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                        'sessionId' => 'debug-session',
+                        'runId' => 'run1',
+                        'hypothesisId' => 'C',
+                        'location' => 'QuotationCommodityItem.php:afterCommit',
+                        'message' => 'afterCommit callback',
+                        'data' => [
+                            'quotation_request_id' => $quotationRequestId,
+                            'triggering_item_id' => $triggeringItemId,
+                            'use_queue' => $useQueue,
+                            'debounce_seconds' => $debounceSeconds,
+                        ],
+                        'timestamp' => time() * 1000
+                    ]) . "\n", FILE_APPEND);
+                    // #endregion
+                    \Log::info('Debug: afterCommit callback', [
+                        'quotation_request_id' => $quotationRequestId,
+                        'triggering_item_id' => $triggeringItemId,
+                        'use_queue' => $useQueue,
+                        'debounce_seconds' => $debounceSeconds,
+                    ]);
+
                     if ($useQueue) {
                         $job = new \App\Jobs\RecalculateQuotationArticles($quotationRequestId, $triggeringItemId);
                         if ($debounceSeconds > 0) {
@@ -889,6 +976,25 @@ class QuotationCommodityItem extends Model
                     static::recalculateQuotationArticles($quotationRequestId, $triggeringItemId);
                 });
             }
+
+            // #region agent log
+            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
+                'sessionId' => 'debug-session',
+                'runId' => 'run1',
+                'hypothesisId' => 'C',
+                'location' => 'QuotationCommodityItem.php:saved',
+                'message' => 'saved handler end',
+                'data' => [
+                    'item_id' => $item->id,
+                    'quotation_request_id' => $item->quotation_request_id,
+                ],
+                'timestamp' => time() * 1000
+            ]) . "\n", FILE_APPEND);
+            // #endregion
+            \Log::info('Debug: saved handler end', [
+                'item_id' => $item->id,
+                'quotation_request_id' => $item->quotation_request_id,
+            ]);
         });
 
         // Handle item deletion: reprocess related items (especially trailers) when a truck is removed

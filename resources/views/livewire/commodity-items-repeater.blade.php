@@ -110,7 +110,10 @@
                             </div>
 
                             <!-- Category/Subtype Fields (shown immediately after Commodity Type selection) -->
-                            @if($item['commodity_type'] === 'vehicles')
+                            @php
+                                $effectiveCommodityType = $this->getEffectiveCommodityTypeForItem($index);
+                            @endphp
+                            @if($effectiveCommodityType === 'vehicles')
                             <div class="lg:col-span-3">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">
                                     Vehicle Category <span class="text-red-500">*</span>
@@ -126,7 +129,7 @@
                             </div>
                             @endif
 
-                            @if($item['commodity_type'] === 'machinery')
+                            @if($effectiveCommodityType === 'machinery')
                             <div class="lg:col-span-3">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">
                                     Machinery Type <span class="text-red-500">*</span>
@@ -142,7 +145,7 @@
                             </div>
                             @endif
 
-                            @if($item['commodity_type'] === 'general_cargo')
+                            @if($effectiveCommodityType === 'general_cargo')
                             <div class="lg:col-span-3">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">
                                     Cargo Type <span class="text-red-500">*</span>
@@ -158,7 +161,7 @@
                             </div>
                             @endif
 
-                            @if($item['commodity_type'])
+                            @if(!empty($item['commodity_type'] ?? ''))
                                 @include('livewire.commodity-forms.' . $item['commodity_type'], ['index' => $index, 'item' => $item])
                             @endif
                         </div>

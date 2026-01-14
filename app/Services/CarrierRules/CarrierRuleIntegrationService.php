@@ -199,6 +199,10 @@ class CarrierRuleIntegrationService
         array $quoteLineDrafts,
         QuotationCommodityItem $item
     ): void {
+        $useCarrierRuleColumns = Schema::hasColumn('quotation_request_articles', 'carrier_rule_applied')
+            && Schema::hasColumn('quotation_request_articles', 'carrier_rule_commodity_item_id')
+            && Schema::hasColumn('quotation_request_articles', 'carrier_rule_event_code');
+
         foreach ($quoteLineDrafts as $draft) {
             // Check if article already exists for this quotation with same event code
             $eventCode = $draft['meta']['event_code'] ?? null;
