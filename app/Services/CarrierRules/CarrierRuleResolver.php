@@ -452,6 +452,14 @@ class CarrierRuleResolver
                     'relationship_type' => $item->relationship_type,
                     'related_item_id' => $item->related_item_id,
                 ]);
+
+                // Loaded cargo should never receive towing surcharge
+                if ($item->isLoadedWith() && $item->related_item_id) {
+                    \Log::info('shouldApplyTowing: Loaded cargo, NO towing applied', [
+                        'related_item_id' => $item->related_item_id,
+                    ]);
+                    return false;
+                }
                 
                 // If trailer is connected to something, check if it's a truck/truckhead
                 if ($item->isConnected() && $item->related_item_id) {
