@@ -86,6 +86,19 @@ class BackfillQuotationPortsAndCarrierRuleMeta extends Command
                     $carrierRuleApplied = $notes['carrier_rule_applied'] ?? null;
                     $eventCode = $notes['event_code'] ?? null;
                     $commodityItemId = $notes['commodity_item_id'] ?? null;
+                    $commodityExists = true;
+
+                    if ($commodityItemId) {
+                        $commodityExists = \App\Models\QuotationCommodityItem::whereKey($commodityItemId)->exists();
+                        if (!$commodityExists) {
+                            $this->warn(sprintf(
+                                'Article %s references missing commodity_item_id=%s; setting to null',
+                                $article->id,
+                                $commodityItemId
+                            ));
+                            $commodityItemId = null;
+                        }
+                    }
 
                     if ($carrierRuleApplied || $eventCode || $commodityItemId) {
                         $this->line(sprintf(
