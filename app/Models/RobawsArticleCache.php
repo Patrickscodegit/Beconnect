@@ -892,6 +892,7 @@ class RobawsArticleCache extends Model
                                     } else {
                                         $routeQuery->whereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
                                     }
+                                }
                             }
                         }
                     });
