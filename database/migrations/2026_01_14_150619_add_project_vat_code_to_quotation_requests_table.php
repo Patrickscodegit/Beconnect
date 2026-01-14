@@ -12,7 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('quotation_requests', function (Blueprint $table) {
-            $table->string('project_vat_code')->nullable()->after('vat_rate');
+            if (!Schema::hasColumn('quotation_requests', 'project_vat_code')) {
+                $table->string('project_vat_code')->nullable()->after('vat_rate');
+            }
         });
     }
 
@@ -22,7 +24,9 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('quotation_requests', function (Blueprint $table) {
-            $table->dropColumn('project_vat_code');
+            if (Schema::hasColumn('quotation_requests', 'project_vat_code')) {
+                $table->dropColumn('project_vat_code');
+            }
         });
     }
 };
