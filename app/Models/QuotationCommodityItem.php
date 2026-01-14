@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Schema;
 
 class QuotationCommodityItem extends Model
 {
@@ -927,13 +928,15 @@ class QuotationCommodityItem extends Model
                 ]);
 
                 // Remove articles specifically linked to the deleted commodity item
-                $linkedArticles = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotationRequestId)
-                    ->get()
-                    ->filter(function ($article) use ($deletedItemId) {
-                        $notes = json_decode($article->notes ?? '{}', true);
-                        $linkedItemId = $notes['commodity_item_id'] ?? null;
-                        return $linkedItemId == $deletedItemId;
-                    });
+                $linkedArticlesQuery = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotationRequestId);
+
+                if (Schema::hasColumn('quotation_request_articles', 'carrier_rule_commodity_item_id')) {
+                    $linkedArticlesQuery->where('carrier_rule_commodity_item_id', $deletedItemId);
+                } else {
+                    $linkedArticlesQuery->where('notes', 'like', '%"commodity_item_id":' . $deletedItemId . '%');
+                }
+
+                $linkedArticles = $linkedArticlesQuery->get();
 
                 foreach ($linkedArticles as $linkedArticle) {
                     \Log::info('QuotationCommodityItem: Removing article linked to deleted commodity', [

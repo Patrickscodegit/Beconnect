@@ -9,6 +9,7 @@ use App\Models\QuotationRequestArticle;
 use App\Models\RobawsArticleCache;
 use App\Services\CarrierRules\DTOs\CargoInputDTO;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Service to integrate CarrierRuleEngine into quotation flow
@@ -134,14 +135,25 @@ class CarrierRuleIntegrationService
         QuotationCommodityItem $item
     ): void {
         // Get all existing carrier rule articles linked to this commodity item
-        // Note: notes column is TEXT, not JSONB, so we use LIKE patterns instead of JSON operators
-        $existingArticles = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
-            ->where('notes', 'like', '%"commodity_item_id":' . $item->id . '%')
-            ->where(function ($query) {
-                $query->where('notes', 'like', '%"carrier_rule_applied":true%')
-                    ->orWhere('notes', 'like', "%'carrier_rule_applied':true%");
-            })
-            ->get();
+        $useCarrierRuleColumns = Schema::hasColumn('quotation_request_articles', 'carrier_rule_applied')
+            && Schema::hasColumn('quotation_request_articles', 'carrier_rule_commodity_item_id')
+            && Schema::hasColumn('quotation_request_articles', 'carrier_rule_event_code');
+
+        $existingArticlesQuery = QuotationRequestArticle::where('quotation_request_id', $quotation->id);
+
+        if ($useCarrierRuleColumns) {
+            $existingArticlesQuery->where('carrier_rule_applied', true)
+                ->where('carrier_rule_commodity_item_id', $item->id);
+        } else {
+            // Legacy fallback: notes column is TEXT, so use LIKE patterns
+            $existingArticlesQuery->where('notes', 'like', '%"commodity_item_id":' . $item->id . '%')
+                ->where(function ($query) {
+                    $query->where('notes', 'like', '%"carrier_rule_applied":true%')
+                        ->orWhere('notes', 'like', "%'carrier_rule_applied':true%");
+                });
+        }
+
+        $existingArticles = $existingArticlesQuery->get();
 
         // Build a map of new drafts by event_code for quick lookup
         $newDraftsByEventCode = [];
@@ -154,9 +166,12 @@ class CarrierRuleIntegrationService
 
         // Remove articles that are no longer applicable
         foreach ($existingArticles as $existingArticle) {
-            $notes = json_decode($existingArticle->notes ?? '{}', true);
-            $eventCode = $notes['event_code'] ?? null;
-            $linkedItemId = $notes['commodity_item_id'] ?? null;
+            $eventCode = $useCarrierRuleColumns
+                ? ($existingArticle->carrier_rule_event_code ?? null)
+                : (json_decode($existingArticle->notes ?? '{}', true)['event_code'] ?? null);
+            $linkedItemId = $useCarrierRuleColumns
+                ? ($existingArticle->carrier_rule_commodity_item_id ?? null)
+                : (json_decode($existingArticle->notes ?? '{}', true)['commodity_item_id'] ?? null);
 
             // Remove if:
             // 1. Linked to this commodity item AND
@@ -190,11 +205,18 @@ class CarrierRuleIntegrationService
             $existingArticle = null;
             
             if ($eventCode) {
-                // Note: notes column is TEXT, not JSONB, so we use LIKE patterns instead of JSON operators
-                $existingArticle = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
-                    ->where('article_cache_id', $draft['article_id'])
-                    ->where('notes', 'like', '%"event_code":"' . $eventCode . '"%')
-                    ->first();
+                if ($useCarrierRuleColumns) {
+                    $existingArticle = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+                        ->where('article_cache_id', $draft['article_id'])
+                        ->where('carrier_rule_event_code', $eventCode)
+                        ->first();
+                } else {
+                    // Legacy fallback: notes column is TEXT, so use LIKE patterns
+                    $existingArticle = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+                        ->where('article_cache_id', $draft['article_id'])
+                        ->where('notes', 'like', '%"event_code":"' . $eventCode . '"%')
+                        ->first();
+                }
             } else {
                 // Fallback: check by article ID only
                 $existingArticle = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
@@ -208,7 +230,13 @@ class CarrierRuleIntegrationService
                     $existingArticle->quantity = $draft['qty'];
                 }
                 
-                // Update notes to ensure commodity_item_id is set
+                if ($useCarrierRuleColumns) {
+                    $existingArticle->carrier_rule_applied = true;
+                    $existingArticle->carrier_rule_event_code = $draft['meta']['event_code'] ?? null;
+                    $existingArticle->carrier_rule_commodity_item_id = $item->id;
+                }
+
+                // Keep notes for backward compatibility
                 $notes = json_decode($existingArticle->notes ?? '{}', true);
                 $notes['carrier_rule_applied'] = true;
                 $notes['event_code'] = $draft['meta']['event_code'] ?? null;
@@ -259,6 +287,9 @@ class CarrierRuleIntegrationService
                 'selling_price' => $unitPrice,
                 'subtotal' => $unitPrice * $draft['qty'],
                 'currency' => $article->currency ?? 'EUR',
+                'carrier_rule_applied' => $useCarrierRuleColumns ? true : null,
+                'carrier_rule_event_code' => $useCarrierRuleColumns ? ($draft['meta']['event_code'] ?? null) : null,
+                'carrier_rule_commodity_item_id' => $useCarrierRuleColumns ? $item->id : null,
                 'notes' => json_encode([
                     'carrier_rule_applied' => true,
                     'event_code' => $draft['meta']['event_code'] ?? null,
@@ -294,20 +325,30 @@ class CarrierRuleIntegrationService
         }
 
         // Get all articles that are NOT carrier rule-based
-        // Exclude articles that have carrier_rule_applied:true in their notes
-        $articles = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
-            ->where(function ($query) {
-                // Articles where notes is null OR notes doesn't contain carrier_rule_applied:true
+        $useCarrierRuleColumns = Schema::hasColumn('quotation_request_articles', 'carrier_rule_applied');
+
+        $articlesQuery = QuotationRequestArticle::where('quotation_request_id', $quotation->id);
+
+        if ($useCarrierRuleColumns) {
+            $articlesQuery->where(function ($query) {
+                $query->whereNull('carrier_rule_applied')
+                    ->orWhere('carrier_rule_applied', false);
+            });
+        } else {
+            // Legacy fallback: exclude articles that have carrier_rule_applied:true in their notes
+            $articlesQuery->where(function ($query) {
                 $query->whereNull('notes')
                     ->orWhere('notes', 'not like', '%"carrier_rule_applied":true%')
                     ->orWhere('notes', 'not like', "%'carrier_rule_applied':true%");
-            })
-            ->with('articleCache')
-            ->get();
+            });
+        }
+
+        $articles = $articlesQuery->with('articleCache')->get();
 
         // Extract POD code from quotation's POD for matching
         $quotationPodCode = null;
         $quotationPodName = null;
+        $quotationPodPortId = $quotation->pod_port_id ?? null;
         if (!empty($quotation->pod)) {
             // Extract code from format "City (CODE), Country"
             if (preg_match('/\(([A-Z0-9]+)\)/', $quotation->pod, $matches)) {
@@ -423,9 +464,14 @@ class CarrierRuleIntegrationService
             }
 
             // Check 2: Article POD must match quotation POD (if article has POD)
-            if (!$shouldRemove && !empty($article->pod) && !empty($quotation->pod)) {
+            if (
+                !$shouldRemove &&
+                ((isset($article->pod_port_id) && $article->pod_port_id) || !empty($article->pod)) &&
+                ($quotationPodPortId || !empty($quotation->pod))
+            ) {
                 $articlePodCode = null;
                 $articlePodName = null;
+                $articlePodPortId = $article->pod_port_id ?? null;
                 
                 // Extract code from article POD
                 if (preg_match('/\(([A-Z0-9]+)\)/', $article->pod, $matches)) {
@@ -437,7 +483,9 @@ class CarrierRuleIntegrationService
 
                 // Check if PODs match (by code or name)
                 $podMatches = false;
-                if ($quotationPodCode && $articlePodCode) {
+                if ($quotationPodPortId && $articlePodPortId) {
+                    $podMatches = ((int) $quotationPodPortId === (int) $articlePodPortId);
+                } elseif ($quotationPodCode && $articlePodCode) {
                     $podMatches = ($quotationPodCode === $articlePodCode);
                 } elseif ($quotationPodName && $articlePodName) {
                     // Case-insensitive name match

@@ -11,6 +11,7 @@ use App\Models\ShippingCarrier;
 use App\Models\PricingTier;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Services\Ports\PortResolutionService;
 
 class QuotationCreator extends Component
 {
@@ -22,7 +23,9 @@ class QuotationCreator extends Component
     
     // Form fields
     public $pol = '';
+    public ?int $pol_port_id = null;
     public $pod = '';
+    public ?int $pod_port_id = null;
     public $por = '';
     public $fdest = '';
     public $in_transit_to = '';
@@ -243,6 +246,8 @@ class QuotationCreator extends Component
         $routing = $quotation->routing ?? [];
         $this->pol = $quotation->pol ?? $routing['pol'] ?? '';
         $this->pod = $quotation->pod ?? $routing['pod'] ?? '';
+        $this->pol_port_id = $quotation->pol_port_id;
+        $this->pod_port_id = $quotation->pod_port_id;
         $this->por = $quotation->por ?? $routing['por'] ?? '';
         $this->fdest = $quotation->fdest ?? $routing['fdest'] ?? '';
         $this->in_transit_to = $quotation->in_transit_to ?? '';
@@ -376,11 +381,18 @@ class QuotationCreator extends Component
             $this->selected_schedule_id = $this->selected_schedule_id ? (int) $this->selected_schedule_id : null;
         }
         
+        // Resolve port IDs when POL/POD changes
+        if (in_array($propertyName, ['pol', 'pod'], true)) {
+            $this->resolvePortIds();
+        }
+
         // Save to draft quotation
         if ($this->quotation) {
             $updateData = [
                 'pol' => $this->pol,
+                'pol_port_id' => $this->pol_port_id,
                 'pod' => $this->pod,
+                'pod_port_id' => $this->pod_port_id,
                 'por' => $this->por,
                 'fdest' => $this->fdest,
                 'in_transit_to' => $this->in_transit_to,
@@ -414,6 +426,8 @@ class QuotationCreator extends Component
                 'field' => $propertyName,
                 'pol' => $this->pol,
                 'pod' => $this->pod,
+                'pol_port_id' => $this->pol_port_id,
+                'pod_port_id' => $this->pod_port_id,
                 'selected_schedule_id' => $this->selected_schedule_id,
                 'pol_filled' => !empty(trim($this->pol)),
                 'pod_filled' => !empty(trim($this->pod)),
@@ -421,6 +435,36 @@ class QuotationCreator extends Component
                 'show_articles' => $this->showArticles,
             ]);
         }
+    }
+
+    protected function resolvePortIds(): void
+    {
+        $mode = $this->isAirService() ? 'AIR' : 'SEA';
+        $resolver = app(PortResolutionService::class);
+
+        $this->pol_port_id = $this->resolvePortIdFromInput($resolver, $this->pol, $mode);
+        $this->pod_port_id = $this->resolvePortIdFromInput($resolver, $this->pod, $mode);
+    }
+
+    protected function resolvePortIdFromInput(PortResolutionService $resolver, ?string $value, string $mode): ?int
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+
+        try {
+            $port = $resolver->resolveOne($value, $mode);
+            return $port?->id;
+        } catch (\Exception $e) {
+            Log::warning('QuotationCreator: failed to resolve port ID', [
+                'value' => $value,
+                'mode' => $mode,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return null;
     }
     
     /**
@@ -1094,7 +1138,9 @@ class QuotationCreator extends Component
     protected function handleServiceTypeChanged(): void
     {
         $this->pol = '';
+        $this->pol_port_id = null;
         $this->pod = '';
+        $this->pod_port_id = null;
         $this->por = '';
         $this->fdest = '';
         $this->in_transit_to = '';

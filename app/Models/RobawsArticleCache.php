@@ -797,6 +797,8 @@ class RobawsArticleCache extends Model
                 'request_number' => $quotation->request_number ?? null,
                 'pol' => $quotation->pol ?? null,
                 'pod' => $quotation->pod ?? null,
+                'pol_port_id' => $quotation->pol_port_id ?? null,
+                'pod_port_id' => $quotation->pod_port_id ?? null,
                 'service_type' => $quotation->service_type ?? null,
                 'selected_schedule_id' => $quotation->selected_schedule_id ?? null,
                 'commodity_type' => $quotation->commodity_type ?? null,
@@ -854,7 +856,9 @@ class RobawsArticleCache extends Model
                 $q->orWhere(function ($qq) use ($quotation, $useIlike) {
                     $qq->where('is_surcharge', false)
                         ->where(function ($routeQuery) use ($quotation, $useIlike) {
-                            if ($quotation->pol) {
+                            if ($quotation->pol_port_id) {
+                                $routeQuery->where('pol_port_id', $quotation->pol_port_id);
+                            } elseif ($quotation->pol) {
                                 $quotationPolCode = $this->extractPortCode($quotation->pol);
                                 if ($quotationPolCode) {
                                     // Match by port code in parentheses
@@ -874,7 +878,9 @@ class RobawsArticleCache extends Model
                                     }
                                 }
                             }
-                            if ($quotation->pod) {
+                            if ($quotation->pod_port_id) {
+                                $routeQuery->where('pod_port_id', $quotation->pod_port_id);
+                            } elseif ($quotation->pod) {
                                 $quotationPodCode = $this->extractPortCode($quotation->pod);
                                 if ($quotationPodCode) {
                                     // Match by port code in parentheses
@@ -1151,6 +1157,8 @@ class RobawsArticleCache extends Model
         // Extract port codes and compare exactly, fall back to exact string match
         $quotationPolCode = null;
         $quotationPodCode = null;
+        $quotationPolPortId = $quotation->pol_port_id ?? null;
+        $quotationPodPortId = $quotation->pod_port_id ?? null;
         if ($quotation->pol && $quotation->pod) {
             $quotationPolCode = $this->extractPortCode($quotation->pol);
             $quotationPodCode = $this->extractPortCode($quotation->pod);
@@ -1166,6 +1174,8 @@ class RobawsArticleCache extends Model
                     'quotation_id' => $quotation->id ?? null,
                     'quotation_pol' => $quotation->pol ?? null,
                     'quotation_pod' => $quotation->pod ?? null,
+                    'quotation_pol_port_id' => $quotationPolPortId,
+                    'quotation_pod_port_id' => $quotationPodPortId,
                     'extracted_pol_code' => $quotationPolCode ?? null,
                     'extracted_pod_code' => $quotationPodCode ?? null,
                     'has_mappings' => !empty($mappedArticleIds),
@@ -1177,7 +1187,7 @@ class RobawsArticleCache extends Model
 
             // Require both POL and POD to match exactly, BUT allow mapped articles to bypass
             // IMPORTANT: When mappings exist, ONLY show mapped articles (don't fall back to POL/POD matching)
-            $query->where(function ($q) use ($quotation, $quotationPolCode, $quotationPodCode, $useIlike, $mappedArticleIds) {
+            $query->where(function ($q) use ($quotation, $quotationPolCode, $quotationPodCode, $quotationPolPortId, $quotationPodPortId, $useIlike, $mappedArticleIds) {
                 // #region agent log
                 @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
                     'sessionId' => 'debug-session',
@@ -1222,7 +1232,12 @@ class RobawsArticleCache extends Model
                         'quotation_id' => $quotation->id ?? null,
                     ]);
                     // No mappings exist - fall back to POL/POD matching
-                    $q->where(function ($polPodQuery) use ($quotation, $quotationPolCode, $quotationPodCode, $useIlike) {
+                    $q->where(function ($polPodQuery) use ($quotation, $quotationPolCode, $quotationPodCode, $quotationPolPortId, $quotationPodPortId, $useIlike) {
+                    if ($quotationPolPortId && $quotationPodPortId) {
+                        $polPodQuery->where('pol_port_id', $quotationPolPortId)
+                            ->where('pod_port_id', $quotationPodPortId);
+                        return;
+                    }
                     // POL matching
                     $polPodQuery->where(function ($polQuery) use ($quotation, $quotationPolCode, $useIlike) {
                         if ($quotationPolCode) {
@@ -1276,13 +1291,17 @@ class RobawsArticleCache extends Model
         } elseif ($quotation->pol) {
             // Only POL specified - require exact POL match, BUT allow mapped articles to bypass
             $quotationPolCode = $this->extractPortCode($quotation->pol);
-            $query->where(function ($q) use ($quotation, $quotationPolCode, $useIlike, $mappedArticleIds) {
+            $query->where(function ($q) use ($quotation, $quotationPolCode, $quotationPolPortId, $useIlike, $mappedArticleIds) {
                 // If mappings exist, ONLY show mapped articles (don't fall back to POL matching)
                 if (!empty($mappedArticleIds)) {
                     $q->whereIn('id', $mappedArticleIds);
                 } else {
                     // No mappings exist - fall back to POL matching
-                    $q->where(function ($polQuery) use ($quotation, $quotationPolCode, $useIlike) {
+                    $q->where(function ($polQuery) use ($quotation, $quotationPolCode, $quotationPolPortId, $useIlike) {
+                    if ($quotationPolPortId) {
+                        $polQuery->where('pol_port_id', $quotationPolPortId);
+                        return;
+                    }
                     if ($quotationPolCode) {
                         // Match by port code in parentheses (more flexible)
                         $polQuery->where(function ($codeQuery) use ($quotationPolCode, $quotation, $useIlike) {
@@ -1309,13 +1328,17 @@ class RobawsArticleCache extends Model
         } elseif ($quotation->pod) {
             // Only POD specified - require exact POD match, BUT allow mapped articles to bypass
             $quotationPodCode = $this->extractPortCode($quotation->pod);
-            $query->where(function ($q) use ($quotation, $quotationPodCode, $useIlike, $mappedArticleIds) {
+            $query->where(function ($q) use ($quotation, $quotationPodCode, $quotationPodPortId, $useIlike, $mappedArticleIds) {
                 // If mappings exist, ONLY show mapped articles (don't fall back to POD matching)
                 if (!empty($mappedArticleIds)) {
                     $q->whereIn('id', $mappedArticleIds);
                 } else {
                     // No mappings exist - fall back to POD matching
-                    $q->where(function ($podQuery) use ($quotation, $quotationPodCode, $useIlike) {
+                    $q->where(function ($podQuery) use ($quotation, $quotationPodCode, $quotationPodPortId, $useIlike) {
+                    if ($quotationPodPortId) {
+                        $podQuery->where('pod_port_id', $quotationPodPortId);
+                        return;
+                    }
                     if ($quotationPodCode) {
                         // Match by port code in parentheses
                         $podQuery->where(function ($codeQuery) use ($quotationPodCode, $quotation, $useIlike) {

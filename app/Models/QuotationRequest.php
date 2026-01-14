@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Str;
+use App\Models\Port;
+use App\Services\Ports\PortResolutionService;
 use App\Models\QuotationAdditionalService;
 
 class QuotationRequest extends Model
@@ -36,7 +38,9 @@ class QuotationRequest extends Model
         'routing',
         'por',
         'pol',
+        'pol_port_id',
         'pod',
+        'pod_port_id',
         'fdest',
         'in_transit_to',
         'cargo_details',
@@ -99,6 +103,8 @@ class QuotationRequest extends Model
         'vat_amount' => 'decimal:2',
         'vat_rate' => 'decimal:2',
         'total_incl_vat' => 'decimal:2',
+        'pol_port_id' => 'integer',
+        'pod_port_id' => 'integer',
     ];
 
     protected static function boot()
@@ -156,6 +162,23 @@ class QuotationRequest extends Model
                 }
             }
         });
+
+        static::saving(function ($quotationRequest) {
+            $polDirty = $quotationRequest->isDirty('pol');
+            $podDirty = $quotationRequest->isDirty('pod');
+
+            if ($polDirty || $podDirty || !$quotationRequest->pol_port_id || !$quotationRequest->pod_port_id) {
+                $mode = ($quotationRequest->simple_service_type === 'AIR') ? 'AIR' : 'SEA';
+                $resolver = app(PortResolutionService::class);
+
+                if ($polDirty || !$quotationRequest->pol_port_id) {
+                    $quotationRequest->pol_port_id = $quotationRequest->resolvePortId($resolver, $quotationRequest->pol, $mode);
+                }
+                if ($podDirty || !$quotationRequest->pod_port_id) {
+                    $quotationRequest->pod_port_id = $quotationRequest->resolvePortId($resolver, $quotationRequest->pod, $mode);
+                }
+            }
+        });
     }
 
     /**
@@ -200,6 +223,25 @@ class QuotationRequest extends Model
         return $prefix . date('mdHis');
     }
 
+    protected function resolvePortId(PortResolutionService $resolver, ?string $input, string $mode): ?int
+    {
+        $input = trim((string) $input);
+        if ($input === '') {
+            return null;
+        }
+
+        try {
+            return $resolver->resolveOne($input, $mode)?->id;
+        } catch (\Exception $e) {
+            \Log::warning('QuotationRequest: failed to resolve port ID', [
+                'input' => $input,
+                'mode' => $mode,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
+    }
+
     /**
      * Relationships
      */
@@ -232,6 +274,16 @@ class QuotationRequest extends Model
     public function selectedSchedule(): BelongsTo
     {
         return $this->belongsTo(ShippingSchedule::class, 'selected_schedule_id');
+    }
+
+    public function polPort(): BelongsTo
+    {
+        return $this->belongsTo(Port::class, 'pol_port_id');
+    }
+
+    public function podPort(): BelongsTo
+    {
+        return $this->belongsTo(Port::class, 'pod_port_id');
     }
 
     public function preferredCarrier(): BelongsTo

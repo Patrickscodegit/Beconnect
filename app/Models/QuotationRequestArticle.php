@@ -24,6 +24,9 @@ class QuotationRequestArticle extends Model
         'formula_inputs',
         'calculated_price',
         'notes',
+        'carrier_rule_applied',
+        'carrier_rule_event_code',
+        'carrier_rule_commodity_item_id',
     ];
 
     protected $casts = [
@@ -34,6 +37,8 @@ class QuotationRequestArticle extends Model
         'subtotal' => 'decimal:2',
         'calculated_price' => 'decimal:2',
         'formula_inputs' => 'array',
+        'carrier_rule_applied' => 'boolean',
+        'carrier_rule_commodity_item_id' => 'integer',
     ];
 
     protected static function boot()
