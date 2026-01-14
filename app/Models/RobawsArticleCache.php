@@ -892,10 +892,11 @@ class RobawsArticleCache extends Model
                                     } else {
                                         $routeQuery->whereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
                                     }
-                                }
                             }
-                        });
-                });
+                        }
+                    });
+                    });
+                }
             });
         }
 
@@ -1021,10 +1022,38 @@ class RobawsArticleCache extends Model
                 }
             }
             
-            // Also check category group mappings for LM cargo (truck/trailer/truckhead)
+            // Also check category group mappings for ALL vehicle categories
             // This finds mappings that use category_group_ids instead of vehicle_categories
+            // This is needed because some carriers (like Grimaldi) use category_group_ids for car mappings
+            if (!empty($categoryGroupIds)) {
+                foreach ($categoryGroupIds as $categoryGroupId) {
+                    $categoryMappings = $resolver->resolveArticleMappings(
+                        $carrierId,
+                        $podPortId,
+                        null, // No vehicle category when using category groups
+                        $categoryGroupId,
+                        $vesselName,
+                        $vesselClass
+                    );
+                    
+                    if ($podPortId !== null) {
+                        $portGroupIds = $resolver->resolvePortGroupIdsForPort($carrierId, $podPortId);
+                        $categoryMappings = $this->filterMappingsByPort($categoryMappings, $podPortId, $portGroupIds);
+                    }
+                    
+                    $allMappings = $allMappings->merge($categoryMappings);
+                }
+            }
+            
+            // Also check category group mappings for LM cargo (truck/trailer/truckhead)
+            // This finds mappings that use category_group_ids for LM cargo specifically
             if (!empty($lmCategoryGroupIds)) {
                 foreach ($lmCategoryGroupIds as $categoryGroupId) {
+                    // Skip if already processed above
+                    if (in_array($categoryGroupId, $categoryGroupIds)) {
+                        continue;
+                    }
+                    
                     $categoryMappings = $resolver->resolveArticleMappings(
                         $carrierId,
                         $podPortId,
@@ -1131,6 +1160,7 @@ class RobawsArticleCache extends Model
             // #endregion
 
             // Require both POL and POD to match exactly, BUT allow mapped articles to bypass
+            // IMPORTANT: When mappings exist, ONLY show mapped articles (don't fall back to POL/POD matching)
             $query->where(function ($q) use ($quotation, $quotationPolCode, $quotationPodCode, $useIlike, $mappedArticleIds) {
                 // #region agent log
                 @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
@@ -1148,7 +1178,7 @@ class RobawsArticleCache extends Model
                 ]) . "\n", FILE_APPEND);
                 // #endregion
                 
-                // Allow mapped articles to bypass POL/POD filtering
+                // If mappings exist, ONLY show mapped articles (don't fall back to POL/POD matching)
                 if (!empty($mappedArticleIds)) {
                     $q->whereIn('id', $mappedArticleIds);
                     
@@ -1158,17 +1188,16 @@ class RobawsArticleCache extends Model
                         'runId' => 'run1',
                         'hypothesisId' => 'B',
                         'location' => 'RobawsArticleCache.php:1056',
-                        'message' => 'POL/POD bypass applied - whereIn added',
+                        'message' => 'POL/POD bypass applied - ONLY mapped articles shown',
                         'data' => [
                             'mapped_article_ids' => $mappedArticleIds,
                         ],
                         'timestamp' => time() * 1000
                     ]) . "\n", FILE_APPEND);
                     // #endregion
-                }
-                
-                // Also include articles that match POL/POD exactly
-                $q->orWhere(function ($polPodQuery) use ($quotation, $quotationPolCode, $quotationPodCode, $useIlike) {
+                } else {
+                    // No mappings exist - fall back to POL/POD matching
+                    $q->where(function ($polPodQuery) use ($quotation, $quotationPolCode, $quotationPodCode, $useIlike) {
                     // POL matching
                     $polPodQuery->where(function ($polQuery) use ($quotation, $quotationPolCode, $useIlike) {
                         if ($quotationPolCode) {
@@ -1216,19 +1245,19 @@ class RobawsArticleCache extends Model
                             }
                         }
                     });
-                });
+                    });
+                }
             });
         } elseif ($quotation->pol) {
             // Only POL specified - require exact POL match, BUT allow mapped articles to bypass
             $quotationPolCode = $this->extractPortCode($quotation->pol);
             $query->where(function ($q) use ($quotation, $quotationPolCode, $useIlike, $mappedArticleIds) {
-                // Allow mapped articles to bypass POL filtering
+                // If mappings exist, ONLY show mapped articles (don't fall back to POL matching)
                 if (!empty($mappedArticleIds)) {
                     $q->whereIn('id', $mappedArticleIds);
-                }
-                
-                // Also include articles that match POL exactly
-                $q->orWhere(function ($polQuery) use ($quotation, $quotationPolCode, $useIlike) {
+                } else {
+                    // No mappings exist - fall back to POL matching
+                    $q->where(function ($polQuery) use ($quotation, $quotationPolCode, $useIlike) {
                     if ($quotationPolCode) {
                         // Match by port code in parentheses (more flexible)
                         $polQuery->where(function ($codeQuery) use ($quotationPolCode, $quotation, $useIlike) {
@@ -1249,19 +1278,19 @@ class RobawsArticleCache extends Model
                             $polQuery->whereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
                         }
                     }
-                });
+                    });
+                }
             });
         } elseif ($quotation->pod) {
             // Only POD specified - require exact POD match, BUT allow mapped articles to bypass
             $quotationPodCode = $this->extractPortCode($quotation->pod);
             $query->where(function ($q) use ($quotation, $quotationPodCode, $useIlike, $mappedArticleIds) {
-                // Allow mapped articles to bypass POD filtering
+                // If mappings exist, ONLY show mapped articles (don't fall back to POD matching)
                 if (!empty($mappedArticleIds)) {
                     $q->whereIn('id', $mappedArticleIds);
-                }
-                
-                // Also include articles that match POD exactly
-                $q->orWhere(function ($podQuery) use ($quotation, $quotationPodCode, $useIlike) {
+                } else {
+                    // No mappings exist - fall back to POD matching
+                    $q->where(function ($podQuery) use ($quotation, $quotationPodCode, $useIlike) {
                     if ($quotationPodCode) {
                         // Match by port code in parentheses
                         $podQuery->where(function ($codeQuery) use ($quotationPodCode, $quotation, $useIlike) {
@@ -1282,7 +1311,8 @@ class RobawsArticleCache extends Model
                             $podQuery->whereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
                         }
                     }
-                });
+                    });
+                }
             });
         }
 
