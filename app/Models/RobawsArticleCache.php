@@ -894,10 +894,8 @@ class RobawsArticleCache extends Model
                                     }
                                 }
                             }
-                        }
-                    });
-                    });
-                }
+                        });
+                });
             });
         }
 
