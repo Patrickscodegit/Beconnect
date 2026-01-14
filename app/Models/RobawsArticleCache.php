@@ -1023,7 +1023,7 @@ class RobawsArticleCache extends Model
             
             // Also check category group mappings for ALL vehicle categories
             // This finds mappings that use category_group_ids instead of vehicle_categories
-            // This is needed because some carriers (like Grimaldi) use category_group_ids for car mappings
+            // This is needed because some carriers (like Grimaldi) use category_group_ids for car, suv, etc.
             if (!empty($categoryGroupIds)) {
                 foreach ($categoryGroupIds as $categoryGroupId) {
                     $categoryMappings = $resolver->resolveArticleMappings(
@@ -1041,6 +1041,13 @@ class RobawsArticleCache extends Model
                     }
                     
                     $allMappings = $allMappings->merge($categoryMappings);
+                    
+                    \Log::info('RobawsArticleCache: Category group mappings resolved', [
+                        'quotation_id' => $quotation->id ?? null,
+                        'category_group_id' => $categoryGroupId,
+                        'mappings_count' => $categoryMappings->count(),
+                        'article_ids' => $categoryMappings->pluck('article_id')->toArray(),
+                    ]);
                 }
             }
             
@@ -1090,6 +1097,16 @@ class RobawsArticleCache extends Model
             
             // Remove duplicates and get unique article IDs
             $mappedArticleIds = $allMappings->pluck('article_id')->unique()->toArray();
+            
+            \Log::info('RobawsArticleCache: All mappings resolved', [
+                'quotation_id' => $quotation->id ?? null,
+                'carrier_id' => $carrierId ?? null,
+                'all_mappings_count' => $allMappings->count(),
+                'mapped_article_ids' => $mappedArticleIds,
+                'mapped_article_ids_count' => count($mappedArticleIds),
+                'vehicle_categories' => $vehicleCategories,
+                'category_group_ids' => $categoryGroupIds,
+            ]);
             
             // #region agent log
             @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
@@ -1179,6 +1196,12 @@ class RobawsArticleCache extends Model
                 
                 // If mappings exist, ONLY show mapped articles (don't fall back to POL/POD matching)
                 if (!empty($mappedArticleIds)) {
+                    \Log::info('RobawsArticleCache: POL/POD filter - using mapped articles only', [
+                        'quotation_id' => $quotation->id ?? null,
+                        'mapped_article_ids' => $mappedArticleIds,
+                        'mapped_article_ids_count' => count($mappedArticleIds),
+                    ]);
+                    
                     $q->whereIn('id', $mappedArticleIds);
                     
                     // #region agent log
@@ -1195,6 +1218,9 @@ class RobawsArticleCache extends Model
                     ]) . "\n", FILE_APPEND);
                     // #endregion
                 } else {
+                    \Log::info('RobawsArticleCache: POL/POD filter - no mapped articles, using POL/POD matching', [
+                        'quotation_id' => $quotation->id ?? null,
+                    ]);
                     // No mappings exist - fall back to POL/POD matching
                     $q->where(function ($polPodQuery) use ($quotation, $quotationPolCode, $quotationPodCode, $useIlike) {
                     // POL matching
@@ -1489,57 +1515,17 @@ class RobawsArticleCache extends Model
             // #endregion
             
             // Apply allowlist: only mapped articles + universal articles (commodity_type NULL)
-            // BUT: Also filter mapped articles by POD match to ensure they're for the correct destination
-            $query->where(function ($q) use ($mappedArticleIds, $quotation, $quotationPodCode, $useIlike) {
-                // #region agent log
-                @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                    'sessionId' => 'debug-session',
-                    'runId' => 'run1',
-                    'hypothesisId' => 'C',
-                    'location' => 'RobawsArticleCache.php:1266',
-                    'message' => 'ALLOWLIST closure - mappedArticleIds check',
-                    'data' => [
-                        'mapped_article_ids_count' => count($mappedArticleIds),
-                        'mapped_article_ids' => $mappedArticleIds,
-                        'is_empty' => empty($mappedArticleIds),
-                    ],
-                    'timestamp' => time() * 1000
-                ]) . "\n", FILE_APPEND);
-                // #endregion
+            // When mappings exist, they are already port-scoped, so just show them
+            // The POD matching was already done when resolving mappings, so we don't need to filter again here
+            $query->where(function ($q) use ($mappedArticleIds) {
+                \Log::info('RobawsArticleCache: ALLOWLIST - showing mapped articles', [
+                    'mapped_article_ids' => $mappedArticleIds,
+                    'mapped_article_ids_count' => count($mappedArticleIds),
+                ]);
                 
-                // Mapped articles that also match POD (strict POD matching)
-                // When an article is mapped to a port, its POD field is updated to match that port
-                // So we still need to verify POD matches to ensure strict POD matching
+                // Mapped articles (already port-scoped)
                 if (!empty($mappedArticleIds)) {
-                    $q->where(function ($mappedQuery) use ($mappedArticleIds, $quotation, $quotationPodCode, $useIlike) {
-                        $mappedQuery->whereIn('id', $mappedArticleIds);
-                        
-                        // If quotation has POD, ensure article POD matches (strict matching)
-                        if ($quotation->pod) {
-                            $podCode = $quotationPodCode ?? $this->extractPortCode($quotation->pod);
-                            $mappedQuery->where(function ($podMatchQuery) use ($quotation, $podCode, $useIlike) {
-                                // Article has no POD (universal)
-                                $podMatchQuery->whereNull('pod');
-                                
-                                // Or article POD matches quotation POD (strict match)
-                                if ($podCode) {
-                                    if ($useIlike) {
-                                        $podMatchQuery->orWhere('pod', 'ILIKE', '%(' . $podCode . ')%')
-                                            ->orWhere('pod', 'ILIKE', $quotation->pod);
-                                    } else {
-                                        $podMatchQuery->orWhereRaw('LOWER(pod) LIKE LOWER(?)', ['%(' . $podCode . ')%'])
-                                            ->orWhereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
-                                    }
-                                } else {
-                                    if ($useIlike) {
-                                        $podMatchQuery->orWhere('pod', 'ILIKE', $quotation->pod);
-                                    } else {
-                                        $podMatchQuery->orWhereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
-                                    }
-                                }
-                            });
-                        }
-                    });
+                    $q->whereIn('id', $mappedArticleIds);
                 }
                 
                 // Keep universal articles (commodity_type NULL)
@@ -1548,6 +1534,12 @@ class RobawsArticleCache extends Model
             
             // #region agent log
             $articlesAfterAllowlist = (clone $query)->get();
+            \Log::info('RobawsArticleCache: After ALLOWLIST applied', [
+                'quotation_id' => $quotation->id ?? null,
+                'articles_after_allowlist_count' => $articlesAfterAllowlist->count(),
+                'articles_after_allowlist_ids' => $articlesAfterAllowlist->pluck('id')->toArray(),
+                'mapped_article_ids' => $mappedArticleIds,
+            ]);
             @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
                 'sessionId' => 'debug-session',
                 'runId' => 'run1',
@@ -1562,6 +1554,9 @@ class RobawsArticleCache extends Model
                 'timestamp' => time() * 1000
             ]) . "\n", FILE_APPEND);
             // #endregion
+            
+            // Return early - skip commodity type filtering when mappings exist
+            return $query;
         } else {
             // #region agent log
             @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
