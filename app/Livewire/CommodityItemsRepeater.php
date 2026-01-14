@@ -184,6 +184,16 @@ class CommodityItemsRepeater extends Component
             
             // Update line numbers for remaining items
             $this->updateLineNumbers();
+
+            if (count($this->items) === 0) {
+                $this->dispatch('commodity-items-cleared', [
+                    'quotation_id' => $this->quotationId,
+                ]);
+
+                \Log::info('CommodityItemsRepeater::removeItem() cleared last item', [
+                    'quotation_id' => $this->quotationId,
+                ]);
+            }
         }
     }
     

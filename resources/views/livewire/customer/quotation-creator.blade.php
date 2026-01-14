@@ -334,7 +334,7 @@
     @endif
     
     {{-- Selected Articles Summary --}}
-    @if($quotation && $quotation->articles->count() > 0)
+    @if($quotation && $quotation->commodityItems->count() > 0 && $quotation->articles->count() > 0)
         <div class="bg-white rounded-lg shadow p-8 mb-6">
             <h3 class="text-xl font-semibold text-gray-900 mb-4">
                 <i class="fas fa-check-circle text-green-600 mr-2"></i>

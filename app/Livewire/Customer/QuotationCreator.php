@@ -51,6 +51,7 @@ class QuotationCreator extends Component
         'articleRemoved' => 'handleArticleRemoved',
         'port-updated' => 'handlePortUpdated',
         'commodity-item-saved' => 'handleCommodityItemSaved',
+        'commodity-items-cleared' => 'handleCommodityItemsCleared',
     ];
     
     // Handle port-updated event from JavaScript (fallback method)
@@ -69,7 +70,7 @@ class QuotationCreator extends Component
     {
         // Refresh quotation to load latest commodityItems
         if ($this->quotation) {
-            $this->quotation = $this->quotation->fresh(['commodityItems', 'selectedSchedule.carrier']);
+            $this->quotation = $this->quotation->fresh(['commodityItems', 'selectedSchedule.carrier', 'articles']);
         }
         
         // Update showArticles flag (commodity item might now have commodity_type set)
@@ -87,6 +88,33 @@ class QuotationCreator extends Component
             'commodity_items_count' => $this->quotation?->commodityItems?->count() ?? 0,
             'show_articles' => $this->showArticles,
             'event_dispatched' => $this->showArticles
+        ]);
+    }
+
+    /**
+     * Handle all commodity items cleared (UI should immediately clear pricing/services).
+     */
+    public function handleCommodityItemsCleared($data): void
+    {
+        if ($this->quotation) {
+            $this->quotation = $this->quotation->fresh(['commodityItems', 'selectedSchedule.carrier', 'articles']);
+
+            // Clear displayed services and totals immediately in UI
+            $this->quotation->setRelation('articles', collect());
+            $this->quotation->subtotal = 0;
+            $this->quotation->discount_amount = 0;
+            $this->quotation->total_excl_vat = 0;
+            $this->quotation->vat_amount = 0;
+            $this->quotation->total_incl_vat = 0;
+        }
+
+        $this->showArticles = false;
+        $this->resetErrorBag('commodity_items');
+
+        $this->dispatch('quotationUpdated');
+
+        Log::info('QuotationCreator::handleCommodityItemsCleared() called', [
+            'quotation_id' => $this->quotationId,
         ]);
     }
     
