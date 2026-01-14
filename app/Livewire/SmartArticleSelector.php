@@ -52,24 +52,6 @@ class SmartArticleSelector extends Component
         // and when commodity items are auto-saved in detailed quote mode
         $this->quotation = $this->quotation->fresh(['selectedSchedule.carrier', 'commodityItems']);
         
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'A',
-            'location' => 'SmartArticleSelector.php:46',
-            'message' => 'loadSuggestions entry',
-            'data' => [
-                'quotation_id' => $this->quotation->id,
-                'quotation_pol' => $this->quotation->pol,
-                'quotation_pod' => $this->quotation->pod,
-                'selected_schedule_id' => $this->quotation->selected_schedule_id,
-                'service_type' => $this->quotation->service_type,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-        
         try {
             $service = app(SmartArticleSelectionService::class);
             
@@ -82,21 +64,6 @@ class SmartArticleSelector extends Component
                 $this->maxArticles, 
                 $this->minMatchPercentage
             );
-            
-            // #region agent log
-            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'A',
-                'location' => 'SmartArticleSelector.php:68',
-                'message' => 'Suggestions result',
-                'data' => [
-                    'suggestions_count' => $suggestions->count(),
-                    'suggestion_ids' => $suggestions->pluck('article.id')->toArray(),
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
             
             $this->suggestedArticles = $suggestions;
             
