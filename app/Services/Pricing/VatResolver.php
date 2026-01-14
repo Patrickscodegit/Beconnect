@@ -24,8 +24,10 @@ class VatResolver implements VatResolverInterface
             $customerCountryIso = $customer?->country_code;
         }
         
-        $isExport = $this->isExport($originCountryIso, $destinationCountryIso);
-        $isImport = $this->isImport($originCountryIso, $destinationCountryIso);
+        // Handle NON_EU placeholder explicitly (non-EU countries not in ISO mapping)
+        if ($destinationCountryIso === 'NON_EU' && $originCountryIso === 'BE') {
+            return 'vrijgesteld VF'; // Export to non-EU
+        }
         
         // BE → BE: 21% VF
         if ($originCountryIso === 'BE' && $destinationCountryIso === 'BE') {
@@ -38,16 +40,16 @@ class VatResolver implements VatResolverInterface
         }
         
         // Export (BE → non-EU): vrijgesteld VF
-        if ($isExport) {
+        if ($this->isExport($originCountryIso, $destinationCountryIso)) {
             return 'vrijgesteld VF';
         }
         
         // Import (non-BE → BE): 21% VF
-        if ($isImport) {
+        if ($this->isImport($originCountryIso, $destinationCountryIso)) {
             return '21% VF';
         }
         
-        // Default: 21% VF
+        // Default: 21% VF (only if we can't determine)
         return '21% VF';
     }
     

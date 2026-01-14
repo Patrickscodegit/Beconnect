@@ -32,6 +32,9 @@ class QuotationVatService
             $quotation->project_vat_code = $projectVatCode;
             $quotation->saveQuietly();
             
+            // Recalculate totals with the new VAT code
+            $quotation->calculateTotals();
+            
             // Check if vat_code column exists on articles table
             if ($this->columnExists('quotation_request_articles', 'vat_code')) {
                 // Update all articles with the correct VAT code
