@@ -1204,7 +1204,8 @@ class RobawsArticleCache extends Model
                 ]) . "\n", FILE_APPEND);
                 // #endregion
                 
-                // If mappings exist, ONLY show mapped articles (don't fall back to POL/POD matching)
+                // If mappings exist, ONLY show mapped articles.
+                // When port IDs are available, also require route match to avoid cross-route leakage.
                 if (!empty($mappedArticleIds)) {
                     \Log::info('RobawsArticleCache: POL/POD filter - using mapped articles only', [
                         'quotation_id' => $quotation->id ?? null,
@@ -1213,6 +1214,10 @@ class RobawsArticleCache extends Model
                     ]);
                     
                     $q->whereIn('id', $mappedArticleIds);
+                    if ($quotationPolPortId && $quotationPodPortId) {
+                        $q->where('pol_port_id', $quotationPolPortId)
+                            ->where('pod_port_id', $quotationPodPortId);
+                    }
                     
                     // #region agent log
                     @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([

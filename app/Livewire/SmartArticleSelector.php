@@ -54,11 +54,7 @@ class SmartArticleSelector extends Component
         
         try {
             $service = app(SmartArticleSelectionService::class);
-            
-            // Clear cache before loading to ensure fresh suggestions
-            // This is critical when commodity items change, as cache key might not update immediately
-            $service->clearCache($this->quotation);
-            
+
             $suggestions = $service->getTopSuggestions(
                 $this->quotation, 
                 $this->maxArticles, 

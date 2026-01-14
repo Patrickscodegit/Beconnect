@@ -510,6 +510,260 @@ class QuotationCommodityItem extends Model
      */
     protected static array $deletedItemRelatedItems = [];
 
+    public static function recalculateQuotationArticles(int $quotationRequestId, ?int $triggeringItemId = null): void
+    {
+        $quotation = \App\Models\QuotationRequest::find($quotationRequestId);
+        if (!$quotation) {
+            return;
+        }
+
+        $triggeringItem = $triggeringItemId ? static::find($triggeringItemId) : null;
+
+        // Load commodity items to calculate quantities
+        $quotation->load('commodityItems');
+        $commodityItems = $quotation->commodityItems;
+        $totalCommodityQuantity = $commodityItems->sum('quantity') ?? 0;
+
+        $itemsById = $commodityItems->keyBy('id');
+        $childrenByBaseId = $commodityItems->groupBy('related_item_id');
+        $memberTypesCache = [];
+
+        $resolveBaseId = function ($item) use ($itemsById) {
+            $current = $item;
+            while ($current->related_item_id && $itemsById->has($current->related_item_id)) {
+                $current = $itemsById->get($current->related_item_id);
+            }
+            return $current->id;
+        };
+
+        $stackMembersByBaseId = [];
+        foreach ($commodityItems as $commodityItem) {
+            $baseId = $resolveBaseId($commodityItem);
+            if (!isset($stackMembersByBaseId[$baseId])) {
+                $stackMembersByBaseId[$baseId] = collect();
+            }
+            $stackMembersByBaseId[$baseId]->push($commodityItem);
+        }
+
+        $stackUnitCountByBaseId = [];
+        foreach ($stackMembersByBaseId as $baseId => $members) {
+            $baseItem = $itemsById->get($baseId);
+            $stackUnitCountByBaseId[$baseId] = $baseItem?->stack_unit_count ?? ($members->sum('quantity') ?? 0);
+        }
+
+        $getMemberTypes = function ($member) use (&$memberTypesCache) {
+            if (!isset($memberTypesCache[$member->id])) {
+                $memberTypesCache[$member->id] = array_map('strtoupper', static::normalizeCommodityTypes($member));
+            }
+            return $memberTypesCache[$member->id];
+        };
+
+        // Get ALL articles for this quotation (not just LM)
+        $allArticles = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+            ->with('articleCache')
+            ->get();
+
+        \Log::info('QuotationCommodityItem saved - recalculating all articles', [
+            'commodity_item_id' => $triggeringItem?->id,
+            'quotation_request_id' => $quotation->id,
+            'total_articles_count' => $allArticles->count(),
+            'item_quantity' => $triggeringItem?->quantity,
+            'total_commodity_quantity' => $totalCommodityQuantity,
+            'item_lm' => $triggeringItem?->lm,
+            'item_length' => $triggeringItem?->length_cm,
+            'item_width' => $triggeringItem?->width_cm,
+        ]);
+
+        foreach ($allArticles as $article) {
+            $oldSubtotal = $article->subtotal;
+            $oldQuantity = $article->quantity;
+            $unitType = strtoupper(trim($article->unit_type ?? ''));
+
+            // Check if this is a unit-count-based article (e.g., "Chassis nr")
+            // These articles use stack_unit_count instead of stack count
+            $isUnitCountBased = $unitType === 'CHASSIS NR';
+
+            // For LM articles, quantity is calculated by LmQuantityCalculator from dimensions
+            // For non-LM articles, calculate quantity based on matching commodity items
+            if ($unitType !== 'LM') {
+                // Get article's commodity type from articleCache
+                $articleCommodityType = $article->articleCache->commodity_type ?? null;
+
+                if ($articleCommodityType) {
+                    // Find matching commodity items based on commodity type
+                    $matchingItems = static::findMatchingCommodityItems(
+                        $commodityItems,
+                        $articleCommodityType
+                    );
+
+                    if ($isUnitCountBased) {
+                        // For unit-count-based articles (e.g., "Chassis nr"), sum stack_unit_count
+                        $totalUnitCount = 0;
+                        $processedBaseIds = [];
+                        $processedItemIds = [];
+
+                        foreach ($matchingItems as $matchingItem) {
+                            if (isset($processedItemIds[$matchingItem->id])) {
+                                continue;
+                            }
+
+                            $isInStack = in_array($matchingItem->relationship_type, ['loaded_with', 'connected_to'], true)
+                                || $childrenByBaseId->has($matchingItem->id);
+
+                            if ($isInStack) {
+                                $baseId = $resolveBaseId($matchingItem);
+                                if (!isset($processedBaseIds[$baseId])) {
+                                    $stackMembers = $stackMembersByBaseId[$baseId] ?? collect([$matchingItem]);
+                                    $hasMatchingMember = false;
+                                    foreach ($stackMembers as $member) {
+                                        $memberTypes = $getMemberTypes($member);
+                                        if (in_array(strtoupper($articleCommodityType), $memberTypes, true)) {
+                                            $hasMatchingMember = true;
+                                            break;
+                                        }
+                                    }
+                                    if ($hasMatchingMember) {
+                                        $stackUnitCount = $stackUnitCountByBaseId[$baseId] ?? 0;
+                                        $totalUnitCount += $stackUnitCount;
+                                        foreach ($stackMembers as $member) {
+                                            $processedItemIds[$member->id] = true;
+                                        }
+                                        $processedBaseIds[$baseId] = true;
+                                    }
+                                }
+                            } else {
+                                // Separate item (not in stack) - use its quantity
+                                $totalUnitCount += $matchingItem->quantity ?? 1;
+                                $processedItemIds[$matchingItem->id] = true;
+                            }
+                        }
+
+                        $article->quantity = (int) $totalUnitCount;
+
+                        \Log::debug('Article quantity calculated from stack unit count (unit-count-based)', [
+                            'article_id' => $article->id,
+                            'article_commodity_type' => $articleCommodityType,
+                            'unit_type' => $article->unit_type,
+                            'matching_items_count' => $matchingItems->count(),
+                            'total_unit_count' => $totalUnitCount,
+                        ]);
+                    } else {
+                        // For regular articles, count stacks (each stack = quantity 1) + sum separate item quantities
+                        // Note: "stack" is the internal term for a group of related items (combinations/loaded combinations/loaded units)
+                        $stacks = [];
+                        $separateItemQuantity = 0;
+                        $processedItemIds = [];
+
+                        foreach ($matchingItems as $matchingItem) {
+                            if (isset($processedItemIds[$matchingItem->id])) {
+                                continue;
+                            }
+
+                            // Check if item is in a stack (combination/loaded combination/loaded unit)
+                            $isInStack = in_array($matchingItem->relationship_type, ['loaded_with', 'connected_to'], true)
+                                || $childrenByBaseId->has($matchingItem->id);
+
+                            if ($isInStack) {
+                                $baseId = $resolveBaseId($matchingItem);
+                                if (!isset($stacks[$baseId])) {
+                                    $stackMembers = $stackMembersByBaseId[$baseId] ?? collect([$matchingItem]);
+                                    // Check if any member of this stack matches the article type
+                                    $hasMatchingMember = false;
+                                    foreach ($stackMembers as $member) {
+                                        $memberTypes = $getMemberTypes($member);
+                                        if (in_array(strtoupper($articleCommodityType), $memberTypes, true)) {
+                                            $hasMatchingMember = true;
+                                            break;
+                                        }
+                                    }
+                                    if ($hasMatchingMember) {
+                                        $stacks[$baseId] = true;
+                                        foreach ($stackMembers as $member) {
+                                            $processedItemIds[$member->id] = true;
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Separate item - use its actual quantity field
+                                $separateItemQuantity += $matchingItem->quantity ?? 1;
+                                $processedItemIds[$matchingItem->id] = true;
+                            }
+                        }
+
+                        // Total quantity = stack count (each group = 1) + separate item quantities (sum of quantity fields)
+                        $stackCount = count($stacks);
+                        $article->quantity = (int) ($stackCount + $separateItemQuantity);
+
+                        \Log::debug('Article quantity calculated from stacks and separate items', [
+                            'article_id' => $article->id,
+                            'article_commodity_type' => $articleCommodityType,
+                            'matching_items_count' => $matchingItems->count(),
+                            'stack_count' => $stackCount,
+                            'separate_item_quantity' => $separateItemQuantity,
+                            'total_quantity' => $article->quantity,
+                            'old_method_quantity' => $matchingItems->sum('quantity'),
+                        ]);
+                    }
+                } else {
+                    // Fallback: For articles without commodity_type (e.g., surcharges),
+                    // For child articles, use parent's quantity if available
+                    if ($article->parent_article_id) {
+                        // Child article: use parent's quantity
+                        $parentArticle = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+                            ->where('article_cache_id', $article->parent_article_id)
+                            ->first();
+
+                        if ($parentArticle) {
+                            $article->quantity = $parentArticle->quantity;
+                        } else {
+                            // If unit-count-based, sum stack_unit_count; otherwise sum all items
+                            if ($isUnitCountBased) {
+                                $article->quantity = (int) array_sum($stackUnitCountByBaseId);
+                            } else {
+                                $article->quantity = (int) $totalCommodityQuantity;
+                            }
+                        }
+                    } else {
+                        // Article without commodity type
+                        if ($isUnitCountBased) {
+                            $article->quantity = (int) array_sum($stackUnitCountByBaseId);
+                        } else {
+                            // Sum all items (regular behavior)
+                            $article->quantity = (int) $totalCommodityQuantity;
+                        }
+                    }
+
+                    \Log::debug('Article quantity calculated from all items (no commodity type)', [
+                        'article_id' => $article->id,
+                        'quantity' => $article->quantity,
+                        'is_child' => $article->parent_article_id !== null,
+                        'is_unit_count_based' => $isUnitCountBased,
+                        'unit_type' => $article->unit_type,
+                    ]);
+                }
+            }
+
+            // Save the article to trigger saving event which recalculates quantity and subtotal
+            // The saving event uses QuantityCalculationService which handles LM calculations
+            // For non-LM, it uses the updated quantity field
+            $article->save();
+
+            \Log::info('Article recalculated', [
+                'article_id' => $article->id,
+                'unit_type' => $unitType,
+                'old_quantity' => $oldQuantity,
+                'new_quantity' => $article->quantity,
+                'old_subtotal' => $oldSubtotal,
+                'new_subtotal' => $article->subtotal,
+                'effective_quantity' => app(\App\Services\Quotation\QuantityCalculationService::class)->calculateQuantity($article),
+                'selling_price' => $article->selling_price,
+            ]);
+        }
+
+        // Recalculate quotation totals
+        $quotation->calculateTotals();
+    }
+
     /**
      * Boot method to auto-calculate CBM before saving
      */
@@ -616,256 +870,23 @@ class QuotationCommodityItem extends Model
             // For LM articles: quantity is calculated from dimensions
             // For non-LM articles: quantity is updated based on matching commodity items only
             if ($item->quotation_request_id) {
+                $quotationRequestId = $item->quotation_request_id;
+                $triggeringItemId = $item->id;
+                $useQueue = (bool) env('QUOTE_RECALC_QUEUE', false);
+                $debounceSeconds = (int) env('QUOTE_RECALC_DEBOUNCE_SECONDS', 0);
+
                 // Use DB::afterCommit to ensure the transaction is complete before querying
-                \DB::afterCommit(function () use ($item) {
-                    // Reload the relationship to ensure we have fresh data
-                    $quotation = \App\Models\QuotationRequest::find($item->quotation_request_id);
-                    if ($quotation) {
-                        // Load commodity items to calculate quantities
-                        $quotation->load('commodityItems');
-                        $totalCommodityQuantity = $quotation->commodityItems->sum('quantity') ?? 0;
-                        
-                        // Get ALL articles for this quotation (not just LM)
-                        $allArticles = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotation->id)
-                            ->with('articleCache')
-                            ->get();
-                        
-                        \Log::info('QuotationCommodityItem saved - recalculating all articles', [
-                            'commodity_item_id' => $item->id,
-                            'quotation_request_id' => $quotation->id,
-                            'total_articles_count' => $allArticles->count(),
-                            'item_quantity' => $item->quantity,
-                            'total_commodity_quantity' => $totalCommodityQuantity,
-                            'item_lm' => $item->lm,
-                            'item_length' => $item->length_cm,
-                            'item_width' => $item->width_cm,
-                        ]);
-                        
-                        foreach ($allArticles as $article) {
-                            // Reload the article to ensure we have fresh relationship data
-                            $article->load('quotationRequest.commodityItems', 'articleCache');
-                            
-                            $oldSubtotal = $article->subtotal;
-                            $oldQuantity = $article->quantity;
-                            $unitType = strtoupper(trim($article->unit_type ?? ''));
-                            
-                            // Check if this is a unit-count-based article (e.g., "Chassis nr")
-                            // These articles use stack_unit_count instead of stack count
-                            $isUnitCountBased = $unitType === 'CHASSIS NR';
-                            
-                            // For LM articles, quantity is calculated by LmQuantityCalculator from dimensions
-                            // For non-LM articles, calculate quantity based on matching commodity items
-                            if ($unitType !== 'LM') {
-                                // Get article's commodity type from articleCache
-                                $articleCommodityType = $article->articleCache->commodity_type ?? null;
-                                
-                                if ($articleCommodityType) {
-                                    // Find matching commodity items based on commodity type
-                                    $matchingItems = static::findMatchingCommodityItems(
-                                        $quotation->commodityItems,
-                                        $articleCommodityType
-                                    );
-                                    
-                                    if ($isUnitCountBased) {
-                                        // For unit-count-based articles (e.g., "Chassis nr"), sum stack_unit_count
-                                        $totalUnitCount = 0;
-                                        $processed = [];
-                                        
-                                        foreach ($matchingItems as $item) {
-                                            if (in_array($item->id, $processed)) {
-                                                continue;
-                                            }
-                                            
-                                            // Check if item is in a stack
-                                            if ($item->isInStack()) {
-                                                $baseId = $item->getStackGroup();
-                                                if (!in_array($baseId, $processed)) {
-                                                    $baseItem = static::find($baseId);
-                                                    if ($baseItem) {
-                                                        $stackMembers = $baseItem->getStackMembers();
-                                                        // Check if any member of this stack matches the article type
-                                                        $hasMatchingMember = false;
-                                                        foreach ($stackMembers as $member) {
-                                                            $memberTypes = static::normalizeCommodityTypes($member);
-                                                            if (in_array(strtoupper($articleCommodityType), array_map('strtoupper', $memberTypes))) {
-                                                                $hasMatchingMember = true;
-                                                                break;
-                                                            }
-                                                        }
-                                                        if ($hasMatchingMember) {
-                                                            // Use stack_unit_count if available, otherwise calculate it
-                                                            $stackUnitCount = $baseItem->stack_unit_count ?? $baseItem->getStackUnitCount() ?? 0;
-                                                            $totalUnitCount += $stackUnitCount;
-                                                            foreach ($stackMembers as $member) {
-                                                                $processed[] = $member->id;
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            } else {
-                                                // Separate item (not in stack) - use its quantity
-                                                $totalUnitCount += $item->quantity ?? 1;
-                                                $processed[] = $item->id;
-                                            }
-                                        }
-                                        
-                                        $article->quantity = (int) $totalUnitCount;
-                                        
-                                        \Log::debug('Article quantity calculated from stack unit count (unit-count-based)', [
-                                            'article_id' => $article->id,
-                                            'article_commodity_type' => $articleCommodityType,
-                                            'unit_type' => $article->unit_type,
-                                            'matching_items_count' => $matchingItems->count(),
-                                            'total_unit_count' => $totalUnitCount,
-                                        ]);
-                                    } else {
-                                        // For regular articles, count stacks (each stack = quantity 1) + sum separate item quantities
-                                        // Note: "stack" is the internal term for a group of related items (combinations/loaded combinations/loaded units)
-                                        $stacks = [];
-                                        $separateItemQuantity = 0;
-                                        $processed = [];
-                                        
-                                        foreach ($matchingItems as $item) {
-                                            if (in_array($item->id, $processed)) {
-                                                continue;
-                                            }
-                                            
-                                            // Check if item is in a stack (combination/loaded combination/loaded unit)
-                                            if ($item->isInStack()) {
-                                                $baseId = $item->getStackGroup();
-                                                if (!isset($stacks[$baseId])) {
-                                                    $stackMembers = $item->getStackMembers();
-                                                    // Check if any member of this stack matches the article type
-                                                    $hasMatchingMember = false;
-                                                    foreach ($stackMembers as $member) {
-                                                        $memberTypes = static::normalizeCommodityTypes($member);
-                                                        if (in_array(strtoupper($articleCommodityType), array_map('strtoupper', $memberTypes))) {
-                                                            $hasMatchingMember = true;
-                                                            break;
-                                                        }
-                                                    }
-                                                    if ($hasMatchingMember) {
-                                                        $stacks[$baseId] = true;
-                                                        foreach ($stackMembers as $member) {
-                                                            $processed[] = $member->id;
-                                                        }
-                                                    }
-                                                }
-                                            } else {
-                                                // Separate item - use its actual quantity field
-                                                $separateItemQuantity += $item->quantity ?? 1;
-                                                $processed[] = $item->id;
-                                            }
-                                        }
-                                        
-                                        // Total quantity = stack count (each group = 1) + separate item quantities (sum of quantity fields)
-                                        $stackCount = count($stacks);
-                                        $article->quantity = (int) ($stackCount + $separateItemQuantity);
-                                        
-                                        \Log::debug('Article quantity calculated from stacks and separate items', [
-                                            'article_id' => $article->id,
-                                            'article_commodity_type' => $articleCommodityType,
-                                            'matching_items_count' => $matchingItems->count(),
-                                            'stack_count' => $stackCount,
-                                            'separate_item_quantity' => $separateItemQuantity,
-                                            'total_quantity' => $article->quantity,
-                                            'old_method_quantity' => $matchingItems->sum('quantity'),
-                                        ]);
-                                    }
-                                } else {
-                                    // Fallback: For articles without commodity_type (e.g., surcharges),
-                                    // For child articles, use parent's quantity if available
-                                    if ($article->parent_article_id) {
-                                        // Child article: use parent's quantity
-                                        $parentArticle = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotation->id)
-                                            ->where('article_cache_id', $article->parent_article_id)
-                                            ->first();
-                                        
-                                        if ($parentArticle) {
-                                            $article->quantity = $parentArticle->quantity;
-                                        } else {
-                                            // If unit-count-based, sum stack_unit_count; otherwise sum all items
-                                            if ($isUnitCountBased) {
-                                                $totalUnitCount = 0;
-                                                foreach ($quotation->commodityItems as $item) {
-                                                    if ($item->isInStack() && $item->isStackBase()) {
-                                                        $totalUnitCount += $item->stack_unit_count ?? $item->getStackUnitCount() ?? 0;
-                                                    } else if ($item->isSeparate()) {
-                                                        $totalUnitCount += $item->quantity ?? 1;
-                                                    }
-                                                }
-                                                $article->quantity = (int) $totalUnitCount;
-                                            } else {
-                                                $article->quantity = (int) $totalCommodityQuantity;
-                                            }
-                                        }
-                                    } else {
-                                        // Article without commodity type
-                                        if ($isUnitCountBased) {
-                                            // Sum stack_unit_count for all stacks + individual item quantities
-                                            $totalUnitCount = 0;
-                                            $processed = [];
-                                            
-                                            foreach ($quotation->commodityItems as $item) {
-                                                if (in_array($item->id, $processed)) {
-                                                    continue;
-                                                }
-                                                
-                                                if ($item->isInStack()) {
-                                                    $baseId = $item->getStackGroup();
-                                                    if (!in_array($baseId, $processed)) {
-                                                        $baseItem = static::find($baseId);
-                                                        if ($baseItem) {
-                                                            $stackUnitCount = $baseItem->stack_unit_count ?? $baseItem->getStackUnitCount() ?? 0;
-                                                            $totalUnitCount += $stackUnitCount;
-                                                            $stackMembers = $baseItem->getStackMembers();
-                                                            foreach ($stackMembers as $member) {
-                                                                $processed[] = $member->id;
-                                                            }
-                                                        }
-                                                    }
-                                                } else {
-                                                    $totalUnitCount += $item->quantity ?? 1;
-                                                    $processed[] = $item->id;
-                                                }
-                                            }
-                                            $article->quantity = (int) $totalUnitCount;
-                                        } else {
-                                            // Sum all items (regular behavior)
-                                            $article->quantity = (int) $totalCommodityQuantity;
-                                        }
-                                    }
-                                    
-                                    \Log::debug('Article quantity calculated from all items (no commodity type)', [
-                                        'article_id' => $article->id,
-                                        'quantity' => $article->quantity,
-                                        'is_child' => $article->parent_article_id !== null,
-                                        'is_unit_count_based' => $isUnitCountBased,
-                                        'unit_type' => $article->unit_type,
-                                    ]);
-                                }
-                            }
-                            
-                            // Save the article to trigger saving event which recalculates quantity and subtotal
-                            // The saving event uses QuantityCalculationService which handles LM calculations
-                            // For non-LM, it uses the updated quantity field
-                            $article->save();
-                            
-                            \Log::info('Article recalculated', [
-                                'article_id' => $article->id,
-                                'unit_type' => $unitType,
-                                'old_quantity' => $oldQuantity,
-                                'new_quantity' => $article->quantity,
-                                'old_subtotal' => $oldSubtotal,
-                                'new_subtotal' => $article->subtotal,
-                                'effective_quantity' => app(\App\Services\Quotation\QuantityCalculationService::class)->calculateQuantity($article),
-                                'selling_price' => $article->selling_price,
-                            ]);
+                \DB::afterCommit(function () use ($quotationRequestId, $triggeringItemId, $useQueue, $debounceSeconds) {
+                    if ($useQueue) {
+                        $job = new \App\Jobs\RecalculateQuotationArticles($quotationRequestId, $triggeringItemId);
+                        if ($debounceSeconds > 0) {
+                            $job->delay(now()->addSeconds($debounceSeconds));
                         }
-                        
-                        // Recalculate quotation totals
-                        $quotation->calculateTotals();
+                        dispatch($job);
+                        return;
                     }
+
+                    static::recalculateQuotationArticles($quotationRequestId, $triggeringItemId);
                 });
             }
         });
