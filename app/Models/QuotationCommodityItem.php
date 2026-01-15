@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Schema;
+use App\Models\QuotationRequestArticle;
 
 class QuotationCommodityItem extends Model
 {
@@ -777,9 +778,152 @@ class QuotationCommodityItem extends Model
         // Recalculate quotation totals
         $quotation->calculateTotals();
 
+        static::applyBaseServiceNotes($quotation, $commodityItems);
+
         \Log::info('QuotationCommodityItem: Articles recalculation completed', [
             'quotation_request_id' => $quotationRequestId,
         ]);
+    }
+
+    private static function applyBaseServiceNotes(QuotationRequest $quotation, $commodityItems): void
+    {
+        $contexts = static::buildStackContexts($commodityItems);
+        if (empty($contexts)) {
+            return;
+        }
+
+        $lmArticles = QuotationRequestArticle::query()
+            ->where('quotation_request_id', $quotation->id)
+            ->whereRaw('UPPER(TRIM(unit_type)) = ?', ['LM'])
+            ->where(function ($query) {
+                $query->whereNull('carrier_rule_applied')
+                    ->orWhere('carrier_rule_applied', false);
+            })
+            ->orderBy('id')
+            ->get();
+
+        if ($lmArticles->isEmpty()) {
+            return;
+        }
+
+        $contextsByIndex = collect($contexts)
+            ->sortBy('base_line_number')
+            ->values();
+
+        foreach ($lmArticles as $index => $article) {
+            $context = $contextsByIndex->get($index);
+            if (!$context) {
+                continue;
+            }
+
+            $article->formula_inputs = array_merge($article->formula_inputs ?? [], [
+                'service_context' => [
+                    'source' => 'base_service',
+                    'base_item_id' => $context['base_item_id'],
+                    'base_line_number' => $context['base_line_number'],
+                    'commodity_types' => $context['commodity_types'],
+                    'vehicle_categories' => $context['categories'],
+                    'line_numbers' => $context['line_numbers'],
+                    'is_combination' => $context['is_combination'],
+                ],
+            ]);
+            $article->notes = static::buildBaseServiceNote($context);
+            $article->saveQuietly();
+
+            $baseItem = $context['base_item'];
+            if ($baseItem) {
+                $meta = $baseItem->carrier_rule_meta ?? [];
+                $baseServices = $meta['base_services'] ?? [];
+                $baseServices[] = [
+                    'article_id' => $article->article_cache_id,
+                    'base_item_id' => $context['base_item_id'],
+                    'line_numbers' => $context['line_numbers'],
+                    'commodity_types' => $context['commodity_types'],
+                    'vehicle_categories' => $context['categories'],
+                    'is_combination' => $context['is_combination'],
+                ];
+
+                $meta['base_services'] = collect($baseServices)
+                    ->unique(fn ($entry) => ($entry['article_id'] ?? '') . ':' . ($entry['base_item_id'] ?? ''))
+                    ->values()
+                    ->all();
+
+                $baseItem->carrier_rule_meta = $meta;
+                $baseItem->saveQuietly();
+            }
+        }
+    }
+
+    private static function buildStackContexts($commodityItems): array
+    {
+        $contexts = [];
+        $processed = [];
+
+        foreach ($commodityItems as $item) {
+            if (in_array($item->id, $processed, true)) {
+                continue;
+            }
+
+            $stackMembers = $item->getStackMembers();
+            $stackMembers->each(fn ($member) => $processed[] = $member->id);
+
+            $baseItem = $stackMembers->first(function ($candidate) {
+                return $candidate->id === $candidate->getStackGroup();
+            }) ?? $stackMembers->first();
+
+            if (!$baseItem) {
+                continue;
+            }
+
+            $categories = $stackMembers->pluck('category')->filter()->unique()->values()->all();
+            $commodityTypes = $stackMembers->pluck('commodity_type')->filter()->unique()->values()->all();
+            $lineNumbers = $stackMembers->pluck('line_number')->filter()->sort()->values()->all();
+            $isCombination = $stackMembers->count() > 1
+                || $stackMembers->contains(fn ($member) => !$member->isSeparate());
+
+            $contexts[] = [
+                'base_item_id' => $baseItem->id,
+                'base_line_number' => $baseItem->line_number,
+                'base_item' => $baseItem,
+                'categories' => $categories,
+                'commodity_types' => $commodityTypes,
+                'line_numbers' => $lineNumbers,
+                'is_combination' => $isCombination,
+            ];
+        }
+
+        return $contexts;
+    }
+
+    private static function buildBaseServiceNote(array $context): string
+    {
+        $typeLabel = $context['is_combination'] ? 'combination' : 'base unit';
+        $commodityTypes = implode(', ', $context['commodity_types'] ?: ['n/a']);
+        $categories = implode(', ', $context['categories'] ?: ['n/a']);
+        $lines = implode(', ', $context['line_numbers'] ?: []);
+        $averageNote = static::hasTrailerCategory($context['categories'])
+            ? ' Note: dimensions may use average trailer measurements when missing.'
+            : '';
+
+        return sprintf(
+            'Base service for %s (lines %s). Commodity type(s): %s. Vehicle category(s): %s.%s',
+            $typeLabel,
+            $lines ?: 'n/a',
+            $commodityTypes,
+            $categories,
+            $averageNote
+        );
+    }
+
+    private static function hasTrailerCategory(array $categories): bool
+    {
+        foreach ($categories as $category) {
+            if (in_array($category, ['trailer', 'trailer_stack', 'tank_trailer'], true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
