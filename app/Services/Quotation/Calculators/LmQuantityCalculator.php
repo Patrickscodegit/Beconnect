@@ -49,6 +49,25 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
         
         $totalLm = 0;
         $processedItems = [];
+
+        if (!$quotationRequest->relationLoaded('articles')) {
+            $quotationRequest->load('articles');
+        }
+
+        $lmArticles = $quotationRequest->articles
+            ->filter(function ($candidate) use ($article) {
+                $unitType = strtoupper(trim($candidate->unit_type ?? ''));
+                return $unitType === 'LM'
+                    && !$candidate->carrier_rule_applied
+                    && $candidate->article_cache_id === $article->article_cache_id;
+            })
+            ->sortBy('id')
+            ->values();
+
+        $usePerStackAllocation = $lmArticles->count() > 1;
+        $lmArticleIndex = $usePerStackAllocation
+            ? $lmArticles->search(fn ($candidate) => $candidate->id === $article->id)
+            : null;
         
         foreach ($commodityItems as $item) {
             // Skip if already processed
@@ -105,6 +124,60 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
                 $lmForItemLine = $lmPerItem * $itemQuantity;
                 
                 $totalLm += $lmForItemLine;
+            }
+        }
+
+        if ($usePerStackAllocation && $lmArticleIndex !== false) {
+            $stackGroups = \App\Models\QuotationCommodityItem::getAllStacks($quotationRequest->id);
+            $stackEntries = collect($stackGroups)->map(function ($stack) use ($service, $carrierId, $portId, $vesselName, $vesselClass) {
+                $baseItem = $stack->first(function ($candidate) {
+                    return $candidate->id === $candidate->getStackGroup();
+                }) ?? $stack->first();
+
+                if (!$baseItem) {
+                    return [
+                        'line_number' => null,
+                        'lm' => 0,
+                    ];
+                }
+
+                $lm = 0.0;
+                if ($baseItem->stack_length_cm && $baseItem->stack_width_cm) {
+                    $result = $service->computeChargeableLm(
+                        $baseItem->stack_length_cm,
+                        $baseItem->stack_width_cm,
+                        $carrierId,
+                        $portId,
+                        $baseItem->category,
+                        $vesselName,
+                        $vesselClass
+                    );
+                    $stackUnitCount = $baseItem->stack_unit_count ?? $baseItem->getStackUnitCount() ?? 1;
+                    $lm = $result->chargeableLm * $stackUnitCount;
+                } elseif ($baseItem->length_cm && $baseItem->width_cm) {
+                    $result = $service->computeChargeableLm(
+                        $baseItem->length_cm,
+                        $baseItem->width_cm,
+                        $carrierId,
+                        $portId,
+                        $baseItem->category,
+                        $vesselName,
+                        $vesselClass
+                    );
+                    $itemQuantity = $baseItem->quantity ?? 1;
+                    $lm = $result->chargeableLm * $itemQuantity;
+                }
+
+                return [
+                    'line_number' => $baseItem->line_number ?? null,
+                    'lm' => $lm,
+                ];
+            })
+            ->sortBy('line_number')
+            ->values();
+
+            if ($stackEntries->has($lmArticleIndex)) {
+                return $stackEntries[$lmArticleIndex]['lm'] ?? 0.0;
             }
         }
         
