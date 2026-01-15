@@ -7,6 +7,7 @@ use App\Models\CarrierCategoryGroup;
 use App\Models\CarrierCategoryGroupMember;
 use App\Services\CarrierRules\DTOs\CargoInputDTO;
 use App\Services\CarrierRules\DTOs\CarrierRuleResultDTO;
+use App\Services\CarrierRules\DTOs\ChargeableMeasureDTO;
 use Illuminate\Support\Collection;
 
 /**

@@ -4,6 +4,7 @@ namespace App\Services\CarrierRules;
 
 use App\Models\CarrierSurchargeRule;
 use App\Services\CarrierRules\DTOs\CargoInputDTO;
+use App\Services\CarrierRules\DTOs\ChargeableMeasureDTO;
 use InvalidArgumentException;
 
 /**

@@ -3,6 +3,7 @@
 namespace App\Services\CarrierRules;
 
 use App\Services\CarrierRules\CarrierRuleResolver;
+use App\Services\CarrierRules\DTOs\ChargeableMeasureDTO;
 
 /**
  * Single source of truth for LM/chargeable measure calculation.
@@ -166,18 +167,5 @@ class ChargeableMeasureService
             meta: $meta
         );
     }
-}
-
-/**
- * DTO for chargeable measure calculation results
- */
-class ChargeableMeasureDTO
-{
-    public function __construct(
-        public float $baseLm,
-        public float $chargeableLm,
-        public ?int $appliedTransformRuleId,
-        public array $meta
-    ) {}
 }
 

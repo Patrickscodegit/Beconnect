@@ -2,7 +2,7 @@
 
 namespace App\Services\CarrierRules\DTOs;
 
-use App\Services\CarrierRules\ChargeableMeasureDTO;
+use App\Services\CarrierRules\DTOs\ChargeableMeasureDTO;
 
 /**
  * Output DTO from carrier rule engine
