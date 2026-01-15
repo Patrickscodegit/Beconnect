@@ -106,12 +106,9 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
                 );
                 
                 $lmPerStack = $result->chargeableLm;
-                
-                // Multiply by stack unit count (number of units in the stack)
-                $stackUnitCount = $item->stack_unit_count ?? $item->getStackUnitCount() ?? 1;
-                $lmForStack = $lmPerStack * $stackUnitCount;
-                
-                $totalLm += $lmForStack;
+                // stack_length/stack_width represent overall stack dimensions.
+                $totalLm += $lmPerStack;
+                continue;
             }
             // PRIORITY 2: Use individual item dimensions (for standalone items)
             $itemLength = $item->length_cm;
@@ -178,8 +175,8 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
                         $vesselName,
                         $vesselClass
                     );
-                    $stackUnitCount = $baseItem->stack_unit_count ?? $baseItem->getStackUnitCount() ?? 1;
-                    $lm = $result->chargeableLm * $stackUnitCount;
+                    // stack_length/stack_width represent overall stack dimensions.
+                    $lm = $result->chargeableLm;
                 } else {
                     $itemLength = $baseItem->length_cm;
                     $itemWidth = $baseItem->width_cm;
