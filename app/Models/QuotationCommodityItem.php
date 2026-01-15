@@ -810,9 +810,16 @@ class QuotationCommodityItem extends Model
             ->sortBy('base_line_number')
             ->values();
 
+        $assignedBaseIds = [];
+
         foreach ($lmArticles as $index => $article) {
             $context = $contextsByIndex->get($index);
             if (!$context) {
+                continue;
+            }
+
+            if (in_array($context['base_item_id'], $assignedBaseIds, true)) {
+                $article->delete();
                 continue;
             }
 
@@ -829,6 +836,7 @@ class QuotationCommodityItem extends Model
             ]);
             $article->notes = static::buildBaseServiceNote($context);
             $article->saveQuietly();
+            $assignedBaseIds[] = $context['base_item_id'];
 
             $baseItem = $context['base_item'];
             if ($baseItem) {
@@ -852,6 +860,18 @@ class QuotationCommodityItem extends Model
                 $baseItem->saveQuietly();
             }
         }
+
+        $staleBaseIds = collect($assignedBaseIds)->flip();
+        $lmArticles->each(function (QuotationRequestArticle $article) use ($staleBaseIds) {
+            $serviceContext = $article->formula_inputs['service_context'] ?? null;
+            if (!is_array($serviceContext) || ($serviceContext['source'] ?? null) !== 'base_service') {
+                return;
+            }
+            $baseItemId = $serviceContext['base_item_id'] ?? null;
+            if (!$baseItemId || !$staleBaseIds->has($baseItemId)) {
+                $article->delete();
+            }
+        });
     }
 
     private static function buildStackContexts($commodityItems): array
