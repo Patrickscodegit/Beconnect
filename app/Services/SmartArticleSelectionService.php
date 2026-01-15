@@ -7,6 +7,7 @@ use App\Models\RobawsArticleCache;
 use App\Models\QuotationCommodityItem;
 use App\Models\CarrierCategoryGroupMember;
 use App\Models\CarrierCategoryGroup;
+use App\Services\CarrierRules\DTOs\CargoInputDTO;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -455,7 +456,7 @@ class SmartArticleSelectionService
 
     private function getStrictMappedArticleIds(QuotationRequest $quotation): array
     {
-        $quotation->loadMissing(['commodityItems', 'selectedSchedule.carrier']);
+        $quotation->loadMissing(['commodityItems', 'selectedSchedule.carrier', 'selectedSchedule.podPort']);
 
         $schedule = $quotation->selectedSchedule;
         $carrierId = $schedule?->carrier_id ?? $schedule?->carrier?->id;
@@ -491,6 +492,21 @@ class SmartArticleSelectionService
             ->unique()
             ->values()
             ->toArray();
+
+        $dimensionAlignedCodes = $this->getDimensionAlignedCategoryGroupCodes(
+            $quotation,
+            $carrierId,
+            $podPortId
+        );
+        if (!empty($dimensionAlignedCodes)) {
+            Log::info('SmartArticleSelectionService: Using dimension-aligned category groups', [
+                'quotation_id' => $quotation->id ?? null,
+                'carrier_id' => $carrierId,
+                'matched_category_groups' => $acceptanceGroupCodes,
+                'dimension_aligned_groups' => $dimensionAlignedCodes,
+            ]);
+            $acceptanceGroupCodes = $dimensionAlignedCodes;
+        }
 
         $categoryGroupIds = [];
         if (!empty($acceptanceGroupCodes)) {
@@ -643,6 +659,118 @@ class SmartArticleSelectionService
         }
 
         return $mappedIds;
+    }
+
+    private function getDimensionAlignedCategoryGroupCodes(
+        QuotationRequest $quotation,
+        int $carrierId,
+        int $podPortId
+    ): array {
+        $schedule = $quotation->selectedSchedule;
+        if (!$schedule) {
+            return [];
+        }
+
+        $resolver = app(CarrierRuleResolver::class);
+        $alignedCodes = [];
+
+        foreach ($quotation->commodityItems as $item) {
+            $meta = $item->carrier_rule_meta;
+            if (!is_array($meta) || empty($meta['violations'])) {
+                continue;
+            }
+
+            $hasMaxViolation = collect($meta['violations'])
+                ->contains(fn($violation) => str_starts_with((string) $violation, 'max_'));
+            if (!$hasMaxViolation) {
+                continue;
+            }
+
+            $input = CargoInputDTO::fromCommodityItem($item, $schedule->podPort, $schedule);
+            $candidateCategories = $this->getDimensionOverrideCategories($item->category);
+
+            foreach ($candidateCategories as $category) {
+                $rule = $resolver->resolveAcceptanceRule(
+                    $carrierId,
+                    $podPortId,
+                    $category,
+                    null,
+                    $schedule->vessel_name,
+                    $schedule->vessel_class
+                );
+
+                if (!$rule || !$this->fitsWithinMaxDimensions($input, $rule)) {
+                    continue;
+                }
+
+                $code = $this->resolveCategoryGroupCodeForCategory($carrierId, $category);
+                if ($code) {
+                    $alignedCodes[] = $code;
+                }
+                break;
+            }
+        }
+
+        return array_values(array_unique(array_filter($alignedCodes)));
+    }
+
+    private function getDimensionOverrideCategories(?string $vehicleCategory): array
+    {
+        $category = $vehicleCategory ?? '';
+        $paths = [
+            'car' => ['car', 'small_van', 'big_van', 'truck', 'high_and_heavy'],
+            'small_van' => ['small_van', 'big_van', 'truck', 'high_and_heavy'],
+            'big_van' => ['big_van', 'truck', 'high_and_heavy'],
+            'suv' => ['suv', 'big_van', 'truck', 'high_and_heavy'],
+        ];
+
+        if (isset($paths[$category])) {
+            return $paths[$category];
+        }
+
+        if ($category !== '') {
+            return [$category, 'high_and_heavy'];
+        }
+
+        return ['high_and_heavy'];
+    }
+
+    private function fitsWithinMaxDimensions(CargoInputDTO $input, $rule): bool
+    {
+        if ($rule->max_length_cm && $input->lengthCm > 0 && $input->lengthCm > $rule->max_length_cm) {
+            return false;
+        }
+
+        if ($rule->max_width_cm && $input->widthCm > 0 && $input->widthCm > $rule->max_width_cm) {
+            return false;
+        }
+
+        if ($rule->max_height_cm && $input->heightCm > 0 && $input->heightCm > $rule->max_height_cm) {
+            return false;
+        }
+
+        if ($rule->max_weight_kg && $input->weightKg > 0 && $input->weightKg > $rule->max_weight_kg) {
+            return false;
+        }
+
+        if ($rule->max_cbm && $input->cbm > 0 && $input->cbm > $rule->max_cbm) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function resolveCategoryGroupCodeForCategory(int $carrierId, string $vehicleCategory): ?string
+    {
+        $member = CarrierCategoryGroupMember::whereHas('categoryGroup', function ($q) use ($carrierId) {
+            $q->where('carrier_id', $carrierId)->where('is_active', true);
+        })
+            ->where('vehicle_category', $vehicleCategory)
+            ->where('is_active', true)
+            ->with('categoryGroup')
+            ->first();
+
+        return $member?->categoryGroup?->code;
     }
 
     private function filterMappingsByPort($mappings, ?int $portId, array $portGroupIds = []): Collection
