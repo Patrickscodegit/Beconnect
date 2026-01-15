@@ -785,29 +785,6 @@ class RobawsArticleCache extends Model
      */
     public function scopeForQuotationContext(Builder $query, \App\Models\QuotationRequest $quotation): Builder
     {
-        // #region agent log
-        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'A',
-            'location' => 'RobawsArticleCache.php:786',
-            'message' => 'scopeForQuotationContext entry',
-            'data' => [
-                'quotation_id' => $quotation->id ?? null,
-                'request_number' => $quotation->request_number ?? null,
-                'pol' => $quotation->pol ?? null,
-                'pod' => $quotation->pod ?? null,
-                'pol_port_id' => $quotation->pol_port_id ?? null,
-                'pod_port_id' => $quotation->pod_port_id ?? null,
-                'service_type' => $quotation->service_type ?? null,
-                'selected_schedule_id' => $quotation->selected_schedule_id ?? null,
-                'commodity_type' => $quotation->commodity_type ?? null,
-                'has_commodity_items' => $quotation->commodityItems ? $quotation->commodityItems->count() : 0,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-        
         // Use database-agnostic case-insensitive matching
         // PostgreSQL supports ILIKE, SQLite/MySQL use LOWER() with LIKE
         $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
@@ -817,21 +794,6 @@ class RobawsArticleCache extends Model
             ->where('is_parent_item', true)
             ->limit(1)
             ->exists();
-
-        // #region agent log
-        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'E',
-            'location' => 'RobawsArticleCache.php:793',
-            'message' => 'Parent items check',
-            'data' => [
-                'quotation_id' => $quotation->id ?? null,
-                'has_parent_items' => $hasParentItems,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
 
         if ($hasParentItems) {
             $query->where('is_parent_item', true);
@@ -1114,39 +1076,7 @@ class RobawsArticleCache extends Model
                 'category_group_ids' => $categoryGroupIds,
             ]);
             
-            // #region agent log
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'A',
-                'location' => 'RobawsArticleCache.php:1022',
-                'message' => 'Mappings calculated',
-                'data' => [
-                    'quotation_id' => $quotation->id ?? null,
-                    'carrier_id' => $carrierId ?? null,
-                    'all_mappings_count' => $allMappings->count(),
-                    'mapped_article_ids' => $mappedArticleIds,
-                    'mapped_article_ids_count' => count($mappedArticleIds),
-                    'vehicle_categories' => $vehicleCategories,
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
         } else {
-            // #region agent log
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'C',
-                'location' => 'RobawsArticleCache.php:1024',
-                'message' => 'No carrier ID - mappings not calculated',
-                'data' => [
-                    'quotation_id' => $quotation->id ?? null,
-                    'carrier_id' => $carrierId ?? null,
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
         }
 
         // Apply validity date filter
@@ -1173,47 +1103,9 @@ class RobawsArticleCache extends Model
             $quotationPolCode = $this->extractPortCode($quotation->pol);
             $quotationPodCode = $this->extractPortCode($quotation->pod);
             
-            // #region agent log
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'D',
-                'location' => 'RobawsArticleCache.php:905',
-                'message' => 'POL/POD filtering',
-                'data' => [
-                    'quotation_id' => $quotation->id ?? null,
-                    'quotation_pol' => $quotation->pol ?? null,
-                    'quotation_pod' => $quotation->pod ?? null,
-                    'quotation_pol_port_id' => $quotationPolPortId,
-                    'quotation_pod_port_id' => $quotationPodPortId,
-                    'extracted_pol_code' => $quotationPolCode ?? null,
-                    'extracted_pod_code' => $quotationPodCode ?? null,
-                    'has_mappings' => !empty($mappedArticleIds),
-                    'mapped_article_ids_count' => count($mappedArticleIds),
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
-
             // Require both POL and POD to match exactly, BUT allow mapped articles to bypass
             // IMPORTANT: When mappings exist, ONLY show mapped articles (don't fall back to POL/POD matching)
             $query->where(function ($q) use ($quotation, $quotationPolCode, $quotationPodCode, $quotationPolPortId, $quotationPodPortId, $useIlike, $mappedArticleIds) {
-                // #region agent log
-                @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                    'sessionId' => 'debug-session',
-                    'runId' => 'run1',
-                    'hypothesisId' => 'A',
-                    'location' => 'RobawsArticleCache.php:1053',
-                    'message' => 'POL/POD filter closure - mappedArticleIds check',
-                    'data' => [
-                        'mapped_article_ids_count' => count($mappedArticleIds),
-                        'mapped_article_ids' => $mappedArticleIds,
-                        'is_empty' => empty($mappedArticleIds),
-                    ],
-                    'timestamp' => time() * 1000
-                ]) . "\n", FILE_APPEND);
-                // #endregion
-                
                 // If mappings exist, ONLY show mapped articles.
                 // When port IDs are available, also require route match to avoid cross-route leakage.
                 if (!empty($mappedArticleIds)) {
@@ -1231,19 +1123,6 @@ class RobawsArticleCache extends Model
                         $q->where('pod_port_id', $quotationPodPortId);
                     }
                     
-                    // #region agent log
-                    @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                        'sessionId' => 'debug-session',
-                        'runId' => 'run1',
-                        'hypothesisId' => 'B',
-                        'location' => 'RobawsArticleCache.php:1056',
-                        'message' => 'POL/POD bypass applied - ONLY mapped articles shown',
-                        'data' => [
-                            'mapped_article_ids' => $mappedArticleIds,
-                        ],
-                        'timestamp' => time() * 1000
-                    ]) . "\n", FILE_APPEND);
-                    // #endregion
                 } else {
                     \Log::info('RobawsArticleCache: POL/POD filter - no mapped articles, using POL/POD matching', [
                         'quotation_id' => $quotation->id ?? null,
@@ -1403,25 +1282,6 @@ class RobawsArticleCache extends Model
             $transportMode = $this->mapQuotationServiceTypeToTransportMode($quotation->service_type);
             $serviceTypeValue = Str::upper(str_replace(' ', '_', $quotation->service_type));
 
-            // #region agent log
-            $articlesBeforeTransportFilter = (clone $query)->get();
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'D',
-                'location' => 'RobawsArticleCache.php:1178',
-                'message' => 'Before transport mode filter',
-                'data' => [
-                    'quotation_id' => $quotation->id ?? null,
-                    'service_type' => $quotation->service_type,
-                    'transport_mode' => $transportMode,
-                    'service_type_value' => $serviceTypeValue,
-                    'articles_count' => $articlesBeforeTransportFilter->count(),
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
-
             $query->where(function ($q) use ($transportMode, $serviceTypeValue, $mappedArticleIds) {
                 // Allow mapped articles to bypass transport mode filter
                 if (!empty($mappedArticleIds)) {
@@ -1438,46 +1298,12 @@ class RobawsArticleCache extends Model
                     }
                 });
             });
-            
-            // #region agent log
-            $articlesAfterTransportFilter = (clone $query)->get();
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'D',
-                'location' => 'RobawsArticleCache.php:1191',
-                'message' => 'After transport mode filter',
-                'data' => [
-                    'articles_count' => $articlesAfterTransportFilter->count(),
-                    'articles_ids' => $articlesAfterTransportFilter->pluck('id')->toArray(),
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
         }
 
         // Apply shipping line filter if schedule is selected - Include NULL shipping_carrier_id (universal articles)
         if ($quotation->selected_schedule_id && $quotation->selectedSchedule) {
             $schedule = $quotation->selectedSchedule;
             if ($schedule->carrier_id) {
-                // #region agent log
-                $articlesBeforeCarrierFilter = (clone $query)->get();
-                @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                    'sessionId' => 'debug-session',
-                    'runId' => 'run1',
-                    'hypothesisId' => 'D',
-                    'location' => 'RobawsArticleCache.php:1194',
-                    'message' => 'Before carrier filter',
-                    'data' => [
-                        'quotation_id' => $quotation->id ?? null,
-                        'schedule_id' => $schedule->id ?? null,
-                        'carrier_id' => $schedule->carrier_id ?? null,
-                        'articles_count' => $articlesBeforeCarrierFilter->count(),
-                    ],
-                    'timestamp' => time() * 1000
-                ]) . "\n", FILE_APPEND);
-                // #endregion
-                
                 $query->where(function ($q) use ($schedule, $mappedArticleIds) {
                     // Allow mapped articles to bypass carrier filter
                     if (!empty($mappedArticleIds)) {
@@ -1490,22 +1316,6 @@ class RobawsArticleCache extends Model
                           ->orWhereNull('shipping_carrier_id');
                     });
                 });
-                
-                // #region agent log
-                $articlesAfterCarrierFilter = (clone $query)->get();
-                @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                    'sessionId' => 'debug-session',
-                    'runId' => 'run1',
-                    'hypothesisId' => 'D',
-                    'location' => 'RobawsArticleCache.php:1202',
-                    'message' => 'After carrier filter',
-                    'data' => [
-                        'articles_count' => $articlesAfterCarrierFilter->count(),
-                        'articles_ids' => $articlesAfterCarrierFilter->pluck('id')->toArray(),
-                    ],
-                    'timestamp' => time() * 1000
-                ]) . "\n", FILE_APPEND);
-                // #endregion
             }
         }
         
@@ -1521,55 +1331,12 @@ class RobawsArticleCache extends Model
         // Note: $mappings variable is now $allMappings, but we use $mappedArticleIds for the filter
         $mappings = $allMappings;
 
-        // #region agent log
-        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'A',
-            'location' => 'RobawsArticleCache.php:1048',
-            'message' => 'Article mappings check',
-            'data' => [
-                'quotation_id' => $quotation->id ?? null,
-                'carrier_id' => $carrierId ?? null,
-                'pod_port_id' => $podPortId ?? null,
-                'vehicle_category' => $vehicleCategory ?? null,
-                'category_group_id' => $categoryGroupId ?? null,
-                'mappings_count' => $mappings->count(),
-                'mapped_article_ids' => $mappings->pluck('article_id')->unique()->toArray(),
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-
         // If mappings exist, apply ALLOWLIST strategy
         if ($mappings->isNotEmpty()) {
             // Ensure $mappedArticleIds is populated from $mappings if not already set
             if (empty($mappedArticleIds)) {
                 $mappedArticleIds = $mappings->pluck('article_id')->unique()->toArray();
             }
-            
-            // #region agent log
-            // Check how many mapped articles pass POL/POD filter before ALLOWLIST
-            $articlesBeforeAllowlist = (clone $query)->get();
-            $mappedArticlesBeforeAllowlist = $articlesBeforeAllowlist->whereIn('id', $mappedArticleIds);
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'A',
-                'location' => 'RobawsArticleCache.php:1068',
-                'message' => 'ALLOWLIST strategy applied',
-                'data' => [
-                    'quotation_id' => $quotation->id ?? null,
-                    'mapped_article_ids_count' => count($mappedArticleIds),
-                    'mapped_article_ids' => $mappedArticleIds,
-                    'articles_before_allowlist_count' => $articlesBeforeAllowlist->count(),
-                    'mapped_articles_before_allowlist_count' => $mappedArticlesBeforeAllowlist->count(),
-                    'mapped_articles_before_allowlist_ids' => $mappedArticlesBeforeAllowlist->pluck('id')->toArray(),
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
-            
             // Apply allowlist: only mapped articles + universal articles (commodity_type NULL)
             // When mappings exist, they are already port-scoped, so just show them
             // The POD matching was already done when resolving mappings, so we don't need to filter again here
@@ -1588,48 +1355,9 @@ class RobawsArticleCache extends Model
                 $q->orWhereNull('commodity_type');
             });
             
-            // #region agent log
-            $articlesAfterAllowlist = (clone $query)->get();
-            \Log::info('RobawsArticleCache: After ALLOWLIST applied', [
-                'quotation_id' => $quotation->id ?? null,
-                'articles_after_allowlist_count' => $articlesAfterAllowlist->count(),
-                'articles_after_allowlist_ids' => $articlesAfterAllowlist->pluck('id')->toArray(),
-                'mapped_article_ids' => $mappedArticleIds,
-            ]);
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'C',
-                'location' => 'RobawsArticleCache.php:1272',
-                'message' => 'After ALLOWLIST applied',
-                'data' => [
-                    'quotation_id' => $quotation->id ?? null,
-                    'articles_after_allowlist_count' => $articlesAfterAllowlist->count(),
-                    'articles_after_allowlist_ids' => $articlesAfterAllowlist->pluck('id')->toArray(),
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
-            
             // Return early - skip commodity type filtering when mappings exist
             return $query;
         } else {
-            // #region agent log
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'C',
-                'location' => 'RobawsArticleCache.php:1285',
-                'message' => 'ALLOWLIST NOT applied - mappings empty',
-                'data' => [
-                    'quotation_id' => $quotation->id ?? null,
-                    'mappings_count' => $mappings->count(),
-                    'mappings_is_empty' => $mappings->isEmpty(),
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
-            
             // Skip commodity type filtering when mappings exist
             return $query;
         }
@@ -1651,24 +1379,6 @@ class RobawsArticleCache extends Model
             
             $commodityTypes = array_merge($commodityTypes, $itemTypes);
         }
-        
-        // #region agent log
-        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'B',
-            'location' => 'RobawsArticleCache.php:1081',
-            'message' => 'Commodity type extraction',
-            'data' => [
-                'quotation_id' => $quotation->id ?? null,
-                'quotation_commodity_type' => $quotation->commodity_type ?? null,
-                'commodity_items_count' => $quotation->commodityItems ? $quotation->commodityItems->count() : 0,
-                'commodity_items_types' => $quotation->commodityItems ? $quotation->commodityItems->pluck('commodity_type')->toArray() : [],
-                'extracted_commodity_types' => $commodityTypes,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
         
         // Filter by commodity type when selected, but always include universal articles (NULL commodity_type)
         if (!empty($commodityTypes)) {
@@ -1704,56 +1414,8 @@ class RobawsArticleCache extends Model
                 $q->whereRaw("UPPER(TRIM(commodity_type)) IN ($placeholders)", $commodityTypes)
                   ->orWhereNull('commodity_type');
             });
-            
-            // #region agent log
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'B',
-                'location' => 'RobawsArticleCache.php:1129',
-                'message' => 'Commodity type filter applied',
-                'data' => [
-                    'quotation_id' => $quotation->id ?? null,
-                    'final_commodity_types' => $commodityTypes,
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
         }
         // If no commodity selected, show all articles (existing behavior)
-
-        // #region agent log
-        $articleCountBeforeReturn = $query->count();
-        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'C',
-            'location' => 'RobawsArticleCache.php:1136',
-            'message' => 'scopeForQuotationContext exit',
-            'data' => [
-                'quotation_id' => $quotation->id ?? null,
-                'articles_count' => $articleCountBeforeReturn,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-
-        // #region agent log
-        $finalArticles = (clone $query)->get();
-        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'E',
-            'location' => 'RobawsArticleCache.php:1561',
-            'message' => 'Final query result',
-            'data' => [
-                'quotation_id' => $quotation->id ?? null,
-                'final_articles_count' => $finalArticles->count(),
-                'final_articles_ids' => $finalArticles->pluck('id')->toArray(),
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
 
         return $query;
     }

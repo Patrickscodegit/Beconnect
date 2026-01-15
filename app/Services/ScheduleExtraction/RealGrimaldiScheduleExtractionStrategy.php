@@ -17,34 +17,10 @@ class RealGrimaldiScheduleExtractionStrategy extends RealDataExtractionStrategy
 
     protected function fetchRealSchedules(string $polCode, string $podCode): array
     {
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'timestamp' => time() * 1000,
-            'location' => 'RealGrimaldiScheduleExtractionStrategy.php:fetchRealSchedules',
-            'message' => 'Starting schedule fetch',
-            'data' => ['pol' => $polCode, 'pod' => $podCode],
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'D'
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-        
         try {
             // Map port codes to Grimaldi format (e.g., ANR -> BEANR)
             $grimaldiPol = $this->mapPortCodeToGrimaldi($polCode);
             $grimaldiPod = $this->mapPortCodeToGrimaldi($podCode);
-
-            // #region agent log
-            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                'timestamp' => time() * 1000,
-                'location' => 'RealGrimaldiScheduleExtractionStrategy.php:fetchRealSchedules',
-                'message' => 'Port code mapping result',
-                'data' => ['pol' => $polCode, 'grimaldi_pol' => $grimaldiPol, 'pod' => $podCode, 'grimaldi_pod' => $grimaldiPod],
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'D'
-            ]) . "\n", FILE_APPEND);
-            // #endregion
 
             if (!$grimaldiPol || !$grimaldiPod) {
                 Log::warning("Grimaldi: Could not map port codes", [
@@ -64,18 +40,6 @@ class RealGrimaldiScheduleExtractionStrategy extends RealDataExtractionStrategy
             // Fetch schedules from API (60 days lookahead)
             $apiResponse = $this->apiClient->getSailingSchedule($grimaldiPol, $grimaldiPod, 60);
 
-            // #region agent log
-            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                'timestamp' => time() * 1000,
-                'location' => 'RealGrimaldiScheduleExtractionStrategy.php:fetchRealSchedules',
-                'message' => 'API response received',
-                'data' => ['pol' => $polCode, 'pod' => $podCode, 'response_type' => gettype($apiResponse), 'is_array' => is_array($apiResponse), 'is_null' => is_null($apiResponse), 'count' => is_array($apiResponse) ? count($apiResponse) : 0, 'response_sample' => is_array($apiResponse) && !empty($apiResponse) ? array_slice($apiResponse, 0, 1) : null],
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'B'
-            ]) . "\n", FILE_APPEND);
-            // #endregion
-
             if (empty($apiResponse)) {
                 Log::info("Grimaldi: No schedules found via API", [
                     'pol' => $polCode,
@@ -86,18 +50,6 @@ class RealGrimaldiScheduleExtractionStrategy extends RealDataExtractionStrategy
 
             // Parse API response to standard format
             $parsed = $this->parseGrimaldiApiResponse($apiResponse, $polCode, $podCode);
-            
-            // #region agent log
-            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                'timestamp' => time() * 1000,
-                'location' => 'RealGrimaldiScheduleExtractionStrategy.php:fetchRealSchedules',
-                'message' => 'Parsed schedules result',
-                'data' => ['pol' => $polCode, 'pod' => $podCode, 'parsed_count' => count($parsed), 'schedules' => $parsed],
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'E'
-            ]) . "\n", FILE_APPEND);
-            // #endregion
             
             return $parsed;
 
@@ -179,66 +131,19 @@ class RealGrimaldiScheduleExtractionStrategy extends RealDataExtractionStrategy
      */
     protected function parseGrimaldiApiResponse($apiResponse, string $polCode, string $podCode): array
     {
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'timestamp' => time() * 1000,
-            'location' => 'RealGrimaldiScheduleExtractionStrategy.php:parseGrimaldiApiResponse',
-            'message' => 'Starting API response parsing',
-            'data' => ['pol' => $polCode, 'pod' => $podCode, 'response_type' => gettype($apiResponse), 'response_keys' => is_array($apiResponse) ? array_keys($apiResponse) : null],
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'E'
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-        
         $schedules = [];
 
         // Handle different response formats
         // API might return array of schedules or single schedule object
         $scheduleData = is_array($apiResponse) ? $apiResponse : [$apiResponse];
 
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'timestamp' => time() * 1000,
-            'location' => 'RealGrimaldiScheduleExtractionStrategy.php:parseGrimaldiApiResponse',
-            'message' => 'Schedule data prepared',
-            'data' => ['pol' => $polCode, 'pod' => $podCode, 'schedule_data_count' => count($scheduleData), 'first_item_keys' => is_array($scheduleData[0] ?? null) ? array_keys($scheduleData[0]) : null],
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'E'
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-
         foreach ($scheduleData as $index => $scheduleItem) {
             if (!is_array($scheduleItem)) {
-                // #region agent log
-                @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                    'timestamp' => time() * 1000,
-                    'location' => 'RealGrimaldiScheduleExtractionStrategy.php:parseGrimaldiApiResponse',
-                    'message' => 'Skipping non-array schedule item',
-                    'data' => ['index' => $index, 'item_type' => gettype($scheduleItem)],
-                    'sessionId' => 'debug-session',
-                    'runId' => 'run1',
-                    'hypothesisId' => 'E'
-                ]) . "\n", FILE_APPEND);
-                // #endregion
                 continue;
             }
 
             try {
                 $schedule = $this->convertApiScheduleToStandardFormat($scheduleItem, $polCode, $podCode);
-                
-                // #region agent log
-                @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                    'timestamp' => time() * 1000,
-                    'location' => 'RealGrimaldiScheduleExtractionStrategy.php:parseGrimaldiApiResponse',
-                    'message' => 'Schedule converted',
-                    'data' => ['index' => $index, 'schedule' => $schedule, 'is_valid' => $schedule ? $this->validateSchedule($schedule) : false],
-                    'sessionId' => 'debug-session',
-                    'runId' => 'run1',
-                    'hypothesisId' => 'E'
-                ]) . "\n", FILE_APPEND);
-                // #endregion
                 
                 if ($schedule && $this->validateSchedule($schedule)) {
                     $schedules[] = $schedule;
@@ -249,17 +154,6 @@ class RealGrimaldiScheduleExtractionStrategy extends RealDataExtractionStrategy
                     'item' => $scheduleItem,
                 ]);
                 
-                // #region agent log
-                @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                    'timestamp' => time() * 1000,
-                    'location' => 'RealGrimaldiScheduleExtractionStrategy.php:parseGrimaldiApiResponse',
-                    'message' => 'Parse exception',
-                    'data' => ['index' => $index, 'error' => $e->getMessage()],
-                    'sessionId' => 'debug-session',
-                    'runId' => 'run1',
-                    'hypothesisId' => 'E'
-                ]) . "\n", FILE_APPEND);
-                // #endregion
             }
         }
 
@@ -416,51 +310,16 @@ class RealGrimaldiScheduleExtractionStrategy extends RealDataExtractionStrategy
 
     public function supports(string $polCode, string $podCode): bool
     {
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'timestamp' => time() * 1000,
-            'location' => 'RealGrimaldiScheduleExtractionStrategy.php:supports',
-            'message' => 'Checking if route is supported',
-            'data' => ['pol' => $polCode, 'pod' => $podCode],
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'C'
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-        
         // Focus on Antwerp (BEANR) as POL for now
         // Support all PODs that can be mapped to Grimaldi format
         $supportedPols = ['ANR']; // Only Antwerp for now
         
         if (!in_array($polCode, $supportedPols)) {
-            // #region agent log
-            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                'timestamp' => time() * 1000,
-                'location' => 'RealGrimaldiScheduleExtractionStrategy.php:supports',
-                'message' => 'POL not supported',
-                'data' => ['pol' => $polCode, 'supported_pols' => $supportedPols],
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'C'
-            ]) . "\n", FILE_APPEND);
-            // #endregion
             return false;
         }
 
         // Check if POD can be mapped to Grimaldi format
         $grimaldiPod = $this->mapPortCodeToGrimaldi($podCode);
-        
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'timestamp' => time() * 1000,
-            'location' => 'RealGrimaldiScheduleExtractionStrategy.php:supports',
-            'message' => 'POD mapping result',
-            'data' => ['pod' => $podCode, 'grimaldi_pod' => $grimaldiPod, 'supported' => !empty($grimaldiPod)],
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'C'
-        ]) . "\n", FILE_APPEND);
-        // #endregion
         
         return !empty($grimaldiPod);
     }

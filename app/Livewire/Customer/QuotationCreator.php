@@ -282,21 +282,6 @@ class QuotationCreator extends Component
     // Auto-save when fields change
     public function updated($propertyName)
     {
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'D',
-            'location' => 'QuotationCreator.php:updated',
-            'message' => 'updated() called',
-            'data' => [
-                'propertyName' => $propertyName,
-                'selected_schedule_id' => $this->selected_schedule_id,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-        
         // Skip auto-save for file uploads (handled separately)
         if ($propertyName === 'supporting_files') {
             return;
@@ -304,53 +289,12 @@ class QuotationCreator extends Component
         
         // Handle schedule change explicitly
         if ($propertyName === 'selected_schedule_id') {
-            // #region agent log
-            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'D',
-                'location' => 'QuotationCreator.php:updated',
-                'message' => 'selected_schedule_id changed in updated()',
-                'data' => [
-                    'selected_schedule_id' => $this->selected_schedule_id,
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
-            
             // Dispatch event to CommodityItemsRepeater to recalculate LM
             $this->dispatch('scheduleChanged');
-            
-            // #region agent log
-            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'D',
-                'location' => 'QuotationCreator.php:updated',
-                'message' => 'scheduleChanged event dispatched from updated()',
-                'data' => [],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
         }
         
         // Also dispatch when POD changes (schedule might change when POD changes)
         if ($propertyName === 'pod') {
-            // #region agent log
-            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'E',
-                'location' => 'QuotationCreator.php:updated',
-                'message' => 'POD changed, dispatching scheduleChanged',
-                'data' => [
-                    'pod' => $this->pod,
-                    'selected_schedule_id' => $this->selected_schedule_id,
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
-            
             // Dispatch event to CommodityItemsRepeater to recalculate LM when POD changes
             // This ensures LM is recalculated if schedule changes due to POD change
             $this->dispatch('scheduleChanged');
@@ -472,22 +416,6 @@ class QuotationCreator extends Component
      */
     public function updatedSelectedScheduleId($value)
     {
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'C',
-            'location' => 'QuotationCreator.php:updatedSelectedScheduleId',
-            'message' => 'Schedule changed',
-            'data' => [
-                'old_value' => $this->selected_schedule_id,
-                'new_value' => $value,
-                'quotationId' => $this->quotationId,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-        
         // Ensure value is cast to int
         $this->selected_schedule_id = $value ? (int) $value : null;
         
@@ -496,20 +424,6 @@ class QuotationCreator extends Component
         
         // Dispatch event globally - Livewire will broadcast to all child components
         $this->dispatch('scheduleChanged');
-        
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'C',
-            'location' => 'QuotationCreator.php:updatedSelectedScheduleId',
-            'message' => 'scheduleChanged event dispatched',
-            'data' => [
-                'new_schedule_id' => $this->selected_schedule_id,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
         
         // Recalculation is handled by QuotationRequest::saved when selected_schedule_id changes.
         

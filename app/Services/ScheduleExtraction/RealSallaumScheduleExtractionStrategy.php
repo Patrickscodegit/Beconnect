@@ -170,23 +170,6 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
                         }
                     }
                     
-                    // #region agent log
-                    @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                        'sessionId' => 'debug-session',
-                        'runId' => 'silver-sun-extraction',
-                        'hypothesisId' => 'A',
-                        'location' => __FILE__ . ':' . __LINE__,
-                        'message' => 'Vessels and voyages parsed',
-                        'data' => [
-                            'vessels' => $vessels,
-                            'voyageNumbers' => $voyageNumbers,
-                            'silverSunIndex' => array_search('Silver Sun', $vessels),
-                            'silverSunVoyage' => $voyageNumbers[array_search('Silver Sun', $vessels)] ?? null,
-                        ],
-                        'timestamp' => time() * 1000
-                    ]) . "\n", FILE_APPEND);
-                    // #endregion
-                    
                     // Ensure voyage numbers array matches vessels array length
                     while (count($voyageNumbers) < count($vessels)) {
                         $voyageNumbers[] = null;
@@ -194,23 +177,6 @@ class RealSallaumScheduleExtractionStrategy extends RealDataExtractionStrategy
                     
                     Log::info("Sallaum Lines: Found " . count($vessels) . " vessels", ['vessels' => $vessels]);
                     Log::info("Sallaum Lines: Found " . count($voyageNumbers) . " voyage numbers", ['voyages' => $voyageNumbers]);
-                    
-                    // #region agent log
-                    @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                        'sessionId' => 'debug-session',
-                        'runId' => 'silver-sun-extraction',
-                        'hypothesisId' => 'A',
-                        'location' => __FILE__ . ':' . __LINE__,
-                        'message' => 'Vessels and voyages parsed',
-                        'data' => [
-                            'vessels' => $vessels,
-                            'voyageNumbers' => $voyageNumbers,
-                            'silverSunIndex' => array_search('Silver Sun', $vessels),
-                            'silverSunVoyage' => $voyageNumbers[array_search('Silver Sun', $vessels)] ?? null,
-                        ],
-                        'timestamp' => time() * 1000
-                    ]) . "\n", FILE_APPEND);
-                    // #endregion
                     
                     // Build port name to row index mapping for ALL POLs and PODs
                     $polRowIndices = []; // Row index => POL code
