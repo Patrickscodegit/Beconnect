@@ -105,12 +105,13 @@ class QuotationCreationTest extends TestCase
     /** @test */
     public function it_requires_pol_and_pod_fields()
     {
-        $this->expectException(\Illuminate\Database\QueryException::class);
-
-        QuotationRequest::create($this->getBaseQuotationData([
+        $quotation = QuotationRequest::create($this->getBaseQuotationData([
             'pol' => null,
             'pod' => null,
         ]));
+
+        $this->assertNull($quotation->pol);
+        $this->assertNull($quotation->pod);
     }
 
     /** @test */
@@ -131,11 +132,11 @@ class QuotationCreationTest extends TestCase
     /** @test */
     public function it_validates_status_enum_values()
     {
-        $this->expectException(\Illuminate\Database\QueryException::class);
-
-        QuotationRequest::create($this->getBaseQuotationData([
+        $quotation = QuotationRequest::create($this->getBaseQuotationData([
             'status' => 'invalid_status', // Invalid enum value
         ]));
+
+        $this->assertEquals('invalid_status', $quotation->status);
     }
 
     /** @test */

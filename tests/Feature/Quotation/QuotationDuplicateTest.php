@@ -3,7 +3,7 @@
 namespace Tests\Feature\Quotation;
 
 use App\Models\QuotationRequest;
-use App\Models\RobawsArticle;
+use App\Models\RobawsArticleCache;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -85,33 +85,39 @@ class QuotationDuplicateTest extends TestCase
     {
         $original = QuotationRequest::create($this->baseQuotationData());
 
-        $article1 = RobawsArticle::create([
+        $article1 = RobawsArticleCache::create([
             'robaws_article_id' => 'ART-001',
             'article_name' => 'Test Article 1',
-            'article_description' => 'Description 1',
+            'description' => 'Description 1',
+            'category' => 'Test Category',
             'unit_price' => 100.00,
-            'unit_type' => 'per unit',
+            'unit_type' => 'unit',
+            'currency' => 'EUR',
+            'last_synced_at' => now(),
         ]);
 
-        $article2 = RobawsArticle::create([
+        $article2 = RobawsArticleCache::create([
             'robaws_article_id' => 'ART-002',
             'article_name' => 'Test Article 2',
-            'article_description' => 'Description 2',
+            'description' => 'Description 2',
+            'category' => 'Test Category',
             'unit_price' => 200.00,
-            'unit_type' => 'per unit',
+            'unit_type' => 'unit',
+            'currency' => 'EUR',
+            'last_synced_at' => now(),
         ]);
 
         $original->articles()->attach($article1->id, [
             'quantity' => 2,
             'unit_price' => 100.00,
-            'discount_percentage' => 0,
+            'selling_price' => 100.00,
             'subtotal' => 200.00,
         ]);
 
         $original->articles()->attach($article2->id, [
             'quantity' => 1,
             'unit_price' => 200.00,
-            'discount_percentage' => 0,
+            'selling_price' => 200.00,
             'subtotal' => 200.00,
         ]);
 
@@ -124,7 +130,7 @@ class QuotationDuplicateTest extends TestCase
             $duplicate->articles()->attach($article->id, [
                 'quantity' => $article->pivot->quantity ?? 1,
                 'unit_price' => $article->pivot->unit_price ?? 0,
-                'discount_percentage' => $article->pivot->discount_percentage ?? 0,
+                'selling_price' => $article->pivot->selling_price ?? $article->pivot->unit_price ?? 0,
                 'subtotal' => $article->pivot->subtotal ?? 0,
             ]);
         }
