@@ -167,6 +167,23 @@ class QuotationRequestArticle extends Model
 
             if ($model->quotationRequest && $articleCache) {
                 $unitType = strtoupper(trim($model->unit_type ?? ''));
+                $unitTypeNormalized = rtrim($unitType, '.');
+
+                if ($unitTypeNormalized === 'SHIPM') {
+                    $oldQuantity = $model->quantity;
+                    $model->quantity = 1;
+                    if ($model->quantity != $oldQuantity) {
+                        \Log::info('Per-shipment article quantity overridden on save', [
+                            'article_id' => $model->id,
+                            'article_cache_id' => $model->article_cache_id,
+                            'unit_type' => $model->unit_type,
+                            'old_quantity' => $oldQuantity,
+                            'new_quantity' => $model->quantity,
+                        ]);
+                        $model->save();
+                    }
+                    return;
+                }
                 
                 // Only recalculate for non-LM/CBM articles (LM/CBM are calculated by QuantityCalculationService)
                 if (!in_array($unitType, ['LM', 'CBM'], true)) {

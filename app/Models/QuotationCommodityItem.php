@@ -635,6 +635,22 @@ class QuotationCommodityItem extends Model
             $oldSubtotal = $article->subtotal;
             $oldQuantity = $article->quantity;
             $unitType = strtoupper(trim($article->unit_type ?? ''));
+            $unitTypeNormalized = rtrim($unitType, '.');
+
+            if ($unitTypeNormalized === 'SHIPM') {
+                $article->quantity = 1;
+                if ($article->quantity != $oldQuantity) {
+                    \Log::info('Per-shipment article quantity overridden', [
+                        'article_id' => $article->id,
+                        'article_cache_id' => $article->article_cache_id,
+                        'unit_type' => $article->unit_type,
+                        'old_quantity' => $oldQuantity,
+                        'new_quantity' => $article->quantity,
+                    ]);
+                    $article->save();
+                }
+                continue;
+            }
 
             if ($article->carrier_rule_applied) {
                 \Log::debug('Skipping recalculation for carrier rule article', [
