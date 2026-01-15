@@ -45,7 +45,15 @@ class CarrierRuleEngine
         // 3. Resolve acceptance rule and validate
         $acceptanceResult = $this->validateAcceptance($input, $vehicleCategory, $categoryGroupId);
 
-        // 4. Compute LM via ChargeableMeasureService
+        // Apply transform override when max limits are exceeded
+        if (!empty($acceptanceResult['transformRequired'])) {
+            $vehicleCategory = 'high_and_heavy';
+            $categoryGroupId = $this->deriveCategoryGroup($input->carrierId, $vehicleCategory);
+            $acceptanceResult['warnings'][] = 'transformed_due_to_max_exceeded';
+            $acceptanceResult['status'] = 'ALLOWED_WITH_SURCHARGES';
+        }
+
+        // 4. Compute LM via ChargeableMeasureService (after any transform)
         $chargeableMeasure = $this->chargeableMeasureService->computeChargeableLm(
             $input->lengthCm,
             $input->widthCm,
@@ -154,6 +162,7 @@ class CarrierRuleEngine
         $warnings = [];
         $approvalsRequired = [];
         $status = 'ALLOWED';
+        $transformRequired = false;
 
         // Check minimum limits
         if ($rule->min_length_cm !== null && $input->lengthCm < $rule->min_length_cm) {
@@ -201,10 +210,12 @@ class CarrierRuleEngine
         if ($rule->max_length_cm && $input->lengthCm > $rule->max_length_cm) {
             $violations[] = 'max_length_exceeded';
             $status = 'NOT_ALLOWED';
+            $transformRequired = true;
         }
         if ($rule->max_width_cm && $input->widthCm > $rule->max_width_cm) {
             $violations[] = 'max_width_exceeded';
             $status = 'NOT_ALLOWED';
+            $transformRequired = true;
         }
         if ($rule->max_height_cm && $input->heightCm > $rule->max_height_cm) {
             // Check if within soft limit range (exceeds max but within soft_max)
@@ -216,13 +227,15 @@ class CarrierRuleEngine
                 $status = 'ALLOWED_UPON_REQUEST';
             } else {
                 // Exceeds soft limit or no soft limit configured - not allowed
-            $violations[] = 'max_height_exceeded';
-            $status = 'NOT_ALLOWED';
+                $violations[] = 'max_height_exceeded';
+                $status = 'NOT_ALLOWED';
+                $transformRequired = true;
             }
         }
         if ($rule->max_cbm && $input->cbm > $rule->max_cbm) {
             $violations[] = 'max_cbm_exceeded';
             $status = 'NOT_ALLOWED';
+            $transformRequired = true;
         }
         if ($rule->max_weight_kg && $input->weightKg > $rule->max_weight_kg) {
             // Check if within soft limit range (exceeds max but within soft_max)
@@ -236,6 +249,7 @@ class CarrierRuleEngine
                 // Exceeds soft limit or no soft limit configured - not allowed
                 $violations[] = 'max_weight_exceeded';
                 $status = 'NOT_ALLOWED';
+                $transformRequired = true;
             }
         }
 
@@ -259,6 +273,7 @@ class CarrierRuleEngine
             'approvalsRequired' => $approvalsRequired,
             'warnings' => $warnings,
             'basicFreight' => null, // Will be calculated from articles
+            'transformRequired' => $transformRequired,
         ];
     }
 
