@@ -30,7 +30,7 @@ class QuotationRequestArticle extends Model
     ];
 
     protected $casts = [
-        'quantity' => 'integer',
+        'quantity' => 'decimal:4',
         'unit_type' => 'string',
         'unit_price' => 'decimal:2',
         'selling_price' => 'decimal:2',
@@ -55,12 +55,12 @@ class QuotationRequestArticle extends Model
             // Calculate effective quantity based on unit type (LM, CBM, etc.)
             // This uses the QuantityCalculationService to handle different calculation strategies
             $calculationService = app(QuantityCalculationService::class);
-            $effectiveQuantity = $calculationService->calculateQuantity($model);
+            $effectiveQuantity = round($calculationService->calculateQuantity($model), 4);
             
             // Update stored quantity to match calculated quantity for LM/CBM articles
             // This ensures the quantity field reflects the actual calculated value
             $unitType = strtoupper(trim($model->unit_type ?? ''));
-            if (in_array($unitType, ['LM', 'CBM'])) {
+            if (in_array($unitType, ['LM', 'CBM'], true)) {
                 $model->quantity = $effectiveQuantity;
             }
             
@@ -164,8 +164,8 @@ class QuotationRequestArticle extends Model
             if ($model->quotationRequest && $articleCache) {
                 $unitType = strtoupper(trim($model->unit_type ?? ''));
                 
-                // Only recalculate for non-LM articles (LM is calculated by QuantityCalculationService)
-                if ($unitType !== 'LM') {
+                // Only recalculate for non-LM/CBM articles (LM/CBM are calculated by QuantityCalculationService)
+                if (!in_array($unitType, ['LM', 'CBM'], true)) {
                     $articleCommodityType = $articleCache->commodity_type ?? null;
                     
                     if ($articleCommodityType) {
