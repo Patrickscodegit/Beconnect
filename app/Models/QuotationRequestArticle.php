@@ -161,6 +161,10 @@ class QuotationRequestArticle extends Model
             
             // Recalculate article quantity based on commodity items when article is first created
             // This ensures articles get the correct quantity even if commodity items were added before the article
+            if ($model->carrier_rule_applied) {
+                return;
+            }
+
             if ($model->quotationRequest && $articleCache) {
                 $unitType = strtoupper(trim($model->unit_type ?? ''));
                 
