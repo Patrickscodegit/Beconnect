@@ -7,6 +7,10 @@ use App\Services\CarrierRules\ChargeableMeasureService;
 
 class LmQuantityCalculator implements QuantityCalculatorInterface
 {
+    private const DEFAULT_TRAILER_LENGTH_CM = 1360.0;
+    private const DEFAULT_TRAILER_WIDTH_CM = 250.0;
+    private const DEFAULT_TRAILER_HEIGHT_CM = 400.0;
+
     /**
      * Calculate LM quantity: Sum of [quantity × chargeable LM] for all commodity items
      * Uses ChargeableMeasureService for carrier-aware LM calculations.
@@ -80,12 +84,20 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
             }
             
             // PRIORITY 1: Use stack/overall dimensions if available (for stacks)
-            if ($item->stack_length_cm && $item->stack_width_cm) {
+            $stackLength = $item->stack_length_cm;
+            $stackWidth = $item->stack_width_cm;
+            if ((!$stackLength || !$stackWidth) && $this->isTrailerCategory($item->category)) {
+                // Use average trailer dimensions when measurements are missing.
+                $stackLength = self::DEFAULT_TRAILER_LENGTH_CM;
+                $stackWidth = self::DEFAULT_TRAILER_WIDTH_CM;
+            }
+
+            if ($stackLength && $stackWidth) {
                 $processedItems[] = $item->id;
                 
                 $result = $service->computeChargeableLm(
-                    $item->stack_length_cm,
-                    $item->stack_width_cm,
+                    $stackLength,
+                    $stackWidth,
                     $carrierId,
                     $portId,
                     $item->category,
@@ -102,12 +114,20 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
                 $totalLm += $lmForStack;
             }
             // PRIORITY 2: Use individual item dimensions (for standalone items)
-            elseif ($item->length_cm && $item->width_cm) {
+            $itemLength = $item->length_cm;
+            $itemWidth = $item->width_cm;
+            if ((!$itemLength || !$itemWidth) && $this->isTrailerCategory($item->category)) {
+                // Use average trailer dimensions when measurements are missing.
+                $itemLength = self::DEFAULT_TRAILER_LENGTH_CM;
+                $itemWidth = self::DEFAULT_TRAILER_WIDTH_CM;
+            }
+
+            if ($itemLength && $itemWidth) {
                 $processedItems[] = $item->id;
                 
                 $result = $service->computeChargeableLm(
-                    $item->length_cm,
-                    $item->width_cm,
+                    $itemLength,
+                    $itemWidth,
                     $carrierId,
                     $portId,
                     $item->category,
@@ -140,10 +160,18 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
                 }
 
                 $lm = 0.0;
-                if ($baseItem->stack_length_cm && $baseItem->stack_width_cm) {
+                $stackLength = $baseItem->stack_length_cm;
+                $stackWidth = $baseItem->stack_width_cm;
+                if ((!$stackLength || !$stackWidth) && $this->isTrailerCategory($baseItem->category)) {
+                    // Use average trailer dimensions when measurements are missing.
+                    $stackLength = self::DEFAULT_TRAILER_LENGTH_CM;
+                    $stackWidth = self::DEFAULT_TRAILER_WIDTH_CM;
+                }
+
+                if ($stackLength && $stackWidth) {
                     $result = $service->computeChargeableLm(
-                        $baseItem->stack_length_cm,
-                        $baseItem->stack_width_cm,
+                        $stackLength,
+                        $stackWidth,
                         $carrierId,
                         $portId,
                         $baseItem->category,
@@ -152,18 +180,28 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
                     );
                     $stackUnitCount = $baseItem->stack_unit_count ?? $baseItem->getStackUnitCount() ?? 1;
                     $lm = $result->chargeableLm * $stackUnitCount;
-                } elseif ($baseItem->length_cm && $baseItem->width_cm) {
-                    $result = $service->computeChargeableLm(
-                        $baseItem->length_cm,
-                        $baseItem->width_cm,
-                        $carrierId,
-                        $portId,
-                        $baseItem->category,
-                        $vesselName,
-                        $vesselClass
-                    );
-                    $itemQuantity = $baseItem->quantity ?? 1;
-                    $lm = $result->chargeableLm * $itemQuantity;
+                } else {
+                    $itemLength = $baseItem->length_cm;
+                    $itemWidth = $baseItem->width_cm;
+                    if ((!$itemLength || !$itemWidth) && $this->isTrailerCategory($baseItem->category)) {
+                        // Use average trailer dimensions when measurements are missing.
+                        $itemLength = self::DEFAULT_TRAILER_LENGTH_CM;
+                        $itemWidth = self::DEFAULT_TRAILER_WIDTH_CM;
+                    }
+
+                    if ($itemLength && $itemWidth) {
+                        $result = $service->computeChargeableLm(
+                            $itemLength,
+                            $itemWidth,
+                            $carrierId,
+                            $portId,
+                            $baseItem->category,
+                            $vesselName,
+                            $vesselClass
+                        );
+                        $itemQuantity = $baseItem->quantity ?? 1;
+                        $lm = $result->chargeableLm * $itemQuantity;
+                    }
                 }
 
                 return [
@@ -180,6 +218,15 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
         }
         
         return $totalLm > 0 ? $totalLm : (float) $article->quantity;
+    }
+
+    private function isTrailerCategory(?string $category): bool
+    {
+        if (!$category) {
+            return false;
+        }
+
+        return in_array($category, ['trailer', 'trailer_stack', 'tank_trailer'], true);
     }
 }
 

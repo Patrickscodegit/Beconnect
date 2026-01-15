@@ -36,14 +36,45 @@ class CargoInputDTO
         ?\App\Models\Port $pod = null,
         ?\App\Models\ShippingSchedule $schedule = null
     ): self {
+        $isTrailerCategory = in_array($item->category, ['trailer', 'trailer_stack', 'tank_trailer'], true);
+        $defaultLength = 1360.0;
+        $defaultWidth = 250.0;
+        $defaultHeight = 400.0;
+        $defaultWeight = 8000.0;
+
+        $length = (float) ($item->stack_length_cm ?? $item->length_cm ?? 0);
+        $width = (float) ($item->stack_width_cm ?? $item->width_cm ?? 0);
+        $height = (float) ($item->stack_height_cm ?? $item->height_cm ?? 0);
+        $weight = (float) ($item->stack_weight_kg ?? $item->weight_kg ?? 0);
+        $cbm = (float) ($item->stack_cbm ?? $item->cbm ?? 0);
+
+        if ($isTrailerCategory) {
+            // Use average trailer dimensions/weight when measurements are missing.
+            if ($length <= 0) {
+                $length = $defaultLength;
+            }
+            if ($width <= 0) {
+                $width = $defaultWidth;
+            }
+            if ($height <= 0) {
+                $height = $defaultHeight;
+            }
+            if ($weight <= 0) {
+                $weight = $defaultWeight;
+            }
+            if ($cbm <= 0 && $length > 0 && $width > 0 && $height > 0) {
+                $cbm = ($length * $width * $height) / 1000000;
+            }
+        }
+
         return new self(
             carrierId: $schedule?->carrier_id ?? 0,
             podPortId: $pod?->id ?? $schedule?->pod_id ?? null,
-            lengthCm: (float) ($item->stack_length_cm ?? $item->length_cm ?? 0),
-            widthCm: (float) ($item->stack_width_cm ?? $item->width_cm ?? 0),
-            heightCm: (float) ($item->stack_height_cm ?? $item->height_cm ?? 0),
-            cbm: (float) ($item->stack_cbm ?? $item->cbm ?? 0),
-            weightKg: (float) ($item->stack_weight_kg ?? $item->weight_kg ?? 0),
+            lengthCm: $length,
+            widthCm: $width,
+            heightCm: $height,
+            cbm: $cbm,
+            weightKg: $weight,
             unitCount: $item->stack_unit_count ?? $item->quantity ?? 1,
             commodityType: $item->commodity_type,
             category: $item->category,
