@@ -257,6 +257,11 @@
                                             </span>
                                         </p>
                                     @endif
+                                    @if(!empty($article->pivot?->notes))
+                                        <div class="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800 whitespace-pre-line">
+                                            {{ $article->pivot->notes }}
+                                        </div>
+                                    @endif
                                 </div>
                                 @if($article->commodity_type)
                                     <span class="ml-4 px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
