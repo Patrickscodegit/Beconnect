@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Schema;
 use App\Models\QuotationRequestArticle;
 use App\Services\SmartArticleSelectionService;
+use App\Services\CarrierRules\CarrierRuleResolver;
+use App\Services\CarrierRules\DTOs\CargoInputDTO;
 
 class QuotationCommodityItem extends Model
 {
@@ -503,7 +505,126 @@ class QuotationCommodityItem extends Model
             'truck_trailer_combination' => ['TRUCK', 'HH', 'LM CARGO'],
         ];
 
-        return $vehicleMapping[$category] ?? [];
+        $mappedTypes = $vehicleMapping[$category] ?? [];
+
+        $alignedCategories = static::getDimensionAlignedVehicleCategories($commodityItem);
+        foreach ($alignedCategories as $alignedCategory) {
+            $alignedType = static::mapVehicleCategoryToArticleType($alignedCategory);
+            if ($alignedType && !in_array($alignedType, $mappedTypes, true)) {
+                $mappedTypes[] = $alignedType;
+            }
+        }
+
+        return $mappedTypes;
+    }
+
+    private static function getDimensionAlignedVehicleCategories($commodityItem): array
+    {
+        $meta = $commodityItem->carrier_rule_meta ?? null;
+        if (!is_array($meta) || empty($meta['violations'])) {
+            return [];
+        }
+
+        $hasMaxViolation = collect($meta['violations'])
+            ->contains(fn($violation) => str_starts_with((string) $violation, 'max_'));
+        if (!$hasMaxViolation) {
+            return [];
+        }
+
+        $quotation = $commodityItem->quotationRequest;
+        $schedule = $quotation?->selectedSchedule;
+        $carrierId = $schedule?->carrier_id;
+        $podPortId = $schedule?->pod_id;
+        if (!$carrierId || !$podPortId || !$schedule) {
+            return [];
+        }
+
+        $input = CargoInputDTO::fromCommodityItem($commodityItem, $schedule->podPort, $schedule);
+        $candidateCategories = static::getDimensionOverrideCategories(
+            $commodityItem->category ?? $commodityItem->vehicle_category ?? null
+        );
+        $resolver = app(CarrierRuleResolver::class);
+
+        foreach ($candidateCategories as $category) {
+            $rule = $resolver->resolveAcceptanceRule(
+                $carrierId,
+                $podPortId,
+                $category,
+                null,
+                $schedule->vessel_name,
+                $schedule->vessel_class
+            );
+
+            if ($rule && static::fitsWithinMaxDimensions($input, $rule)) {
+                return [$category];
+            }
+        }
+
+        return [];
+    }
+
+    private static function getDimensionOverrideCategories(?string $vehicleCategory): array
+    {
+        $category = $vehicleCategory ?? '';
+        $paths = [
+            'car' => ['car', 'small_van', 'big_van', 'truck', 'high_and_heavy'],
+            'small_van' => ['small_van', 'big_van', 'truck', 'high_and_heavy'],
+            'big_van' => ['big_van', 'truck', 'high_and_heavy'],
+            'suv' => ['suv', 'big_van', 'truck', 'high_and_heavy'],
+        ];
+
+        if (isset($paths[$category])) {
+            return $paths[$category];
+        }
+
+        if ($category !== '') {
+            return [$category, 'high_and_heavy'];
+        }
+
+        return ['high_and_heavy'];
+    }
+
+    private static function mapVehicleCategoryToArticleType(string $vehicleCategory): ?string
+    {
+        $mapping = [
+            'car' => 'CAR',
+            'small_van' => 'SMALL VAN',
+            'big_van' => 'BIG VAN',
+            'suv' => 'SUV',
+            'truck' => 'TRUCK',
+            'truckhead' => 'TRUCKHEAD',
+            'trailer' => 'TRAILER',
+            'bus' => 'BUS',
+            'motorcycle' => 'MOTORCYCLE',
+            'high_and_heavy' => 'HH',
+        ];
+
+        return $mapping[$vehicleCategory] ?? null;
+    }
+
+    private static function fitsWithinMaxDimensions(CargoInputDTO $input, $rule): bool
+    {
+        if ($rule->max_length_cm && $input->lengthCm > 0 && $input->lengthCm > $rule->max_length_cm) {
+            return false;
+        }
+
+        if ($rule->max_width_cm && $input->widthCm > 0 && $input->widthCm > $rule->max_width_cm) {
+            return false;
+        }
+
+        if ($rule->max_height_cm && $input->heightCm > 0 && $input->heightCm > $rule->max_height_cm) {
+            return false;
+        }
+
+        if ($rule->max_weight_kg && $input->weightKg > 0 && $input->weightKg > $rule->max_weight_kg) {
+            return false;
+        }
+
+        if ($rule->max_cbm && $input->cbm > 0 && $input->cbm > $rule->max_cbm) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
