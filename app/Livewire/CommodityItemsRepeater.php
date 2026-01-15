@@ -106,22 +106,6 @@ class CommodityItemsRepeater extends Component
     public function addItem($relationshipType = 'separate', $relatedItemId = null)
     {
         try {
-            // #region agent log
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'A',
-                'location' => 'CommodityItemsRepeater.php:addItem',
-                'message' => 'addItem entry',
-                'data' => [
-                    'current_items_count' => count($this->items),
-                    'relationship_type' => $relationshipType,
-                    'related_item_id' => $relatedItemId,
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
-
             \Log::info('CommodityItemsRepeater::addItem() called', [
                 'current_items_count' => count($this->items),
                 'quotation_id' => $this->quotationId,
@@ -183,21 +167,6 @@ class CommodityItemsRepeater extends Component
                 'new_items_count' => count($this->items),
                 'last_item_id' => end($this->items)['id'] ?? null
             ]);
-
-            // #region agent log
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'A',
-                'location' => 'CommodityItemsRepeater.php:addItem',
-                'message' => 'addItem exit',
-                'data' => [
-                    'new_items_count' => count($this->items),
-                    'last_item_id' => end($this->items)['id'] ?? null,
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
         } catch (\Exception $e) {
             \Log::error('CommodityItemsRepeater::addItem() failed', [
                 'error' => $e->getMessage(),
@@ -209,36 +178,12 @@ class CommodityItemsRepeater extends Component
 
     public function hydrate()
     {
-        // #region agent log
-        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'D',
-            'location' => 'CommodityItemsRepeater.php:hydrate',
-            'message' => 'hydrate',
-            'data' => [
-                'items_count' => count($this->items),
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
+        // Livewire lifecycle hook - no logging needed
     }
 
     public function dehydrate()
     {
-        // #region agent log
-        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'D',
-            'location' => 'CommodityItemsRepeater.php:dehydrate',
-            'message' => 'dehydrate',
-            'data' => [
-                'items_count' => count($this->items),
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
+        // Livewire lifecycle hook - no logging needed
     }
 
     public function removeItem($index)
@@ -346,24 +291,6 @@ class CommodityItemsRepeater extends Component
 
     public function calculateLm($index)
     {
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'A',
-            'location' => 'CommodityItemsRepeater.php:calculateLm',
-            'message' => 'calculateLm called',
-            'data' => [
-                'index' => $index,
-                'quotationId' => $this->quotationId,
-                'item_length' => $this->items[$index]['length_cm'] ?? null,
-                'item_width' => $this->items[$index]['width_cm'] ?? null,
-                'item_lm_before' => $this->items[$index]['lm'] ?? null,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-        
         $item = &$this->items[$index];
         
         $length = floatval($item['length_cm'] ?? 0);
@@ -421,25 +348,6 @@ class CommodityItemsRepeater extends Component
                 }
             }
             
-            // #region agent log
-            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'A',
-                'location' => 'CommodityItemsRepeater.php:calculateLm',
-                'message' => 'Carrier context loaded',
-                'data' => [
-                    'carrierId' => $carrierId,
-                    'portId' => $portId,
-                    'vesselName' => $vesselName,
-                    'vehicleCategory' => $vehicleCategory,
-                    'length' => $length,
-                    'width' => $width,
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
-            
             if ($this->unitSystem === 'us') {
                 // Convert inches to cm first
                 $lengthCm = $length * 2.54;
@@ -481,21 +389,6 @@ class CommodityItemsRepeater extends Component
                     $item['lm'] = round($lm, 4);
                 }
             }
-            
-            // #region agent log
-            @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'A',
-                'location' => 'CommodityItemsRepeater.php:calculateLm',
-                'message' => 'LM calculated',
-                'data' => [
-                    'item_lm_after' => $item['lm'],
-                    'unitSystem' => $this->unitSystem,
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
         } else {
             $item['lm'] = '';
         }
@@ -506,67 +399,14 @@ class CommodityItemsRepeater extends Component
      */
     public function recalculateAllLm()
     {
-        // #region agent log
-        @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'B',
-            'location' => 'CommodityItemsRepeater.php:recalculateAllLm',
-            'message' => 'recalculateAllLm called',
-            'data' => [
-                'items_count' => count($this->items),
-                'quotationId' => $this->quotationId,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-        
         // Refresh quotation to get latest schedule data before recalculating
         if ($this->quotationId) {
             $quotation = \App\Models\QuotationRequest::with('selectedSchedule')->find($this->quotationId);
-            if ($quotation && $quotation->selectedSchedule) {
-                // #region agent log
-                @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                    'sessionId' => 'debug-session',
-                    'runId' => 'run1',
-                    'hypothesisId' => 'B',
-                    'location' => 'CommodityItemsRepeater.php:recalculateAllLm',
-                    'message' => 'Current schedule loaded',
-                    'data' => [
-                        'schedule_id' => $quotation->selectedSchedule->id ?? null,
-                        'carrier_id' => $quotation->selectedSchedule->carrier_id ?? null,
-                        'pod_id' => $quotation->selectedSchedule->pod_id ?? null,
-                        'vessel_name' => $quotation->selectedSchedule->vessel_name ?? null,
-                    ],
-                    'timestamp' => time() * 1000
-                ]) . "\n", FILE_APPEND);
-                // #endregion
-            }
         }
         
         foreach ($this->items as $index => $item) {
             if (!empty($item['length_cm']) && !empty($item['width_cm'])) {
-                $oldLm = $item['lm'] ?? null;
                 $this->calculateLm($index);
-                $newLm = $this->items[$index]['lm'] ?? null;
-                
-                // #region agent log
-                @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                    'sessionId' => 'debug-session',
-                    'runId' => 'run1',
-                    'hypothesisId' => 'B',
-                    'location' => 'CommodityItemsRepeater.php:recalculateAllLm',
-                    'message' => 'LM recalculated for item',
-                    'data' => [
-                        'index' => $index,
-                        'item_id' => $item['id'] ?? null,
-                        'old_lm' => $oldLm,
-                        'new_lm' => $newLm,
-                        'has_database_id' => isset($item['id']) && is_numeric($item['id']),
-                    ],
-                    'timestamp' => time() * 1000
-                ]) . "\n", FILE_APPEND);
-                // #endregion
                 
                 // Save updated LM to database if item has a database ID
                 if (isset($item['id']) && is_numeric($item['id']) && $this->quotationId) {
@@ -1297,21 +1137,6 @@ class CommodityItemsRepeater extends Component
 
     public function updated($propertyName)
     {
-        // #region agent log
-        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'A',
-            'location' => 'CommodityItemsRepeater.php:updated',
-            'message' => 'updated entry',
-            'data' => [
-                'property' => $propertyName,
-                'items_count' => count($this->items),
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-
         // Handle relationship_type changes
         if (preg_match('/^items\.(\d+)\.relationship_type$/', $propertyName, $matches)) {
             $index = (int) $matches[1];
@@ -1337,23 +1162,6 @@ class CommodityItemsRepeater extends Component
             $relatedItemId = $currentItem['related_item_id'] ?? null;
             $currentItemId = $currentItem['id'] ?? null;
             $relationshipType = $currentItem['relationship_type'] ?? 'separate';
-
-            // #region agent log
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'A',
-                'location' => 'CommodityItemsRepeater.php:updated',
-                'message' => 'related_item_id change',
-                'data' => [
-                    'index' => $index,
-                    'current_item_id' => $currentItemId,
-                    'related_item_id' => $relatedItemId,
-                    'relationship_type' => $relationshipType,
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
             
             // Prevent item from relating to itself
             if ($relatedItemId && $currentItemId && $relatedItemId == $currentItemId) {
@@ -1460,21 +1268,6 @@ class CommodityItemsRepeater extends Component
             
             // Only save if item has a database ID (not a temporary ID)
             if (isset($item['id']) && is_numeric($item['id'])) {
-                // #region agent log
-                @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                    'sessionId' => 'debug-session',
-                    'runId' => 'run1',
-                    'hypothesisId' => 'B',
-                    'location' => 'CommodityItemsRepeater.php:updated',
-                    'message' => 'saveItemToDatabase dispatch',
-                    'data' => [
-                        'index' => $itemIndex,
-                        'item_id' => $item['id'],
-                        'property' => $propertyName,
-                    ],
-                    'timestamp' => time() * 1000
-                ]) . "\n", FILE_APPEND);
-                // #endregion
                 $this->saveItemToDatabase($itemIndex, $item);
             }
         }
@@ -1485,24 +1278,6 @@ class CommodityItemsRepeater extends Component
      */
     protected function createItemInDatabase($index, $item)
     {
-        // #region agent log
-        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'B',
-            'location' => 'CommodityItemsRepeater.php:createItemInDatabase',
-            'message' => 'create item',
-            'data' => [
-                'index' => $index,
-                'quotation_id' => $this->quotationId,
-                'commodity_type' => $item['commodity_type'] ?? null,
-                'relationship_type' => $item['relationship_type'] ?? null,
-                'related_item_id' => $item['related_item_id'] ?? null,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-
         \Log::info('CommodityItemsRepeater::createItemInDatabase() called', [
             'quotation_id' => $this->quotationId,
             'commodity_type' => $item['commodity_type'] ?? 'empty',
@@ -1567,22 +1342,6 @@ class CommodityItemsRepeater extends Component
             
             // Create item in database
             $dbItem = \App\Models\QuotationCommodityItem::create($data);
-
-            // #region agent log
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'B',
-                'location' => 'CommodityItemsRepeater.php:createItemInDatabase',
-                'message' => 'create item complete',
-                'data' => [
-                    'index' => $index,
-                    'db_item_id' => $dbItem->id ?? null,
-                    'resolved_related_item_id' => $data['related_item_id'] ?? null,
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
             
             // Update the item's ID from temporary to database ID
             $this->items[$index]['id'] = $dbItem->id;
@@ -1621,23 +1380,6 @@ class CommodityItemsRepeater extends Component
         }
         
         try {
-            // #region agent log
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'C',
-                'location' => 'CommodityItemsRepeater.php:saveItemToDatabase',
-                'message' => 'save item begin',
-                'data' => [
-                    'index' => $index,
-                    'item_id' => $item['id'],
-                    'relationship_type' => $item['relationship_type'] ?? null,
-                    'related_item_id' => $item['related_item_id'] ?? null,
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
-
             // Prepare data for database save
             $data = [
                 'line_number' => $index + 1,
@@ -1690,21 +1432,6 @@ class CommodityItemsRepeater extends Component
                 $dbItem->fill($data);
                 $dbItem->save(); // This will trigger saved event which recalculates articles
             }
-
-            // #region agent log
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'C',
-                'location' => 'CommodityItemsRepeater.php:saveItemToDatabase',
-                'message' => 'save item end',
-                'data' => [
-                    'index' => $index,
-                    'item_id' => $item['id'],
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
             
             // Touch parent quotation to update updated_at timestamp
             // This ensures cache keys change when commodity items are modified
@@ -1746,22 +1473,6 @@ class CommodityItemsRepeater extends Component
         if (!$relatedItemId || !$currentItemId) {
             return;
         }
-
-        // #region agent log
-        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'A',
-            'location' => 'CommodityItemsRepeater.php:setReverseRelationship',
-            'message' => 'set reverse relationship',
-            'data' => [
-                'current_item_id' => $currentItemId,
-                'related_item_id' => $relatedItemId,
-                'relationship_type' => $relationshipType,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
         
         // Find the related item in the items array
         $relatedItemIndex = null;
@@ -1805,21 +1516,6 @@ class CommodityItemsRepeater extends Component
         if (!$relatedItemId || !$currentItemId) {
             return;
         }
-
-        // #region agent log
-        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'A',
-            'location' => 'CommodityItemsRepeater.php:clearReverseRelationship',
-            'message' => 'clear reverse relationship',
-            'data' => [
-                'current_item_id' => $currentItemId,
-                'related_item_id' => $relatedItemId,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
         
         // Find the related item in the items array
         $relatedItemIndex = null;
@@ -1982,25 +1678,6 @@ class CommodityItemsRepeater extends Component
 
     public function render()
     {
-        // #region agent log
-        $missingCommodityType = [];
-        foreach ($this->items as $idx => $item) {
-            $missingCommodityType[$idx] = !array_key_exists('commodity_type', $item);
-        }
-        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'D',
-            'location' => 'CommodityItemsRepeater.php:render',
-            'message' => 'render items snapshot',
-            'data' => [
-                'items_count' => count($this->items),
-                'missing_commodity_type' => $missingCommodityType,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-
         return view('livewire.commodity-items-repeater', [
             'commodityTypes' => $this->commodityTypes,
             'unitSystems' => $this->unitSystems,

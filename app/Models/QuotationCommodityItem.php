@@ -512,21 +512,7 @@ class QuotationCommodityItem extends Model
 
     public static function recalculateQuotationArticles(int $quotationRequestId, ?int $triggeringItemId = null): void
     {
-        // #region agent log
-        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'C',
-            'location' => 'QuotationCommodityItem.php:recalculateQuotationArticles',
-            'message' => 'recalculate start',
-            'data' => [
-                'quotation_request_id' => $quotationRequestId,
-                'triggering_item_id' => $triggeringItemId,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-        \Log::info('Debug: recalculate start', [
+        \Log::info('QuotationCommodityItem: Recalculating articles', [
             'quotation_request_id' => $quotationRequestId,
             'triggering_item_id' => $triggeringItemId,
         ]);
@@ -782,20 +768,7 @@ class QuotationCommodityItem extends Model
         // Recalculate quotation totals
         $quotation->calculateTotals();
 
-        // #region agent log
-        @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'C',
-            'location' => 'QuotationCommodityItem.php:recalculateQuotationArticles',
-            'message' => 'recalculate end',
-            'data' => [
-                'quotation_request_id' => $quotationRequestId,
-            ],
-            'timestamp' => time() * 1000
-        ]) . "\n", FILE_APPEND);
-        // #endregion
-        \Log::info('Debug: recalculate end', [
+        \Log::info('QuotationCommodityItem: Articles recalculation completed', [
             'quotation_request_id' => $quotationRequestId,
         ]);
     }
@@ -840,25 +813,11 @@ class QuotationCommodityItem extends Model
         });
 
         static::saved(function ($item) {
-            // #region agent log
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'C',
-                'location' => 'QuotationCommodityItem.php:saved',
-                'message' => 'saved handler start',
-                'data' => [
-                    'item_id' => $item->id,
-                    'quotation_request_id' => $item->quotation_request_id,
-                    'relationship_type' => $item->relationship_type ?? null,
-                    'related_item_id' => $item->related_item_id ?? null,
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
-            \Log::info('Debug: saved handler start', [
+            \Log::info('QuotationCommodityItem: Item saved', [
                 'item_id' => $item->id,
                 'quotation_request_id' => $item->quotation_request_id,
+                'relationship_type' => $item->relationship_type ?? null,
+                'related_item_id' => $item->related_item_id ?? null,
             ]);
 
             // Process through carrier rules engine if schedule/carrier is available
@@ -874,13 +833,29 @@ class QuotationCommodityItem extends Model
             }
 
             // DISABLED: Bidirectional relationship sync at database level
-            // This was causing circular dependencies during Livewire component hydration/dehydration,
-            // resulting in timeout errors. Bidirectional relationships are now handled exclusively
-            // by the Livewire component (CommodityItemsRepeater::setReverseRelationship) to prevent conflicts.
             //
-            // Original logic (commented out):
+            // This bidirectional sync was disabled to prevent circular dependencies during Livewire
+            // component hydration/dehydration, which caused "Maximum execution time exceeded" errors
+            // when accessing quotations with connected/loaded items.
+            //
+            // Why it was causing issues:
+            // - When a commodity item was saved, the model's saved event handler would sync the
+            //   bidirectional relationship by updating the related item
+            // - This triggered another saved event, which could create a loop during Livewire's
+            //   serialization/deserialization process
+            // - The circular dependency caused Eloquent to timeout when accessing model attributes
+            //
+            // Current solution:
+            // - Bidirectional relationships are now handled exclusively by the Livewire component
+            //   (CommodityItemsRepeater::setReverseRelationship and clearReverseRelationship)
+            // - This ensures relationships are synced only at the UI level, preventing conflicts
+            //   with Livewire's state management
+            //
+            // Original logic (commented out for reference):
             // - When Item A is set to "Connected to Item B", automatically set Item B to "Connected to Item A"
             // - When relationship is cleared, clear reverse relationship
+            //
+            // See: CommodityItemsRepeater::setReverseRelationship() and clearReverseRelationship()
             //
             // if ($item->related_item_id && in_array($item->relationship_type, ['connected_to', 'loaded_with'])) {
             //     $relatedItem = static::where('id', $item->related_item_id)
@@ -941,23 +916,7 @@ class QuotationCommodityItem extends Model
 
                 // Use DB::afterCommit to ensure the transaction is complete before querying
                 \DB::afterCommit(function () use ($quotationRequestId, $triggeringItemId, $useQueue, $debounceSeconds) {
-                    // #region agent log
-                    @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                        'sessionId' => 'debug-session',
-                        'runId' => 'run1',
-                        'hypothesisId' => 'C',
-                        'location' => 'QuotationCommodityItem.php:afterCommit',
-                        'message' => 'afterCommit callback',
-                        'data' => [
-                            'quotation_request_id' => $quotationRequestId,
-                            'triggering_item_id' => $triggeringItemId,
-                            'use_queue' => $useQueue,
-                            'debounce_seconds' => $debounceSeconds,
-                        ],
-                        'timestamp' => time() * 1000
-                    ]) . "\n", FILE_APPEND);
-                    // #endregion
-                    \Log::info('Debug: afterCommit callback', [
+                    \Log::info('QuotationCommodityItem: After commit - recalculating articles', [
                         'quotation_request_id' => $quotationRequestId,
                         'triggering_item_id' => $triggeringItemId,
                         'use_queue' => $useQueue,
@@ -976,25 +935,6 @@ class QuotationCommodityItem extends Model
                     static::recalculateQuotationArticles($quotationRequestId, $triggeringItemId);
                 });
             }
-
-            // #region agent log
-            @file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'C',
-                'location' => 'QuotationCommodityItem.php:saved',
-                'message' => 'saved handler end',
-                'data' => [
-                    'item_id' => $item->id,
-                    'quotation_request_id' => $item->quotation_request_id,
-                ],
-                'timestamp' => time() * 1000
-            ]) . "\n", FILE_APPEND);
-            // #endregion
-            \Log::info('Debug: saved handler end', [
-                'item_id' => $item->id,
-                'quotation_request_id' => $item->quotation_request_id,
-            ]);
         });
 
         // Handle item deletion: reprocess related items (especially trailers) when a truck is removed
