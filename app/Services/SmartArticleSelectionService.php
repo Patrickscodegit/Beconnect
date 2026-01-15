@@ -79,6 +79,30 @@ class SmartArticleSelectionService
             return in_array($article->id, $strictMappedIds, true);
         })->values();
 
+        if ($articles->isEmpty() && !empty($strictMappedIds)) {
+            if ($shouldDebugLog) {
+                Log::debug('SmartArticleSelectionService: Empty after strict mapping, reloading mapped IDs', [
+                    'quotation_id' => $quotation->id ?? null,
+                    'strict_mapped_ids' => $strictMappedIds,
+                ]);
+            }
+
+            $fallbackQuery = RobawsArticleCache::query()
+                ->whereIn('id', $strictMappedIds)
+                ->where('is_active', true);
+
+            $hasParentItems = RobawsArticleCache::query()
+                ->where('is_parent_item', true)
+                ->limit(1)
+                ->exists();
+
+            if ($hasParentItems) {
+                $fallbackQuery->where('is_parent_item', true);
+            }
+
+            $articles = $fallbackQuery->get();
+        }
+
         if ($shouldDebugLog) {
             Log::debug('SmartArticleSelectionService: Articles after strict mapping filter', [
                 'quotation_id' => $quotation->id ?? null,
