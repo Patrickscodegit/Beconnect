@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\QuotationRequest;
 use App\Models\RobawsArticleCache;
+use App\Models\QuotationCommodityItem;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -364,21 +365,7 @@ class SmartArticleSelectionService
      */
     protected function normalizeCommodityTypes($commodityItem): array
     {
-        if (!$commodityItem) {
-            return [];
-        }
-
-        $type = $commodityItem->commodity_type ?? null;
-
-        // Map internal commodity types to Robaws article types
-        $typeMapping = [
-            'vehicles' => $this->getVehicleCategoryMappings($commodityItem),
-            'machinery' => ['Machinery'],
-            'boat' => ['Boat'],
-            'general_cargo' => ['General Cargo'],
-        ];
-
-        return $typeMapping[$type] ?? [];
+        return QuotationCommodityItem::normalizeCommodityTypes($commodityItem);
     }
 
     /**

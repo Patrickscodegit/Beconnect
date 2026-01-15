@@ -501,7 +501,7 @@ class QuotationCommodityItem extends Model
             'truck_trailer_combination' => ['TRUCK', 'HH', 'LM CARGO'],
         ];
 
-        return $vehicleMapping[$category] ?? ['CAR'];
+        return $vehicleMapping[$category] ?? [];
     }
 
     /**

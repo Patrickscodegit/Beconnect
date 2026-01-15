@@ -135,23 +135,21 @@ class CarrierRuleIntegrationService
         QuotationCommodityItem $item
     ): void {
         // Get all existing carrier rule articles linked to this commodity item
-        $useCarrierRuleColumns = Schema::hasColumn('quotation_request_articles', 'carrier_rule_applied')
+        $hasCarrierRuleColumns = Schema::hasColumn('quotation_request_articles', 'carrier_rule_applied')
             && Schema::hasColumn('quotation_request_articles', 'carrier_rule_commodity_item_id')
             && Schema::hasColumn('quotation_request_articles', 'carrier_rule_event_code');
+        if (!$hasCarrierRuleColumns) {
+            Log::warning('CarrierRuleIntegration: carrier rule columns missing, skipping sync', [
+                'quotation_id' => $quotation->id,
+                'item_id' => $item->id,
+            ]);
+            return;
+        }
 
         $existingArticlesQuery = QuotationRequestArticle::where('quotation_request_id', $quotation->id);
 
-        if ($useCarrierRuleColumns) {
-            $existingArticlesQuery->where('carrier_rule_applied', true)
-                ->where('carrier_rule_commodity_item_id', $item->id);
-        } else {
-            // Legacy fallback: notes column is TEXT, so use LIKE patterns
-            $existingArticlesQuery->where('notes', 'like', '%"commodity_item_id":' . $item->id . '%')
-                ->where(function ($query) {
-                    $query->where('notes', 'like', '%"carrier_rule_applied":true%')
-                        ->orWhere('notes', 'like', "%'carrier_rule_applied':true%");
-                });
-        }
+        $existingArticlesQuery->where('carrier_rule_applied', true)
+            ->where('carrier_rule_commodity_item_id', $item->id);
 
         $existingArticles = $existingArticlesQuery->get();
 
@@ -166,12 +164,8 @@ class CarrierRuleIntegrationService
 
         // Remove articles that are no longer applicable
         foreach ($existingArticles as $existingArticle) {
-            $eventCode = $useCarrierRuleColumns
-                ? ($existingArticle->carrier_rule_event_code ?? null)
-                : (json_decode($existingArticle->notes ?? '{}', true)['event_code'] ?? null);
-            $linkedItemId = $useCarrierRuleColumns
-                ? ($existingArticle->carrier_rule_commodity_item_id ?? null)
-                : (json_decode($existingArticle->notes ?? '{}', true)['commodity_item_id'] ?? null);
+            $eventCode = $existingArticle->carrier_rule_event_code ?? null;
+            $linkedItemId = $existingArticle->carrier_rule_commodity_item_id ?? null;
 
             // Remove if:
             // 1. Linked to this commodity item AND
@@ -199,9 +193,16 @@ class CarrierRuleIntegrationService
         array $quoteLineDrafts,
         QuotationCommodityItem $item
     ): void {
-        $useCarrierRuleColumns = Schema::hasColumn('quotation_request_articles', 'carrier_rule_applied')
+        $hasCarrierRuleColumns = Schema::hasColumn('quotation_request_articles', 'carrier_rule_applied')
             && Schema::hasColumn('quotation_request_articles', 'carrier_rule_commodity_item_id')
             && Schema::hasColumn('quotation_request_articles', 'carrier_rule_event_code');
+        if (!$hasCarrierRuleColumns) {
+            Log::warning('CarrierRuleIntegration: carrier rule columns missing, skipping surcharge add', [
+                'quotation_id' => $quotation->id,
+                'item_id' => $item->id,
+            ]);
+            return;
+        }
 
         foreach ($quoteLineDrafts as $draft) {
             // Check if article already exists for this quotation with same event code
@@ -209,18 +210,10 @@ class CarrierRuleIntegrationService
             $existingArticle = null;
             
             if ($eventCode) {
-                if ($useCarrierRuleColumns) {
-                    $existingArticle = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
-                        ->where('article_cache_id', $draft['article_id'])
-                        ->where('carrier_rule_event_code', $eventCode)
-                        ->first();
-                } else {
-                    // Legacy fallback: notes column is TEXT, so use LIKE patterns
-                    $existingArticle = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
-                        ->where('article_cache_id', $draft['article_id'])
-                        ->where('notes', 'like', '%"event_code":"' . $eventCode . '"%')
-                        ->first();
-                }
+                $existingArticle = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+                    ->where('article_cache_id', $draft['article_id'])
+                    ->where('carrier_rule_event_code', $eventCode)
+                    ->first();
             } else {
                 // Fallback: check by article ID only
                 $existingArticle = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
@@ -234,20 +227,9 @@ class CarrierRuleIntegrationService
                     $existingArticle->quantity = $draft['qty'];
                 }
                 
-                if ($useCarrierRuleColumns) {
-                    $existingArticle->carrier_rule_applied = true;
-                    $existingArticle->carrier_rule_event_code = $draft['meta']['event_code'] ?? null;
-                    $existingArticle->carrier_rule_commodity_item_id = $item->id;
-                }
-
-                // Keep notes for backward compatibility
-                $notes = json_decode($existingArticle->notes ?? '{}', true);
-                $notes['carrier_rule_applied'] = true;
-                $notes['event_code'] = $draft['meta']['event_code'] ?? null;
-                $notes['reason'] = $draft['meta']['reason'] ?? null;
-                $notes['matched_rule_id'] = $draft['meta']['matched_rule_id'] ?? null;
-                $notes['commodity_item_id'] = $item->id;
-                $existingArticle->notes = json_encode($notes);
+                $existingArticle->carrier_rule_applied = true;
+                $existingArticle->carrier_rule_event_code = $draft['meta']['event_code'] ?? null;
+                $existingArticle->carrier_rule_commodity_item_id = $item->id;
                 
                 $existingArticle->save();
                 continue;
@@ -291,16 +273,9 @@ class CarrierRuleIntegrationService
                 'selling_price' => $unitPrice,
                 'subtotal' => $unitPrice * $draft['qty'],
                 'currency' => $article->currency ?? 'EUR',
-                'carrier_rule_applied' => $useCarrierRuleColumns ? true : null,
-                'carrier_rule_event_code' => $useCarrierRuleColumns ? ($draft['meta']['event_code'] ?? null) : null,
-                'carrier_rule_commodity_item_id' => $useCarrierRuleColumns ? $item->id : null,
-                'notes' => json_encode([
-                    'carrier_rule_applied' => true,
-                    'event_code' => $draft['meta']['event_code'] ?? null,
-                    'reason' => $draft['meta']['reason'] ?? null,
-                    'matched_rule_id' => $draft['meta']['matched_rule_id'] ?? null,
-                    'commodity_item_id' => $item->id,
-                ]),
+                'carrier_rule_applied' => true,
+                'carrier_rule_event_code' => $draft['meta']['event_code'] ?? null,
+                'carrier_rule_commodity_item_id' => $item->id,
             ]);
 
             Log::info('CarrierRuleIntegration: Added surcharge article', [
@@ -329,23 +304,20 @@ class CarrierRuleIntegrationService
         }
 
         // Get all articles that are NOT carrier rule-based
-        $useCarrierRuleColumns = Schema::hasColumn('quotation_request_articles', 'carrier_rule_applied');
+        $hasCarrierRuleColumns = Schema::hasColumn('quotation_request_articles', 'carrier_rule_applied');
+        if (!$hasCarrierRuleColumns) {
+            Log::warning('CarrierRuleIntegration: carrier rule columns missing, skipping non-matching removal', [
+                'quotation_id' => $quotation->id,
+            ]);
+            return;
+        }
 
         $articlesQuery = QuotationRequestArticle::where('quotation_request_id', $quotation->id);
 
-        if ($useCarrierRuleColumns) {
-            $articlesQuery->where(function ($query) {
-                $query->whereNull('carrier_rule_applied')
-                    ->orWhere('carrier_rule_applied', false);
-            });
-        } else {
-            // Legacy fallback: exclude articles that have carrier_rule_applied:true in their notes
-            $articlesQuery->where(function ($query) {
-                $query->whereNull('notes')
-                    ->orWhere('notes', 'not like', '%"carrier_rule_applied":true%')
-                    ->orWhere('notes', 'not like', "%'carrier_rule_applied':true%");
-            });
-        }
+        $articlesQuery->where(function ($query) {
+            $query->whereNull('carrier_rule_applied')
+                ->orWhere('carrier_rule_applied', false);
+        });
 
         $articles = $articlesQuery->with('articleCache')->get();
 
