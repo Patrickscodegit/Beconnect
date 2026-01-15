@@ -337,79 +337,8 @@ class CarrierRuleIntegrationService
         }
 
         // Get carrier rule mappings to check if articles are explicitly mapped (Freight Mapping)
-        $carrierRuleMappedArticleIds = [];
-        if ($quotation->selected_schedule_id && $quotation->selectedSchedule) {
-            $schedule = $quotation->selectedSchedule;
-            if ($schedule->carrier) {
-                $carrierId = $schedule->carrier->id;
-                $podPortId = $schedule->pod_id;
-                $vesselName = $schedule->vessel_name;
-                $vesselClass = $schedule->vessel_class;
-                
-                // Get vehicle category and category group from first commodity item
-                $vehicleCategory = null;
-                $categoryGroupId = null;
-                if ($commodityItems->isNotEmpty()) {
-                    $firstItem = $commodityItems->first();
-                    $vehicleCategory = $firstItem->category ?? null;
-                    
-                    if ($vehicleCategory) {
-                        $member = \App\Models\CarrierCategoryGroupMember::whereHas('categoryGroup', function ($q) use ($carrierId) {
-                            $q->where('carrier_id', $carrierId)->where('is_active', true);
-                        })
-                        ->where('vehicle_category', $vehicleCategory)
-                        ->where('is_active', true)
-                        ->first();
-                        $categoryGroupId = $member?->carrier_category_group_id;
-                    }
-                }
-                
-                // Check if this article is mapped via carrier rules (Freight Mapping)
-                $resolver = app(\App\Services\CarrierRules\CarrierRuleResolver::class);
-                $mappings = $resolver->resolveArticleMappings(
-                    $carrierId,
-                    $podPortId,
-                    $vehicleCategory,
-                    $categoryGroupId,
-                    $vesselName,
-                    $vesselClass
-                );
-
-                // Filter mappings to only include those that match the requested port
-                if ($podPortId !== null) {
-                    $portGroupIds = $resolver->resolvePortGroupIdsForPort($carrierId, $podPortId);
-                    $mappings = $mappings->filter(function ($mapping) use ($podPortId, $portGroupIds) {
-                        $mappingPortIds = $mapping->port_ids ?? [];
-                        $mappingPortGroupIds = $mapping->port_group_ids ?? [];
-
-                        // Include global mappings (port_ids=null and port_group_ids=null)
-                        if (empty($mappingPortIds) && empty($mappingPortGroupIds)) {
-                            return true;
-                        }
-
-                        // Include mappings that explicitly contain the requested port
-                        if (!empty($mappingPortIds) && in_array($podPortId, $mappingPortIds, false)) {
-                            return true;
-                        }
-
-                        // Include mappings that match via port group ONLY if they don't have specific port_ids
-                        // This prevents including mappings for other ports that happen to be in the same port group
-                        if (empty($mappingPortIds) && !empty($mappingPortGroupIds) && !empty($portGroupIds)) {
-                            foreach ($portGroupIds as $groupId) {
-                                if (in_array($groupId, $mappingPortGroupIds, false)) {
-                                    return true;
-                                }
-                            }
-                        }
-
-                        // Exclude mappings for other specific ports
-                        return false;
-                    });
-                }
-
-                $carrierRuleMappedArticleIds = $mappings->pluck('article_id')->unique()->toArray();
-            }
-        }
+        $carrierRuleMappedArticleIds = app(\App\Services\SmartArticleSelectionService::class)
+            ->getStrictMappedArticleIdsForQuotation($quotation);
 
         foreach ($articles as $articleRecord) {
             $article = $articleRecord->articleCache;
@@ -422,12 +351,26 @@ class CarrierRuleIntegrationService
 
             // Check 0: If article is mapped via carrier rules (Freight Mapping), don't remove it
             // It's explicitly allowed regardless of commodity type matching
-            if (in_array($article->id, $carrierRuleMappedArticleIds)) {
+            if (
+                in_array($article->id, $carrierRuleMappedArticleIds, true)
+                || in_array($articleRecord->parent_article_id, $carrierRuleMappedArticleIds, true)
+            ) {
                 continue; // Skip removal check for carrier rule mapped articles
             }
 
-            // Check 1: Article must have matching commodity type
-            if ($article->commodity_type) {
+            // Check 1: Enforce strict mapping when available
+            if (!empty($carrierRuleMappedArticleIds)) {
+                $isMapped = in_array($article->id, $carrierRuleMappedArticleIds, true)
+                    || in_array($articleRecord->parent_article_id, $carrierRuleMappedArticleIds, true);
+
+                if (!$isMapped) {
+                    $shouldRemove = true;
+                    $removalReason = 'not in strict carrier mapping';
+                }
+            }
+
+            // Check 2: Article must have matching commodity type
+            if (!$shouldRemove && $article->commodity_type) {
                 $matchingItems = QuotationCommodityItem::findMatchingCommodityItems(
                     $commodityItems,
                     $article->commodity_type
@@ -440,7 +383,7 @@ class CarrierRuleIntegrationService
                 }
             }
 
-            // Check 2: Article POD must match quotation POD (if article has POD)
+            // Check 3: Article POD must match quotation POD (if article has POD)
             if (
                 !$shouldRemove &&
                 ((isset($article->pod_port_id) && $article->pod_port_id) || !empty($article->pod)) &&

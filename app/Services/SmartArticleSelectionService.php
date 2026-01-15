@@ -6,6 +6,7 @@ use App\Models\QuotationRequest;
 use App\Models\RobawsArticleCache;
 use App\Models\QuotationCommodityItem;
 use App\Models\CarrierCategoryGroupMember;
+use App\Models\CarrierCategoryGroup;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -478,14 +479,47 @@ class SmartArticleSelectionService
             return [];
         }
 
-        $members = CarrierCategoryGroupMember::whereHas('categoryGroup', function ($q) use ($carrierId) {
-            $q->where('carrier_id', $carrierId)->where('is_active', true);
-        })
-            ->whereIn('vehicle_category', $vehicleCategories)
-            ->where('is_active', true)
-            ->get();
+        $acceptanceGroupCodes = $quotation->commodityItems
+            ->map(function ($item) {
+                $meta = $item->carrier_rule_meta;
+                if (!is_array($meta)) {
+                    return null;
+                }
+                return $meta['matched_category_group'] ?? null;
+            })
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
 
-        $categoryGroupIds = $members->pluck('carrier_category_group_id')->unique()->filter()->values()->toArray();
+        $categoryGroupIds = [];
+        if (!empty($acceptanceGroupCodes)) {
+            $categoryGroupIds = CarrierCategoryGroup::where('carrier_id', $carrierId)
+                ->whereIn('code', $acceptanceGroupCodes)
+                ->pluck('id')
+                ->unique()
+                ->filter()
+                ->values()
+                ->toArray();
+        }
+
+        if (!empty($categoryGroupIds)) {
+            Log::info('SmartArticleSelectionService: Using acceptance category groups', [
+                'quotation_id' => $quotation->id ?? null,
+                'carrier_id' => $carrierId,
+                'matched_category_groups' => $acceptanceGroupCodes,
+                'category_group_ids' => $categoryGroupIds,
+            ]);
+        } else {
+            $members = CarrierCategoryGroupMember::whereHas('categoryGroup', function ($q) use ($carrierId) {
+                $q->where('carrier_id', $carrierId)->where('is_active', true);
+            })
+                ->whereIn('vehicle_category', $vehicleCategories)
+                ->where('is_active', true)
+                ->get();
+
+            $categoryGroupIds = $members->pluck('carrier_category_group_id')->unique()->filter()->values()->toArray();
+        }
         if (empty($categoryGroupIds)) {
             return [];
         }
@@ -527,10 +561,13 @@ class SmartArticleSelectionService
                     $q->orWhereJsonContains('port_ids', (string) $podPortId)
                       ->orWhereJsonContains('port_ids', (int) $podPortId);
 
-                    // Port group rules
+                    // Port group rules (only when no specific port_ids are set)
                     if (!empty($portGroupVariants)) {
                         foreach ($portGroupVariants as $groupId) {
-                            $q->orWhereJsonContains('port_group_ids', $groupId);
+                            $q->orWhere(function ($qq) use ($groupId) {
+                                $qq->whereNull('port_ids')
+                                    ->whereJsonContains('port_group_ids', $groupId);
+                            });
                         }
                     }
                 }
@@ -540,7 +577,72 @@ class SmartArticleSelectionService
             $allMappings = $allMappings->merge($mappings);
         }
 
-        return $allMappings->pluck('article_id')->unique()->values()->all();
+        $mappedIds = $allMappings->pluck('article_id')->unique()->values()->all();
+
+        if (empty($mappedIds) && in_array('HH', $acceptanceGroupCodes, true)) {
+            $fallbackGroupIds = CarrierCategoryGroup::where('carrier_id', $carrierId)
+                ->whereIn('code', ['LM_CARGO_TRUCKS', 'LM_CARGO_TRAILERS'])
+                ->pluck('id')
+                ->unique()
+                ->filter()
+                ->values()
+                ->toArray();
+
+            if (!empty($fallbackGroupIds)) {
+                Log::info('SmartArticleSelectionService: Falling back to LM cargo groups for HH', [
+                    'quotation_id' => $quotation->id ?? null,
+                    'carrier_id' => $carrierId,
+                    'fallback_group_ids' => $fallbackGroupIds,
+                ]);
+
+                foreach ($fallbackGroupIds as $categoryGroupId) {
+                    $categoryGroupVariants = [(string) $categoryGroupId, (int) $categoryGroupId];
+                    $portGroupVariants = array_values(array_unique(array_merge(
+                        $portGroupIds,
+                        array_map('strval', $portGroupIds)
+                    )));
+
+                    $query = \App\Models\CarrierArticleMapping::query()
+                        ->where('carrier_id', $carrierId)
+                        ->active();
+
+                    $query->where(function ($q) use ($categoryGroupVariants) {
+                        $q->whereNull('category_group_ids');
+                        foreach ($categoryGroupVariants as $variant) {
+                            $q->orWhereJsonContains('category_group_ids', $variant);
+                        }
+                    });
+
+                    $query->where(function ($q) use ($podPortId, $portGroupVariants) {
+                        $q->where(function ($q2) {
+                            $q2->whereNull('port_ids')
+                               ->whereNull('port_group_ids');
+                        });
+
+                        if ($podPortId !== null) {
+                            $q->orWhereJsonContains('port_ids', (string) $podPortId)
+                              ->orWhereJsonContains('port_ids', (int) $podPortId);
+
+                            if (!empty($portGroupVariants)) {
+                                foreach ($portGroupVariants as $groupId) {
+                                    $q->orWhere(function ($qq) use ($groupId) {
+                                        $qq->whereNull('port_ids')
+                                            ->whereJsonContains('port_group_ids', $groupId);
+                                    });
+                                }
+                            }
+                        }
+                    });
+
+                    $mappings = $query->get();
+                    $allMappings = $allMappings->merge($mappings);
+                }
+
+                $mappedIds = $allMappings->pluck('article_id')->unique()->values()->all();
+            }
+        }
+
+        return $mappedIds;
     }
 
     private function filterMappingsByPort($mappings, ?int $portId, array $portGroupIds = []): Collection
@@ -563,9 +665,8 @@ class SmartArticleSelectionService
                 return true;
             }
 
-            // Match via port_group_ids (if set and port_group_ids match)
-            // Note: This check is independent of port_ids - mappings can have both set
-            if (!empty($mappingPortGroupIds) && !empty($portGroupIds)) {
+            // Match via port_group_ids only when no specific port_ids are set
+            if (empty($mappingPortIds) && !empty($mappingPortGroupIds) && !empty($portGroupIds)) {
                 foreach ($portGroupIds as $groupId) {
                     if (in_array($groupId, $mappingPortGroupIds, false)) {
                         return true;
@@ -703,6 +804,14 @@ class SmartArticleSelectionService
         }
         
         return $filtered;
+    }
+
+    /**
+     * Public helper to retrieve strict mapped article IDs for a quotation.
+     */
+    public function getStrictMappedArticleIdsForQuotation(QuotationRequest $quotation): array
+    {
+        return $this->getStrictMappedArticleIds($quotation);
     }
 }
 
