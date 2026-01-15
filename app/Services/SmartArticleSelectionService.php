@@ -494,16 +494,49 @@ class SmartArticleSelectionService
         $portGroupIds = $resolver->resolvePortGroupIdsForPort($carrierId, $podPortId);
         $allMappings = collect();
 
+        // Query mappings directly to ensure correct filtering
         foreach ($categoryGroupIds as $categoryGroupId) {
-            $mappings = $resolver->resolveArticleMappings(
-                $carrierId,
-                $podPortId,
-                null,
-                $categoryGroupId,
-                $schedule?->vessel_name,
-                $schedule?->vessel_class
-            );
-            $mappings = $this->filterMappingsByPort($mappings, $podPortId, $portGroupIds);
+            $categoryGroupVariants = [(string) $categoryGroupId, (int) $categoryGroupId];
+            $portGroupVariants = array_values(array_unique(array_merge(
+                $portGroupIds,
+                array_map('strval', $portGroupIds)
+            )));
+
+            $query = \App\Models\CarrierArticleMapping::query()
+                ->where('carrier_id', $carrierId)
+                ->active();
+
+            // Category group filtering
+            $query->where(function ($q) use ($categoryGroupVariants) {
+                $q->whereNull('category_group_ids');
+                foreach ($categoryGroupVariants as $variant) {
+                    $q->orWhereJsonContains('category_group_ids', $variant);
+                }
+            });
+
+            // Port filtering
+            $query->where(function ($q) use ($podPortId, $portGroupVariants) {
+                // Global rules (no port scope)
+                $q->where(function ($q2) {
+                    $q2->whereNull('port_ids')
+                       ->whereNull('port_group_ids');
+                });
+
+                if ($podPortId !== null) {
+                    // Port-specific rules
+                    $q->orWhereJsonContains('port_ids', (string) $podPortId)
+                      ->orWhereJsonContains('port_ids', (int) $podPortId);
+
+                    // Port group rules
+                    if (!empty($portGroupVariants)) {
+                        foreach ($portGroupVariants as $groupId) {
+                            $q->orWhereJsonContains('port_group_ids', $groupId);
+                        }
+                    }
+                }
+            });
+
+            $mappings = $query->get();
             $allMappings = $allMappings->merge($mappings);
         }
 
@@ -520,15 +553,19 @@ class SmartArticleSelectionService
             $mappingPortIds = $mapping->port_ids ?? [];
             $mappingPortGroupIds = $mapping->port_group_ids ?? [];
 
+            // Global mappings (no port scope)
             if (empty($mappingPortIds) && empty($mappingPortGroupIds)) {
                 return true;
             }
 
+            // Match via port_ids (if set)
             if (!empty($mappingPortIds) && in_array($portId, $mappingPortIds, false)) {
                 return true;
             }
 
-            if (empty($mappingPortIds) && !empty($mappingPortGroupIds) && !empty($portGroupIds)) {
+            // Match via port_group_ids (if set and port_group_ids match)
+            // Note: This check is independent of port_ids - mappings can have both set
+            if (!empty($mappingPortGroupIds) && !empty($portGroupIds)) {
                 foreach ($portGroupIds as $groupId) {
                     if (in_array($groupId, $mappingPortGroupIds, false)) {
                         return true;
