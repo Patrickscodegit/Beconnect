@@ -820,17 +820,7 @@ class QuotationCommodityItem extends Model
                 'related_item_id' => $item->related_item_id ?? null,
             ]);
 
-            // Process through carrier rules engine if schedule/carrier is available
-            try {
-                $integrationService = app(\App\Services\CarrierRules\CarrierRuleIntegrationService::class);
-                $integrationService->processCommodityItem($item);
-            } catch (\Exception $e) {
-                \Log::error('QuotationCommodityItem: Error processing carrier rules', [
-                    'item_id' => $item->id,
-                    'error' => $e->getMessage(),
-                ]);
-                // Continue with other processing even if carrier rules fail
-            }
+            $orchestrator = app(\App\Services\Quotation\QuotationPricingOrchestrator::class);
 
             // DISABLED: Bidirectional relationship sync at database level
             //
@@ -915,7 +905,7 @@ class QuotationCommodityItem extends Model
                 $debounceSeconds = (int) env('QUOTE_RECALC_DEBOUNCE_SECONDS', 0);
 
                 // Use DB::afterCommit to ensure the transaction is complete before querying
-                \DB::afterCommit(function () use ($quotationRequestId, $triggeringItemId, $useQueue, $debounceSeconds) {
+                \DB::afterCommit(function () use ($quotationRequestId, $triggeringItemId, $useQueue, $debounceSeconds, $item) {
                     \Log::info('QuotationCommodityItem: After commit - recalculating articles', [
                         'quotation_request_id' => $quotationRequestId,
                         'triggering_item_id' => $triggeringItemId,
@@ -932,7 +922,8 @@ class QuotationCommodityItem extends Model
                         return;
                     }
 
-                    static::recalculateQuotationArticles($quotationRequestId, $triggeringItemId);
+                    $orchestrator = app(\App\Services\Quotation\QuotationPricingOrchestrator::class);
+                    $orchestrator->recalculateForCommodityItem($item);
                 });
             }
         });

@@ -190,15 +190,8 @@ class QuotationRequest extends Model
             }
 
             \DB::afterCommit(function () use ($quotationRequest) {
-                $freshQuotation = $quotationRequest->fresh(['commodityItems', 'selectedSchedule.carrier']);
-                if (!$freshQuotation || $freshQuotation->commodityItems->isEmpty()) {
-                    return;
-                }
-
-                $integrationService = app(\App\Services\CarrierRules\CarrierRuleIntegrationService::class);
-                foreach ($freshQuotation->commodityItems as $item) {
-                    $integrationService->processCommodityItem($item);
-                }
+                $orchestrator = app(\App\Services\Quotation\QuotationPricingOrchestrator::class);
+                $orchestrator->recalculateForScheduleChange($quotationRequest);
             });
         });
     }

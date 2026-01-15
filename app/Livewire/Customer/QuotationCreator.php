@@ -511,37 +511,7 @@ class QuotationCreator extends Component
         ]) . "\n", FILE_APPEND);
         // #endregion
         
-        // Recalculate articles when schedule changes (LM calculation depends on carrier/port context)
-        if ($this->quotation) {
-            $quotation = $this->quotation->fresh(['commodityItems']);
-            if ($quotation->commodityItems && $quotation->commodityItems->count() > 0) {
-                // Touch all commodity items to trigger saved event, which recalculates articles
-                foreach ($quotation->commodityItems as $item) {
-                    $item->touch(); // This triggers saved event which recalculates articles
-                }
-                
-                // Also recalculate quotation totals
-                $quotation->calculateTotals();
-                $quotation->save();
-                
-                // Refresh quotation
-                $this->quotation = $quotation->fresh(['articles']);
-                
-                // #region agent log
-                @file_put_contents(base_path('.cursor/debug.log'), json_encode([
-                    'sessionId' => 'debug-session',
-                    'runId' => 'run1',
-                    'hypothesisId' => 'C',
-                    'location' => 'QuotationCreator.php:updatedSelectedScheduleId',
-                    'message' => 'Touched commodity items to trigger article recalculation',
-                    'data' => [
-                        'commodity_items_count' => $quotation->commodityItems->count(),
-                    ],
-                    'timestamp' => time() * 1000
-                ]) . "\n", FILE_APPEND);
-                // #endregion
-            }
-        }
+        // Recalculation is handled by QuotationRequest::saved when selected_schedule_id changes.
         
         // Call parent updated() for database save and logging
         $this->updated('selected_schedule_id');

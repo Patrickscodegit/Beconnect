@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Models\QuotationCommodityItem;
+use App\Services\Quotation\QuotationPricingOrchestrator;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -35,6 +35,7 @@ class RecalculateQuotationArticles implements ShouldQueue, ShouldBeUnique
 
     public function handle(): void
     {
-        QuotationCommodityItem::recalculateQuotationArticles($this->quotationRequestId, $this->triggeringItemId);
+        $orchestrator = app(QuotationPricingOrchestrator::class);
+        $orchestrator->recalculateForQuotationId($this->quotationRequestId, $this->triggeringItemId);
     }
 }
