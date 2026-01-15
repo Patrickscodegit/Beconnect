@@ -50,11 +50,9 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
         $totalLm = 0;
         $processedItems = [];
 
-        if (!$quotationRequest->relationLoaded('articles')) {
-            $quotationRequest->load('articles');
-        }
-
-        $lmArticles = $quotationRequest->articles
+        $lmArticles = QuotationRequestArticle::query()
+            ->where('quotation_request_id', $quotationRequest->id)
+            ->get()
             ->filter(function ($candidate) use ($article) {
                 $unitType = strtoupper(trim($candidate->unit_type ?? ''));
                 return $unitType === 'LM'
