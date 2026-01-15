@@ -537,13 +537,27 @@ class CarrierRuleResolver
         if ($portId !== null) {
             $inputPortGroupIds = $this->resolvePortGroupIdsForPort($carrierId, $portId);
         }
+        $portGroupIdVariants = [];
+        if (!empty($inputPortGroupIds)) {
+            $portGroupIdVariants = array_values(array_unique(array_merge(
+                $inputPortGroupIds,
+                array_map('strval', $inputPortGroupIds)
+            )));
+        }
+        $categoryGroupIdVariants = [];
+        if ($categoryGroupId !== null) {
+            $categoryGroupIdVariants = array_values(array_unique([
+                (string) $categoryGroupId,
+                (int) $categoryGroupId,
+            ]));
+        }
 
         $query = CarrierArticleMapping::query()
             ->where('carrier_id', $carrierId)
             ->active();
 
         // Apply port scoping
-        $query->where(function ($q) use ($portId, $inputPortGroupIds) {
+        $query->where(function ($q) use ($portId, $portGroupIdVariants) {
             // Global rules (no port scope)
             $q->where(function ($q2) {
                 $q2->whereNull('port_ids')
@@ -556,8 +570,8 @@ class CarrierRuleResolver
                   ->orWhereJsonContains('port_ids', (int)$portId);
 
                 // Port group rules (overlap check)
-                if (!empty($inputPortGroupIds)) {
-                    foreach ($inputPortGroupIds as $groupId) {
+                if (!empty($portGroupIdVariants)) {
+                    foreach ($portGroupIdVariants as $groupId) {
                         $q->orWhereJsonContains('port_group_ids', $groupId);
                     }
                 }
@@ -576,14 +590,15 @@ class CarrierRuleResolver
         });
 
         // Apply category group scoping
-        $query->where(function ($q) use ($categoryGroupId) {
+        $query->where(function ($q) use ($categoryGroupId, $categoryGroupIdVariants) {
             // Global rules (no category group scope)
             $q->whereNull('category_group_ids');
 
             if ($categoryGroupId !== null) {
                 // Category group-specific rules (type-safe)
-                $q->orWhereJsonContains('category_group_ids', (string)$categoryGroupId)
-                  ->orWhereJsonContains('category_group_ids', (int)$categoryGroupId);
+                foreach ($categoryGroupIdVariants as $groupId) {
+                    $q->orWhereJsonContains('category_group_ids', $groupId);
+                }
             }
         });
 
