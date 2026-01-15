@@ -123,7 +123,11 @@ class SmartArticleSelector extends Component
         
         // Use addArticle() which creates QuotationRequestArticle model
         // This triggers the boot() method which automatically adds child articles
-        $quotationRequestArticle = $this->quotation->addArticle($article, 1);
+        $allowOverride = $this->canAdminOverride();
+        $quotationRequestArticle = $this->quotation->addArticle($article, 1, [], $allowOverride);
+        if (!$quotationRequestArticle) {
+            return;
+        }
         
         // Override selling price with tier price if we calculated one
         $tierPrice = $this->getTierPrice($article);
@@ -231,5 +235,28 @@ class SmartArticleSelector extends Component
     public function render()
     {
         return view('livewire.smart-article-selector');
+    }
+
+    protected function canAdminOverride(): bool
+    {
+        $user = auth()->user();
+        if (!$user) {
+            return false;
+        }
+
+        if (!class_exists(\Filament\Facades\Filament::class)) {
+            return false;
+        }
+
+        try {
+            $panel = \Filament\Facades\Filament::getCurrentPanel();
+            if (!$panel) {
+                return false;
+            }
+
+            return $user->canAccessPanel($panel);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 }

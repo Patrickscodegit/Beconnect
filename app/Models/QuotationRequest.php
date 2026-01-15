@@ -551,10 +551,32 @@ class QuotationRequest extends Model
      * @param RobawsArticleCache $article
      * @param int $quantity
      * @param array $formulaInputs Optional formula inputs for CONSOL pricing
-     * @return QuotationRequestArticle
+     * @param bool $allowOverride Allow admin override for strict alignment
+     * @return QuotationRequestArticle|null
      */
-    public function addArticle(RobawsArticleCache $article, int $quantity = 1, array $formulaInputs = []): QuotationRequestArticle
+    public function addArticle(RobawsArticleCache $article, int $quantity = 1, array $formulaInputs = [], bool $allowOverride = false): ?QuotationRequestArticle
     {
+        $selectionService = app(\App\Services\SmartArticleSelectionService::class);
+        $isStrictEligible = $selectionService->isStrictlyEligible($this, $article);
+        $overrideAllowed = $allowOverride && $this->isAdminOverrideAllowed();
+
+        if (!$isStrictEligible && !$overrideAllowed) {
+            \Log::warning('QuotationRequest::addArticle blocked by strict alignment', [
+                'quotation_request_id' => $this->id,
+                'article_id' => $article->id,
+                'article_name' => $article->article_name,
+            ]);
+            return null;
+        }
+
+        if (!$isStrictEligible && $overrideAllowed) {
+            \Log::warning('QuotationRequest::addArticle strict alignment overridden', [
+                'quotation_request_id' => $this->id,
+                'article_id' => $article->id,
+                'article_name' => $article->article_name,
+            ]);
+        }
+
         // Use pricing tier if available, otherwise fall back to customer role
         $sellingPrice = null;
         
@@ -601,6 +623,29 @@ class QuotationRequest extends Model
             'formula_inputs' => $formulaInputs ?: null,
         ]);
         // Child articles and totals are calculated automatically in QuotationRequestArticle::boot()
+    }
+
+    protected function isAdminOverrideAllowed(): bool
+    {
+        $user = auth()->user();
+        if (!$user) {
+            return false;
+        }
+
+        if (!class_exists(\Filament\Facades\Filament::class)) {
+            return false;
+        }
+
+        try {
+            $panel = \Filament\Facades\Filament::getCurrentPanel();
+            if (!$panel) {
+                return false;
+            }
+
+            return $user->canAccessPanel($panel);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     /**

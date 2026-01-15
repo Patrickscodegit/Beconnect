@@ -5,10 +5,12 @@ namespace App\Services;
 use App\Models\QuotationRequest;
 use App\Models\RobawsArticleCache;
 use App\Models\QuotationCommodityItem;
+use App\Models\CarrierCategoryGroupMember;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use App\Services\PortCodeMapper;
+use App\Services\CarrierRules\CarrierRuleResolver;
 
 class SmartArticleSelectionService
 {
@@ -59,8 +61,24 @@ class SmartArticleSelectionService
         // Get base query using the model scope (now requires POL/POD match)
         $articles = RobawsArticleCache::forQuotationContext($quotation)->get();
 
+        // Enforce strict alignment via carrier category group mappings
+        $strictMappedIds = $this->getStrictMappedArticleIds($quotation);
+        if (empty($strictMappedIds)) {
+            if ($shouldDebugLog) {
+                Log::debug('SmartArticleSelectionService: No strict mappings found', [
+                    'quotation_id' => $quotation->id ?? null,
+                ]);
+            }
+
+            return collect([]);
+        }
+
+        $articles = $articles->filter(function ($article) use ($strictMappedIds) {
+            return in_array($article->id, $strictMappedIds, true);
+        })->values();
+
         if ($shouldDebugLog) {
-            Log::debug('SmartArticleSelectionService: Articles after scopeForQuotationContext', [
+            Log::debug('SmartArticleSelectionService: Articles after strict mapping filter', [
                 'quotation_id' => $quotation->id ?? null,
                 'articles_count' => $articles->count(),
                 'article_ids' => $articles->pluck('id')->toArray(),
@@ -339,6 +357,29 @@ class SmartArticleSelectionService
     }
 
     /**
+     * Strict eligibility check for manual/auto-added articles.
+     */
+    public function isStrictlyEligible(QuotationRequest $quotation, RobawsArticleCache $article): bool
+    {
+        $strictMappedIds = $this->getStrictMappedArticleIds($quotation);
+        if (empty($strictMappedIds) || !in_array($article->id, $strictMappedIds, true)) {
+            return false;
+        }
+
+        if (!$this->matchesRoute($quotation, $article)) {
+            return false;
+        }
+
+        $schedule = $quotation->selectedSchedule;
+        $carrierId = $schedule?->carrier_id ?? $schedule?->carrier?->id;
+        if ($carrierId && $article->shipping_carrier_id && (int) $article->shipping_carrier_id !== (int) $carrierId) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Get specific vehicle category mappings
      *
      * @param mixed $commodityItem
@@ -409,6 +450,109 @@ class SmartArticleSelectionService
         }
 
         return null;
+    }
+
+    private function getStrictMappedArticleIds(QuotationRequest $quotation): array
+    {
+        $quotation->loadMissing(['commodityItems', 'selectedSchedule.carrier']);
+
+        $schedule = $quotation->selectedSchedule;
+        $carrierId = $schedule?->carrier_id ?? $schedule?->carrier?->id;
+        if (!$carrierId) {
+            return [];
+        }
+
+        $podPortId = $schedule?->pod_id ?? $quotation->pod_port_id;
+        if (!$podPortId) {
+            return [];
+        }
+
+        $vehicleCategories = $quotation->commodityItems
+            ->pluck('category')
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
+
+        if (empty($vehicleCategories)) {
+            return [];
+        }
+
+        $members = CarrierCategoryGroupMember::whereHas('categoryGroup', function ($q) use ($carrierId) {
+            $q->where('carrier_id', $carrierId)->where('is_active', true);
+        })
+            ->whereIn('vehicle_category', $vehicleCategories)
+            ->where('is_active', true)
+            ->get();
+
+        $categoryGroupIds = $members->pluck('carrier_category_group_id')->unique()->filter()->values()->toArray();
+        if (empty($categoryGroupIds)) {
+            return [];
+        }
+
+        $resolver = app(CarrierRuleResolver::class);
+        $portGroupIds = $resolver->resolvePortGroupIdsForPort($carrierId, $podPortId);
+        $allMappings = collect();
+
+        foreach ($categoryGroupIds as $categoryGroupId) {
+            $mappings = $resolver->resolveArticleMappings(
+                $carrierId,
+                $podPortId,
+                null,
+                $categoryGroupId,
+                $schedule?->vessel_name,
+                $schedule?->vessel_class
+            );
+            $mappings = $this->filterMappingsByPort($mappings, $podPortId, $portGroupIds);
+            $allMappings = $allMappings->merge($mappings);
+        }
+
+        return $allMappings->pluck('article_id')->unique()->values()->all();
+    }
+
+    private function filterMappingsByPort($mappings, ?int $portId, array $portGroupIds = []): Collection
+    {
+        if ($portId === null) {
+            return $mappings;
+        }
+
+        return $mappings->filter(function ($mapping) use ($portId, $portGroupIds) {
+            $mappingPortIds = $mapping->port_ids ?? [];
+            $mappingPortGroupIds = $mapping->port_group_ids ?? [];
+
+            if (empty($mappingPortIds) && empty($mappingPortGroupIds)) {
+                return true;
+            }
+
+            if (!empty($mappingPortIds) && in_array($portId, $mappingPortIds, false)) {
+                return true;
+            }
+
+            if (empty($mappingPortIds) && !empty($mappingPortGroupIds) && !empty($portGroupIds)) {
+                foreach ($portGroupIds as $groupId) {
+                    if (in_array($groupId, $mappingPortGroupIds, false)) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        });
+    }
+
+    private function matchesRoute(QuotationRequest $quotation, RobawsArticleCache $article): bool
+    {
+        if ($quotation->pol_port_id && $quotation->pod_port_id && $article->pol_port_id && $article->pod_port_id) {
+            return (int) $quotation->pol_port_id === (int) $article->pol_port_id
+                && (int) $quotation->pod_port_id === (int) $article->pod_port_id;
+        }
+
+        if ($quotation->pol && $quotation->pod && $article->pol && $article->pod) {
+            return trim($quotation->pol) === trim($article->pol)
+                && trim($quotation->pod) === trim($article->pod);
+        }
+
+        return false;
     }
 
     protected function shouldWriteDebugLog(): bool

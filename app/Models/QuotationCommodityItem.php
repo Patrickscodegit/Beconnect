@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Schema;
 use App\Models\QuotationRequestArticle;
+use App\Services\SmartArticleSelectionService;
 
 class QuotationCommodityItem extends Model
 {
@@ -480,7 +481,7 @@ class QuotationCommodityItem extends Model
         // Map vehicle categories to Robaws types
         $vehicleMapping = [
             'car' => ['CAR'],
-            'suv' => ['SUV'],
+            'suv' => ['SUV', 'SMALL VAN'],
             'small_van' => ['SMALL VAN'],
             'big_van' => ['BIG VAN', 'LM CARGO'],
             'truck' => ['TRUCK', 'HH', 'LM CARGO'],
@@ -526,9 +527,59 @@ class QuotationCommodityItem extends Model
         $triggeringItem = $triggeringItemId ? static::find($triggeringItemId) : null;
 
         // Load commodity items to calculate quantities
-        $quotation->load('commodityItems');
+        $quotation->load(['commodityItems', 'selectedSchedule.carrier']);
         $commodityItems = $quotation->commodityItems;
         $totalCommodityQuantity = $commodityItems->sum('quantity') ?? 0;
+
+        // Auto-add matching parent articles when nothing is selected yet.
+        if ($commodityItems->isNotEmpty()) {
+            $existingParentCount = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+                ->whereIn('item_type', ['parent', 'standalone'])
+                ->count();
+
+            if ($existingParentCount === 0) {
+                $selectionService = app(SmartArticleSelectionService::class);
+                $selectionService->clearCache($quotation);
+                $distinctCommodityTypes = $commodityItems
+                    ->flatMap(fn ($item) => static::normalizeCommodityTypes($item))
+                    ->filter()
+                    ->unique()
+                    ->values();
+                $suggestionLimit = max(1, $distinctCommodityTypes->count());
+                $suggestions = $selectionService->getTopSuggestions($quotation, $suggestionLimit, 0);
+
+                foreach ($suggestions as $suggestion) {
+                    $article = $suggestion['article'] ?? null;
+                    if (!$article) {
+                        continue;
+                    }
+
+                    if (!$selectionService->isStrictlyEligible($quotation, $article)) {
+                        \Log::warning('Auto-add skipped by strict alignment', [
+                            'quotation_request_id' => $quotation->id,
+                            'article_id' => $article->id,
+                            'article_name' => $article->article_name,
+                        ]);
+                        continue;
+                    }
+
+                    $exists = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+                        ->where('article_cache_id', $article->id)
+                        ->exists();
+
+                    if ($exists) {
+                        continue;
+                    }
+
+                    \Log::info('Auto-adding suggested parent article', [
+                        'quotation_request_id' => $quotation->id,
+                        'article_id' => $article->id,
+                        'article_name' => $article->article_name,
+                    ]);
+                    $quotation->addArticle($article, 1);
+                }
+            }
+        }
 
         $itemsById = $commodityItems->keyBy('id');
         $childrenByBaseId = $commodityItems->groupBy('related_item_id');
