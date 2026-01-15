@@ -5,6 +5,7 @@ namespace Tests\Feature\Quotation;
 use App\Models\QuotationRequest;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
 class QuotationCreationTest extends TestCase
@@ -47,7 +48,7 @@ class QuotationCreationTest extends TestCase
         ], $overrides);
     }
 
-    /** @test */
+    #[Test]
     public function it_creates_quotation_with_unique_request_number()
     {
         $quotation = QuotationRequest::create($this->getBaseQuotationData([
@@ -63,7 +64,7 @@ class QuotationCreationTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function it_generates_unique_request_numbers_for_multiple_quotations()
     {
         $quotations = [];
@@ -81,7 +82,7 @@ class QuotationCreationTest extends TestCase
         $this->assertCount(3, $uniqueNumbers, 'All request numbers should be unique');
     }
 
-    /** @test */
+    #[Test]
     public function it_handles_soft_deleted_records_correctly()
     {
         // Create and soft delete a quotation
@@ -102,7 +103,7 @@ class QuotationCreationTest extends TestCase
         $this->assertNotEquals($firstNumber, $second->request_number, 'New quotation should not reuse soft-deleted request number');
     }
 
-    /** @test */
+    #[Test]
     public function it_requires_pol_and_pod_fields()
     {
         $quotation = QuotationRequest::create($this->getBaseQuotationData([
@@ -114,7 +115,7 @@ class QuotationCreationTest extends TestCase
         $this->assertNull($quotation->pod);
     }
 
-    /** @test */
+    #[Test]
     public function it_allows_optional_por_and_fdest_fields()
     {
         $quotation = QuotationRequest::create($this->getBaseQuotationData([
@@ -129,7 +130,7 @@ class QuotationCreationTest extends TestCase
         $this->assertEquals('Lagos', $quotation->pod);
     }
 
-    /** @test */
+    #[Test]
     public function it_validates_status_enum_values()
     {
         $quotation = QuotationRequest::create($this->getBaseQuotationData([
@@ -139,7 +140,7 @@ class QuotationCreationTest extends TestCase
         $this->assertEquals('invalid_status', $quotation->status);
     }
 
-    /** @test */
+    #[Test]
     public function it_initializes_cargo_details_as_json_array()
     {
         $quotation = QuotationRequest::create($this->getBaseQuotationData());
@@ -148,7 +149,7 @@ class QuotationCreationTest extends TestCase
         $this->assertEmpty($quotation->cargo_details);
     }
 
-    /** @test */
+    #[Test]
     public function it_saves_customer_reference_field()
     {
         $quotation = QuotationRequest::create($this->getBaseQuotationData([
@@ -158,7 +159,7 @@ class QuotationCreationTest extends TestCase
         $this->assertEquals('REF-12345', $quotation->customer_reference);
     }
 
-    /** @test */
+    #[Test]
     public function it_builds_routing_string_from_route_fields()
     {
         $quotation = QuotationRequest::create($this->getBaseQuotationData([
@@ -176,7 +177,7 @@ class QuotationCreationTest extends TestCase
         $this->assertNotNull($quotation);
     }
 
-    /** @test */
+    #[Test]
     public function it_sets_default_values_for_pricing_fields()
     {
         $quotation = QuotationRequest::create($this->getBaseQuotationData());

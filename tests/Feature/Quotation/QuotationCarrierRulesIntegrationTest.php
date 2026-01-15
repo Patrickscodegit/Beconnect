@@ -15,6 +15,7 @@ use App\Models\ShippingCarrier;
 use App\Models\ShippingSchedule;
 use App\Services\CarrierRules\CarrierRuleIntegrationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
 class QuotationCarrierRulesIntegrationTest extends TestCase
@@ -76,7 +77,7 @@ class QuotationCarrierRulesIntegrationTest extends TestCase
         ], $overrides));
     }
 
-    /** @test */
+    #[Test]
     public function it_selects_mapped_article_by_category_group(): void
     {
         $carrier = $this->createCarrier();
@@ -143,7 +144,7 @@ class QuotationCarrierRulesIntegrationTest extends TestCase
         $this->assertContains($article->id, $results);
     }
 
-    /** @test */
+    #[Test]
     public function it_resolves_port_ids_from_pol_pod_strings(): void
     {
         $pol = $this->createPort('Antwerp', 'ANR');
@@ -176,7 +177,7 @@ class QuotationCarrierRulesIntegrationTest extends TestCase
         $this->assertContains($article->id, $results);
     }
 
-    /** @test */
+    #[Test]
     public function it_calculates_lm_quantity_with_schedule_context(): void
     {
         $carrier = $this->createCarrier();
@@ -234,7 +235,7 @@ class QuotationCarrierRulesIntegrationTest extends TestCase
         $this->assertSame('500.00', $quotationArticle->subtotal);
     }
 
-    /** @test */
+    #[Test]
     public function it_adds_surcharge_article_from_rule(): void
     {
         $carrier = $this->createCarrier();

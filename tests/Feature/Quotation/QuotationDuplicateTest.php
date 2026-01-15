@@ -6,6 +6,7 @@ use App\Models\QuotationRequest;
 use App\Models\RobawsArticleCache;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 class QuotationDuplicateTest extends TestCase
 {
@@ -44,7 +45,7 @@ class QuotationDuplicateTest extends TestCase
         ], $overrides);
     }
 
-    /** @test */
+    #[Test]
     public function it_duplicates_quotation_with_new_unique_request_number()
     {
         $original = QuotationRequest::create($this->baseQuotationData([
@@ -80,7 +81,7 @@ class QuotationDuplicateTest extends TestCase
         $this->assertNull($duplicate->robaws_offer_id);
     }
 
-    /** @test */
+    #[Test]
     public function it_copies_articles_from_original_quotation()
     {
         $original = QuotationRequest::create($this->baseQuotationData());
@@ -139,7 +140,7 @@ class QuotationDuplicateTest extends TestCase
         $this->assertEquals(2, $duplicate->articles->first()->pivot->quantity);
     }
 
-    /** @test */
+    #[Test]
     public function it_resets_pricing_fields_in_duplicate()
     {
         $original = QuotationRequest::create($this->baseQuotationData([
@@ -169,7 +170,7 @@ class QuotationDuplicateTest extends TestCase
         $this->assertEquals(0, $duplicate->total_incl_vat);
     }
 
-    /** @test */
+    #[Test]
     public function it_preserves_customer_and_route_information()
     {
         $original = QuotationRequest::create($this->baseQuotationData([
@@ -195,7 +196,7 @@ class QuotationDuplicateTest extends TestCase
         $this->assertEquals('Abuja', $duplicate->fdest);
     }
 
-    /** @test */
+    #[Test]
     public function it_clears_robaws_sync_information()
     {
         $original = QuotationRequest::create($this->baseQuotationData([

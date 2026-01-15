@@ -6,6 +6,7 @@ use App\Models\QuotationRequest;
 use App\Models\QuotationRequestArticle;
 use App\Models\RobawsArticleCache;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
 class QuotationArticleQuantityPrecisionTest extends TestCase
@@ -50,7 +51,7 @@ class QuotationArticleQuantityPrecisionTest extends TestCase
         ], $overrides));
     }
 
-    /** @test */
+    #[Test]
     public function it_preserves_fractional_lm_quantity_and_subtotal_precision(): void
     {
         $quotation = $this->createQuotation();
@@ -74,7 +75,7 @@ class QuotationArticleQuantityPrecisionTest extends TestCase
         $this->assertSame('125.00', $article->subtotal);
     }
 
-    /** @test */
+    #[Test]
     public function it_preserves_fractional_cbm_quantity_and_subtotal_precision(): void
     {
         $quotation = $this->createQuotation();
