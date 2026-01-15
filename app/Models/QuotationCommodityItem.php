@@ -584,6 +584,15 @@ class QuotationCommodityItem extends Model
             $oldQuantity = $article->quantity;
             $unitType = strtoupper(trim($article->unit_type ?? ''));
 
+            if ($article->carrier_rule_applied) {
+                \Log::debug('Skipping recalculation for carrier rule article', [
+                    'article_id' => $article->id,
+                    'event_code' => $article->carrier_rule_event_code,
+                    'commodity_item_id' => $article->carrier_rule_commodity_item_id,
+                ]);
+                continue;
+            }
+
             // Check if this is a unit-count-based article (e.g., "Chassis nr")
             // These articles use stack_unit_count instead of stack count
             $isUnitCountBased = $unitType === 'CHASSIS NR';

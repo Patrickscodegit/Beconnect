@@ -213,6 +213,7 @@ class CarrierRuleIntegrationService
                 $existingArticle = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
                     ->where('article_cache_id', $draft['article_id'])
                     ->where('carrier_rule_event_code', $eventCode)
+                    ->where('carrier_rule_commodity_item_id', $item->id)
                     ->first();
             } else {
                 // Fallback: check by article ID only
