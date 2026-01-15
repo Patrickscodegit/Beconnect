@@ -1159,6 +1159,16 @@ class RobawsArticleCache extends Model
         $quotationPodCode = null;
         $quotationPolPortId = $quotation->pol_port_id ?? null;
         $quotationPodPortId = $quotation->pod_port_id ?? null;
+        if ((!$quotationPolPortId || !$quotationPodPortId) && ($quotation->pol || $quotation->pod)) {
+            $resolver = app(\App\Services\Ports\PortResolutionService::class);
+            $mode = ($quotation->simple_service_type === 'AIR') ? 'AIR' : 'SEA';
+            if (!$quotationPolPortId && $quotation->pol) {
+                $quotationPolPortId = $resolver->resolveOne($quotation->pol, $mode)?->id;
+            }
+            if (!$quotationPodPortId && $quotation->pod) {
+                $quotationPodPortId = $resolver->resolveOne($quotation->pod, $mode)?->id;
+            }
+        }
         if ($quotation->pol && $quotation->pod) {
             $quotationPolCode = $this->extractPortCode($quotation->pol);
             $quotationPodCode = $this->extractPortCode($quotation->pod);
@@ -1214,9 +1224,11 @@ class RobawsArticleCache extends Model
                     ]);
                     
                     $q->whereIn('id', $mappedArticleIds);
-                    if ($quotationPolPortId && $quotationPodPortId) {
-                        $q->where('pol_port_id', $quotationPolPortId)
-                            ->where('pod_port_id', $quotationPodPortId);
+                    if ($quotationPolPortId) {
+                        $q->where('pol_port_id', $quotationPolPortId);
+                    }
+                    if ($quotationPodPortId) {
+                        $q->where('pod_port_id', $quotationPodPortId);
                     }
                     
                     // #region agent log
@@ -1238,58 +1250,68 @@ class RobawsArticleCache extends Model
                     ]);
                     // No mappings exist - fall back to POL/POD matching
                     $q->where(function ($polPodQuery) use ($quotation, $quotationPolCode, $quotationPodCode, $quotationPolPortId, $quotationPodPortId, $useIlike) {
-                    if ($quotationPolPortId && $quotationPodPortId) {
-                        $polPodQuery->where('pol_port_id', $quotationPolPortId)
-                            ->where('pod_port_id', $quotationPodPortId);
-                        return;
+                    if ($quotationPolPortId || $quotationPodPortId) {
+                        if ($quotationPolPortId) {
+                            $polPodQuery->where('pol_port_id', $quotationPolPortId);
+                        }
+                        if ($quotationPodPortId) {
+                            $polPodQuery->where('pod_port_id', $quotationPodPortId);
+                        }
+                        if ($quotationPolPortId && $quotationPodPortId) {
+                            return;
+                        }
                     }
-                    // POL matching
-                    $polPodQuery->where(function ($polQuery) use ($quotation, $quotationPolCode, $useIlike) {
-                        if ($quotationPolCode) {
-                            // Match by port code in parentheses (more flexible but still exact code match)
-                            $polQuery->where(function ($codeQuery) use ($quotationPolCode, $quotation, $useIlike) {
-                                // Match if article POL contains the port code in parentheses
-                                if ($useIlike) {
-                                    $codeQuery->where('pol', 'ILIKE', '%(' . $quotationPolCode . ')%')
-                                        ->orWhere('pol', 'ILIKE', $quotation->pol);
-                                } else {
-                                    $codeQuery->whereRaw('LOWER(pol) LIKE LOWER(?)', ['%(' . $quotationPolCode . ')%'])
-                                        ->orWhereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
-                                }
-                            });
-                        } else {
-                            // No code available - exact string match
-                            if ($useIlike) {
-                                $polQuery->where('pol', 'ILIKE', $quotation->pol);
+                    // POL matching (only if no port ID available)
+                    if (!$quotationPolPortId) {
+                        $polPodQuery->where(function ($polQuery) use ($quotation, $quotationPolCode, $useIlike) {
+                            if ($quotationPolCode) {
+                                // Match by port code in parentheses (more flexible but still exact code match)
+                                $polQuery->where(function ($codeQuery) use ($quotationPolCode, $quotation, $useIlike) {
+                                    // Match if article POL contains the port code in parentheses
+                                    if ($useIlike) {
+                                        $codeQuery->where('pol', 'ILIKE', '%(' . $quotationPolCode . ')%')
+                                            ->orWhere('pol', 'ILIKE', $quotation->pol);
+                                    } else {
+                                        $codeQuery->whereRaw('LOWER(pol) LIKE LOWER(?)', ['%(' . $quotationPolCode . ')%'])
+                                            ->orWhereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
+                                    }
+                                });
                             } else {
-                                $polQuery->whereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
+                                // No code available - exact string match
+                                if ($useIlike) {
+                                    $polQuery->where('pol', 'ILIKE', $quotation->pol);
+                                } else {
+                                    $polQuery->whereRaw('LOWER(TRIM(pol)) = LOWER(TRIM(?))', [$quotation->pol]);
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                     
-                    // POD matching
-                    $polPodQuery->where(function ($podQuery) use ($quotation, $quotationPodCode, $useIlike) {
-                        if ($quotationPodCode) {
-                            // Match by port code in parentheses
-                            $podQuery->where(function ($codeQuery) use ($quotationPodCode, $quotation, $useIlike) {
-                                // Match if article POD contains the port code in parentheses
-                                if ($useIlike) {
-                                    $codeQuery->where('pod', 'ILIKE', '%(' . $quotationPodCode . ')%')
-                                        ->orWhere('pod', 'ILIKE', $quotation->pod);
-                                } else {
-                                    $codeQuery->whereRaw('LOWER(pod) LIKE LOWER(?)', ['%(' . $quotationPodCode . ')%'])
-                                        ->orWhereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
-                                }
-                            });
-                        } else {
-                            // No code available - exact string match
-                            if ($useIlike) {
-                                $podQuery->where('pod', 'ILIKE', $quotation->pod);
+                    // POD matching (only if no port ID available)
+                    if (!$quotationPodPortId) {
+                        $polPodQuery->where(function ($podQuery) use ($quotation, $quotationPodCode, $useIlike) {
+                            if ($quotationPodCode) {
+                                // Match by port code in parentheses
+                                $podQuery->where(function ($codeQuery) use ($quotationPodCode, $quotation, $useIlike) {
+                                    // Match if article POD contains the port code in parentheses
+                                    if ($useIlike) {
+                                        $codeQuery->where('pod', 'ILIKE', '%(' . $quotationPodCode . ')%')
+                                            ->orWhere('pod', 'ILIKE', $quotation->pod);
+                                    } else {
+                                        $codeQuery->whereRaw('LOWER(pod) LIKE LOWER(?)', ['%(' . $quotationPodCode . ')%'])
+                                            ->orWhereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
+                                    }
+                                });
                             } else {
-                                $podQuery->whereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
+                                // No code available - exact string match
+                                if ($useIlike) {
+                                    $podQuery->where('pod', 'ILIKE', $quotation->pod);
+                                } else {
+                                    $podQuery->whereRaw('LOWER(TRIM(pod)) = LOWER(TRIM(?))', [$quotation->pod]);
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                     });
                 }
             });
@@ -1300,6 +1322,9 @@ class RobawsArticleCache extends Model
                 // If mappings exist, ONLY show mapped articles (don't fall back to POL matching)
                 if (!empty($mappedArticleIds)) {
                     $q->whereIn('id', $mappedArticleIds);
+                    if ($quotationPolPortId) {
+                        $q->where('pol_port_id', $quotationPolPortId);
+                    }
                 } else {
                     // No mappings exist - fall back to POL matching
                     $q->where(function ($polQuery) use ($quotation, $quotationPolCode, $quotationPolPortId, $useIlike) {
@@ -1337,6 +1362,9 @@ class RobawsArticleCache extends Model
                 // If mappings exist, ONLY show mapped articles (don't fall back to POD matching)
                 if (!empty($mappedArticleIds)) {
                     $q->whereIn('id', $mappedArticleIds);
+                    if ($quotationPodPortId) {
+                        $q->where('pod_port_id', $quotationPodPortId);
+                    }
                 } else {
                     // No mappings exist - fall back to POD matching
                     $q->where(function ($podQuery) use ($quotation, $quotationPodCode, $quotationPodPortId, $useIlike) {

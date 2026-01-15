@@ -179,6 +179,28 @@ class QuotationRequest extends Model
                 }
             }
         });
+
+        static::saved(function ($quotationRequest) {
+            if (!$quotationRequest->wasChanged('selected_schedule_id')) {
+                return;
+            }
+
+            if (!$quotationRequest->selected_schedule_id) {
+                return;
+            }
+
+            \DB::afterCommit(function () use ($quotationRequest) {
+                $freshQuotation = $quotationRequest->fresh(['commodityItems', 'selectedSchedule.carrier']);
+                if (!$freshQuotation || $freshQuotation->commodityItems->isEmpty()) {
+                    return;
+                }
+
+                $integrationService = app(\App\Services\CarrierRules\CarrierRuleIntegrationService::class);
+                foreach ($freshQuotation->commodityItems as $item) {
+                    $integrationService->processCommodityItem($item);
+                }
+            });
+        });
     }
 
     /**
