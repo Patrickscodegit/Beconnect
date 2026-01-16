@@ -81,6 +81,7 @@ class QuotationRequest extends Model
         'intro_text',
         'end_text',
         'template_variables',
+        'carrier_clauses',
         // Assignment
         'assigned_to',
         'created_by',
@@ -90,6 +91,7 @@ class QuotationRequest extends Model
         'routing' => 'array',
         'cargo_details' => 'array',
         'template_variables' => 'array',
+        'carrier_clauses' => 'array',
         'preferred_departure_date' => 'date',
         'robaws_synced_at' => 'datetime',
         'quoted_at' => 'datetime',

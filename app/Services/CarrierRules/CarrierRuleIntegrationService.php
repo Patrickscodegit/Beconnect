@@ -17,7 +17,8 @@ use Illuminate\Support\Facades\Schema;
 class CarrierRuleIntegrationService
 {
     public function __construct(
-        private CarrierRuleEngine $engine
+        private CarrierRuleEngine $engine,
+        private CarrierRuleResolver $resolver
     ) {}
 
     /**
@@ -103,6 +104,9 @@ class CarrierRuleIntegrationService
 
             // Sync surcharge articles: remove old ones no longer applicable, add/update new ones
             $this->syncSurchargeArticles($quotation, $result->quoteLineDrafts, $item);
+
+            // Sync carrier clauses to quotation (for display on customer/admin/PDF)
+            $this->syncCarrierClauses($quotation, $input->carrierId, $input->podPortId, $input->vesselName, $input->vesselClass);
             
             // Remove articles that no longer match any commodity items (non-carrier-rule articles)
             $this->removeNonMatchingArticles($quotation);
@@ -124,6 +128,36 @@ class CarrierRuleIntegrationService
                 'trace' => $e->getTraceAsString(),
             ]);
         }
+    }
+
+    private function syncCarrierClauses(
+        QuotationRequest $quotation,
+        int $carrierId,
+        ?int $portId,
+        ?string $vesselName,
+        ?string $vesselClass
+    ): void {
+        $clauses = $this->resolver->resolveClauses(
+            $carrierId,
+            $portId,
+            $vesselName,
+            $vesselClass
+        );
+
+        $normalized = $clauses->map(function ($clause) {
+            return [
+                'carrier_id' => $clause->carrier_id,
+                'port_id' => $clause->port_id,
+                'vessel_name' => $clause->vessel_name,
+                'vessel_class' => $clause->vessel_class,
+                'clause_type' => $clause->clause_type,
+                'text' => $clause->text,
+                'sort_order' => $clause->sort_order,
+            ];
+        })->values()->toArray();
+
+        $quotation->carrier_clauses = $normalized;
+        $quotation->saveQuietly();
     }
 
     /**

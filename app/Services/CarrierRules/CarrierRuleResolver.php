@@ -7,6 +7,7 @@ use App\Models\CarrierArticleMapping;
 use App\Models\CarrierPortGroupMember;
 use App\Models\CarrierSurchargeRule;
 use App\Models\CarrierTransformRule;
+use App\Models\CarrierClause;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
@@ -412,6 +413,43 @@ class CarrierRuleResolver
         ]);
         
         return $filteredRules;
+    }
+
+    /**
+     * Resolve carrier clauses (can return multiple, ordered by sort_order)
+     */
+    public function resolveClauses(
+        int $carrierId,
+        ?int $portId,
+        ?string $vesselName = null,
+        ?string $vesselClass = null
+    ): Collection {
+        return CarrierClause::where('carrier_id', $carrierId)
+            ->active()
+            ->where(function ($q) use ($portId) {
+                $q->whereNull('port_id');
+
+                if ($portId !== null) {
+                    $q->orWhere('port_id', $portId);
+                }
+            })
+            ->where(function ($q) use ($vesselName) {
+                $q->whereNull('vessel_name');
+
+                if ($vesselName !== null) {
+                    $q->orWhere('vessel_name', $vesselName);
+                }
+            })
+            ->where(function ($q) use ($vesselClass) {
+                $q->whereNull('vessel_class');
+
+                if ($vesselClass !== null) {
+                    $q->orWhere('vessel_class', $vesselClass);
+                }
+            })
+            ->orderBy('clause_type')
+            ->orderBy('sort_order')
+            ->get();
     }
     
     /**

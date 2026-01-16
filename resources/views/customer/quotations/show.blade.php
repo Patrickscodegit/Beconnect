@@ -452,6 +452,30 @@
                 @endif
             </div>
 
+            @php
+                $carrierClauses = collect($quotationRequest->carrier_clauses ?? []);
+            @endphp
+            @if($carrierClauses->isNotEmpty())
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-semibold text-gray-900 mb-4">
+                        <i class="fas fa-file-contract mr-2 text-blue-600"></i>Carrier Clauses
+                    </h2>
+
+                    <div class="space-y-4">
+                        @foreach($carrierClauses->groupBy('clause_type') as $type => $clauses)
+                            <div>
+                                <h3 class="text-sm font-semibold text-gray-700 mb-2">{{ ucfirst(strtolower($type)) }}</h3>
+                                <ul class="list-disc pl-5 space-y-1 text-sm text-gray-700">
+                                    @foreach($clauses as $clause)
+                                        <li>{{ $clause['text'] ?? '' }}</li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
             <!-- Uploaded Files -->
             @if($quotationRequest->files->count() > 0)
                 <div class="bg-white rounded-lg shadow p-6">
