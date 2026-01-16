@@ -740,34 +740,73 @@ class QuotationRequestResource extends Resource
                                 }
                             })
                             ->searchable()
-                            ->helperText('Optional: Select a sailing to filter carrier-specific articles')
+                            ->helperText('Optional: Select a sailing to filter carrier-specific articles. Carrier is auto-set on selection.')
                             ->columnSpanFull(),
                             
-                        Forms\Components\Placeholder::make('sailing_details')
-                            ->label('Selected Sailing Details')
+                        Forms\Components\Placeholder::make('sailing_summary')
+                            ->label('Selected Sailing (Summary)')
                             ->content(function (Forms\Get $get) {
                                 $scheduleId = $get('selected_schedule_id');
                                 if (!$scheduleId) {
                                     return 'No sailing selected';
                                 }
-                                
+
                                 $schedule = \App\Models\ShippingSchedule::with(['carrier', 'polPort', 'podPort'])
                                     ->find($scheduleId);
-                                    
                                 if (!$schedule) {
                                     return 'Sailing not found';
                                 }
-                                
+
                                 return new \Illuminate\Support\HtmlString(sprintf(
-                                    '<div class="text-sm"><strong>%s</strong><br>Route: %s → %s<br>Service: %s<br>Transit: %d days<br>Next Sailing: %s</div>',
+                                    '<div class="text-sm font-semibold">%s | %s → %s | %s | %d days</div>',
                                     $schedule->carrier->name,
                                     $schedule->polPort->name,
                                     $schedule->podPort->name,
-                                    $schedule->service_name ?? 'N/A',
-                                    $schedule->transit_days ?? 0,
-                                    $schedule->next_sailing_date?->format('l, F j, Y') ?? 'TBA'
+                                    $schedule->next_sailing_date?->format('M d, Y') ?? 'TBA',
+                                    $schedule->transit_days ?? 0
                                 ));
                             })
+                            ->visible(fn (Forms\Get $get) => $get('selected_schedule_id'))
+                            ->columnSpanFull(),
+
+                        Forms\Components\Section::make('Selected Sailing Details')
+                            ->schema([
+                                Forms\Components\Placeholder::make('sailing_details')
+                                    ->label('')
+                                    ->content(function (Forms\Get $get) {
+                                        $scheduleId = $get('selected_schedule_id');
+                                        if (!$scheduleId) {
+                                            return 'No sailing selected';
+                                        }
+
+                                        $schedule = \App\Models\ShippingSchedule::with(['carrier', 'polPort', 'podPort'])
+                                            ->find($scheduleId);
+                                        if (!$schedule) {
+                                            return 'Sailing not found';
+                                        }
+
+                                        return new \Illuminate\Support\HtmlString(sprintf(
+                                            '<div class="text-sm">
+                                                <strong>%s</strong><br>
+                                                Route: %s → %s<br>
+                                                Service: %s<br>
+                                                Vessel: %s<br>
+                                                Transit: %d days<br>
+                                                Next Sailing: %s
+                                            </div>',
+                                            $schedule->carrier->name,
+                                            $schedule->polPort->name,
+                                            $schedule->podPort->name,
+                                            $schedule->service_name ?? 'N/A',
+                                            $schedule->vessel_name ?? 'TBA',
+                                            $schedule->transit_days ?? 0,
+                                            $schedule->next_sailing_date?->format('l, F j, Y') ?? 'TBA'
+                                        ));
+                                    })
+                                    ->columnSpanFull(),
+                            ])
+                            ->collapsible()
+                            ->collapsed()
                             ->visible(fn (Forms\Get $get) => $get('selected_schedule_id'))
                             ->columnSpanFull(),
                             
@@ -798,6 +837,12 @@ class QuotationRequestResource extends Resource
                             ->customerRole(fn ($get) => $get('customer_role')) // Keep for backward compatibility
                             ->discountPercentage(fn ($get) => $get('discount_percentage') ?? 0)
                             ->vatRate(fn ($get) => $get('vat_rate') ?? 21)
+                            ->columnSpanFull(),
+
+                        Forms\Components\Placeholder::make('pricing_pending_note')
+                            ->label('')
+                            ->content('Totals are indicative until the quotation is marked as quoted.')
+                            ->visible(fn (Forms\Get $get) => $get('status') !== 'quoted')
                             ->columnSpanFull(),
                     ])
                     ->collapsible(),

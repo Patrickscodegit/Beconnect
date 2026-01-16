@@ -151,7 +151,10 @@
         <div class="rounded-lg border border-gray-300 bg-white p-4 dark:border-gray-600 dark:bg-gray-900">
             <div class="mb-3 flex items-center justify-between">
                 <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Selected Articles</h4>
-                <span class="text-sm font-medium text-gray-500 dark:text-gray-400" x-text="articles.length + ' article(s)'"></span>
+                <span class="text-sm font-medium text-gray-500 dark:text-gray-400">
+                    <span x-text="articles.length + ' total'"></span>
+                    <span class="ml-2" x-text="'(' + articles.filter(a => a.is_parent).length + ' parent, ' + articles.filter(a => a.is_child).length + ' child)'"></span>
+                </span>
             </div>
             
             {{-- Empty State --}}
@@ -176,6 +179,18 @@
                                     ↳
                                 </span>
                                 <p class="text-sm font-medium text-gray-900 dark:text-white" x-text="article.description"></p>
+                                <span
+                                    x-show="article.is_parent"
+                                    class="inline-flex items-center rounded bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800 dark:bg-primary-900 dark:text-primary-200"
+                                >
+                                    Parent
+                                </span>
+                                <span
+                                    x-show="article.is_child"
+                                    class="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                                >
+                                    Auto-added
+                                </span>
                             </div>
                             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" x-show="article.article_code" x-text="'Code: ' + article.article_code"></p>
                         </div>
