@@ -36,5 +36,39 @@ class EditQuotationRequest extends EditRecord
         
         return $data;
     }
+
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        $record = $this->getRecord();
+        if (!$record) {
+            return $data;
+        }
+
+        $record->loadMissing('articles');
+
+        $data['articles'] = $record->articles->map(function ($article) {
+            $pivot = $article->pivot;
+            $unitPrice = $pivot->unit_price ?? $pivot->selling_price ?? $article->unit_price ?? 0;
+            $unitType = $pivot->unit_type ?? $article->unit_type ?? 'unit';
+            $quantity = $pivot->quantity ?? 1;
+            $isChild = ($pivot->item_type ?? null) === 'child' || !empty($pivot->parent_article_id);
+            $isParent = ($pivot->item_type ?? null) === 'parent' || (bool) ($article->is_parent_item ?? false);
+
+            return [
+                'id' => $article->id,
+                'robaws_id' => $article->robaws_article_id,
+                'description' => $article->sales_name ?? $article->description ?? $article->article_name,
+                'article_code' => $article->article_code,
+                'unit_price' => $unitPrice,
+                'unit_type' => $unitType,
+                'quantity' => $quantity,
+                'is_parent' => $isParent,
+                'is_child' => $isChild,
+                'parent_id' => $pivot->parent_article_id,
+            ];
+        })->values()->toArray();
+
+        return $data;
+    }
 }
 
