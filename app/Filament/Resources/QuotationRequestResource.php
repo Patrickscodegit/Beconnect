@@ -649,7 +649,7 @@ class QuotationRequestResource extends Resource
                     ->schema([
                         Forms\Components\Placeholder::make('schedule_availability_status')
                             ->label('')
-                            ->content(function (Forms\Get $get) {
+                            ->content(function (Forms\Get $get, $livewire) {
                                 $pol = $get('pol');
                                 $pod = $get('pod');
                                 
@@ -662,9 +662,40 @@ class QuotationRequestResource extends Resource
                                     );
                                 }
                                 
-                                // Check if custom ports are used (not in database)
-                                $polIsCustom = !\App\Models\Port::where('name', 'like', "%{$pol}%")->exists();
-                                $podIsCustom = !\App\Models\Port::where('name', 'like', "%{$pod}%")->exists();
+                                // Check if custom ports are used by checking if pol_port_id/pod_port_id are null
+                                // If the port was resolved during save, these IDs will be set; if custom, they'll be null
+                                $polPortId = null;
+                                $podPortId = null;
+                                
+                                // Get port IDs from record if available (for edit mode)
+                                if (isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
+                                    try {
+                                        $record = $livewire->getRecord();
+                                        $polPortId = $record?->pol_port_id ?? null;
+                                        $podPortId = $record?->pod_port_id ?? null;
+                                    } catch (\Throwable $e) {
+                                        // Silent fail, will fall through to form state check
+                                    }
+                                }
+                                
+                                // Fallback: try to get from form state (if fields exist in form)
+                                if ($polPortId === null) {
+                                    $polPortId = $get('pol_port_id');
+                                }
+                                if ($podPortId === null) {
+                                    $podPortId = $get('pod_port_id');
+                                }
+                                
+                                // Port is custom if pol_port_id/pod_port_id is null (couldn't be resolved)
+                                // For new forms without record, fall back to checking ports table
+                                if ($polPortId === null && $podPortId === null && (!isset($livewire) || !is_object($livewire) || !method_exists($livewire, 'getRecord'))) {
+                                    // Fallback for new forms: check if port names exist in database (exact match)
+                                    $polIsCustom = !\App\Models\Port::findByNameInsensitive($pol);
+                                    $podIsCustom = !\App\Models\Port::findByNameInsensitive($pod);
+                                } else {
+                                    $polIsCustom = $polPortId === null;
+                                    $podIsCustom = $podPortId === null;
+                                }
                                 
                                 if ($polIsCustom || $podIsCustom) {
                                     return new \Illuminate\Support\HtmlString(
