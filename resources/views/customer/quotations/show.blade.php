@@ -778,6 +778,8 @@
             padding-left: 14pt;
             margin-top: 3pt;
             margin-bottom: 4pt;
+            break-inside: auto;
+            page-break-inside: auto;
         }
 
         .print-clauses li {
