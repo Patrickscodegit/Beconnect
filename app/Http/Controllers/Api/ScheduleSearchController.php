@@ -39,7 +39,7 @@ class ScheduleSearchController extends Controller
                       ->orWhere('code', 'like', "%{$pod}%");
                 })
                 ->where(function($q) {
-                    $q->whereDate('next_sailing_date', '>', now())
+                    $q->whereDate('next_sailing_date', '>=', today())
                       ->orWhereNull('next_sailing_date'); // Include TBA dates
                 })
                 ->with(['carrier', 'polPort', 'podPort'])
