@@ -3,6 +3,7 @@
 namespace Tests\Unit\Services\CarrierRules;
 
 use App\Models\CarrierAcceptanceRule;
+use App\Models\CarrierArticleMapping;
 use App\Models\CarrierCategoryGroup;
 use App\Models\CarrierCategoryGroupMember;
 use App\Models\CarrierSurchargeRule;
@@ -255,6 +256,54 @@ class CarrierRuleResolverTest extends TestCase
 
         $this->assertNotNull($result2);
         $this->assertEquals($groupRule->id, $result2->id);
+    }
+
+    /** @test */
+    public function it_resolves_article_mappings_with_numeric_category_group_ids()
+    {
+        $group = CarrierCategoryGroup::create([
+            'carrier_id' => $this->carrier->id,
+            'code' => 'CARS',
+            'display_name' => 'Cars',
+            'priority' => 10,
+            'is_active' => true,
+            'effective_from' => now()->subYear(),
+        ]);
+
+        CarrierCategoryGroupMember::create([
+            'carrier_category_group_id' => $group->id,
+            'vehicle_category' => 'car',
+            'is_active' => true,
+        ]);
+
+        $article = RobawsArticleCache::create([
+            'robaws_article_id' => 1001,
+            'article_name' => 'Test Car Article',
+            'category' => 'car',
+            'commodity_type' => 'Car',
+            'is_parent_item' => true,
+            'is_active' => true,
+            'shipping_carrier_id' => $this->carrier->id,
+            'last_synced_at' => now(),
+            'last_modified_at' => now(),
+        ]);
+
+        CarrierArticleMapping::create([
+            'carrier_id' => $this->carrier->id,
+            'article_id' => $article->id,
+            'category_group_ids' => [$group->id],
+            'port_ids' => [$this->port->id],
+            'is_active' => true,
+        ]);
+
+        $mappings = $this->resolver->resolveArticleMappings(
+            $this->carrier->id,
+            $this->port->id,
+            null,
+            $group->id
+        );
+
+        $this->assertTrue($mappings->pluck('article_id')->contains($article->id));
     }
 
     /** @test */

@@ -539,17 +539,18 @@ class CarrierRuleResolver
         }
         $portGroupIdVariants = [];
         if (!empty($inputPortGroupIds)) {
-            $portGroupIdVariants = array_values(array_unique(array_merge(
-                $inputPortGroupIds,
-                array_map('strval', $inputPortGroupIds)
-            )));
+            $portGroupIdVariants = array_values(array_merge(
+                array_map('intval', $inputPortGroupIds),
+                array_map(static fn ($id) => (string) $id, $inputPortGroupIds)
+            ));
         }
         $categoryGroupIdVariants = [];
         if ($categoryGroupId !== null) {
-            $categoryGroupIdVariants = array_values(array_unique([
-                (string) $categoryGroupId,
+            // Keep both numeric and string variants to match JSON arrays across DB types.
+            $categoryGroupIdVariants = [
                 (int) $categoryGroupId,
-            ]));
+                (string) $categoryGroupId,
+            ];
         }
 
         $query = CarrierArticleMapping::query()
