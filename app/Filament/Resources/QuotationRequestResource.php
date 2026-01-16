@@ -701,32 +701,70 @@ class QuotationRequestResource extends Resource
                             
                         Forms\Components\Select::make('selected_schedule_id')
                             ->label('Available Sailings')
-                            ->options(function (Forms\Get $get) {
+                            ->options(function (Forms\Get $get, $livewire) {
                                 $pol = $get('pol');
                                 $pod = $get('pod');
                                 $serviceType = $get('service_type');
                                 
-                                if (!$pol || !$pod) {
-                                    return [];
+                                // Get existing selected_schedule_id from record or form state
+                                $existingScheduleId = $get('selected_schedule_id');
+                                if (!$existingScheduleId && isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
+                                    try {
+                                        $record = $livewire->getRecord();
+                                        $existingScheduleId = $record?->selected_schedule_id ?? null;
+                                    } catch (\Throwable $e) {
+                                        // Silent fail, will use form state value
+                                    }
                                 }
                                 
-                                return \App\Models\ShippingSchedule::active()
-                                    ->whereHas('polPort', fn($q) => $q->where('name', 'like', "%{$pol}%"))
-                                    ->whereHas('podPort', fn($q) => $q->where('name', 'like', "%{$pod}%"))
-                                    // Service type filter removed - data format mismatch between config (RORO_IMPORT) and database (RORO)
-                                    // User already selected service type separately, showing all sailings for route is helpful
-                                    ->with(['carrier', 'polPort', 'podPort'])
-                                    ->get()
-                                    ->mapWithKeys(fn($schedule) => [
-                                        $schedule->id => sprintf(
+                                $options = [];
+                                
+                                // Always include existing selection if it exists
+                                if ($existingScheduleId) {
+                                    $existingSchedule = \App\Models\ShippingSchedule::active()
+                                        ->with(['carrier', 'polPort', 'podPort'])
+                                        ->find($existingScheduleId);
+                                    
+                                    if ($existingSchedule) {
+                                        $options[$existingSchedule->id] = sprintf(
+                                            '%s - %s → %s | Departs: %s | Transit: %d days',
+                                            $existingSchedule->carrier->name,
+                                            $existingSchedule->polPort->name,
+                                            $existingSchedule->podPort->name,
+                                            $existingSchedule->next_sailing_date?->format('M d, Y') ?? 'TBA',
+                                            $existingSchedule->transit_days ?? 0
+                                        );
+                                    }
+                                }
+                                
+                                // Add POL/POD filtered results if both are set
+                                if ($pol && $pod) {
+                                    $filteredSchedules = \App\Models\ShippingSchedule::active()
+                                        ->whereHas('polPort', fn($q) => $q->where('name', 'like', "%{$pol}%"))
+                                        ->whereHas('podPort', fn($q) => $q->where('name', 'like', "%{$pod}%"))
+                                        // Service type filter removed - data format mismatch between config (RORO_IMPORT) and database (RORO)
+                                        // User already selected service type separately, showing all sailings for route is helpful
+                                        ->with(['carrier', 'polPort', 'podPort'])
+                                        ->get();
+                                    
+                                    foreach ($filteredSchedules as $schedule) {
+                                        // Skip if already added as existing selection
+                                        if (isset($options[$schedule->id])) {
+                                            continue;
+                                        }
+                                        
+                                        $options[$schedule->id] = sprintf(
                                             '%s - %s → %s | Departs: %s | Transit: %d days',
                                             $schedule->carrier->name,
                                             $schedule->polPort->name,
                                             $schedule->podPort->name,
                                             $schedule->next_sailing_date?->format('M d, Y') ?? 'TBA',
                                             $schedule->transit_days ?? 0
-                                        )
-                                    ]);
+                                        );
+                                    }
+                                }
+                                
+                                return $options;
                             })
                             ->live(onBlur: false)
                             ->afterStateUpdated(function ($state, Forms\Set $set) {
