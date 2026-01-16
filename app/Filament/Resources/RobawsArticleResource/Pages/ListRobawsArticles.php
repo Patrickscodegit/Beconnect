@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\RobawsArticleResource\Pages;
 
 use App\Filament\Resources\RobawsArticleResource;
+use App\Jobs\RobawsArticlesFullSyncJob;
 use App\Services\Quotation\RobawsArticlesSyncService;
 use App\Jobs\SyncSingleArticleMetadataJob;
 use Filament\Actions;
@@ -11,6 +12,8 @@ use Filament\Resources\Components\Tab;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Contracts\Pagination\Paginator;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
 
 class ListRobawsArticles extends ListRecords
 {
@@ -128,26 +131,49 @@ class ListRobawsArticles extends ListRecords
                 ->modalSubmitActionLabel('Yes, full sync')
                 ->action(function () {
                     try {
-                        $syncService = app(RobawsArticlesSyncService::class);
-                        
-                        // 1. Sync all articles
-                        $result = $syncService->sync();
-                        
-                        // 2. Sync metadata from names
-                        $metadataResult = $syncService->syncAllMetadata();
-                        
-                        // 3. Automatically queue extra fields sync
-                        \App\Jobs\DispatchArticleExtraFieldsSyncJobs::dispatch(
-                            batchSize: 50,
-                            delaySeconds: 0.5
-                        );
-                        
+                        if (config('queue.default') === 'database' && !Schema::hasTable('jobs')) {
+                            Notification::make()
+                                ->title('Queue tables missing')
+                                ->body('The jobs table is missing, so background sync cannot run. Run migrations first.')
+                                ->danger()
+                                ->send();
+                            return;
+                        }
+
+                        if (Cache::get(RobawsArticlesFullSyncJob::RUNNING_CACHE_KEY)) {
+                            $batchId = Cache::get(RobawsArticlesFullSyncJob::BATCH_ID_CACHE_KEY);
+                            if ($batchId) {
+                                $batch = \Illuminate\Support\Facades\DB::table('job_batches')->where('id', $batchId)->first();
+                            } else {
+                                $batch = \Illuminate\Support\Facades\DB::table('job_batches')
+                                    ->where('name', 'robaws-articles-full-sync')
+                                    ->orderByDesc('created_at')
+                                    ->first();
+                            }
+
+                            $hasBatchJobs = $batch && ((int) $batch->total_jobs > 0);
+                            $queuedJobs = \Illuminate\Support\Facades\DB::table('jobs')->count();
+
+                            if (!$hasBatchJobs && $queuedJobs === 0) {
+                                Cache::forget(RobawsArticlesFullSyncJob::RUNNING_CACHE_KEY);
+                            } else {
+                                Notification::make()
+                                    ->title('Full sync already running')
+                                    ->body('A full sync is currently in progress. Check the Sync Progress page for status.')
+                                    ->warning()
+                                    ->send();
+                                return;
+                            }
+                        }
+
+                        RobawsArticlesFullSyncJob::dispatch();
+
                         $articleCount = \App\Models\RobawsArticleCache::count();
                         $estimatedMinutes = ceil(($articleCount * 0.5) / 60);
-                        
+
                         Notification::make()
                             ->title('Full sync started!')
-                            ->body("Synced {$result['synced']} articles. Metadata: {$metadataResult['success']}/{$metadataResult['total']}. Extra fields queued (~{$estimatedMinutes} min). Check Sync Progress page.")
+                            ->body("Full sync queued. Metadata + extra fields will be processed in background (~{$estimatedMinutes} min). Check Sync Progress page.")
                             ->success()
                             ->duration(12000)
                             ->send();

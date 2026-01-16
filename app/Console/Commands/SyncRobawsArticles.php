@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Jobs\SyncArticlesMetadataBulkJob;
+use App\Jobs\RobawsArticlesFullSyncJob;
 use App\Models\RobawsArticleCache;
 use App\Services\Quotation\RobawsArticlesSyncService;
 use Illuminate\Console\Command;
@@ -14,7 +15,8 @@ class SyncRobawsArticles extends Command
                             {--incremental : Only sync articles changed since last sync (recommended for scheduled runs)}
                             {--metadata-only : Only sync metadata for existing articles}
                             {--skip-metadata : Skip automatic metadata sync after article sync}
-                            {--use-api : Use Robaws API for metadata (slower, more complete data)}';
+                            {--use-api : Use Robaws API for metadata (slower, more complete data)}
+                            {--sync-now : Run synchronously instead of dispatching jobs}';
     
     protected $description = 'Sync articles from Robaws Articles API';
 
@@ -54,23 +56,39 @@ class SyncRobawsArticles extends Command
                     $this->info('ℹ️  Using fast extraction (no API calls, except for parent items)');
                 }
                 
-                $result = $syncService->syncAllMetadata(useApi: $useApi);
-                
-                $this->info("✅ Metadata sync completed!");
-                $this->table(
-                    ['Metric', 'Value'],
-                    [
-                        ['Total Articles', $result['total']],
-                        ['Success', $result['success']],
-                        ['Failed', $result['failed']],
-                    ]
-                );
+                if ($this->option('sync-now')) {
+                    $result = $syncService->syncAllMetadata(useApi: $useApi);
+                    
+                    $this->info("✅ Metadata sync completed!");
+                    $this->table(
+                        ['Metric', 'Value'],
+                        [
+                            ['Total Articles', $result['total']],
+                            ['Success', $result['success']],
+                            ['Failed', $result['failed']],
+                        ]
+                    );
+                } else {
+                    SyncArticlesMetadataBulkJob::dispatch(
+                        articleIds: 'all',
+                        chunkSize: 100,
+                        delaySeconds: 0.25,
+                        useApi: $useApi
+                    );
+                    $this->info('✅ Metadata sync queued (check Sync Progress page)');
+                }
                 return Command::SUCCESS;
             }
             
             // Option 3: Full article sync (with or without metadata)
             $this->info('Starting Robaws articles sync...');
             
+            if (!$this->option('sync-now')) {
+                RobawsArticlesFullSyncJob::dispatch(rebuildCache: (bool) $this->option('rebuild'));
+                $this->info('✅ Full sync queued (check Sync Progress page)');
+                return Command::SUCCESS;
+            }
+
             if ($this->option('rebuild')) {
                 $this->warn('Rebuilding entire article cache...');
                 $result = $syncService->rebuildCache();

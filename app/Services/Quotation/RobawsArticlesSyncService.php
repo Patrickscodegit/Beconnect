@@ -22,6 +22,7 @@ class RobawsArticlesSyncService
     protected ArticleSyncEnhancementService $enhancementService;
     protected RobawsFieldMapper $fieldMapper;
     protected ArticleTransportModeResolver $transportModeResolver;
+    protected PortResolutionService $portResolver;
 
     public function __construct(
         RobawsApiClient $apiClient, 
@@ -29,7 +30,8 @@ class RobawsArticlesSyncService
         RobawsArticleProvider $articleProvider,
         ArticleSyncEnhancementService $enhancementService,
         RobawsFieldMapper $fieldMapper,
-        ArticleTransportModeResolver $transportModeResolver
+        ArticleTransportModeResolver $transportModeResolver,
+        PortResolutionService $portResolver
     )
     {
         $this->apiClient = $apiClient;
@@ -38,6 +40,7 @@ class RobawsArticlesSyncService
         $this->enhancementService = $enhancementService;
         $this->fieldMapper = $fieldMapper;
         $this->transportModeResolver = $transportModeResolver;
+        $this->portResolver = $portResolver;
     }
 
     /**
@@ -46,43 +49,40 @@ class RobawsArticlesSyncService
     public function sync(): array
     {
         Log::info('Starting direct articles API sync');
-        
-        $result = $this->apiClient->getAllArticlesPaginated();
-        
-        if (!$result['success']) {
-            Log::error('Articles API sync failed', ['error' => $result['error'] ?? 'Unknown']);
-            throw new \RuntimeException('Failed to fetch articles from Robaws API');
-        }
-        
-        $articles = $result['articles'];
+
         $synced = 0;
         $errors = 0;
-        
-        foreach ($articles as $articleData) {
-            try {
-                // Only fetch full details if extraFields not in list API response
-                // List API may not include extraFields, so we check first
-                $needsFullDetails = empty($articleData['extraFields']);
-                $this->processArticle($articleData, fetchFullDetails: $needsFullDetails);
-                $synced++;
-            } catch (\Exception $e) {
-                $errors++;
-                Log::warning('Failed to process article', [
-                    'article_id' => $articleData['id'] ?? 'unknown',
-                    'error' => $e->getMessage()
-                ]);
+        $totalArticles = 0;
+
+        $this->apiClient->forEachArticlePage(function (array $articles, int $page, int $totalItems) use (&$synced, &$errors, &$totalArticles) {
+            $totalArticles = $totalItems;
+            foreach ($articles as $articleData) {
+                try {
+                    // Only fetch full details if extraFields not in list API response
+                    // List API may not include extraFields, so we check first
+                    $needsFullDetails = empty($articleData['extraFields']);
+                    $this->processArticle($articleData, fetchFullDetails: $needsFullDetails);
+                    $synced++;
+                } catch (\Exception $e) {
+                    $errors++;
+                    Log::warning('Failed to process article', [
+                        'article_id' => $articleData['id'] ?? 'unknown',
+                        'error' => $e->getMessage()
+                    ]);
+                }
             }
-        }
+            return true;
+        });
         
         Log::info('Direct articles API sync completed', [
-            'total_articles' => count($articles),
+            'total_articles' => $totalArticles,
             'synced' => $synced,
             'errors' => $errors
         ]);
         
         return [
             'success' => true,
-            'total' => count($articles),
+            'total' => $totalArticles,
             'synced' => $synced,
             'errors' => $errors
         ];
@@ -469,11 +469,9 @@ class RobawsArticlesSyncService
         }
 
         // Resolve port foreign keys using PortResolutionService
-        $portResolver = app(PortResolutionService::class);
-
         // Resolve POL port
         if (!empty($data['pol_code'])) {
-            $polPort = $portResolver->resolveOne($data['pol_code'], 'SEA');
+            $polPort = $this->portResolver->resolveOne($data['pol_code'], 'SEA');
             $data['pol_port_id'] = $polPort?->id;
         } else {
             $data['pol_port_id'] = null;
@@ -481,7 +479,7 @@ class RobawsArticlesSyncService
 
         // Resolve POD port
         if (!empty($data['pod_code'])) {
-            $podPort = $portResolver->resolveOne($data['pod_code'], 'SEA');
+            $podPort = $this->portResolver->resolveOne($data['pod_code'], 'SEA');
             $data['pod_port_id'] = $podPort?->id;
         } else {
             $data['pod_port_id'] = null;
