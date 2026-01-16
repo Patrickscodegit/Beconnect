@@ -3,6 +3,11 @@
         
         {{-- Status Card --}}
         <div class="rounded-lg border p-6 {{ $this->getSyncStatus() === 'running' ? 'border-primary-300 bg-primary-50 dark:border-primary-700 dark:bg-primary-950' : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900' }}">
+            @if($warning = $this->getStaleSyncWarning())
+                <div class="mb-4 rounded-md border border-warning-300 bg-warning-50 p-3 text-sm text-warning-800 dark:border-warning-700 dark:bg-warning-950 dark:text-warning-200">
+                    {{ $warning }}
+                </div>
+            @endif
             <div class="flex items-center justify-between">
                 <div>
                     <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
@@ -49,7 +54,35 @@
         {{-- Queue Stats --}}
         @php
             $queueStats = $this->getQueueStats();
+            $batchStats = $this->getBatchStats();
+            $queueReadiness = $this->getQueueReadiness();
+            $queueDiagnostics = $this->getQueueDiagnostics();
+            $lastSyncLog = $this->getLastSyncLog();
         @endphp
+
+        @if(!empty($queueStats['error']))
+            <x-filament::card>
+                <div class="rounded-md border border-danger-300 bg-danger-50 p-3 text-sm text-danger-800 dark:border-danger-700 dark:bg-danger-950 dark:text-danger-200">
+                    Queue stats error: {{ $queueStats['error'] }}
+                </div>
+            </x-filament::card>
+        @endif
+
+        @if(!empty($batchStats['error']))
+            <x-filament::card>
+                <div class="rounded-md border border-danger-300 bg-danger-50 p-3 text-sm text-danger-800 dark:border-danger-700 dark:bg-danger-950 dark:text-danger-200">
+                    Batch stats error: {{ $batchStats['error'] }}
+                </div>
+            </x-filament::card>
+        @endif
+
+        @if(!empty($queueDiagnostics['error']))
+            <x-filament::card>
+                <div class="rounded-md border border-danger-300 bg-danger-50 p-3 text-sm text-danger-800 dark:border-danger-700 dark:bg-danger-950 dark:text-danger-200">
+                    Queue diagnostics error: {{ $queueDiagnostics['error'] }}
+                </div>
+            </x-filament::card>
+        @endif
         
         <div class="grid gap-4 md:grid-cols-3">
             <x-filament::card>
@@ -85,11 +118,108 @@
                 </div>
             </x-filament::card>
         </div>
+
+        @if(!empty($batchStats['has_batch']))
+            <x-filament::card>
+                <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">Full Sync Batch</h3>
+                <div class="grid gap-4 md:grid-cols-4">
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-gray-900 dark:text-white">
+                            {{ $batchStats['total_jobs'] }}
+                        </div>
+                        <div class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            Total Jobs
+                        </div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-gray-900 dark:text-white">
+                            {{ $batchStats['processed_jobs'] }}
+                        </div>
+                        <div class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            Processed
+                        </div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-gray-900 dark:text-white">
+                            {{ $batchStats['pending_jobs'] }}
+                        </div>
+                        <div class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            Pending
+                        </div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold {{ $batchStats['failed_jobs'] > 0 ? 'text-red-600' : 'text-green-600' }}">
+                            {{ $batchStats['failed_jobs'] }}
+                        </div>
+                        <div class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            Failed
+                        </div>
+                    </div>
+                </div>
+            </x-filament::card>
+        @endif
+
+        <div class="grid gap-4 md:grid-cols-2">
+            <x-filament::card>
+                <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">Queue Readiness</h3>
+                <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                    <div>Connection: <span class="font-medium">{{ $queueReadiness['connection'] }}</span></div>
+                    <div>Jobs table: <span class="font-medium">{{ $queueReadiness['jobs_table'] ? 'OK' : 'Missing' }}</span></div>
+                    <div>Batch table: <span class="font-medium">{{ $queueReadiness['batches_table'] ? 'OK' : 'Missing' }}</span></div>
+                    <div>Failed jobs table: <span class="font-medium">{{ $queueReadiness['failed_table'] ? 'OK' : 'Missing' }}</span></div>
+                </div>
+                @if($queueReadiness['is_sync'])
+                    <div class="mt-3 rounded-md border border-warning-300 bg-warning-50 p-2 text-sm text-warning-800 dark:border-warning-700 dark:bg-warning-950 dark:text-warning-200">
+                        Queue connection is set to sync. Background jobs will run inline and may still time out.
+                    </div>
+                @endif
+            </x-filament::card>
+
+            <x-filament::card>
+                <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">Queue Diagnostics</h3>
+                @if($queueDiagnostics['has_jobs_table'])
+                    <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                        <div>Queue size: <span class="font-medium">{{ $queueDiagnostics['queue_size'] }}</span></div>
+                        <div>Oldest job: <span class="font-medium">{{ $queueDiagnostics['oldest_job_at'] ?? 'N/A' }}</span></div>
+                        <div>Latest job: <span class="font-medium">{{ $queueDiagnostics['latest_job_at'] ?? 'N/A' }}</span></div>
+                    </div>
+                @else
+                    <div class="text-sm text-gray-600 dark:text-gray-400">Jobs table not found.</div>
+                @endif
+            </x-filament::card>
+        </div>
+
+        <x-filament::card>
+            <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">Last Full Sync</h3>
+            @if($lastSyncLog)
+                <div class="grid gap-4 md:grid-cols-4 text-sm text-gray-700 dark:text-gray-300">
+                    <div>Started: <span class="font-medium">{{ $lastSyncLog->started_at }}</span></div>
+                    <div>Completed: <span class="font-medium">{{ $lastSyncLog->completed_at ?? 'Running' }}</span></div>
+                    <div>Items synced: <span class="font-medium">{{ $lastSyncLog->items_synced ?? 0 }}</span></div>
+                    <div>Status: <span class="font-medium">{{ $lastSyncLog->error_message ? 'Failed' : ($lastSyncLog->completed_at ? 'Completed' : 'Running') }}</span></div>
+                </div>
+                @if($lastSyncLog->error_message)
+                    <div class="mt-3 rounded-md border border-danger-300 bg-danger-50 p-2 text-sm text-danger-800 dark:border-danger-700 dark:bg-danger-950 dark:text-danger-200">
+                        {{ $lastSyncLog->error_message }}
+                    </div>
+                @endif
+            @else
+                <div class="text-sm text-gray-600 dark:text-gray-400">No full sync logs recorded yet.</div>
+            @endif
+        </x-filament::card>
         
         {{-- Field Population Stats --}}
         @php
             $fieldStats = $this->getFieldStats();
         @endphp
+
+        @if(!empty($fieldStats['error']))
+            <x-filament::card>
+                <div class="rounded-md border border-danger-300 bg-danger-50 p-3 text-sm text-danger-800 dark:border-danger-700 dark:bg-danger-950 dark:text-danger-200">
+                    Field stats error: {{ $fieldStats['error'] }}
+                </div>
+            </x-filament::card>
+        @endif
         
         <x-filament::card>
             <h3 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Field Population Status</h3>
@@ -100,11 +230,11 @@
                         <span class="font-medium text-gray-700 dark:text-gray-300">Parent Items</span>
                         <span class="font-medium text-gray-900 dark:text-white">
                             {{ $fieldStats['parent_items'] }} / {{ $fieldStats['total'] }} 
-                            ({{ round(($fieldStats['parent_items']/$fieldStats['total'])*100, 1) }}%)
+                            ({{ $fieldStats['total'] > 0 ? round(($fieldStats['parent_items']/$fieldStats['total'])*100, 1) : 0 }}%)
                         </span>
                     </div>
                     <div class="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                        <div class="h-full bg-success-600" style="width: {{ round(($fieldStats['parent_items']/$fieldStats['total'])*100) }}%"></div>
+                        <div class="h-full bg-success-600" style="width: {{ $fieldStats['total'] > 0 ? round(($fieldStats['parent_items']/$fieldStats['total'])*100) : 0 }}%"></div>
                     </div>
                 </div>
                 
@@ -113,11 +243,11 @@
                         <span class="font-medium text-gray-700 dark:text-gray-300">Commodity Type</span>
                         <span class="font-medium text-gray-900 dark:text-white">
                             {{ $fieldStats['with_commodity'] }} / {{ $fieldStats['total'] }} 
-                            ({{ round(($fieldStats['with_commodity']/$fieldStats['total'])*100, 1) }}%)
+                            ({{ $fieldStats['total'] > 0 ? round(($fieldStats['with_commodity']/$fieldStats['total'])*100, 1) : 0 }}%)
                         </span>
                     </div>
                     <div class="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                        <div class="h-full bg-warning-600" style="width: {{ round(($fieldStats['with_commodity']/$fieldStats['total'])*100) }}%"></div>
+                        <div class="h-full bg-warning-600" style="width: {{ $fieldStats['total'] > 0 ? round(($fieldStats['with_commodity']/$fieldStats['total'])*100) : 0 }}%"></div>
                     </div>
                 </div>
                 
@@ -126,11 +256,11 @@
                         <span class="font-medium text-gray-700 dark:text-gray-300">POD Code</span>
                         <span class="font-medium text-gray-900 dark:text-white">
                             {{ $fieldStats['with_pod_code'] }} / {{ $fieldStats['total'] }} 
-                            ({{ round(($fieldStats['with_pod_code']/$fieldStats['total'])*100, 1) }}%)
+                            ({{ $fieldStats['total'] > 0 ? round(($fieldStats['with_pod_code']/$fieldStats['total'])*100, 1) : 0 }}%)
                         </span>
                     </div>
                     <div class="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                        <div class="h-full bg-info-600" style="width: {{ round(($fieldStats['with_pod_code']/$fieldStats['total'])*100) }}%"></div>
+                        <div class="h-full bg-info-600" style="width: {{ $fieldStats['total'] > 0 ? round(($fieldStats['with_pod_code']/$fieldStats['total'])*100) : 0 }}%"></div>
                     </div>
                 </div>
                 
@@ -139,11 +269,11 @@
                         <span class="font-medium text-gray-700 dark:text-gray-300">POL Terminal</span>
                         <span class="font-medium text-gray-900 dark:text-white">
                             {{ $fieldStats['with_pol_terminal'] }} / {{ $fieldStats['total'] }} 
-                            ({{ round(($fieldStats['with_pol_terminal']/$fieldStats['total'])*100, 1) }}%)
+                            ({{ $fieldStats['total'] > 0 ? round(($fieldStats['with_pol_terminal']/$fieldStats['total'])*100, 1) : 0 }}%)
                         </span>
                     </div>
                     <div class="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                        <div class="h-full bg-primary-600" style="width: {{ round(($fieldStats['with_pol_terminal']/$fieldStats['total'])*100) }}%"></div>
+                        <div class="h-full bg-primary-600" style="width: {{ $fieldStats['total'] > 0 ? round(($fieldStats['with_pol_terminal']/$fieldStats['total'])*100) : 0 }}%"></div>
                     </div>
                 </div>
                 
@@ -152,11 +282,11 @@
                         <span class="font-medium text-gray-700 dark:text-gray-300">Shipping Line</span>
                         <span class="font-medium text-gray-900 dark:text-white">
                             {{ $fieldStats['with_shipping_line'] }} / {{ $fieldStats['total'] }} 
-                            ({{ round(($fieldStats['with_shipping_line']/$fieldStats['total'])*100, 1) }}%)
+                            ({{ $fieldStats['total'] > 0 ? round(($fieldStats['with_shipping_line']/$fieldStats['total'])*100, 1) : 0 }}%)
                         </span>
                     </div>
                     <div class="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                        <div class="h-full bg-success-600" style="width: {{ round(($fieldStats['with_shipping_line']/$fieldStats['total'])*100) }}%"></div>
+                        <div class="h-full bg-success-600" style="width: {{ $fieldStats['total'] > 0 ? round(($fieldStats['with_shipping_line']/$fieldStats['total'])*100) : 0 }}%"></div>
                     </div>
                 </div>
             </div>

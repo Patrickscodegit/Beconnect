@@ -2332,44 +2332,60 @@ final class RobawsApiClient implements RobawsApiClientInterface
     public function getAllArticlesPaginated(): array
     {
         $allArticles = [];
-        $page = 0;
-        $size = 100;
-        
-        do {
-            $result = $this->getArticles([
-                'page' => $page,
-                'size' => $size,
-            ]);
-            
-            if (!$result['success']) {
-                \Log::error('Failed to fetch articles page', [
-                    'page' => $page,
-                    'error' => $result['error'] ?? 'Unknown error'
-                ]);
-                throw new \RuntimeException('Failed to fetch articles: ' . ($result['error'] ?? 'Unknown error'));
-            }
-            
-            $data = $result['data'];
-            $items = $data['items'] ?? [];
+
+        $this->forEachArticlePage(function (array $items) use (&$allArticles) {
             $allArticles = array_merge($allArticles, $items);
-            
-            $page++;
-            $totalItems = (int)($data['totalItems'] ?? 0);
-            
-            \Log::info('Fetched articles page', [
-                'page' => $page - 1,
-                'items_in_page' => count($items),
-                'total_fetched' => count($allArticles),
-                'total_items' => $totalItems
-            ]);
-            
-        } while (count($items) === $size && count($allArticles) < $totalItems);
-        
+            return true;
+        });
+
         return [
             'success' => true,
             'articles' => $allArticles,
-            'total' => count($allArticles)
+            'total' => count($allArticles),
         ];
+    }
+
+    /**
+     * Iterate over article pages without loading everything into memory.
+     *
+     * @param callable $callback function(array $items, int $page, int $totalItems): bool
+     * @param int $size
+     */
+    public function forEachArticlePage(callable $callback, int $size = 100, array $params = []): void
+    {
+        $page = 0;
+
+        do {
+            $result = $this->getArticles(array_merge([
+                'page' => $page,
+                'size' => $size,
+            ], $params));
+
+            if (!$result['success']) {
+                \Log::error('Failed to fetch articles page', [
+                    'page' => $page,
+                    'error' => $result['error'] ?? 'Unknown error',
+                ]);
+                throw new \RuntimeException('Failed to fetch articles: ' . ($result['error'] ?? 'Unknown error'));
+            }
+
+            $data = $result['data'];
+            $items = $data['items'] ?? [];
+            $totalItems = (int) ($data['totalItems'] ?? 0);
+
+            \Log::info('Fetched articles page', [
+                'page' => $page,
+                'items_in_page' => count($items),
+                'total_items' => $totalItems,
+            ]);
+
+            $continue = $callback($items, $page, $totalItems);
+            if ($continue === false) {
+                return;
+            }
+
+            $page++;
+        } while (count($items) === $size && ($page * $size) < $totalItems);
     }
 
     /**
