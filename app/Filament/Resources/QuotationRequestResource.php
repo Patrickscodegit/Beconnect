@@ -707,10 +707,43 @@ class QuotationRequestResource extends Resource
                                 }
                                 
                                 // Check for schedules
-                                $scheduleCount = \App\Models\ShippingSchedule::active()
-                                    ->whereHas('polPort', fn($q) => $q->where('name', 'like', "%{$pol}%"))
-                                    ->whereHas('podPort', fn($q) => $q->where('name', 'like', "%{$pod}%"))
-                                    ->count();
+                                // Include existing selected schedule and prefer port IDs over name matching
+                                $existingScheduleId = $get('selected_schedule_id');
+                                if (!$existingScheduleId && isset($livewire) && is_object($livewire) && method_exists($livewire, 'getRecord')) {
+                                    try {
+                                        $record = $livewire->getRecord();
+                                        $existingScheduleId = $record?->selected_schedule_id ?? null;
+                                    } catch (\Throwable $e) {
+                                        // Silent fail, will use form state value
+                                    }
+                                }
+
+                                $scheduleCount = 0;
+
+                                if ($existingScheduleId) {
+                                    $existingSchedule = \App\Models\ShippingSchedule::active()
+                                        ->where('id', $existingScheduleId)
+                                        ->exists();
+                                    if ($existingSchedule) {
+                                        $scheduleCount = 1;
+                                    }
+                                }
+
+                                if ($polPortId && $podPortId) {
+                                    $filteredCount = \App\Models\ShippingSchedule::active()
+                                        ->where('pol_id', $polPortId)
+                                        ->where('pod_id', $podPortId)
+                                        ->when($existingScheduleId, fn($q) => $q->where('id', '!=', $existingScheduleId))
+                                        ->count();
+                                    $scheduleCount += $filteredCount;
+                                } elseif ($pol && $pod) {
+                                    $filteredCount = \App\Models\ShippingSchedule::active()
+                                        ->whereHas('polPort', fn($q) => $q->where('name', 'like', "%{$pol}%"))
+                                        ->whereHas('podPort', fn($q) => $q->where('name', 'like', "%{$pod}%"))
+                                        ->when($existingScheduleId, fn($q) => $q->where('id', '!=', $existingScheduleId))
+                                        ->count();
+                                    $scheduleCount += $filteredCount;
+                                }
                                 
                                 if ($scheduleCount > 0) {
                                     return new \Illuminate\Support\HtmlString(
@@ -771,11 +804,11 @@ class QuotationRequestResource extends Resource
                                 // Add POL/POD filtered results if both are set
                                 if ($pol && $pod) {
                                     $filteredSchedules = \App\Models\ShippingSchedule::active()
-                                        ->whereHas('polPort', fn($q) => $q->where('name', 'like', "%{$pol}%"))
-                                        ->whereHas('podPort', fn($q) => $q->where('name', 'like', "%{$pod}%"))
-                                        // Service type filter removed - data format mismatch between config (RORO_IMPORT) and database (RORO)
-                                        // User already selected service type separately, showing all sailings for route is helpful
-                                        ->with(['carrier', 'polPort', 'podPort'])
+                                    ->whereHas('polPort', fn($q) => $q->where('name', 'like', "%{$pol}%"))
+                                    ->whereHas('podPort', fn($q) => $q->where('name', 'like', "%{$pod}%"))
+                                    // Service type filter removed - data format mismatch between config (RORO_IMPORT) and database (RORO)
+                                    // User already selected service type separately, showing all sailings for route is helpful
+                                    ->with(['carrier', 'polPort', 'podPort'])
                                         ->get();
                                     
                                     foreach ($filteredSchedules as $schedule) {
@@ -819,7 +852,7 @@ class QuotationRequestResource extends Resource
                                 if (!$scheduleId) {
                                     return 'No sailing selected';
                                 }
-
+                                
                                 $schedule = \App\Models\ShippingSchedule::with(['carrier', 'polPort', 'podPort'])
                                     ->find($scheduleId);
                                 if (!$schedule) {
@@ -850,11 +883,11 @@ class QuotationRequestResource extends Resource
 
                                         $schedule = \App\Models\ShippingSchedule::with(['carrier', 'polPort', 'podPort'])
                                             ->find($scheduleId);
-                                        if (!$schedule) {
-                                            return 'Sailing not found';
-                                        }
-
-                                        return new \Illuminate\Support\HtmlString(sprintf(
+                                if (!$schedule) {
+                                    return 'Sailing not found';
+                                }
+                                
+                                return new \Illuminate\Support\HtmlString(sprintf(
                                             '<div class="text-sm">
                                                 <strong>%s</strong><br>
                                                 Route: %s → %s<br>
@@ -863,15 +896,15 @@ class QuotationRequestResource extends Resource
                                                 Transit: %d days<br>
                                                 Next Sailing: %s
                                             </div>',
-                                            $schedule->carrier->name,
-                                            $schedule->polPort->name,
-                                            $schedule->podPort->name,
-                                            $schedule->service_name ?? 'N/A',
+                                    $schedule->carrier->name,
+                                    $schedule->polPort->name,
+                                    $schedule->podPort->name,
+                                    $schedule->service_name ?? 'N/A',
                                             $schedule->vessel_name ?? 'TBA',
-                                            $schedule->transit_days ?? 0,
-                                            $schedule->next_sailing_date?->format('l, F j, Y') ?? 'TBA'
-                                        ));
-                                    })
+                                    $schedule->transit_days ?? 0,
+                                    $schedule->next_sailing_date?->format('l, F j, Y') ?? 'TBA'
+                                ));
+                            })
                                     ->columnSpanFull(),
                             ])
                             ->collapsible()
