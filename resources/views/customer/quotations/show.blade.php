@@ -761,6 +761,7 @@
         .print-clauses {
             font-size: 9.2pt;
             line-height: 1.25;
+            page-break-before: always;
         }
 
         .print-clauses .space-y-4 {
