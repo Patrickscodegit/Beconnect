@@ -122,6 +122,11 @@ class ApiIntakeController extends Controller
     {
         try {
             $intake = \App\Models\Intake::findOrFail($intakeId);
+
+            $extractionData = $intake->extraction_data;
+            if (is_string($extractionData)) {
+                $extractionData = json_decode($extractionData, true);
+            }
             
             return response()->json([
                 'intake_id' => $intake->id,
@@ -134,7 +139,7 @@ class ApiIntakeController extends Controller
                 'robaws_offer_number' => $intake->robaws_offer_number,
                 'created_at' => $intake->created_at,
                 'updated_at' => $intake->updated_at,
-                'extraction_data' => $intake->extraction_data ? json_decode($intake->extraction_data, true) : null,
+                'extraction_data' => $extractionData ?: null,
                 'last_export_error' => $intake->last_export_error,
                 'last_export_error_at' => $intake->last_export_error_at,
             ]);
