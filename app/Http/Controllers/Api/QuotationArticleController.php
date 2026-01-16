@@ -24,6 +24,14 @@ class QuotationArticleController extends Controller
         
         $query = RobawsArticleCache::query();
         
+        $search = trim((string) $request->get('search', ''));
+        $hasSearch = $search !== '';
+
+        // If no search is provided, avoid returning the full catalog
+        if (!$hasSearch) {
+            return response()->json(['data' => []]);
+        }
+
         // Filter by service type if provided
         if ($request->has('service_type') && $request->service_type !== 'null' && $request->service_type !== '') {
             $serviceType = $request->service_type;
@@ -71,6 +79,11 @@ class QuotationArticleController extends Controller
                 'robaws_articles_cache.is_parent_item',
             ]);
         }])
+        ->where(function ($q) use ($search) {
+            $q->where('article_name', 'LIKE', '%' . $search . '%')
+              ->orWhere('description', 'LIKE', '%' . $search . '%')
+              ->orWhere('article_code', 'LIKE', '%' . $search . '%');
+        })
         ->select([
             'id',
             'robaws_article_id',
@@ -85,6 +98,7 @@ class QuotationArticleController extends Controller
             'is_surcharge',
         ])
         ->orderBy('article_name')
+        ->limit(50)
         ->get();
         
         \Log::info('✅ QuotationArticleController: Returning articles', [

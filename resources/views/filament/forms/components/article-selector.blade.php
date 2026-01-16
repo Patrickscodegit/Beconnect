@@ -80,7 +80,7 @@
         {{-- Article Search and Add --}}
         <div class="rounded-lg border border-gray-300 bg-white p-4 dark:border-gray-600 dark:bg-gray-900">
             <div class="mb-3 flex items-center justify-between">
-                <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">All Articles</h4>
+                <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Search Articles</h4>
                 <button x-show="!showSmartSuggestions && smartSuggestions.length > 0" @click="showSmartSuggestions = true" class="text-sm text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-200">
                     Show Smart Suggestions
                 </button>
@@ -103,8 +103,13 @@
                 <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading articles...</p>
             </div>
             
+            {{-- Search Guidance --}}
+            <div x-show="!loading && searchQuery.length < 2" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                Type at least 2 characters to search for articles.
+            </div>
+
             {{-- Article List --}}
-            <div x-show="!loading" class="max-h-64 space-y-2 overflow-y-auto">
+            <div x-show="!loading && searchQuery.length >= 2" class="max-h-64 space-y-2 overflow-y-auto">
                 <template x-for="article in filteredArticles" :key="article.id">
                     <div
                         class="flex items-center justify-between rounded-lg border p-3 transition"
@@ -244,6 +249,7 @@ document.addEventListener('alpine:init', () => {
         loading: true,
         selectedArticleIds: [],
         showSmartSuggestions: true,
+        searchTimeout: null,
         
         init() {
             // Initialize articles from Livewire state
@@ -254,15 +260,29 @@ document.addEventListener('alpine:init', () => {
             this.$watch('articles', () => {
                 this.$wire.set(statePath, this.articles);
             });
-            
-            this.loadArticles();
+
+            this.$watch('searchQuery', (value) => {
+                const query = (value || '').trim();
+                clearTimeout(this.searchTimeout);
+                if (query.length < 2) {
+                    this.availableArticles = [];
+                    this.loading = false;
+                    return;
+                }
+                this.loading = true;
+                this.searchTimeout = setTimeout(() => {
+                    this.searchArticles(query);
+                }, 300);
+            });
+
+            this.loading = false;
         },
-        
-        async loadArticles() {
-            this.loading = true;
+
+        async searchArticles(query) {
             try {
-                const url = '/admin/api/quotation/articles?service_type=' + serviceType + 
-                            (carrierCode ? '&carrier_code=' + carrierCode : '');
+                const url = '/admin/api/quotation/articles?service_type=' + serviceType +
+                            (carrierCode ? '&carrier_code=' + carrierCode : '') +
+                            '&search=' + encodeURIComponent(query);
                 
                 const response = await fetch(url);
                 
@@ -273,7 +293,7 @@ document.addEventListener('alpine:init', () => {
                     this.availableArticles = [];
                 }
             } catch (error) {
-                console.error('Failed to load articles:', error);
+                console.error('Failed to search articles:', error);
                 this.availableArticles = [];
             }
             this.loading = false;
