@@ -652,26 +652,44 @@ class QuotationCommodityItem extends Model
         $commodityItems = $quotation->commodityItems;
         $totalCommodityQuantity = $commodityItems->sum('quantity') ?? 0;
 
-        // Auto-add matching parent articles when nothing is selected yet.
+        // Auto-add missing parent articles based on commodity types.
         if ($commodityItems->isNotEmpty()) {
-            $existingParentCount = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
-                ->whereIn('item_type', ['parent', 'standalone'])
-                ->count();
+            $selectionService = app(SmartArticleSelectionService::class);
+            $selectionService->clearCache($quotation);
 
-            if ($existingParentCount === 0) {
-                $selectionService = app(SmartArticleSelectionService::class);
-                $selectionService->clearCache($quotation);
-                $distinctCommodityTypes = $commodityItems
-                    ->flatMap(fn ($item) => static::normalizeCommodityTypes($item))
-                    ->filter()
-                    ->unique()
-                    ->values();
-                $suggestionLimit = max(1, $distinctCommodityTypes->count());
+            $distinctCommodityTypes = $commodityItems
+                ->flatMap(fn ($item) => static::normalizeCommodityTypes($item))
+                ->filter()
+                ->unique()
+                ->values();
+
+            $existingParentTypes = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+                ->whereIn('item_type', ['parent', 'standalone'])
+                ->with('articleCache:id,commodity_type')
+                ->get()
+                ->pluck('articleCache.commodity_type')
+                ->filter()
+                ->map(fn ($type) => strtoupper(trim($type)))
+                ->unique()
+                ->values();
+
+            $missingTypes = $distinctCommodityTypes
+                ->map(fn ($type) => strtoupper(trim($type)))
+                ->reject(fn ($type) => $existingParentTypes->contains($type))
+                ->values();
+
+            if ($missingTypes->isNotEmpty()) {
+                $suggestionLimit = max(1, $missingTypes->count());
                 $suggestions = $selectionService->getTopSuggestions($quotation, $suggestionLimit, 0);
 
                 foreach ($suggestions as $suggestion) {
                     $article = $suggestion['article'] ?? null;
                     if (!$article) {
+                        continue;
+                    }
+
+                    $articleType = strtoupper(trim((string) ($article->commodity_type ?? '')));
+                    if ($articleType === '' || !$missingTypes->contains($articleType)) {
                         continue;
                     }
 
