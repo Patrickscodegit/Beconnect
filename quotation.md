@@ -45,7 +45,7 @@ commodity inputs through carrier rules, selection, pricing, and recalculation.
 1. Commodity item is saved or schedule changes.
 2. Carrier rule processing applies acceptance rules, LM calculations, and surcharges.
 3. Selection suggestions and strict mapping determine which parent articles are valid.
-4. Auto-add logic selects top suggestions when no parent articles exist.
+4. Auto-add logic adds missing parent articles by commodity type.
 5. Article quantities are recalculated based on commodity matching and unit types.
 6. Pricing totals are recalculated with VAT logic.
 
@@ -131,8 +131,12 @@ Quantity rules during recalculation:
 - Carrier-rule line items are skipped during quantity recalculation.
 
 Auto-add behavior:
-- If there are no parent articles, top suggestions are computed and added
-  (subject to strict eligibility).
+- Missing parent articles are auto-added based on distinct commodity types
+  (subject to strict eligibility), even if other parent articles already exist.
+
+LM display breakdown:
+- Uses the same stack-aware LM calculation as `LmQuantityCalculator`, preferring
+  `stack_length_cm`/`stack_width_cm` for stacks and trailer defaults when needed.
 
 ---
 

@@ -5,6 +5,13 @@
 @section('content')
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     
+    <!-- Print Header (only visible when printing) -->
+    <div class="print-header-info">
+        <h1>Quotation {{ $quotationRequest->request_number }}</h1>
+        <p>Date: {{ $quotationRequest->created_at->format('F j, Y') }}</p>
+        <p>Route: {{ $quotationRequest->pol }} → {{ $quotationRequest->pod }}</p>
+    </div>
+    
     <!-- Header -->
     <div class="mb-8">
         <div class="flex justify-between items-start">
@@ -24,10 +31,48 @@
                 </div>
                 <p class="text-gray-600">Requested on {{ $quotationRequest->created_at->format('F j, Y') }}</p>
             </div>
-            <a href="{{ route('customer.quotations.index') }}" 
-               class="text-gray-600 hover:text-gray-900 font-medium">
-                <i class="fas fa-arrow-left mr-2"></i>Back to List
-            </a>
+            <div class="flex items-center gap-3">
+                <button onclick="window.print()" 
+                        class="no-print inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition font-medium">
+                    <i class="fas fa-print mr-2"></i>Print
+                </button>
+                <a href="{{ route('customer.quotations.index') }}" 
+                   class="no-print text-gray-600 hover:text-gray-900 font-medium">
+                    <i class="fas fa-arrow-left mr-2"></i>Back to List
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Card -->
+    <div class="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow p-6 border border-blue-200">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <p class="text-sm font-medium text-gray-600 mb-1">Route</p>
+                <p class="text-lg font-semibold text-gray-900">
+                    {{ $quotationRequest->pol }} → {{ $quotationRequest->pod }}
+                </p>
+            </div>
+            <div>
+                <p class="text-sm font-medium text-gray-600 mb-1">Service Type</p>
+                <p class="text-lg font-semibold text-gray-900">
+                    @php
+                        $serviceType = config('quotation.service_types.' . $quotationRequest->service_type);
+                        $serviceName = is_array($serviceType) ? $serviceType['name'] : ($serviceType ?: $quotationRequest->service_type);
+                    @endphp
+                    {{ $serviceName }}
+                </p>
+            </div>
+            <div>
+                <p class="text-sm font-medium text-gray-600 mb-1">Total</p>
+                <p class="text-2xl font-bold text-blue-600">
+                    @if($quotationRequest->status === 'quoted' && $quotationRequest->total_incl_vat)
+                        €{{ number_format($quotationRequest->total_incl_vat, 2) }}
+                    @else
+                        <span class="text-gray-400">Pending</span>
+                    @endif
+                </p>
+            </div>
         </div>
     </div>
 
@@ -234,52 +279,96 @@
                         <i class="fas fa-check-square mr-2 text-green-600"></i>Selected Services
                     </h2>
                     
-                    <div class="space-y-3">
+                    <div class="space-y-4">
                         @foreach($quotationRequest->articles as $article)
-                            <div class="flex items-start justify-between bg-gray-50 p-4 rounded-lg border border-gray-200">
-                                <div class="flex-1">
-                                    <p class="font-medium text-gray-900">{{ $article->description ?: $article->article_name }}</p>
-                                    <p class="text-sm text-gray-600 mt-1">
-                                        Code: {{ $article->article_code }}
-                                    </p>
-                                    @if(auth()->user()->pricing_tier_id || $quotationRequest->pricing_tier_id)
-                                        @php
-                                            $articleModel = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotationRequest->id)
-                                                ->where('article_cache_id', $article->id)
-                                                ->first();
-                                            $displayQty = $articleModel ? $articleModel->display_quantity : ($article->pivot->quantity ?? 1);
-                                        @endphp
-                                        <p class="text-sm text-gray-700 mt-2">
-                                            Qty: {{ number_format($displayQty, 2) }} × 
-                                            €{{ number_format($article->pivot->unit_price ?? $article->unit_price, 2) }} = 
-                                            <span class="font-semibold text-blue-600">
-                                                €{{ number_format($article->pivot->subtotal ?? ($displayQty * ($article->pivot->unit_price ?? $article->unit_price)), 2) }}
-                                            </span>
-                                        </p>
-                                    @endif
-                                    @if(!empty($article->pivot?->notes))
-                                        <div class="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800 whitespace-pre-line">
-                                            {{ $article->pivot->notes }}
+                            @php
+                                // Get the QuotationRequestArticle model to access methods
+                                $articleModel = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotationRequest->id)
+                                    ->where('article_cache_id', $article->id)
+                                    ->first();
+                                $isLmArticle = strtoupper(trim($article->pivot->unit_type ?? $article->unit_type ?? '')) === 'LM';
+                                $lmBreakdown = $articleModel ? $articleModel->getLmCalculationBreakdown() : null;
+                                $unitType = strtoupper(trim($article->pivot->unit_type ?? $article->unit_type ?? 'UNIT'));
+                                $displayQty = $articleModel ? $articleModel->display_quantity : ($article->pivot->quantity ?? 1);
+                                $unitPrice = $article->pivot->unit_price ?? $article->unit_price ?? 0;
+                                $subtotal = $article->pivot->subtotal ?? ($displayQty * $unitPrice);
+                                // Primary display: sales_name > article_name > description
+                                $primaryName = $article->sales_name ?? $article->article_name ?? $article->description ?? 'N/A';
+                                // Secondary description if different from primary
+                                $secondaryDescription = null;
+                                if ($article->description && $article->description !== $primaryName && $article->description !== '-') {
+                                    $secondaryDescription = $article->description;
+                                } elseif ($article->article_name && $article->article_name !== $primaryName && !$article->sales_name) {
+                                    $secondaryDescription = $article->article_name;
+                                }
+                            @endphp
+                            <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 hover:border-blue-300 transition">
+                                <div class="flex items-start justify-between gap-4">
+                                    <div class="flex-1">
+                                        <div class="flex items-center gap-2 mb-2">
+                                            <p class="font-semibold text-gray-900 text-base">{{ $primaryName }}</p>
+                                            @if($unitType && $unitType !== 'UNIT')
+                                                <span class="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-medium rounded">
+                                                    {{ $unitType }}
+                                                </span>
+                                            @endif
+                                            @if($article->commodity_type)
+                                                <span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 text-xs font-medium rounded">
+                                                    {{ strtoupper($article->commodity_type) }}
+                                                </span>
+                                            @endif
                                         </div>
-                                    @endif
+                                        
+                                        @if($secondaryDescription)
+                                            <p class="text-sm text-gray-600 mb-2 italic">{{ $secondaryDescription }}</p>
+                                        @endif
+                                        
+                                        <p class="text-sm text-gray-600 mb-2">
+                                            <span class="font-medium">Code:</span> {{ $article->article_code }}
+                                        </p>
+                                        
+                                        @if($isLmArticle && $lmBreakdown)
+                                            <div class="mt-3 p-3 bg-white rounded border border-gray-200">
+                                                <p class="text-sm text-gray-700 font-medium mb-1">LM Calculation:</p>
+                                                <p class="text-sm text-gray-700">
+                                                    {{ number_format($lmBreakdown['lm_per_item'], 2) }} LM × 
+                                                    {{ $lmBreakdown['quantity'] }} qty = 
+                                                    <span class="font-semibold">{{ number_format($lmBreakdown['total_lm'], 2) }} LM</span> × 
+                                                    €{{ number_format($lmBreakdown['price'], 2) }} = 
+                                                    <span class="font-semibold text-blue-600">€{{ number_format($lmBreakdown['subtotal'], 2) }}</span>
+                                                </p>
+                                            </div>
+                                        @elseif(auth()->user()->pricing_tier_id || $quotationRequest->pricing_tier_id || $quotationRequest->status === 'quoted')
+                                            <div class="mt-2">
+                                                <p class="text-sm text-gray-700">
+                                                    <span class="font-medium">Qty:</span> {{ number_format($displayQty, 2) }} × 
+                                                    <span class="font-medium">Price:</span> €{{ number_format($unitPrice, 2) }} = 
+                                                    <span class="font-semibold text-blue-600 text-base">
+                                                        €{{ number_format($subtotal, 2) }}
+                                                    </span>
+                                                </p>
+                                            </div>
+                                        @endif
+                                        
+                                        @if(!empty($article->pivot?->notes))
+                                            <div class="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800 whitespace-pre-line">
+                                                <i class="fas fa-info-circle mr-1"></i>{{ $article->pivot->notes }}
+                                            </div>
+                                        @endif
+                                    </div>
                                 </div>
-                                @if($article->commodity_type)
-                                    <span class="ml-4 px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
-                                        {{ $article->commodity_type }}
-                                    </span>
-                                @endif
                             </div>
                         @endforeach
                     </div>
                 </div>
             @endif
 
-            <!-- Pricing (if quoted) -->
-            @if($quotationRequest->status === 'quoted' && $quotationRequest->total_incl_vat)
-                <div class="bg-white rounded-lg shadow p-6">
-                    <h2 class="text-xl font-semibold text-gray-900 mb-4">
-                        <i class="fas fa-euro-sign mr-2"></i>Pricing
-                    </h2>
+            <!-- Pricing -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-euro-sign mr-2"></i>Pricing
+                </h2>
+                @if($quotationRequest->status === 'quoted' && $quotationRequest->total_incl_vat)
                     <dl class="space-y-3">
                         <div class="flex justify-between">
                             <dt class="text-sm font-medium text-gray-500">Subtotal</dt>
@@ -311,8 +400,13 @@
                             Valid until {{ $quotationRequest->expires_at->format('F j, Y') }}
                         </p>
                     @endif
-                </div>
-            @endif
+                @else
+                    <div class="text-center py-6 text-gray-500">
+                        <i class="fas fa-hourglass-half text-3xl mb-2"></i>
+                        <p class="text-sm">Pricing will be available once the quotation is processed.</p>
+                    </div>
+                @endif
+            </div>
 
             <!-- Uploaded Files -->
             @if($quotationRequest->files->count() > 0)
@@ -445,5 +539,123 @@
         </div>
     </div>
 </div>
+
+@push('styles')
+<style>
+    @media print {
+        /* Hide non-essential elements */
+        .no-print,
+        nav,
+        header,
+        footer,
+        .sidebar,
+        button:not(.print-only),
+        a:not(.print-only),
+        .bg-blue-50,
+        .bg-green-50,
+        .bg-yellow-50 {
+            display: none !important;
+        }
+        
+        /* Print-specific layout */
+        body {
+            background: white;
+            color: black;
+            font-size: 12pt;
+        }
+        
+        .max-w-7xl {
+            max-width: 100%;
+            padding: 0;
+        }
+        
+        /* Ensure proper page breaks */
+        .bg-white {
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+        
+        /* Print header and footer */
+        @page {
+            margin: 1.5cm;
+            @top-center {
+                content: "Quotation {{ $quotationRequest->request_number }}";
+                font-size: 10pt;
+                color: #666;
+            }
+            @bottom-center {
+                content: "Page " counter(page) " of " counter(pages) " | Printed on {{ date('F j, Y') }}";
+                font-size: 9pt;
+                color: #666;
+            }
+        }
+        
+        /* Improve readability */
+        h1, h2, h3 {
+            color: #000;
+            page-break-after: avoid;
+        }
+        
+        .bg-gray-50,
+        .bg-white {
+            background: white !important;
+            border: 1px solid #ddd !important;
+        }
+        
+        /* Ensure colors print */
+        .text-blue-600,
+        .text-green-600,
+        .text-red-600 {
+            color: #000 !important;
+        }
+        
+        /* Remove shadows and rounded corners for print */
+        .rounded-lg,
+        .rounded {
+            border-radius: 0 !important;
+        }
+        
+        .shadow {
+            box-shadow: none !important;
+        }
+        
+        /* Summary card styling for print */
+        .bg-gradient-to-r {
+            background: #f0f0f0 !important;
+            border: 2px solid #000 !important;
+        }
+        
+        /* Ensure tables and lists print well */
+        table, ul, ol {
+            page-break-inside: avoid;
+        }
+        
+        /* Print header info at top of first page */
+        .print-header-info {
+            display: block !important;
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #000;
+        }
+        
+        .print-header-info h1 {
+            margin: 0;
+            font-size: 18pt;
+        }
+        
+        .print-header-info p {
+            margin: 5px 0;
+            font-size: 10pt;
+        }
+    }
+    
+    @media screen {
+        .print-header-info {
+            display: none;
+        }
+    }
+</style>
+@endpush
 @endsection
 
