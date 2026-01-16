@@ -10,6 +10,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Str;
 
 class CarrierRuleResource extends Resource
 {
@@ -1630,6 +1631,11 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ])
                                             ->columnSpan(1),
 
+                                        Forms\Components\TextInput::make('title')
+                                            ->label('Title')
+                                            ->maxLength(255)
+                                            ->columnSpan(1),
+
                                         Forms\Components\RichEditor::make('text')
                                             ->label('Clause Text')
                                             ->required()
@@ -1658,9 +1664,19 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                     ])
                                     ->label('Clauses')
                                     ->defaultItems(0)
-                                    ->itemLabel(fn (array $state): ?string => 
-                                        ($state['clause_type'] ?? 'New') . ' Clause'
-                                    )
+                                    ->itemLabel(function (array $state): ?string {
+                                        $title = trim((string) ($state['title'] ?? ''));
+                                        $type = $state['clause_type'] ?? 'New';
+                                        $rawText = trim(strip_tags((string) ($state['text'] ?? '')));
+                                        $preview = $rawText ? Str::limit($rawText, 90) : '';
+
+                                        $label = $title !== '' ? $title : $type . ' Clause';
+                                        if ($preview !== '') {
+                                            $label .= ' — ' . $preview;
+                                        }
+
+                                        return $label;
+                                    })
                                     ->collapsible()
                                     ->cloneable()
                                     ->columnSpanFull(),
