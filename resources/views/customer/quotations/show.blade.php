@@ -655,6 +655,19 @@
         .max-w-7xl {
             max-width: 100%;
             padding: 0;
+            width: 100%;
+        }
+
+        /* Use full width in print layout */
+        .grid {
+            grid-template-columns: 1fr !important;
+        }
+
+        .lg\:col-span-2,
+        .lg\:col-span-3,
+        .col-span-2,
+        .col-span-3 {
+            grid-column: 1 / -1 !important;
         }
         
         /* Ensure proper page breaks */
