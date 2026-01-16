@@ -511,6 +511,9 @@
                         <strong>Maritime services:</strong> The General Conditions of the Belgian Forwarders for all our maritime related services. Full details can be found at:
                         <a href="https://www.belgaco-shipping.com/terms-and-conditions" class="text-blue-600 hover:text-blue-800" target="_blank" rel="noopener">https://www.belgaco-shipping.com/terms-and-conditions</a>
                     </p>
+                    <p class="print-only text-gray-700">
+                        https://www.belgaco-shipping.com/terms-and-conditions
+                    </p>
                     <p>
                         <strong>Road transport services:</strong> The Convention on the Contract for the International Carriage of Goods by Road (CMR), governing international road transport agreements.
                     </p>
@@ -642,6 +645,10 @@
         .bg-green-50,
         .bg-yellow-50 {
             display: none !important;
+        }
+
+        .print-only {
+            display: block !important;
         }
         
         /* Print-specific layout */
@@ -812,6 +819,10 @@
     
     @media screen {
         .print-header-info {
+            display: none;
+        }
+
+        .print-only {
             display: none;
         }
     }
