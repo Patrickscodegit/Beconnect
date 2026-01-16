@@ -486,30 +486,72 @@ class QuotationRequestArticle extends Model
         $lmPerItem = 0;
         $totalQuantity = 0;
         $totalLm = 0;
+        $processedItems = [];
 
         foreach ($commodityItems as $item) {
-            if ($item->length_cm && $item->width_cm) {
-                // Use ChargeableMeasureService for carrier-aware LM calculation
+            if (in_array($item->id, $processedItems, true)) {
+                continue;
+            }
+
+            if ($item->isInStack() && !$item->isStackBase()) {
+                continue;
+            }
+
+            $stackLength = $item->stack_length_cm;
+            $stackWidth = $item->stack_width_cm;
+            if ((!$stackLength || !$stackWidth) && in_array($item->category, ['trailer', 'trailer_stack', 'tank_trailer'], true)) {
+                $stackLength = 1360.0;
+                $stackWidth = 250.0;
+            }
+
+            if ($stackLength && $stackWidth) {
+                $processedItems[] = $item->id;
                 $result = $service->computeChargeableLm(
-                    $item->length_cm,
-                    $item->width_cm,
+                    $stackLength,
+                    $stackWidth,
                     $carrierId,
                     $portId,
                     $item->category,
                     $vesselName,
                     $vesselClass
                 );
-                
+
+                $itemLm = $result->chargeableLm;
+                if ($lmPerItem === 0) {
+                    $lmPerItem = $itemLm;
+                }
+                $totalQuantity += 1;
+                $totalLm += $itemLm;
+                continue;
+            }
+
+            $itemLength = $item->length_cm;
+            $itemWidth = $item->width_cm;
+            if ((!$itemLength || !$itemWidth) && in_array($item->category, ['trailer', 'trailer_stack', 'tank_trailer'], true)) {
+                $itemLength = 1360.0;
+                $itemWidth = 250.0;
+            }
+
+            if ($itemLength && $itemWidth) {
+                $processedItems[] = $item->id;
+                $result = $service->computeChargeableLm(
+                    $itemLength,
+                    $itemWidth,
+                    $carrierId,
+                    $portId,
+                    $item->category,
+                    $vesselName,
+                    $vesselClass
+                );
+
                 $itemLmPerItem = $result->chargeableLm;
-                
                 $itemQuantity = $item->quantity ?? 1;
                 $itemTotalLm = $itemLmPerItem * $itemQuantity;
-                
-                // For display, use the first item's LM per item (assuming all items have same dimensions)
-                if ($lmPerItem == 0) {
+
+                if ($lmPerItem === 0) {
                     $lmPerItem = $itemLmPerItem;
                 }
-                
+
                 $totalQuantity += $itemQuantity;
                 $totalLm += $itemTotalLm;
             }
@@ -517,6 +559,10 @@ class QuotationRequestArticle extends Model
 
         if ($totalLm == 0) {
             return null;
+        }
+
+        if ($totalQuantity > 1 && $totalLm > 0) {
+            $lmPerItem = $totalLm / $totalQuantity;
         }
 
         return [
