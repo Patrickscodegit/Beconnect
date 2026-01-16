@@ -17,6 +17,8 @@ commodity inputs through carrier rules, selection, pricing, and recalculation.
   `total_excl_vat`, `vat_amount`, `total_incl_vat`.
 - When `selected_schedule_id` changes, the pricing orchestrator is triggered
   after commit to reprocess carrier rules and recalculations.
+- Stores resolved carrier clauses in `carrier_clauses` (JSON) for display on
+  customer/admin/print views.
 
 ### QuotationCommodityItem
 - Represents the unit(s) being quoted.
@@ -66,7 +68,8 @@ Steps:
 5. Generate surcharge events and map to quote line drafts.
 6. Sync surcharge articles (add/update/remove) and mark them as
    `carrier_rule_applied`.
-7. Remove non-carrier-rule articles that no longer match strict mappings.
+7. Resolve and store carrier clauses on the quotation (by carrier/POD/vessel).
+8. Remove non-carrier-rule articles that no longer match strict mappings.
 
 ---
 
@@ -155,9 +158,31 @@ LM display breakdown:
   - `vrijgesteld VF` and `intracommunautaire levering VF` result in 0% VAT.
   - Default uses `vat_rate` or configured default.
 
+### Pending quotation totals (UI)
+- If not quoted yet, the customer overview shows a calculated total from
+  article subtotals and displays a note that pricing is subject to review.
+- The summary card uses the same calculated total when available.
+
 ---
 
-## 8) Operational Commands (Production)
+## 8) Quotation Display Notes
+
+### Selected Services
+- Uses `sales_name` as the primary label when available, with fallback to
+  `article_name` / `description`.
+- LM articles show a detailed LM breakdown.
+
+### Carrier Clauses
+- Resolved carrier clauses are displayed on customer and admin views, grouped
+  by clause type.
+
+### General Conditions
+- A standard “General Conditions” block is appended to the quotation view and
+  included in print output.
+
+---
+
+## 9) Operational Commands (Production)
 
 Audit:
 - `php artisan quotation:audit QR-YYYY-NNNN`
@@ -167,7 +192,7 @@ Recalculate a single quotation item:
 
 ---
 
-## 9) Production SSH Access
+## 10) Production SSH Access
 
 Host:
 - `forge@bconnect.64.226.120.45.nip.io`

@@ -70,7 +70,7 @@
     </div>
 
     <!-- Summary Card -->
-    <div class="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow p-6 border border-blue-200">
+    <div class="print-section print-summary mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow p-6 border border-blue-200">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
                 <p class="text-sm font-medium text-gray-600 mb-1">Route</p>
@@ -299,7 +299,7 @@
 
             {{-- Selected Articles --}}
             @if($quotationRequest->articles->count() > 0)
-                <div class="bg-white rounded-lg shadow p-6">
+                <div class="print-section print-services bg-white rounded-lg shadow p-6">
                     <h2 class="text-xl font-semibold text-gray-900 mb-4">
                         <i class="fas fa-check-square mr-2 text-green-600"></i>Selected Services
                     </h2>
@@ -389,7 +389,7 @@
             @endif
 
             <!-- Pricing -->
-            <div class="bg-white rounded-lg shadow p-6">
+            <div class="print-section print-pricing bg-white rounded-lg shadow p-6">
                 <h2 class="text-xl font-semibold text-gray-900 mb-4">
                     <i class="fas fa-euro-sign mr-2"></i>Pricing
                 </h2>
@@ -456,7 +456,7 @@
                 $carrierClauses = collect($quotationRequest->carrier_clauses ?? []);
             @endphp
             @if($carrierClauses->isNotEmpty())
-                <div class="bg-white rounded-lg shadow p-6">
+                <div class="print-section print-clauses bg-white rounded-lg shadow p-6">
                     <h2 class="text-xl font-semibold text-gray-900 mb-4">
                         <i class="fas fa-file-contract mr-2 text-blue-600"></i>Carrier Clauses
                     </h2>
@@ -501,7 +501,7 @@
                 </div>
             @endif
 
-            <div class="bg-white rounded-lg shadow p-6">
+            <div class="print-section print-conditions bg-white rounded-lg shadow p-6">
                 <h2 class="text-xl font-semibold text-gray-900 mb-4">
                     <i class="fas fa-file-alt mr-2 text-gray-600"></i>General Conditions
                 </h2>
@@ -648,7 +648,8 @@
         body {
             background: white;
             color: black;
-            font-size: 12pt;
+            font-size: 10.5pt;
+            line-height: 1.35;
         }
         
         .max-w-7xl {
@@ -664,15 +665,15 @@
         
         /* Print header and footer */
         @page {
-            margin: 1.5cm;
+            margin: 1.2cm;
             @top-center {
                 content: "Quotation {{ $quotationRequest->request_number }}";
-                font-size: 10pt;
+                font-size: 9pt;
                 color: #666;
             }
             @bottom-center {
                 content: "Page " counter(page) " of " counter(pages) " | Printed on {{ date('F j, Y') }}";
-                font-size: 9pt;
+                font-size: 8.5pt;
                 color: #666;
             }
         }
@@ -681,6 +682,16 @@
         h1, h2, h3 {
             color: #000;
             page-break-after: avoid;
+        }
+
+        h2 {
+            font-size: 13pt;
+            margin-bottom: 6pt;
+        }
+
+        h3 {
+            font-size: 11pt;
+            margin-bottom: 4pt;
         }
         
         .bg-gray-50,
@@ -716,24 +727,62 @@
         table, ul, ol {
             page-break-inside: avoid;
         }
+
+        /* Print section spacing and grouping */
+        .print-section {
+            margin-bottom: 12pt;
+            padding: 10pt !important;
+        }
+
+        .print-summary {
+            margin-bottom: 10pt;
+        }
+
+        .print-services,
+        .print-pricing,
+        .print-clauses,
+        .print-conditions {
+            page-break-inside: avoid;
+        }
+
+        .print-clauses .space-y-4 {
+            gap: 6pt !important;
+        }
+
+        .print-clauses ul {
+            list-style-position: outside;
+            padding-left: 18pt;
+            margin-top: 4pt;
+            margin-bottom: 6pt;
+        }
+
+        .print-clauses li {
+            break-inside: avoid;
+            page-break-inside: avoid;
+            margin-bottom: 2pt;
+        }
+
+        .print-conditions {
+            page-break-before: always;
+        }
         
         /* Print header info at top of first page */
         .print-header-info {
             display: block !important;
             text-align: center;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
+            margin-bottom: 12pt;
+            padding-bottom: 6pt;
             border-bottom: 2px solid #000;
         }
         
         .print-header-info h1 {
             margin: 0;
-            font-size: 18pt;
+            font-size: 16pt;
         }
         
         .print-header-info p {
-            margin: 5px 0;
-            font-size: 10pt;
+            margin: 3pt 0;
+            font-size: 9pt;
         }
     }
     
