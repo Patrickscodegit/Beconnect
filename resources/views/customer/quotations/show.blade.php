@@ -467,7 +467,7 @@
                                 <h3 class="text-sm font-semibold text-gray-700 mb-2">{{ ucfirst(strtolower($type)) }}</h3>
                                 <ul class="list-disc pl-5 space-y-1 text-sm text-gray-700">
                                     @foreach($clauses as $clause)
-                                        <li>{{ $clause['text'] ?? '' }}</li>
+                                        <li>{{ strip_tags($clause['text'] ?? '') }}</li>
                                     @endforeach
                                 </ul>
                             </div>
