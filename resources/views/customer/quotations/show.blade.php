@@ -745,21 +745,31 @@
             page-break-inside: avoid;
         }
 
+        .print-clauses {
+            font-size: 9.2pt;
+            line-height: 1.25;
+        }
+
         .print-clauses .space-y-4 {
-            gap: 6pt !important;
+            gap: 4pt !important;
+        }
+
+        .print-clauses h3 {
+            font-size: 10pt;
+            margin-bottom: 3pt;
         }
 
         .print-clauses ul {
             list-style-position: outside;
-            padding-left: 18pt;
-            margin-top: 4pt;
-            margin-bottom: 6pt;
+            padding-left: 14pt;
+            margin-top: 3pt;
+            margin-bottom: 4pt;
         }
 
         .print-clauses li {
             break-inside: avoid;
             page-break-inside: avoid;
-            margin-bottom: 2pt;
+            margin-bottom: 1pt;
         }
 
         .print-conditions {
