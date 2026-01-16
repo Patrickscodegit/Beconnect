@@ -378,6 +378,24 @@ class ViewQuotationRequest extends ViewRecord
                             ->columnSpanFull(),
                     ])
                     ->collapsible(),
+
+                Infolists\Components\Section::make('Carrier Clauses')
+                    ->schema([
+                        Infolists\Components\RepeatableEntry::make('carrier_clauses')
+                            ->label('')
+                            ->schema([
+                                Infolists\Components\TextEntry::make('clause_type')
+                                    ->label('Type')
+                                    ->badge(),
+                                Infolists\Components\TextEntry::make('text')
+                                    ->label('Clause')
+                                    ->columnSpanFull(),
+                            ])
+                            ->columns(2)
+                            ->columnSpanFull(),
+                    ])
+                    ->collapsed()
+                    ->visible(fn ($record) => !empty($record->carrier_clauses)),
                     
                 Infolists\Components\Section::make('Pricing')
                     ->schema([
