@@ -500,6 +500,25 @@
                     </ul>
                 </div>
             @endif
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-file-alt mr-2 text-gray-600"></i>General Conditions
+                </h2>
+                <div class="space-y-3 text-sm text-gray-700">
+                    <p>All services and operations performed by Belgaco BV are subject to the terms outlined in the most recent version of the following conditions, as applicable:</p>
+                    <p>
+                        <strong>Maritime services:</strong> The General Conditions of the Belgian Forwarders for all our maritime related services. Full details can be found at:
+                        <a href="https://www.belgaco-shipping.com/terms-and-conditions" class="text-blue-600 hover:text-blue-800" target="_blank" rel="noopener">https://www.belgaco-shipping.com/terms-and-conditions</a>
+                    </p>
+                    <p>
+                        <strong>Road transport services:</strong> The Convention on the Contract for the International Carriage of Goods by Road (CMR), governing international road transport agreements.
+                    </p>
+                    <p>
+                        <strong>Standard conditions:</strong> Belgian Freight Forwarders - Standard Trading Conditions (Free translation)-11.pdf
+                    </p>
+                </div>
+            </div>
         </div>
 
         <!-- Sidebar -->
