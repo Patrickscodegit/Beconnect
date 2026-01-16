@@ -16,6 +16,7 @@ class CarrierClause extends Model
         'vessel_name',
         'vessel_class',
         'clause_type',
+        'title',
         'text',
         'sort_order',
         'effective_from',
