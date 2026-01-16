@@ -3,6 +3,31 @@
 @section('title', 'Quotation ' . $quotationRequest->request_number)
 
 @section('content')
+@php
+    // Calculate total from articles for display (used in summary card and pricing section)
+    $calculatedTotal = null;
+    if ($quotationRequest->status === 'quoted' && $quotationRequest->total_incl_vat) {
+        $calculatedTotal = $quotationRequest->total_incl_vat;
+    } else {
+        $calculatedSubtotal = 0;
+        foreach($quotationRequest->articles as $article) {
+            $articleModel = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotationRequest->id)
+                ->where('article_cache_id', $article->id)
+                ->first();
+            $subtotal = $article->pivot->subtotal ?? 0;
+            if ($articleModel && $articleModel->subtotal) {
+                $subtotal = $articleModel->subtotal;
+            } elseif ($article->pivot->unit_price) {
+                $displayQty = $articleModel ? $articleModel->display_quantity : ($article->pivot->quantity ?? 1);
+                $subtotal = $displayQty * ($article->pivot->unit_price ?? 0);
+            }
+            $calculatedSubtotal += $subtotal;
+        }
+        if ($calculatedSubtotal > 0) {
+            $calculatedTotal = $calculatedSubtotal;
+        }
+    }
+@endphp
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     
     <!-- Print Header (only visible when printing) -->
@@ -66,8 +91,8 @@
             <div>
                 <p class="text-sm font-medium text-gray-600 mb-1">Total</p>
                 <p class="text-2xl font-bold text-blue-600">
-                    @if($quotationRequest->status === 'quoted' && $quotationRequest->total_incl_vat)
-                        €{{ number_format($quotationRequest->total_incl_vat, 2) }}
+                    @if($calculatedTotal !== null)
+                        €{{ number_format($calculatedTotal, 2) }}
                     @else
                         <span class="text-gray-400">Pending</span>
                     @endif
@@ -401,10 +426,29 @@
                         </p>
                     @endif
                 @else
-                    <div class="text-center py-6 text-gray-500">
-                        <i class="fas fa-hourglass-half text-3xl mb-2"></i>
-                        <p class="text-sm">Pricing will be available once the quotation is processed.</p>
-                    </div>
+                    @if($calculatedTotal !== null)
+                        <dl class="space-y-3">
+                            <div class="flex justify-between">
+                                <dt class="text-sm font-medium text-gray-500">Subtotal</dt>
+                                <dd class="text-sm text-gray-900">€{{ number_format($calculatedTotal, 2) }}</dd>
+                            </div>
+                            <div class="flex justify-between pt-3 border-t border-gray-200">
+                                <dt class="text-lg font-bold text-gray-900">Total</dt>
+                                <dd class="text-lg font-bold text-gray-900">€{{ number_format($calculatedTotal, 2) }}</dd>
+                            </div>
+                        </dl>
+                        <div class="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                            <p class="text-sm text-amber-800">
+                                <i class="fas fa-exclamation-triangle mr-2"></i>
+                                <strong>Note:</strong> This pricing is subject to review and confirmation by the Bconnect team.
+                            </p>
+                        </div>
+                    @else
+                        <div class="text-center py-6 text-gray-500">
+                            <i class="fas fa-hourglass-half text-3xl mb-2"></i>
+                            <p class="text-sm">Pricing will be available once the quotation is processed.</p>
+                        </div>
+                    @endif
                 @endif
             </div>
 
