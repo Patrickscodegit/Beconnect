@@ -172,6 +172,11 @@ LM display breakdown:
   `article_name` / `description`.
 - LM articles show a detailed LM breakdown.
 
+### Cargo Description Summary
+- `cargo_description` is a generated summary of commodity items.
+- The summary format mirrors `RobawsFieldGenerator::generateCargoField()` so Filament and exports stay consistent.
+- When commodity items are created, updated, or deleted, the quotation’s `cargo_description` is updated accordingly.
+
 ### Carrier Clauses
 - Resolved carrier clauses are displayed on customer and admin views, grouped
   by clause type.
