@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\QuotationRequestResource\Pages;
 
 use App\Filament\Resources\QuotationRequestResource;
+use App\Services\Pricing\QuotationVatService;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
 
@@ -69,6 +70,16 @@ class EditQuotationRequest extends EditRecord
         })->values()->toArray();
 
         return $data;
+    }
+
+    protected function afterSave(): void
+    {
+        $record = $this->getRecord();
+        if (!$record) {
+            return;
+        }
+
+        app(QuotationVatService::class)->recalculateVatForQuotation($record);
     }
 }
 

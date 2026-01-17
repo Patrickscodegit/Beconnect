@@ -5,6 +5,7 @@
         roleMarginPercentage: 0,
         discount: 0,
         vatRate: 21,
+        projectVatCode: null,
         subtotalExclVat: 0,
         vatAmount: 0,
         totalInclVat: 0,
@@ -13,6 +14,7 @@
             // Initialize values from form data
             this.discount = parseFloat($wire.get('data.discount_percentage')) || 0;
             this.vatRate = parseFloat($wire.get('data.vat_rate')) || 21;
+            this.projectVatCode = $wire.get('data.project_vat_code');
             
             this.calculatePricing();
             
@@ -30,6 +32,12 @@
             // Listen for VAT rate changes
             this.$watch('$wire.data.vat_rate', (value) => {
                 this.vatRate = parseFloat(value) || 21;
+                this.calculatePricing();
+            });
+
+            // Listen for project VAT code changes
+            this.$watch('$wire.data.project_vat_code', (value) => {
+                this.projectVatCode = value;
                 this.calculatePricing();
             });
             
@@ -63,7 +71,8 @@
             this.subtotalExclVat = subtotalWithMargin - discountAmount;
             
             // Calculate VAT
-            this.vatAmount = this.subtotalExclVat * (this.vatRate / 100);
+            const effectiveVatRate = this.getEffectiveVatRate();
+            this.vatAmount = this.subtotalExclVat * (effectiveVatRate / 100);
             
             // Calculate total
             this.totalInclVat = this.subtotalExclVat + this.vatAmount;
@@ -73,6 +82,19 @@
             $wire.set('data.total_excl_vat', this.subtotalExclVat.toFixed(2));
             $wire.set('data.vat_amount', this.vatAmount.toFixed(2));
             $wire.set('data.total_incl_vat', this.totalInclVat.toFixed(2));
+        },
+
+        getEffectiveVatRate() {
+            if (!this.projectVatCode) {
+                return this.vatRate;
+            }
+
+            const code = String(this.projectVatCode).trim().toLowerCase();
+            if (code === 'vrijgesteld vf' || code === 'intracommunautaire levering vf') {
+                return 0;
+            }
+
+            return this.vatRate;
         },
         
         getRoleMargin(role) {

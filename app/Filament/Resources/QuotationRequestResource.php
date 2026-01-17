@@ -987,6 +987,8 @@ class QuotationRequestResource extends Resource
                         Forms\Components\Hidden::make('total_incl_vat')
                             ->default(0)
                             ->dehydrated(),
+                        Forms\Components\Hidden::make('project_vat_code')
+                            ->dehydrated(),
                     ])
                     ->columns(2),
                     
