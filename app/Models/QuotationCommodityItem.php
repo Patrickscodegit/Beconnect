@@ -654,14 +654,14 @@ class QuotationCommodityItem extends Model
 
         // Auto-add missing parent articles based on commodity types.
         if ($commodityItems->isNotEmpty()) {
-            $selectionService = app(SmartArticleSelectionService::class);
-            $selectionService->clearCache($quotation);
+                $selectionService = app(SmartArticleSelectionService::class);
+                $selectionService->clearCache($quotation);
 
-            $distinctCommodityTypes = $commodityItems
-                ->flatMap(fn ($item) => static::normalizeCommodityTypes($item))
-                ->filter()
-                ->unique()
-                ->values();
+                $distinctCommodityTypes = $commodityItems
+                    ->flatMap(fn ($item) => static::normalizeCommodityTypes($item))
+                    ->filter()
+                    ->unique()
+                    ->values();
 
             $existingParentTypes = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
                 ->whereIn('item_type', ['parent', 'standalone'])
@@ -1201,6 +1201,17 @@ class QuotationCommodityItem extends Model
 
             $orchestrator = app(\App\Services\Quotation\QuotationPricingOrchestrator::class);
 
+            // Keep cargo_description in sync with commodity items
+            \DB::afterCommit(function () use ($item) {
+                $quotation = \App\Models\QuotationRequest::find($item->quotation_request_id);
+                if (!$quotation) {
+                    return;
+                }
+
+                $quotation->load('commodityItems');
+                app(\App\Services\RobawsFieldGenerator::class)->updateCargoDescription($quotation);
+            });
+
             // DISABLED: Bidirectional relationship sync at database level
             //
             // This bidirectional sync was disabled to prevent circular dependencies during Livewire
@@ -1356,6 +1367,9 @@ class QuotationCommodityItem extends Model
                 // Reload commodity items to get current count after deletion
                 $quotation->load('commodityItems');
                 $remainingCommodityCount = $quotation->commodityItems->count();
+
+                // Keep cargo_description in sync with remaining commodity items
+                app(\App\Services\RobawsFieldGenerator::class)->updateCargoDescription($quotation);
 
                 \Log::info('QuotationCommodityItem: Processing deletion', [
                     'deleted_item_id' => $deletedItemId,

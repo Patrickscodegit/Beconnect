@@ -187,8 +187,21 @@ class RobawsFieldGenerator
         $dimField = $this->generateDimField($quotation);
         
         $quotation->update([
+            'cargo_description' => $cargoField,
             'robaws_cargo_field' => $cargoField,
             'robaws_dim_field' => $dimField,
+        ]);
+    }
+
+    /**
+     * Update cargo_description from commodity items
+     */
+    public function updateCargoDescription(QuotationRequest $quotation): void
+    {
+        $cargoField = $this->generateCargoField($quotation);
+
+        $quotation->update([
+            'cargo_description' => $cargoField,
         ]);
     }
 
