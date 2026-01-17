@@ -240,10 +240,6 @@
                                 <dt class="text-sm font-medium text-gray-500">Description</dt>
                                 <dd class="text-gray-900">{{ $quotationRequest->cargo_description }}</dd>
                             </div>
-                            <div>
-                                <dt class="text-sm font-medium text-gray-500">Commodity Type</dt>
-                                <dd class="text-gray-900 capitalize">{{ str_replace('_', ' ', $quotationRequest->commodity_type) }}</dd>
-                            </div>
                             @if($quotationRequest->cargo_details && isset($quotationRequest->cargo_details['weight']))
                             <div>
                                 <dt class="text-sm font-medium text-gray-500">Weight</dt>

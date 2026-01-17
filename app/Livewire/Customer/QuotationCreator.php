@@ -31,7 +31,6 @@ class QuotationCreator extends Component
     public $in_transit_to = '';
     public $simple_service_type = 'SEA_RORO';
     public $service_type = 'RORO_EXPORT';
-    public $commodity_type = '';
     public $cargo_description = '';
     public $special_requirements = '';
     public $selected_schedule_id = null;
@@ -253,7 +252,6 @@ class QuotationCreator extends Component
         $this->in_transit_to = $quotation->in_transit_to ?? '';
         $this->service_type = $quotation->service_type ?? 'RORO_EXPORT';
         $this->simple_service_type = $quotation->simple_service_type ?? 'SEA_RORO';
-        $this->commodity_type = $quotation->commodity_type ?? '';
         $this->cargo_description = $quotation->cargo_description ?? '';
         $this->special_requirements = $quotation->special_requirements ?? '';
         $this->selected_schedule_id = $quotation->selected_schedule_id;
@@ -349,7 +347,6 @@ class QuotationCreator extends Component
                 'service_type' => $this->service_type,
                 'simple_service_type' => $this->simple_service_type,
                 'trade_direction' => $this->getDirectionFromServiceType($this->service_type),
-                'commodity_type' => $this->commodity_type,
                 'cargo_description' => $this->cargo_description,
                 'special_requirements' => $this->special_requirements,
                 'selected_schedule_id' => $this->selected_schedule_id,
@@ -490,34 +487,6 @@ class QuotationCreator extends Component
         }
         
         return '';
-    }
-    
-    /**
-     * Explicit handler for commodity_type changes to ensure proper filtering
-     */
-    public function updatedCommodityType($value)
-    {
-        // Save commodity_type to quotation (this updates updated_at timestamp)
-        $this->updated('commodity_type');
-        
-        // Refresh quotation to ensure we have the latest updated_at timestamp
-        $this->quotation = $this->quotation->fresh();
-        
-        // Clear cache for article suggestions when commodity changes
-        // Note: Cache key includes updated_at timestamp, so old cache is automatically invalidated
-        // We clear explicitly to ensure no stale cache remains
-        if ($this->quotation) {
-            $service = app(\App\Services\SmartArticleSelectionService::class);
-            $service->clearCache($this->quotation);
-        }
-        
-        // Update showArticles flag (commodity is now selected)
-        $this->updateShowArticles();
-        
-        // Reload suggestions if articles are showing
-        if ($this->showArticles) {
-            $this->dispatch('quotationUpdated');
-        }
     }
     
     public function handleArticleAdded($articleId)

@@ -45,7 +45,6 @@ class QuotationRequest extends Model
         'in_transit_to',
         'cargo_details',
         'cargo_description',
-        'commodity_type', // Legacy field (for backward compatibility)
         'total_commodity_items', // New multi-commodity system
         'robaws_cargo_field', // Generated CARGO field for Robaws
         'robaws_dim_field', // Generated DIM_BEF_DELIVERY field for Robaws

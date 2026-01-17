@@ -299,18 +299,18 @@
                 'isEditable' => true
             ], key('article-selector-' . $quotation->id))
         </div>
-    @elseif($pol && $pod && $selected_schedule_id && !$commodity_type)
-        {{-- Prompt to select commodity type --}}
+    @elseif($pol && $pod && $selected_schedule_id && empty($this->getEffectiveCommodityType()))
+        {{-- Prompt to add commodity items --}}
         <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-6">
             <div class="flex items-start">
                 <i class="fas fa-info-circle text-yellow-600 text-3xl mr-4"></i>
                 <div>
-                    <h3 class="text-lg font-semibold text-yellow-900 mb-2">Select Commodity Type</h3>
+                    <h3 class="text-lg font-semibold text-yellow-900 mb-2">Add Commodity Items</h3>
                     <p class="text-sm text-yellow-800">
-                        To see suggested services and get instant pricing, please select a commodity type from the section above.
+                        To see suggested services and get instant pricing, please add at least one commodity item below.
                     </p>
                     <p class="text-sm text-yellow-700 mt-2">
-                        💡 <strong>Tip:</strong> Selecting your commodity type helps us show the most relevant articles and accurate pricing for your shipment.
+                        💡 <strong>Tip:</strong> Commodity items help us show the most relevant articles and accurate pricing for your shipment.
                     </p>
                 </div>
             </div>

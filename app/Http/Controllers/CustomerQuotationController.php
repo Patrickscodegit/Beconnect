@@ -297,7 +297,6 @@ class CustomerQuotationController extends Controller
             
             // Legacy Cargo Information (kept for backward compatibility)
             'cargo_description' => 'nullable|string|max:1000',
-            'commodity_type' => 'nullable|string|max:255',
             'cargo_value' => 'nullable|numeric|min:0',
             
             // New Multi-Commodity System
@@ -363,7 +362,6 @@ class CustomerQuotationController extends Controller
             
             // Cargo
             'cargo_description' => $request->cargo_description,
-            'commodity_type' => $request->commodity_type, // Legacy field - kept for backward compatibility
             'cargo_details' => [
                 'value' => $request->cargo_value,
                 'special_requirements' => $request->special_requirements,

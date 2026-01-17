@@ -99,12 +99,6 @@
                                         <td style="padding: 6px 0; color: #6b7280; font-size: 14px;"><strong>Direction:</strong></td>
                                         <td style="padding: 6px 0; color: #111827; font-size: 14px;">{{ ucfirst($quotation->trade_direction) }}</td>
                                     </tr>
-                                    @if($quotation->commodity_type)
-                                    <tr>
-                                        <td style="padding: 6px 0; color: #6b7280; font-size: 14px;"><strong>Commodity:</strong></td>
-                                        <td style="padding: 6px 0; color: #111827; font-size: 14px;">{{ $quotation->commodity_type }}</td>
-                                    </tr>
-                                    @endif
                                 </table>
                                 
                                 @if($quotation->cargo_description)

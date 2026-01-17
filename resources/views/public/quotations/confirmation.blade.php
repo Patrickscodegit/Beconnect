@@ -181,9 +181,6 @@
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Description</dt>
                         <dd class="text-gray-900 mb-4">{{ $quotationRequest->cargo_description }}</dd>
-                        
-                        <dt class="text-sm font-medium text-gray-500">Commodity Type</dt>
-                        <dd class="text-gray-900 capitalize">{{ str_replace('_', ' ', $quotationRequest->commodity_type) }}</dd>
                     </div>
                     
                     <div>

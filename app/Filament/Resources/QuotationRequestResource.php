@@ -414,19 +414,6 @@ class QuotationRequestResource extends Resource
                             ->helperText('If shipment is in transit to another country, specify destination')
                             ->columnSpan(1),
                             
-                        Forms\Components\Select::make('commodity_type')
-                            ->options([
-                                'cars' => 'Cars',
-                                'general_goods' => 'General Goods',
-                                'personal_goods' => 'Personal Goods',
-                                'motorcycles' => 'Motorcycles',
-                                'trucks' => 'Trucks',
-                                'machinery' => 'Machinery',
-                                'breakbulk' => 'Break Bulk',
-                            ])
-                            ->required()
-                            ->columnSpan(1),
-                            
                         Forms\Components\Textarea::make('cargo_description')
                             ->label('Cargo Description')
                             ->rows(3)
