@@ -965,6 +965,19 @@ class QuotationRequestResource extends Resource
                             ->default(config('quotation.vat_rate', 21))
                             ->minValue(0)
                             ->maxValue(100)
+                            ->live()
+                            ->afterStateHydrated(function ($state, Forms\Set $set, Forms\Get $get) {
+                                $projectVatCode = $get('project_vat_code');
+                                if (in_array($projectVatCode, ['vrijgesteld VF', 'intracommunautaire levering VF'], true)) {
+                                    $set('vat_rate', 0);
+                                }
+                            })
+                            ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
+                                $projectVatCode = $get('project_vat_code');
+                                if (in_array($projectVatCode, ['vrijgesteld VF', 'intracommunautaire levering VF'], true)) {
+                                    $set('vat_rate', 0);
+                                }
+                            })
                             ->columnSpan(1),
                             
                         Forms\Components\DatePicker::make('valid_until')
