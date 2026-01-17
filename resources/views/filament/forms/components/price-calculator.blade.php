@@ -45,8 +45,8 @@
             
             // Calculate subtotal from articles
             this.subtotal = articles.reduce((sum, article) => {
-                const price = parseFloat(article.price) || 0;
-                const quantity = parseInt(article.quantity) || 1;
+                const price = parseFloat(article.unit_price ?? article.price) || 0;
+                const quantity = parseFloat(article.quantity) || 1;
                 return sum + (price * quantity);
             }, 0);
             
