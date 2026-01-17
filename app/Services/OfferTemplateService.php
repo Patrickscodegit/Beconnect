@@ -19,14 +19,18 @@ class OfferTemplateService
         $routing = $quotationRequest->routing ?? [];
         $cargo = $quotationRequest->cargo_details ?? [];
         $schedule = $quotationRequest->selectedSchedule;
+        $pol = $routing['pol'] ?? '';
+        $pod = $routing['pod'] ?? '';
+        $por = $routing['por'] ?? '';
+        $fdest = $routing['fdest'] ?? '';
         
         return [
             'contactPersonName' => $quotationRequest->requester_name ?? 'Valued Customer',
             'companyName' => $quotationRequest->requester_company ?? '',
-            'POL' => $routing['pol'] ?? '',
-            'POD' => $routing['pod'] ?? '',
-            'POR' => $routing['por'] ?? '',
-            'FDEST' => $routing['fdest'] ?? '',
+            'POL' => $pol,
+            'POD' => $pod,
+            'POR' => $por,
+            'FDEST' => $fdest,
             'CARGO' => $this->formatCargoDescription($cargo),
             'DIM_BEF_DELIVERY' => $this->formatCargoDetails($cargo),
             'TRANSHIPMENT' => $schedule?->transhipment_port ?? 'Direct',
@@ -38,7 +42,21 @@ class OfferTemplateService
             'VOYAGE' => $schedule?->voyage_number ?? '',
             'SERVICE_TYPE' => $this->formatServiceType($quotationRequest->service_type),
             'REQUEST_NUMBER' => $quotationRequest->request_number,
+            'CARGO_DESCRIPTION' => $quotationRequest->cargo_description ?? $this->formatCargoDescription($cargo),
+            'ROUTE_PHRASE' => $this->buildRoutePhrase($pol, $pod, $por, $fdest),
         ];
+    }
+
+    protected function buildRoutePhrase(string $pol, string $pod, string $por, string $fdest): string
+    {
+        $hasPor = !empty(trim($por));
+        $hasFdest = !empty(trim($fdest));
+
+        if (!$hasPor && !$hasFdest) {
+            return 'Ex delivered terminal "' . $pol . '" to CFR "' . $pod . '"';
+        }
+
+        return trim(($hasPor ? $por : '') . ' → ' . ($hasFdest ? $fdest : ''));
     }
 
     /**

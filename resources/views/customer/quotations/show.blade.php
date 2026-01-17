@@ -297,6 +297,17 @@
                 @endif
             </div>
 
+            @if($quotationRequest->renderIntroText())
+                <div class="print-section bg-white rounded-lg shadow p-6 mt-6">
+                    <h2 class="text-xl font-semibold text-gray-900 mb-3">
+                        <i class="fas fa-file-signature mr-2"></i>Intro
+                    </h2>
+                    <div class="rounded-lg border border-gray-200 bg-white p-4">
+                        <p class="text-gray-900 whitespace-pre-line">{{ $quotationRequest->renderIntroText() }}</p>
+                    </div>
+                </div>
+            @endif
+
             {{-- Selected Articles --}}
             @if($quotationRequest->articles->count() > 0)
                 <div class="print-section print-services bg-white rounded-lg shadow p-6">

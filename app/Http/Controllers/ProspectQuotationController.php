@@ -8,6 +8,7 @@ use App\Models\ShippingCarrier;
 use App\Models\Intake;
 use App\Notifications\QuotationSubmittedNotification;
 use App\Services\RobawsFieldGenerator;
+use App\Services\OfferTemplateService;
 use App\Services\Commodity\CommodityMappingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
@@ -156,6 +157,9 @@ class ProspectQuotationController extends Controller
                 $fieldGenerator = new RobawsFieldGenerator();
                 $fieldGenerator->generateAndUpdateFields($quotationRequest);
             }
+
+            // Apply intro/end templates after cargo fields are ready
+            app(OfferTemplateService::class)->applyTemplates($quotationRequest);
             
             // Handle file uploads if any
             if ($request->hasFile('supporting_files')) {

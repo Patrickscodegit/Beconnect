@@ -177,6 +177,12 @@ LM display breakdown:
 - The summary format mirrors `RobawsFieldGenerator::generateCargoField()` so Filament and exports stay consistent.
 - When commodity items are created, updated, or deleted, the quotation’s `cargo_description` is updated accordingly.
 
+### Intro Templates
+- Intro text is selected via `OfferTemplate` based on `service_type` (and optionally `customer_type`).
+- On customer/prospect submission, `OfferTemplateService::applyTemplates()` renders and stores `intro_text` using template variables.
+- Public confirmation and customer quotation pages display `renderIntroText()` to keep content consistent with Filament.
+- Available variables include: `${POL}`, `${POD}`, `${POR}`, `${FDEST}`, `${CARGO}`, `${CARGO_DESCRIPTION}`, `${ROUTE_PHRASE}`, `${SERVICE_TYPE}`, `${REQUEST_NUMBER}` and schedule-based fields (`${CARRIER}`, `${VESSEL}`, `${VOYAGE}`, `${NEXT_SAILING}`, `${TRANSIT_TIME}`, `${FREQUENCY}`).
+
 ### Carrier Clauses
 - Resolved carrier clauses are displayed on customer and admin views, grouped
   by clause type.
