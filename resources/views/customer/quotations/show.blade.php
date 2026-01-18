@@ -32,6 +32,7 @@
     
     <!-- Print Header (only visible when printing) -->
     <div class="print-header-info">
+        <p class="print-brand">Belgaco Logistics</p>
         <h1>Quotation {{ $quotationRequest->request_number }}</h1>
         <p>Date: {{ $quotationRequest->created_at->format('F j, Y') }}</p>
         <p>Route: {{ $quotationRequest->pol }} → {{ $quotationRequest->pod }}</p>
@@ -706,6 +707,9 @@
             color: black;
             font-size: 10.5pt;
             line-height: 1.35;
+            font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }
         
         .max-w-7xl {
@@ -766,7 +770,7 @@
         .bg-gray-50,
         .bg-white {
             background: white !important;
-            border: 1px solid #ddd !important;
+            border: 1px solid #e2e8f0 !important;
         }
         
         /* Ensure colors print */
@@ -776,10 +780,10 @@
             color: #000 !important;
         }
         
-        /* Remove shadows and rounded corners for print */
+        /* Remove heavy shadows and rounded corners for print */
         .rounded-lg,
         .rounded {
-            border-radius: 0 !important;
+            border-radius: 6pt !important;
         }
         
         .shadow {
@@ -788,8 +792,8 @@
         
         /* Summary card styling for print */
         .bg-gradient-to-r {
-            background: #f0f0f0 !important;
-            border: 2px solid #000 !important;
+            background: #f1f5f9 !important;
+            border: 1px solid #cbd5e1 !important;
         }
         
         /* Ensure tables and lists print well */
@@ -801,10 +805,22 @@
         .print-section {
             margin-bottom: 12pt;
             padding: 10pt !important;
+            border: 1px solid #cbd5e1 !important;
+            background: #ffffff !important;
         }
 
         .print-summary {
             margin-bottom: 10pt;
+        }
+
+        .print-section h2 {
+            font-size: 12.5pt;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            background: #eef2f7;
+            padding: 6pt 8pt;
+            border-left: 4pt solid #1e3a8a;
+            margin: 0 0 8pt 0;
         }
 
         .print-services,
@@ -850,19 +866,29 @@
         .print-header-info {
             display: block !important;
             text-align: center;
-            margin-bottom: 12pt;
-            padding-bottom: 6pt;
-            border-bottom: 2px solid #000;
+            margin-bottom: 14pt;
+            padding-bottom: 8pt;
+            border-bottom: 2px solid #1e293b;
+        }
+
+        .print-header-info .print-brand {
+            font-size: 11pt;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            margin: 0 0 4pt 0;
+            color: #1e3a8a;
         }
         
         .print-header-info h1 {
             margin: 0;
-            font-size: 16pt;
+            font-size: 18pt;
         }
         
         .print-header-info p {
             margin: 3pt 0;
-            font-size: 9pt;
+            font-size: 9.5pt;
+            color: #334155;
         }
     }
     
