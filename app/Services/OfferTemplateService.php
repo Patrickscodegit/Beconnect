@@ -56,7 +56,15 @@ class OfferTemplateService
             return 'Ex delivered terminal "' . $pol . '" to CFR "' . $pod . '"';
         }
 
-        return trim(($hasPor ? $por : '') . ' → ' . ($hasFdest ? $fdest : ''));
+        if ($hasPor && $hasFdest) {
+            return trim($por . ' → ' . $pol . ' → ' . $pod . ' → ' . $fdest);
+        }
+
+        if ($hasPor) {
+            return trim($por . ' → ' . $pod);
+        }
+
+        return trim($pol . ' → ' . $fdest);
     }
 
     /**

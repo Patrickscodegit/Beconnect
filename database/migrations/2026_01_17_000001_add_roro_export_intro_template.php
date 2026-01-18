@@ -12,7 +12,7 @@ Dear,
 
 Thank you for the enquiry, please note our offer as follows:
 
-Ex delivered terminal "${POL}" to CFR "${POD}"
+${ROUTE_PHRASE}
 
 Cargo: ${CARGO_DESCRIPTION}
 EOT;
