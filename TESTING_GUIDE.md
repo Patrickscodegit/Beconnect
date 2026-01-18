@@ -3,7 +3,7 @@
 ## 🚀 Getting Started
 
 > **Testing Database**  
-> PHPUnit now targets `database/testing.sqlite`. If migrations change, regenerate it with `php artisan migrate:fresh --env=testing` before running the suite.
+> PHPUnit now targets `database/testing.sqlite`. If migrations change, regenerate it with `php artisan migrate fresh --env=testing` before running the suite.
 
 > **Pipeline Test Suite**  
 > Integration-heavy ingestion specs are tagged `@group pipeline` and are skipped by default. Set `PIPELINE_TESTS=true` (for example `PIPELINE_TESTS=true php artisan test --group=pipeline`) when you need to exercise the full document/OCR/email pipeline.

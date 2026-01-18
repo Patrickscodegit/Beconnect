@@ -6,9 +6,9 @@
 
 ```bash
 # ❌ DANGEROUS - Wipes entire database
-# php artisan migrate:fresh --seed --force
-# php artisan db:wipe --force  
-# php artisan migrate:reset --force
+# php artisan migrate fresh --seed --force
+# php artisan db wipe --force  
+# php artisan migrate reset --force
 
 # ✅ SAFE - Regular migrations
 php artisan migrate
@@ -20,7 +20,7 @@ php artisan migrate:status
 
 The database was wiped by running `forge-real-data-only-fix.sh` which contains:
 ```bash
-# php artisan migrate:fresh --seed --force  # Line 35 - DANGEROUS!
+# php artisan migrate fresh --seed --force  # Line 35 - DANGEROUS!
 ```
 
 This command:
@@ -62,13 +62,13 @@ php artisan view:clear
 #### ❌ Dangerous Commands (Avoid)
 ```bash
 # These WIPE your database:
-# php artisan migrate:fresh --seed --force
-# php artisan db:wipe --force
-# php artisan migrate:reset --force
+# php artisan migrate fresh --seed --force
+# php artisan db wipe --force
+# php artisan migrate reset --force
 
 # These might cause issues:
-# php artisan migrate:fresh --seed  # Still wipes data
-# php artisan db:wipe  # Still wipes data
+# php artisan migrate fresh --seed  # Still wipes data
+# php artisan db wipe  # Still wipes data
 ```
 
 ### 3. Backup Before Any Major Changes
@@ -156,7 +156,7 @@ Before committing changes:
 
 - [ ] Database backup created
 - [ ] No dangerous scripts in commit
-- [ ] No `# migrate:fresh` commands
+- [ ] No `# migrate fresh` commands
 - [ ] All migrations are additive (not destructive)
 - [ ] Tested on copy of database first
 
@@ -166,7 +166,7 @@ Before running any `.sh` script:
 
 ```bash
 # Check what the script does
-grep -n "migrate:fresh\|db:wipe\|migrate:reset" script_name.sh
+grep -n "migrate fresh|db wipe|migrate reset" script_name.sh
 
 # If found, DON'T RUN without backup
 ```
@@ -182,4 +182,4 @@ If database gets wiped:
 
 ---
 
-**Remember: `# migrate:fresh` = DATA LOSS. Always backup first!** 🛡️
+**Remember: `# migrate fresh` = DATA LOSS. Always backup first!** 🛡️

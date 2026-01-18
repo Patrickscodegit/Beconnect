@@ -183,6 +183,10 @@ LM display breakdown:
 - Public confirmation and customer quotation pages display `renderIntroText()` to keep content consistent with Filament.
 - Available variables include: `${POL}`, `${POD}`, `${POR}`, `${FDEST}`, `${CARGO}`, `${CARGO_DESCRIPTION}`, `${ROUTE_PHRASE}`, `${SERVICE_TYPE}`, `${REQUEST_NUMBER}` and schedule-based fields (`${CARRIER}`, `${VESSEL}`, `${VOYAGE}`, `${NEXT_SAILING}`, `${TRANSIT_TIME}`, `${FREQUENCY}`).
 
+### Selected Schedule Display
+- Confirmation pages (public and customer) show the selected schedule block when `selected_schedule_id` is set.
+- The block renders carrier, service, departure date, vessel, voyage, and transit time using `selectedSchedule` and `selectedSchedule->carrier`.
+
 ### Carrier Clauses
 - Resolved carrier clauses are displayed on customer and admin views, grouped
   by clause type.

@@ -14,9 +14,9 @@ The ports database stores all shipping ports (POLs and PODs) used in the system.
 
 The ports table was likely emptied by one of these scenarios:
 
-1. **Running `migrate:fresh`** - Drops all tables and re-runs migrations
-2. **Running `migrate:reset`** - Rolls back all migrations (drops tables)
-3. **Running `db:wipe`** - Wipes the database
+1. **Running `migrate fresh`** - Drops all tables and re-runs migrations
+2. **Running `migrate reset`** - Rolls back all migrations (drops tables)
+3. **Running `db wipe`** - Wipes the database
 4. **Migration rollback** - If someone rolled back the `create_ports_table` migration
 
 **Root Cause**: These commands are dangerous and should **NEVER** be run without a backup, especially in production.
@@ -33,9 +33,9 @@ php artisan migrate
 php artisan migrate:status
 
 # ❌ DANGEROUS - Never use these without backup
-# php artisan migrate:fresh --seed
-# php artisan migrate:reset
-# php artisan db:wipe
+# php artisan migrate fresh --seed
+# php artisan migrate reset
+# php artisan db wipe
 ```
 
 ### 2. Always Backup Before Major Changes
@@ -67,7 +67,7 @@ php artisan db:seed
 ```
 
 However, **ports won't be seeded automatically** if:
-- You run `migrate:fresh` (drops everything first)
+- You run `migrate fresh` (drops everything first)
 - You manually drop the ports table
 - The seeder isn't called in `DatabaseSeeder`
 
@@ -181,7 +181,7 @@ When adding a new carrier or route:
 
 ## ⚠️ Important Notes
 
-1. **Never run `migrate:fresh` in production** - It wipes all data
+1. **Never run `migrate fresh` in production** - It wipes all data
 2. **Always backup before migrations** - Use the safe-deploy script
 3. **PortSeeder uses `updateOrCreate`** - Won't duplicate ports, safe to run multiple times
 4. **`ports:sync-from-articles` filters invalid codes** - HULL, NMT, etc. are automatically skipped

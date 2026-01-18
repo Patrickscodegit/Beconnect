@@ -155,7 +155,7 @@ php artisan tinker --execute="Schema::getColumnListing('ports')"
 
 ### **Force Re-seed:**
 ```bash
-php artisan migrate:fresh --seed --force
+php artisan migrate fresh --seed --force
 ```
 
 ---
