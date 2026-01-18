@@ -183,10 +183,8 @@ LM display breakdown:
 - Public confirmation and customer quotation pages display `renderIntroText()` to keep content consistent with Filament.
 - Available variables include: `${POL}`, `${POD}`, `${POR}`, `${FDEST}`, `${CARGO}`, `${CARGO_DESCRIPTION}`, `${ROUTE_PHRASE}`, `${SERVICE_TYPE}`, `${REQUEST_NUMBER}` and schedule-based fields (`${CARRIER}`, `${VESSEL}`, `${VOYAGE}`, `${NEXT_SAILING}`, `${TRANSIT_TIME}`, `${FREQUENCY}`).
 - `ROUTE_PHRASE` rules:
-  - POR + FDEST: `POR → POL → POD → FDEST`
-  - Only POR: `POR → POD`
-  - Only FDEST: `POL → FDEST`
-  - Neither: `Ex delivered terminal "POL" to CFR "POD"`
+  - If only POL + POD are present: `Ex delivered terminal "POL" to CFR "POD"`
+  - Otherwise: show all filled fields in order `POR → POL → POD → FDEST` (skipping blanks)
 
 ### Selected Schedule Display
 - Confirmation pages (public and customer) show the selected schedule block when `selected_schedule_id` is set.

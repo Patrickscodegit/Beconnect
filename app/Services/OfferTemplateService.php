@@ -52,19 +52,28 @@ class OfferTemplateService
         $hasPor = !empty(trim($por));
         $hasFdest = !empty(trim($fdest));
 
-        if (!$hasPor && !$hasFdest) {
+        $hasPol = !empty(trim($pol));
+        $hasPod = !empty(trim($pod));
+
+        if ($hasPol && $hasPod && !$hasPor && !$hasFdest) {
             return 'Ex delivered terminal "' . $pol . '" to CFR "' . $pod . '"';
         }
 
-        if ($hasPor && $hasFdest) {
-            return trim($por . ' → ' . $pol . ' → ' . $pod . ' → ' . $fdest);
-        }
-
+        $parts = [];
         if ($hasPor) {
-            return trim($por . ' → ' . $pod);
+            $parts[] = $por;
+        }
+        if ($hasPol) {
+            $parts[] = $pol;
+        }
+        if ($hasPod) {
+            $parts[] = $pod;
+        }
+        if ($hasFdest) {
+            $parts[] = $fdest;
         }
 
-        return trim($pol . ' → ' . $fdest);
+        return implode(' → ', $parts);
     }
 
     /**
