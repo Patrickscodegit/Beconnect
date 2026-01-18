@@ -81,6 +81,20 @@
             </div>
         </div>
 
+        <!-- Intro -->
+        @if($quotationRequest->renderIntroText())
+        <div class="bg-white rounded-lg shadow-xl overflow-hidden mb-8">
+            <div class="bg-gradient-to-r from-indigo-600 to-blue-600 p-6">
+                <h3 class="text-2xl font-bold text-white">
+                    <i class="fas fa-file-signature mr-2"></i>Intro
+                </h3>
+            </div>
+            <div class="p-6">
+                <p class="text-gray-900 whitespace-pre-line">{{ $quotationRequest->renderIntroText() }}</p>
+            </div>
+        </div>
+        @endif
+
         <!-- Route Information -->
         <div class="bg-white rounded-lg shadow-xl overflow-hidden mb-8">
             <div class="bg-gradient-to-r from-green-600 to-blue-600 p-6">
@@ -167,20 +181,6 @@
                 </div>
             </div>
         </div>
-
-        <!-- Intro -->
-        @if($quotationRequest->renderIntroText())
-        <div class="bg-white rounded-lg shadow-xl overflow-hidden mb-8">
-            <div class="bg-gradient-to-r from-indigo-600 to-blue-600 p-6">
-                <h3 class="text-2xl font-bold text-white">
-                    <i class="fas fa-file-signature mr-2"></i>Intro
-                </h3>
-            </div>
-            <div class="p-6">
-                <p class="text-gray-900 whitespace-pre-line">{{ $quotationRequest->renderIntroText() }}</p>
-            </div>
-        </div>
-        @endif
 
         <!-- Cargo Information -->
         <div class="bg-white rounded-lg shadow-xl overflow-hidden mb-8">

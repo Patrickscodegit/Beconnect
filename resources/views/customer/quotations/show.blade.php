@@ -142,6 +142,17 @@
         <!-- Main Content -->
         <div class="lg:col-span-2 space-y-6">
             
+            @if($quotationRequest->renderIntroText())
+                <div class="print-section bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-semibold text-gray-900 mb-3">
+                        <i class="fas fa-file-signature mr-2"></i>Intro
+                    </h2>
+                    <div class="rounded-lg border border-gray-200 bg-white p-4">
+                        <p class="text-gray-900 whitespace-pre-line">{{ $quotationRequest->renderIntroText() }}</p>
+                    </div>
+                </div>
+            @endif
+
             <!-- Route & Service -->
             <div class="bg-white rounded-lg shadow p-6">
                 <h2 class="text-xl font-semibold text-gray-900 mb-4">
@@ -296,17 +307,6 @@
                     </div>
                 @endif
             </div>
-
-            @if($quotationRequest->renderIntroText())
-                <div class="print-section bg-white rounded-lg shadow p-6 mt-6">
-                    <h2 class="text-xl font-semibold text-gray-900 mb-3">
-                        <i class="fas fa-file-signature mr-2"></i>Intro
-                    </h2>
-                    <div class="rounded-lg border border-gray-200 bg-white p-4">
-                        <p class="text-gray-900 whitespace-pre-line">{{ $quotationRequest->renderIntroText() }}</p>
-                    </div>
-                </div>
-            @endif
 
             {{-- Selected Articles --}}
             @if($quotationRequest->articles->count() > 0)
