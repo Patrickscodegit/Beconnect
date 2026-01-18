@@ -12,6 +12,8 @@ use App\Models\PricingTier;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Services\Ports\PortResolutionService;
+use App\Services\OfferTemplateService;
+use App\Services\RobawsFieldGenerator;
 
 class QuotationCreator extends Component
 {
@@ -736,6 +738,12 @@ class QuotationCreator extends Component
         $this->quotation->update([
             'status' => 'pending',
         ]);
+
+        // Ensure cargo description is up to date before rendering templates
+        app(RobawsFieldGenerator::class)->updateCargoDescription($this->quotation);
+
+        // Apply intro/end templates for confirmation display
+        app(OfferTemplateService::class)->applyTemplates($this->quotation);
         
         // TODO: Send notification to admin team
         // Notification::route('mail', config('quotation.admin_email'))
