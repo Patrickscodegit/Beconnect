@@ -203,6 +203,8 @@ class ProspectQuotationController extends Controller
             abort(404);
         }
 
+        $quotationRequest->load(['selectedSchedule.carrier']);
+
         return view('public.quotations.confirmation', compact('quotationRequest'));
     }
 

@@ -220,8 +220,8 @@ class CustomerQuotationController extends Controller
             abort(403, 'Unauthorized access to this quotation');
         }
 
-        // Load commodity items relationship for display
-        $quotationRequest->load('commodityItems');
+        // Load relationships for display
+        $quotationRequest->load(['commodityItems', 'selectedSchedule.carrier']);
 
         // Check if editing is allowed
         $canEdit = in_array($quotationRequest->status, ['draft', 'pending', 'processing']);

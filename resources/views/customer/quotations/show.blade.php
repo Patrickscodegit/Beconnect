@@ -202,6 +202,44 @@
                 </dl>
             </div>
 
+            @if($quotationRequest->selected_schedule_id && $quotationRequest->selectedSchedule)
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-semibold text-gray-900 mb-4">
+                        <i class="fas fa-calendar-alt mr-2"></i>Selected Schedule
+                    </h2>
+                    <dl class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Carrier</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ $quotationRequest->selectedSchedule->carrier->name ?? '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Service</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ $quotationRequest->selectedSchedule->service_name ?? '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Departure</dt>
+                            <dd class="mt-1 text-sm text-gray-900">
+                                {{ $quotationRequest->selectedSchedule->ets_pol?->format('F j, Y') ?? '-' }}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Vessel</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ $quotationRequest->selectedSchedule->vessel_name ?? '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Voyage</dt>
+                            <dd class="mt-1 text-sm text-gray-900">{{ $quotationRequest->selectedSchedule->voyage_number ?? '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Transit Time</dt>
+                            <dd class="mt-1 text-sm text-gray-900">
+                                {{ $quotationRequest->selectedSchedule->transit_days ? $quotationRequest->selectedSchedule->transit_days . ' days' : '-' }}
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
+            @endif
+
             <!-- Cargo Information -->
             <div class="bg-white rounded-lg shadow p-6">
                 <h2 class="text-xl font-semibold text-gray-900 mb-4">

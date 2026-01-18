@@ -182,6 +182,50 @@
             </div>
         </div>
 
+        @if($quotationRequest->selected_schedule_id && $quotationRequest->selectedSchedule)
+        <!-- Selected Schedule -->
+        <div class="bg-white rounded-lg shadow-xl overflow-hidden mb-8">
+            <div class="bg-gradient-to-r from-sky-600 to-blue-600 p-6">
+                <h3 class="text-2xl font-bold text-white">
+                    <i class="fas fa-calendar-alt mr-2"></i>Selected Schedule
+                </h3>
+            </div>
+            
+            <div class="p-6">
+                <dl class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Carrier</dt>
+                        <dd class="text-gray-900">{{ $quotationRequest->selectedSchedule->carrier->name ?? '-' }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Service</dt>
+                        <dd class="text-gray-900">{{ $quotationRequest->selectedSchedule->service_name ?? '-' }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Departure</dt>
+                        <dd class="text-gray-900">
+                            {{ $quotationRequest->selectedSchedule->ets_pol?->format('F j, Y') ?? '-' }}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Vessel</dt>
+                        <dd class="text-gray-900">{{ $quotationRequest->selectedSchedule->vessel_name ?? '-' }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Voyage</dt>
+                        <dd class="text-gray-900">{{ $quotationRequest->selectedSchedule->voyage_number ?? '-' }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Transit Time</dt>
+                        <dd class="text-gray-900">
+                            {{ $quotationRequest->selectedSchedule->transit_days ? $quotationRequest->selectedSchedule->transit_days . ' days' : '-' }}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+        @endif
+
         <!-- Cargo Information -->
         <div class="bg-white rounded-lg shadow-xl overflow-hidden mb-8">
             <div class="bg-gradient-to-r from-purple-600 to-pink-600 p-6">
