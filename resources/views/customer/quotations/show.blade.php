@@ -72,7 +72,7 @@
 
     <!-- Summary Card -->
     <div class="print-section print-summary mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow p-6 border border-blue-200">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 print-cols-3">
             <div>
                 <p class="text-sm font-medium text-gray-600 mb-1">Route</p>
                 <p class="text-lg font-semibold text-gray-900">
@@ -159,7 +159,7 @@
                 <h2 class="text-xl font-semibold text-gray-900 mb-4">
                     <i class="fas fa-route mr-2"></i>Route & Service Information
                 </h2>
-                <dl class="grid grid-cols-2 gap-4">
+                <dl class="grid grid-cols-2 gap-4 print-cols-2">
                     @if($quotationRequest->por)
                         <div>
                             <dt class="text-sm font-medium text-gray-500">Place of Receipt (POR)</dt>
@@ -208,7 +208,7 @@
                     <h2 class="text-xl font-semibold text-gray-900 mb-4">
                         <i class="fas fa-calendar-alt mr-2"></i>Selected Schedule
                     </h2>
-                    <dl class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <dl class="grid grid-cols-1 md:grid-cols-3 gap-4 print-cols-3">
                         <div>
                             <dt class="text-sm font-medium text-gray-500">Carrier</dt>
                             <dd class="mt-1 text-sm text-gray-900">{{ $quotationRequest->selectedSchedule->carrier->name ?? '-' }}</dd>
@@ -721,6 +721,14 @@
         /* Use full width in print layout */
         .grid {
             grid-template-columns: 1fr !important;
+        }
+
+        .print-cols-2 {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        }
+
+        .print-cols-3 {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
         }
 
         .lg\:col-span-2,
