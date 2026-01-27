@@ -244,8 +244,8 @@ return new class extends Migration
             $table->text('notes')->nullable();
             $table->timestamps();
             
-            $table->index(['quotation_request_id', 'article_cache_id']);
-            $table->index(['quotation_request_id', 'parent_article_id']);
+            $table->index(['quotation_request_id', 'article_cache_id'], 'qra_request_article_idx');
+            $table->index(['quotation_request_id', 'parent_article_id'], 'qra_request_parent_idx');
         });
     }
 
