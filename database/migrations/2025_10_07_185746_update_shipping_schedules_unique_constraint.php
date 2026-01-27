@@ -26,10 +26,13 @@ return new class extends Migration
             
             // Add new unique constraint that includes vessel_name to allow multiple schedules per route
             // Note: voyage_number will be added in a later migration
-            $newIndexName = 'shipping_schedules_carrier_id_pol_id_pod_id_service_name_vessel_name_unique';
+            $newIndexName = 'shipping_schedules_route_vessel_unique';
             
             if (!Schema::hasIndex('shipping_schedules', $newIndexName)) {
-                $table->unique(['carrier_id', 'pol_id', 'pod_id', 'service_name', 'vessel_name']);
+                $table->unique(
+                    ['carrier_id', 'pol_id', 'pod_id', 'service_name', 'vessel_name'],
+                    $newIndexName
+                );
             }
 
             // Re-add foreign keys after index updates
@@ -51,10 +54,10 @@ return new class extends Migration
             $table->dropForeign(['pod_id']);
 
             // Check if the new unique constraint exists before trying to drop it
-            $newIndexName = 'shipping_schedules_carrier_id_pol_id_pod_id_service_name_vessel_name_unique';
+            $newIndexName = 'shipping_schedules_route_vessel_unique';
             
             if (Schema::hasIndex('shipping_schedules', $newIndexName)) {
-                $table->dropUnique(['carrier_id', 'pol_id', 'pod_id', 'service_name', 'vessel_name']);
+                $table->dropUnique($newIndexName);
             }
             
             // Restore the old unique constraint only if it doesn't exist
