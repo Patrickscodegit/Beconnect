@@ -12,7 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         // Offer Templates (Intro/End Standard Texts) - MUST BE CREATED FIRST (referenced by quotation_requests)
-        Schema::create('offer_templates', function (Blueprint $table) {
+        if (!Schema::hasTable('offer_templates')) {
+            Schema::create('offer_templates', function (Blueprint $table) {
             $table->id();
             $table->string('template_code')->unique(); // FCL_EXP_INTRO_PICKUP, RORO_IMP_INTRO_ENG
             $table->string('template_name'); // "FCL EXP - intro - with pick up"
@@ -27,10 +28,12 @@ return new class extends Migration
             
             $table->index(['service_type', 'template_type', 'is_active']);
             $table->index('template_code');
-        });
+            });
+        }
 
         // Quotation Requests - Main table for all quotation requests
-        Schema::create('quotation_requests', function (Blueprint $table) {
+        if (!Schema::hasTable('quotation_requests')) {
+            Schema::create('quotation_requests', function (Blueprint $table) {
             $table->id();
             $table->string('request_number')->unique(); // QR-2025-0001
             $table->enum('source', ['customer', 'prospect', 'intake']);
@@ -99,10 +102,12 @@ return new class extends Migration
             $table->index(['status', 'source']);
             $table->index('robaws_offer_id');
             $table->index('requester_email');
-        });
+            });
+        }
 
         // Quotation Request Files
-        Schema::create('quotation_request_files', function (Blueprint $table) {
+        if (!Schema::hasTable('quotation_request_files')) {
+            Schema::create('quotation_request_files', function (Blueprint $table) {
             $table->id();
             $table->foreignId('quotation_request_id')->constrained()->onDelete('cascade');
             $table->string('filename');
@@ -116,10 +121,12 @@ return new class extends Migration
             $table->timestamps();
             
             $table->index('quotation_request_id');
-        });
+            });
+        }
 
         // Robaws Articles Cache
-        Schema::create('robaws_articles_cache', function (Blueprint $table) {
+        if (!Schema::hasTable('robaws_articles_cache')) {
+            Schema::create('robaws_articles_cache', function (Blueprint $table) {
             $table->id();
             $table->string('robaws_article_id')->unique();
             $table->string('article_code')->nullable(); // BWFCLIMP, BWA-FCL, etc.
@@ -165,10 +172,12 @@ return new class extends Migration
             $table->index('article_code');
             $table->index(['customer_type', 'is_active']);
             $table->index('is_parent_article');
-        });
+            });
+        }
 
         // Schedule-Offer Links
-        Schema::create('schedule_offer_links', function (Blueprint $table) {
+        if (!Schema::hasTable('schedule_offer_links')) {
+            Schema::create('schedule_offer_links', function (Blueprint $table) {
             $table->id();
             $table->foreignId('shipping_schedule_id')->constrained()->onDelete('cascade');
             $table->string('robaws_offer_id');
@@ -178,10 +187,12 @@ return new class extends Migration
             $table->timestamps();
             
             $table->index(['shipping_schedule_id', 'robaws_offer_id']);
-        });
+            });
+        }
 
         // Robaws Webhook Logs
-        Schema::create('robaws_webhook_logs', function (Blueprint $table) {
+        if (!Schema::hasTable('robaws_webhook_logs')) {
+            Schema::create('robaws_webhook_logs', function (Blueprint $table) {
             $table->id();
             $table->string('event_type');
             $table->string('robaws_id');
@@ -193,10 +204,12 @@ return new class extends Migration
             
             $table->index(['event_type', 'robaws_id']);
             $table->index('status');
-        });
+            });
+        }
 
         // Robaws Sync Logs
-        Schema::create('robaws_sync_logs', function (Blueprint $table) {
+        if (!Schema::hasTable('robaws_sync_logs')) {
+            Schema::create('robaws_sync_logs', function (Blueprint $table) {
             $table->id();
             $table->string('sync_type'); // articles, offers, projects
             $table->integer('items_synced')->default(0);
@@ -206,10 +219,12 @@ return new class extends Migration
             $table->timestamps();
             
             $table->index(['sync_type', 'started_at']);
-        });
+            });
+        }
 
         // Article Children (Parent-Child Relationships)
-        Schema::create('article_children', function (Blueprint $table) {
+        if (!Schema::hasTable('article_children')) {
+            Schema::create('article_children', function (Blueprint $table) {
             $table->id();
             $table->foreignId('parent_article_id')->constrained('robaws_articles_cache')->onDelete('cascade');
             $table->foreignId('child_article_id')->constrained('robaws_articles_cache')->onDelete('cascade');
@@ -221,10 +236,12 @@ return new class extends Migration
             
             $table->unique(['parent_article_id', 'child_article_id']);
             $table->index('parent_article_id');
-        });
+            });
+        }
 
         // Quotation Request Articles (Pivot table with pricing)
-        Schema::create('quotation_request_articles', function (Blueprint $table) {
+        if (!Schema::hasTable('quotation_request_articles')) {
+            Schema::create('quotation_request_articles', function (Blueprint $table) {
             $table->id();
             $table->foreignId('quotation_request_id')->constrained()->onDelete('cascade');
             $table->foreignId('article_cache_id')->constrained('robaws_articles_cache')->onDelete('cascade');
@@ -246,7 +263,8 @@ return new class extends Migration
             
             $table->index(['quotation_request_id', 'article_cache_id'], 'qra_request_article_idx');
             $table->index(['quotation_request_id', 'parent_article_id'], 'qra_request_parent_idx');
-        });
+            });
+        }
     }
 
     /**
