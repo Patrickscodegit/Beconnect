@@ -18,6 +18,16 @@ return new class extends Migration
         $podFk = 'shipping_schedules_pod_id_foreign';
 
         $foreignKeyExists = function (string $constraintName) use ($tableName): bool {
+            $driver = DB::getDriverName();
+
+            if ($driver === 'pgsql') {
+                return DB::table('pg_constraint')
+                    ->join('pg_class', 'pg_constraint.conrelid', '=', 'pg_class.oid')
+                    ->where('pg_class.relname', $tableName)
+                    ->where('pg_constraint.conname', $constraintName)
+                    ->exists();
+            }
+
             return DB::table('information_schema.KEY_COLUMN_USAGE')
                 ->where('TABLE_SCHEMA', DB::getDatabaseName())
                 ->where('TABLE_NAME', $tableName)
@@ -81,6 +91,16 @@ return new class extends Migration
         $podFk = 'shipping_schedules_pod_id_foreign';
 
         $foreignKeyExists = function (string $constraintName) use ($tableName): bool {
+            $driver = DB::getDriverName();
+
+            if ($driver === 'pgsql') {
+                return DB::table('pg_constraint')
+                    ->join('pg_class', 'pg_constraint.conrelid', '=', 'pg_class.oid')
+                    ->where('pg_class.relname', $tableName)
+                    ->where('pg_constraint.conname', $constraintName)
+                    ->exists();
+            }
+
             return DB::table('information_schema.KEY_COLUMN_USAGE')
                 ->where('TABLE_SCHEMA', DB::getDatabaseName())
                 ->where('TABLE_NAME', $tableName)
