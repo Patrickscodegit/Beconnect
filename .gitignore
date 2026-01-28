@@ -66,21 +66,17 @@ final_*.php
 getFile
 getMessage
 id
-id}n"
 customer_name
 document
 extracted
 extracted_data
 filename
-filename}n"
 mime_type
 null
 pipeline_health_check.php
 retry_pending_intakes.php
 robaws_client_id
-robaws_offer_id}n"
 status
-status}n"
 storage_disk
 storage-test.txt,
 Test Client (Doc-Aligned Update),
