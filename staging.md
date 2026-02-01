@@ -1,15 +1,19 @@
  # Staging Setup Notes
  
- ## Environment
- - App URL: `https://beconnect-rn6k77zh.on-forge.com`
+## Environment
+- App URL: `https://staging.app.belgaco.be`
  - Server user: `forge`
  - App path: `/home/forge/beconnect-rn6k77zh.on-forge.com/current`
  
- ## SSH Access
- - SSH format:
-   - `ssh forge@<STAGING_IP>`
- - Add your public key in Forge:
-   - Server Management -> SSH Keys
+## SSH Access
+- Staging:
+  - `ssh forge@46.101.70.55`
+  - App path: `/home/forge/beconnect-rn6k77zh.on-forge.com/current`
+- Production:
+  - `ssh forge@bconnect.64.226.120.45.nip.io`
+  - App path: `/home/forge/app.belgaco.be`
+- Add your public key in Forge:
+  - Server Management -> SSH Keys
  
  ## Database
  - Staging is PostgreSQL.

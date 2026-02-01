@@ -16,6 +16,7 @@ use App\Models\RobawsArticleCache;
 use App\Models\ShippingCarrier;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class GrimaldiWestAfricaRulesSeeder extends Seeder
 {
@@ -587,21 +588,34 @@ class GrimaldiWestAfricaRulesSeeder extends Seeder
                             break;
                     }
 
+                    $mappingData = [
+                        'name' => $mappingName,
+                        'port_ids' => [$portId],
+                        'port_group_ids' => $wafPortGroupIds,
+                        'category_group_ids' => $categoryGroupIds,
+                        'vehicle_categories' => null, // Mutually exclusive with category_group_ids
+                        'is_active' => true,
+                    ];
+
+                    if (Schema::hasColumn('carrier_article_mappings', 'priority')) {
+                        $mappingData['priority'] = 10;
+                    }
+                    if (Schema::hasColumn('carrier_article_mappings', 'effective_from')) {
+                        $mappingData['effective_from'] = now()->subYear();
+                    }
+                    if (Schema::hasColumn('carrier_article_mappings', 'effective_to')) {
+                        $mappingData['effective_to'] = null;
+                    }
+                    if (Schema::hasColumn('carrier_article_mappings', 'sort_order')) {
+                        $mappingData['sort_order'] = 0;
+                    }
+
                     CarrierArticleMapping::updateOrCreate(
                         [
                             'carrier_id' => $carrier->id,
                             'article_id' => $article->id,
                         ],
-                        [
-                            'name' => $mappingName,
-                            'port_ids' => [$portId],
-                            'port_group_ids' => $wafPortGroupIds,
-                            'category_group_ids' => $categoryGroupIds,
-                            'vehicle_categories' => null, // Mutually exclusive with category_group_ids
-                            'priority' => 10,
-                            'effective_from' => now()->subYear(),
-                            'is_active' => true,
-                        ]
+                        $mappingData
                     );
                     $mappedCount++;
                 }
