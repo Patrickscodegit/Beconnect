@@ -170,6 +170,11 @@ class RobawsArticlePushService
      * Main article fields mapping (fields that go in the main article payload, not extraFields)
      */
     private const MAIN_ARTICLE_FIELDS = [
+        'sales_name' => [
+            'robaws_field' => 'saleName',
+            'label' => 'Salesname',
+            'group' => 'ARTICLE INFO',
+        ],
         'unit_price' => [
             'robaws_field' => 'salePrice',
             'label' => 'Unit Price',
@@ -453,7 +458,19 @@ class RobawsArticlePushService
                 // Ensure it's a float
                 $floatValue = (float) $value;
                 $mainFields[$robawsField] = $floatValue;
+                continue;
             }
+
+            if ($value === null) {
+                Log::warning("{$fieldKey} is null, skipping from push", [
+                    'article_id' => $article->id,
+                    'robaws_article_id' => $article->robaws_article_id,
+                ]);
+                continue;
+            }
+
+            // Default: send raw value (e.g., sales_name)
+            $mainFields[$robawsField] = $value;
         }
         
         return $mainFields;
