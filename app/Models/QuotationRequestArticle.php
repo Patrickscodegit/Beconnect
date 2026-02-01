@@ -684,6 +684,20 @@ class QuotationRequestArticle extends Model
                 $adminChild = $adminChildren->first();
                 
                 if ($adminChild) {
+                    // Ensure only one admin surcharge per quote (per shipment)
+                    $adminAlreadyExists = self::where('quotation_request_id', $quotationRequest->id)
+                        ->whereIn('article_cache_id', $adminArticleIds)
+                        ->exists();
+
+                    if ($adminAlreadyExists) {
+                        \Log::info('Admin article skipped (admin already exists on quote)', [
+                            'admin_article_id' => $adminChild->id,
+                            'parent_pod' => $parentPodCode,
+                            'quotation_pod' => $quotationPodCode,
+                        ]);
+                        return;
+                    }
+
                     // Check for generic "per shipment" deduplication
                     $childUnitType = strtoupper(trim($adminChild->pivot->unit_type ?? $adminChild->unit_type ?? ''));
                     $isPerShipment = in_array($childUnitType, ['SHIPM.', 'SHIPM', 'SHIPMENT']);
