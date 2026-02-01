@@ -458,6 +458,11 @@ class CarrierRuleIntegrationService
             }
 
             if ($shouldRemove) {
+                $source = data_get($articleRecord->formula_inputs, 'service_context.source');
+                if ($source === 'sending_original_docs') {
+                    continue;
+                }
+
                 Log::info('CarrierRuleIntegration: Removing article that no longer matches', [
                     'quotation_id' => $quotation->id,
                     'article_id' => $articleRecord->id,
