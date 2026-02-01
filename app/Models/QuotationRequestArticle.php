@@ -45,6 +45,34 @@ class QuotationRequestArticle extends Model
     {
         parent::boot();
 
+        static::creating(function ($model) {
+            $adminArticleIds = self::getAdminArticleIds();
+            $isAdminArticle = in_array($model->article_cache_id, $adminArticleIds, true);
+
+            $unitType = strtoupper(trim($model->unit_type ?? ''));
+            if ($unitType === '' && !$isAdminArticle) {
+                $articleCache = $model->relationLoaded('articleCache') ? $model->articleCache : null;
+                if (!$articleCache && $model->article_cache_id) {
+                    $articleCache = \App\Models\RobawsArticleCache::find($model->article_cache_id);
+                }
+                $unitType = strtoupper(trim($articleCache->unit_type ?? ''));
+            }
+
+            $isPerShipment = $isAdminArticle || self::isPerShipmentUnitType($unitType);
+            if ($isPerShipment) {
+                $exists = self::perShipmentLineExists($model->quotation_request_id, $adminArticleIds);
+                if ($exists) {
+                    \Log::info('Skipped per-shipment line item (already exists on quote)', [
+                        'quotation_request_id' => $model->quotation_request_id,
+                        'article_cache_id' => $model->article_cache_id,
+                        'unit_type' => $model->unit_type,
+                        'is_admin_article' => $isAdminArticle,
+                    ]);
+                    return false;
+                }
+            }
+        });
+
         static::saving(function ($model) {
             // Calculate price from formula if applicable
             if ($model->formula_inputs && $model->articleCache && $model->articleCache->pricing_formula) {
@@ -684,34 +712,14 @@ class QuotationRequestArticle extends Model
                 $adminChild = $adminChildren->first();
                 
                 if ($adminChild) {
-                    // Ensure only one admin surcharge per quote (per shipment)
-                    $adminAlreadyExists = self::where('quotation_request_id', $quotationRequest->id)
-                        ->whereIn('article_cache_id', $adminArticleIds)
-                        ->exists();
-
-                    if ($adminAlreadyExists) {
-                        \Log::info('Admin article skipped (admin already exists on quote)', [
-                            'admin_article_id' => $adminChild->id,
-                            'parent_pod' => $parentPodCode,
-                            'quotation_pod' => $quotationPodCode,
-                        ]);
-                        return;
-                    }
-
-                    // Check for generic "per shipment" deduplication
+                    // Global per-shipment dedupe (admin counts as per-shipment)
                     $childUnitType = strtoupper(trim($adminChild->pivot->unit_type ?? $adminChild->unit_type ?? ''));
-                    $isPerShipment = in_array($childUnitType, ['SHIPM.', 'SHIPM', 'SHIPMENT']);
+                    $isPerShipment = self::isPerShipmentUnitType($childUnitType) || in_array($adminChild->id, $adminArticleIds, true);
                     
                     // If "per shipment", check if any "per shipment" article already exists
                     $exists = false;
                     if ($isPerShipment) {
-                        $exists = self::where('quotation_request_id', $quotationRequest->id)
-                            ->where(function ($query) {
-                                $query->whereRaw('UPPER(TRIM(unit_type)) = ?', ['SHIPM.'])
-                                      ->orWhereRaw('UPPER(TRIM(unit_type)) = ?', ['SHIPM'])
-                                      ->orWhereRaw('UPPER(TRIM(unit_type)) = ?', ['SHIPMENT']);
-                            })
-                            ->exists();
+                        $exists = self::perShipmentLineExists($quotationRequest->id, $adminArticleIds);
                     }
                     
                     if (!$exists) {
@@ -833,18 +841,12 @@ class QuotationRequestArticle extends Model
             if ($shouldAdd) {
                 // Check for "per shipment" deduplication (generic check)
                 $childUnitType = strtoupper(trim($child->pivot->unit_type ?? $child->unit_type ?? ''));
-                $isPerShipment = in_array($childUnitType, ['SHIPM.', 'SHIPM', 'SHIPMENT']);
+                $isPerShipment = self::isPerShipmentUnitType($childUnitType);
                 
                 $exists = false;
                 if ($isPerShipment) {
-                    // Check if any "per shipment" article already exists in quotation
-                    $exists = self::where('quotation_request_id', $quotationRequest->id)
-                        ->where(function ($query) {
-                            $query->whereRaw('UPPER(TRIM(unit_type)) = ?', ['SHIPM.'])
-                                  ->orWhereRaw('UPPER(TRIM(unit_type)) = ?', ['SHIPM'])
-                                  ->orWhereRaw('UPPER(TRIM(unit_type)) = ?', ['SHIPMENT']);
-                        })
-                        ->exists();
+                        // Check if any "per shipment" article already exists in quotation
+                        $exists = self::perShipmentLineExists($quotationRequest->id, $adminArticleIds);
                 } else {
                     // For non-per-shipment articles, check if same article already added to this parent
                     $exists = self::where('quotation_request_id', $quotationRequest->id)
@@ -935,6 +937,43 @@ class QuotationRequestArticle extends Model
     public function isChild(): bool
     {
         return $this->item_type === 'child' && $this->parent_article_id !== null;
+    }
+
+    protected static function isPerShipmentUnitType(?string $unitType): bool
+    {
+        $unitType = strtoupper(trim($unitType ?? ''));
+        return in_array($unitType, ['SHIPM.', 'SHIPM', 'SHIPMENT'], true);
+    }
+
+    protected static function perShipmentLineExists(int $quotationRequestId, array $adminArticleIds = []): bool
+    {
+        return self::where('quotation_request_id', $quotationRequestId)
+            ->where(function ($query) use ($adminArticleIds) {
+                if (!empty($adminArticleIds)) {
+                    $query->whereIn('article_cache_id', $adminArticleIds);
+                }
+                $query->orWhereRaw('UPPER(TRIM(unit_type)) = ?', ['SHIPM.'])
+                    ->orWhereRaw('UPPER(TRIM(unit_type)) = ?', ['SHIPM'])
+                    ->orWhereRaw('UPPER(TRIM(unit_type)) = ?', ['SHIPMENT']);
+            })
+            ->exists();
+    }
+
+    protected static function getAdminArticleIds(): array
+    {
+        static $cache = null;
+        if ($cache !== null) {
+            return $cache;
+        }
+        $cache = \App\Models\RobawsArticleCache::whereIn('article_name', [
+            'Admin 75',
+            'Admin 100',
+            'Admin 110',
+            'Admin',
+            'Admin 125',
+        ])->pluck('id')->toArray();
+
+        return $cache;
     }
 
     /**
