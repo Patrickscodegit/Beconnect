@@ -592,8 +592,9 @@ class RobawsArticleResource extends Resource
                     
                 Forms\Components\Section::make('Additional Information')
                     ->schema([
-                        Forms\Components\Textarea::make('description')
-                            ->rows(3)
+                        Forms\Components\Textarea::make('sales_name')
+                            ->label('Salesname')
+                            ->rows(6)
                             ->columnSpanFull(),
                             
                         Forms\Components\TextInput::make('mandatory_condition')
@@ -611,7 +612,7 @@ class RobawsArticleResource extends Resource
                             ->disabled()
                             ->columnSpanFull(),
                     ])
-                    ->collapsed(),
+                    ->collapsed(false),
             ]);
     }
 

@@ -102,6 +102,34 @@ class ViewRobawsArticle extends ViewRecord
                         Infolists\Components\TextEntry::make('article_name')
                             ->label('Article Name')
                             ->columnSpanFull(),
+                        Infolists\Components\TextEntry::make('sales_name')
+                            ->label('Salesname')
+                            ->placeholder('No salesname provided')
+                            ->formatStateUsing(function ($state) {
+                                if (blank($state)) {
+                                    return null;
+                                }
+
+                                $fullText = nl2br(e($state));
+                                $plainLength = strlen((string) $state);
+                                $preview = nl2br(e(\Illuminate\Support\Str::limit($state, 300, '…')));
+
+                                if ($plainLength <= 300) {
+                                    return new \Illuminate\Support\HtmlString(
+                                        '<div class="whitespace-pre-wrap">' . $preview . '</div>'
+                                    );
+                                }
+
+                                $html = '<div class="whitespace-pre-wrap">' . $preview . '</div>';
+                                $html .= '<details class="mt-2">';
+                                $html .= '<summary class="cursor-pointer text-sm text-primary-600">Show more</summary>';
+                                $html .= '<div class="mt-2 whitespace-pre-wrap">' . $fullText . '</div>';
+                                $html .= '</details>';
+
+                                return new \Illuminate\Support\HtmlString($html);
+                            })
+                            ->html()
+                            ->columnSpanFull(),
                         Infolists\Components\TextEntry::make('robaws_article_id')
                             ->label('Robaws ID'),
                         Infolists\Components\TextEntry::make('unit_price')
