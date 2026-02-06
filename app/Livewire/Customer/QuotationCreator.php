@@ -155,20 +155,6 @@ class QuotationCreator extends Component
     
     public function mount($intakeId = null, $quotationId = null)
     {
-        // #region agent log
-        file_put_contents('/Users/patrickhome/Documents/Robaws2025_AI/Bconnect/.cursor/debug.log', json_encode([
-            'sessionId' => 'debug-session',
-            'runId' => 'run2',
-            'hypothesisId' => 'H5',
-            'location' => 'QuotationCreator.php:mount',
-            'message' => 'Mount start',
-            'data' => [
-                'intake_id' => $intakeId,
-                'quotation_id' => $quotationId,
-            ],
-            'timestamp' => round(microtime(true) * 1000),
-        ]) . PHP_EOL, FILE_APPEND);
-        // #endregion
         // If editing existing quotation, load it
         if ($quotationId) {
             $this->loadQuotationForEditing($quotationId);
