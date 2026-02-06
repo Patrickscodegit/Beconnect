@@ -4,6 +4,8 @@ namespace App\Console;
 
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
+use App\Jobs\UpdateShippingSchedulesJob;
+use App\Models\ScheduleSyncLog;
 
 class Kernel extends ConsoleKernel
 {
@@ -21,7 +23,21 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        //
+        $schedule->call(function () {
+            $syncLog = ScheduleSyncLog::create([
+                'sync_type' => 'nightly',
+                'status' => 'running',
+                'started_at' => now(),
+                'details' => [
+                    'triggered_by' => 'scheduler',
+                ],
+            ]);
+
+            UpdateShippingSchedulesJob::dispatchSync($syncLog->id);
+        })
+            ->dailyAt('03:00')
+            ->timezone('Europe/Brussels')
+            ->withoutOverlapping(60);
     }
 
     /**
