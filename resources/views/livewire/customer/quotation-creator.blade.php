@@ -502,36 +502,36 @@
 
     {{-- Sending Original Documents --}}
     @if($quotation)
-        <div class="bg-white rounded-lg shadow p-8 mb-6">
-            <h3 class="text-xl font-semibold text-gray-900 mb-2">
+    <div class="bg-white rounded-lg shadow p-5 mb-5">
+            <h3 class="text-lg font-semibold text-gray-900 mb-1.5">
                 <i class="fas fa-envelope-open-text text-blue-600 mr-2"></i>
                 Sending Original Docs <span class="text-red-500">*</span>
             </h3>
-            <p class="text-sm text-gray-600 mb-4">
+            <p class="text-sm text-gray-600 mb-3">
                 Select exactly one option for how you want the original documents to be handled.
             </p>
             @php
                 $originalDocsPricing = $this->getOriginalDocsOptionPricing();
             @endphp
 
-            <div class="space-y-3">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 @foreach($this->getOriginalDocsOptions() as $option)
                     @php
                         $priceInfo = $originalDocsPricing[$option] ?? ['price' => 0, 'currency' => 'EUR'];
                         $displayPrice = number_format($priceInfo['price'], 2);
                     @endphp
-                    <label class="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 hover:border-blue-300 transition">
+                    <label class="flex items-start gap-2.5 rounded-lg border border-gray-200 bg-gray-50 p-3 hover:border-blue-300 transition">
                         <input type="radio"
-                               class="mt-1"
+                               class="mt-0.5"
                                wire:model.live="sending_original_docs_option"
                                value="{{ $option }}">
                         <div class="flex-1">
-                            <div class="flex items-center gap-2">
-                                <span class="font-medium text-gray-900">{{ $option }}</span>
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-sm font-medium text-gray-900">{{ $option }}</span>
                                 @if(!$this->isOriginalDocsPaidOption($option))
-                                    <span class="text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded">Free</span>
+                                    <span class="text-[11px] text-green-700 bg-green-100 px-1.5 py-0.5 rounded">Free</span>
                                 @endif
-                                <span class="text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                                <span class="text-[11px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">
                                     €{{ $displayPrice }}
                                 </span>
                             </div>
