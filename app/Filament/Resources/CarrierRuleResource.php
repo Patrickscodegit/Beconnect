@@ -1445,6 +1445,12 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                                         $schema[] = Forms\Components\Repeater::make('params.tiers')
                                                             ->label('Weight Tiers')
                                                             ->schema([
+                                                                Forms\Components\TextInput::make('min_kg')
+                                                                    ->label('Min Weight (kg)')
+                                                                    ->numeric()
+                                                                    ->step(0.1)
+                                                                    ->helperText('Used for "above" tiers (e.g., 20000)')
+                                                                    ->columnSpan(1),
                                                                 Forms\Components\TextInput::make('max_kg')
                                                                     ->label('Max Weight (kg)')
                                                                     ->numeric()
@@ -1457,8 +1463,15 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                                                     ->numeric()
                                                                     ->step(0.1)
                                                                     ->columnSpan(1),
+                                                                Forms\Components\TextInput::make('per_ton_over')
+                                                                    ->label('Per Ton Over (€)')
+                                                                    ->numeric()
+                                                                    ->step(0.1)
+                                                                    ->helperText('Applied per ton above min weight')
+                                                                    ->visible(fn (Forms\Get $get) => blank($get('max_kg')) || filled($get('min_kg')))
+                                                                    ->columnSpan(1),
                                                             ])
-                                                            ->columns(2)
+                                                            ->columns(4)
                                                             ->defaultItems(1)
                                                             ->columnSpanFull();
                                                         break;
