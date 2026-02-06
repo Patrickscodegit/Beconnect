@@ -49,6 +49,7 @@ class QuotationRequest extends Model
         'robaws_cargo_field', // Generated CARGO field for Robaws
         'robaws_dim_field', // Generated DIM_BEF_DELIVERY field for Robaws
         'special_requirements',
+        'sending_original_docs_option',
         'selected_schedule_id',
         'preferred_carrier',
         'preferred_carrier_id',

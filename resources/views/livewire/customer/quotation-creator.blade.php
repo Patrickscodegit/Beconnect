@@ -403,6 +403,15 @@
             
             {{-- Pricing Summary --}}
             <div class="mt-6 pt-6 border-t border-gray-200 bg-blue-50 rounded-lg p-4">
+                @php
+                    $originalDocsSummary = $this->getOriginalDocsSummaryLine();
+                @endphp
+                <div class="flex justify-between text-sm mb-2">
+                    <span class="text-gray-700">Sending original docs:</span>
+                    <span class="font-semibold text-gray-900">
+                        €{{ number_format($originalDocsSummary['price'], 2) }}
+                    </span>
+                </div>
                 <div class="flex justify-between text-sm mb-2">
                     <span class="text-gray-700">Subtotal:</span>
                     <span class="font-semibold text-gray-900">€{{ number_format($quotation->subtotal, 2) }}</span>
@@ -488,6 +497,52 @@
                     </div>
                 @endforeach
             </div>
+        </div>
+    @endif
+
+    {{-- Sending Original Documents --}}
+    @if($quotation)
+        <div class="bg-white rounded-lg shadow p-8 mb-6">
+            <h3 class="text-xl font-semibold text-gray-900 mb-2">
+                <i class="fas fa-envelope-open-text text-blue-600 mr-2"></i>
+                Sending Original Docs <span class="text-red-500">*</span>
+            </h3>
+            <p class="text-sm text-gray-600 mb-4">
+                Select exactly one option for how you want the original documents to be handled.
+            </p>
+            @php
+                $originalDocsPricing = $this->getOriginalDocsOptionPricing();
+            @endphp
+
+            <div class="space-y-3">
+                @foreach($this->getOriginalDocsOptions() as $option)
+                    @php
+                        $priceInfo = $originalDocsPricing[$option] ?? ['price' => 0, 'currency' => 'EUR'];
+                        $displayPrice = number_format($priceInfo['price'], 2);
+                    @endphp
+                    <label class="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 hover:border-blue-300 transition">
+                        <input type="radio"
+                               class="mt-1"
+                               wire:model.live="sending_original_docs_option"
+                               value="{{ $option }}">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-gray-900">{{ $option }}</span>
+                                @if(!$this->isOriginalDocsPaidOption($option))
+                                    <span class="text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded">Free</span>
+                                @endif
+                                <span class="text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                                    €{{ $displayPrice }}
+                                </span>
+                            </div>
+                        </div>
+                    </label>
+                @endforeach
+            </div>
+
+            @error('sending_original_docs_option')
+                <span class="text-red-500 text-xs mt-2 block">{{ $message }}</span>
+            @enderror
         </div>
     @endif
     

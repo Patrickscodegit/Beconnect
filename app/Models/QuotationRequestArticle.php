@@ -48,6 +48,16 @@ class QuotationRequestArticle extends Model
         static::creating(function ($model) {
             $adminArticleIds = self::getAdminArticleIds();
             $isAdminArticle = in_array($model->article_cache_id, $adminArticleIds, true);
+            $formulaInputs = $model->formula_inputs ?? null;
+            $rawFormulaInputs = $model->getAttributes()['formula_inputs'] ?? null;
+            if (is_string($rawFormulaInputs)) {
+                $decoded = json_decode($rawFormulaInputs, true);
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    $rawFormulaInputs = $decoded;
+                }
+            }
+            $isOriginalDocsOption = data_get($formulaInputs, 'service_context.source') === 'sending_original_docs'
+                || data_get($rawFormulaInputs, 'service_context.source') === 'sending_original_docs';
 
             $unitType = strtoupper(trim($model->unit_type ?? ''));
             if ($unitType === '' && !$isAdminArticle) {
@@ -59,7 +69,7 @@ class QuotationRequestArticle extends Model
             }
 
             $isPerShipment = $isAdminArticle || self::isPerShipmentUnitType($unitType);
-            if ($isPerShipment) {
+            if ($isPerShipment && !$isOriginalDocsOption) {
                 $exists = self::perShipmentLineExists($model->quotation_request_id, $adminArticleIds);
                 if ($exists) {
                     \Log::info('Skipped per-shipment line item (already exists on quote)', [
@@ -459,6 +469,7 @@ class QuotationRequestArticle extends Model
                 $model->quotationRequest->calculateTotals();
             }
         });
+
     }
 
     /**
@@ -948,6 +959,10 @@ class QuotationRequestArticle extends Model
     protected static function perShipmentLineExists(int $quotationRequestId, array $adminArticleIds = []): bool
     {
         return self::where('quotation_request_id', $quotationRequestId)
+            ->where(function ($query) {
+                $query->whereNull('formula_inputs->service_context->source')
+                    ->orWhere('formula_inputs->service_context->source', '!=', 'sending_original_docs');
+            })
             ->where(function ($query) use ($adminArticleIds) {
                 if (!empty($adminArticleIds)) {
                     $query->whereIn('article_cache_id', $adminArticleIds);

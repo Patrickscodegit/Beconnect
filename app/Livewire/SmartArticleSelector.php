@@ -114,6 +114,7 @@ class SmartArticleSelector extends Component
         if (!$article) {
             return;
         }
+
         
         // Ensure pricing tier is set on quotation if we have one
         if ($this->pricingTierId && !$this->quotation->pricing_tier_id) {
@@ -146,7 +147,7 @@ class SmartArticleSelector extends Component
         $this->quotation = $this->quotation->fresh(['articles']);
         
         // Emit to parent
-        $this->dispatch('articleAdded', articleId: $articleId);
+        $this->dispatch('articleAdded', articleId: $articleId)->to('customer.quotation-creator');
     }
     
     public function removeArticle($articleId)
@@ -178,7 +179,7 @@ class SmartArticleSelector extends Component
         $this->quotation = $this->quotation->fresh(['articles']);
         
         // Emit to parent
-        $this->dispatch('articleRemoved', articleId: $articleId);
+        $this->dispatch('articleRemoved', articleId: $articleId)->to('customer.quotation-creator');
     }
     
     public function updateMinMatchPercentage($percentage)

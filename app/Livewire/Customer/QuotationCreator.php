@@ -5,19 +5,36 @@ namespace App\Livewire\Customer;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 use App\Models\QuotationRequest;
+use App\Models\QuotationRequestArticle;
 use App\Models\Port;
 use App\Models\ShippingSchedule;
 use App\Models\ShippingCarrier;
 use App\Models\PricingTier;
+use App\Models\RobawsArticleCache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Services\Ports\PortResolutionService;
 use App\Services\OfferTemplateService;
 use App\Services\RobawsFieldGenerator;
+use Illuminate\Validation\Rule;
 
 class QuotationCreator extends Component
 {
     use WithFileUploads;
+
+    private const ORIGINAL_DOCS_OPTION_DEFAULT = 'Courrier worldwide or telex release';
+    private const ORIGINAL_DOCS_OPTIONS = [
+        'Courrier worldwide or telex release',
+        'Courrier Europe',
+        'Courrier Benelux',
+        'Pick up at our office',
+        'Not applicable',
+    ];
+    private const ORIGINAL_DOCS_PAID_OPTIONS = [
+        'Courrier worldwide or telex release',
+        'Courrier Europe',
+        'Courrier Benelux',
+    ];
     
     // Quotation ID (draft created on mount)
     public ?int $quotationId = null;
@@ -35,6 +52,7 @@ class QuotationCreator extends Component
     public $service_type = 'RORO_EXPORT';
     public $cargo_description = '';
     public $special_requirements = '';
+    public string $sending_original_docs_option = self::ORIGINAL_DOCS_OPTION_DEFAULT;
     public $selected_schedule_id = null;
     public $customer_reference = '';
     
@@ -195,10 +213,14 @@ class QuotationCreator extends Component
                 ],
                 'in_transit_to' => '',
                 'cargo_details' => [], // Will be populated with commodity items
+                'sending_original_docs_option' => self::ORIGINAL_DOCS_OPTION_DEFAULT,
             ]);
             
             $this->quotationId = $this->quotation->id;
         });
+
+        $this->sending_original_docs_option = self::ORIGINAL_DOCS_OPTION_DEFAULT;
+        $this->syncOriginalDocsSelection();
         
         Log::info('Draft quotation created for customer', [
             'quotation_id' => $this->quotationId,
@@ -252,6 +274,8 @@ class QuotationCreator extends Component
         $this->por = $quotation->por ?? $routing['por'] ?? '';
         $this->fdest = $quotation->fdest ?? $routing['fdest'] ?? '';
         $this->in_transit_to = $quotation->in_transit_to ?? '';
+        $this->sending_original_docs_option = $quotation->sending_original_docs_option
+            ?? self::ORIGINAL_DOCS_OPTION_DEFAULT;
         $this->service_type = $quotation->service_type ?? 'RORO_EXPORT';
         $this->simple_service_type = $quotation->simple_service_type ?? 'SEA_RORO';
         $this->cargo_description = $quotation->cargo_description ?? '';
@@ -264,6 +288,8 @@ class QuotationCreator extends Component
         
         // Update showArticles flag based on current state
         $this->updateShowArticles();
+
+        $this->syncOriginalDocsSelection();
         
         Log::info('Quotation loaded for editing', [
             'quotation_id' => $this->quotationId,
@@ -351,6 +377,7 @@ class QuotationCreator extends Component
                 'trade_direction' => $this->getDirectionFromServiceType($this->service_type),
                 'cargo_description' => $this->cargo_description,
                 'special_requirements' => $this->special_requirements,
+                'sending_original_docs_option' => $this->sending_original_docs_option,
                 'selected_schedule_id' => $this->selected_schedule_id,
                 'customer_reference' => $this->customer_reference,
             ];
@@ -362,6 +389,10 @@ class QuotationCreator extends Component
             
             // Update showArticles flag using shared method
             $this->updateShowArticles();
+
+            if ($propertyName === 'sending_original_docs_option') {
+                $this->syncOriginalDocsSelection();
+            }
             
             // INFO-level logging for production debugging
             Log::info('QuotationCreator state updated', [
@@ -493,9 +524,8 @@ class QuotationCreator extends Component
     
     public function handleArticleAdded($articleId)
     {
-        // Recalculate totals
-        $this->quotation->fresh()->calculateTotals();
-        $this->quotation = $this->quotation->fresh();
+        // Recalculate totals and ensure original docs line is consistent
+        $this->syncOriginalDocsSelection();
         
         Log::info('Article added to draft quotation', [
             'quotation_id' => $this->quotationId,
@@ -506,9 +536,8 @@ class QuotationCreator extends Component
     
     public function handleArticleRemoved($articleId)
     {
-        // Recalculate totals
-        $this->quotation->fresh()->calculateTotals();
-        $this->quotation = $this->quotation->fresh();
+        // Recalculate totals and ensure original docs line is consistent
+        $this->syncOriginalDocsSelection();
         
         Log::info('Article removed from draft quotation', [
             'quotation_id' => $this->quotationId,
@@ -707,6 +736,7 @@ class QuotationCreator extends Component
             'pol' => 'required|string|max:255',
             'pod' => 'required|string|max:255',
             'simple_service_type' => 'required|string',
+            'sending_original_docs_option' => ['required', Rule::in(self::ORIGINAL_DOCS_OPTIONS)],
         ];
         
         // Always require commodity items
@@ -760,6 +790,220 @@ class QuotationCreator extends Component
             ->route('customer.quotations.show', $this->quotation)
             ->with('success', 'Quotation submitted for review! Our team will respond within 24 hours.');
     }
+
+    public function getOriginalDocsOptions(): array
+    {
+        return self::ORIGINAL_DOCS_OPTIONS;
+    }
+
+    public function isOriginalDocsPaidOption(string $option): bool
+    {
+        return in_array($option, self::ORIGINAL_DOCS_PAID_OPTIONS, true);
+    }
+
+    /**
+     * Get pricing for each original docs option.
+     *
+     * @return array<string, array{price: float, currency: string}>
+     */
+    public function getOriginalDocsOptionPricing(): array
+    {
+        $pricing = [];
+        foreach (self::ORIGINAL_DOCS_OPTIONS as $option) {
+            $pricing[$option] = [
+                'price' => 0.0,
+                'currency' => 'EUR',
+            ];
+        }
+
+        if (!$this->quotation) {
+            return $pricing;
+        }
+
+        $paidArticles = RobawsArticleCache::query()
+            ->whereIn('article_name', self::ORIGINAL_DOCS_PAID_OPTIONS)
+            ->get()
+            ->keyBy('article_name');
+
+        foreach (self::ORIGINAL_DOCS_PAID_OPTIONS as $option) {
+            $article = $paidArticles->get($option);
+            if (!$article) {
+                continue;
+            }
+
+            $sellingPrice = null;
+            try {
+                if ($this->quotation->pricing_tier_id && $this->quotation->pricingTier) {
+                    $sellingPrice = $article->getPriceForTier($this->quotation->pricingTier);
+                } else {
+                    $sellingPrice = $article->getPriceForRole($this->quotation->customer_role ?: 'default');
+                }
+            } catch (\Exception $e) {
+                $sellingPrice = $article->getPriceForRole($this->quotation->customer_role ?: 'default');
+            }
+
+            $pricing[$option] = [
+                'price' => (float) ($sellingPrice ?? $article->unit_price ?? 0),
+                'currency' => $article->currency ?? 'EUR',
+            ];
+        }
+
+        return $pricing;
+    }
+
+    /**
+     * Get summary line for selected original docs option.
+     *
+     * @return array{label: string, price: float, currency: string}
+     */
+    public function getOriginalDocsSummaryLine(): array
+    {
+        $option = $this->sending_original_docs_option ?: self::ORIGINAL_DOCS_OPTION_DEFAULT;
+        $pricing = $this->getOriginalDocsOptionPricing();
+        $price = $pricing[$option]['price'] ?? 0.0;
+        $currency = $pricing[$option]['currency'] ?? 'EUR';
+
+        return [
+            'label' => $option,
+            'price' => (float) $price,
+            'currency' => $currency,
+        ];
+    }
+
+    protected function syncOriginalDocsSelection(): void
+    {
+        if (!$this->quotation) {
+            return;
+        }
+
+        $this->quotation = $this->quotation->fresh(['pricingTier', 'articles']);
+        $selected = $this->sending_original_docs_option ?: self::ORIGINAL_DOCS_OPTION_DEFAULT;
+        $this->sending_original_docs_option = $selected;
+
+
+        $paidArticleIds = RobawsArticleCache::query()
+            ->whereIn('article_name', self::ORIGINAL_DOCS_PAID_OPTIONS)
+            ->pluck('id')
+            ->toArray();
+
+        QuotationRequestArticle::query()
+            ->where('quotation_request_id', $this->quotation->id)
+            ->where(function ($query) use ($paidArticleIds) {
+                if (!empty($paidArticleIds)) {
+                    $query->whereIn('article_cache_id', $paidArticleIds);
+                }
+                $query->orWhere('formula_inputs->service_context->source', 'sending_original_docs');
+            })
+            ->delete();
+
+
+        if (!in_array($selected, self::ORIGINAL_DOCS_PAID_OPTIONS, true)) {
+            $this->refreshQuotationTotals();
+            return;
+        }
+
+        $article = RobawsArticleCache::where('article_name', $selected)->first();
+        if (!$article) {
+            Log::warning('Original docs option article not found', [
+                'quotation_id' => $this->quotation->id,
+                'selected_option' => $selected,
+            ]);
+            $this->addError('sending_original_docs_option', 'Selected option is not available right now.');
+            return;
+        }
+
+        $sellingPrice = null;
+        try {
+            if ($this->quotation->pricing_tier_id && $this->quotation->pricingTier) {
+                $sellingPrice = $article->getPriceForTier($this->quotation->pricingTier);
+            } else {
+                $sellingPrice = $article->getPriceForRole($this->quotation->customer_role ?: 'default');
+            }
+        } catch (\Exception $e) {
+            $sellingPrice = $article->getPriceForRole($this->quotation->customer_role ?: 'default');
+        }
+
+        $finalPrice = $sellingPrice ?? ($article->unit_price ?? 0);
+
+        QuotationRequestArticle::withoutEvents(function () use ($article, $finalPrice, $selected) {
+            $quantity = 1;
+            $unitPrice = $finalPrice;
+            QuotationRequestArticle::updateOrCreate([
+                'quotation_request_id' => $this->quotation->id,
+                'article_cache_id' => $article->id,
+            ], [
+                'quotation_request_id' => $this->quotation->id,
+                'article_cache_id' => $article->id,
+                'item_type' => 'standalone',
+                'quantity' => $quantity,
+                'unit_type' => $article->unit_type ?? 'SHIPM.',
+                'unit_price' => $unitPrice,
+                'selling_price' => $unitPrice,
+                'subtotal' => $quantity * $unitPrice,
+                'currency' => $article->currency ?? 'EUR',
+                'formula_inputs' => [
+                    'service_context' => [
+                        'source' => 'sending_original_docs',
+                        'option' => $selected,
+                    ],
+                ],
+            ]);
+        });
+
+        $exists = QuotationRequestArticle::query()
+            ->where('quotation_request_id', $this->quotation->id)
+            ->where('article_cache_id', $article->id)
+            ->where('formula_inputs->service_context->source', 'sending_original_docs')
+            ->exists();
+
+        if (!$exists) {
+            Log::warning('Original docs line missing after create; retrying', [
+                'quotation_id' => $this->quotation->id,
+                'selected_option' => $selected,
+                'article_id' => $article->id,
+            ]);
+
+            QuotationRequestArticle::withoutEvents(function () use ($article, $finalPrice, $selected) {
+                $quantity = 1;
+                $unitPrice = $finalPrice;
+                QuotationRequestArticle::updateOrCreate([
+                    'quotation_request_id' => $this->quotation->id,
+                    'article_cache_id' => $article->id,
+                ], [
+                    'quotation_request_id' => $this->quotation->id,
+                    'article_cache_id' => $article->id,
+                    'item_type' => 'standalone',
+                    'quantity' => $quantity,
+                    'unit_type' => $article->unit_type ?? 'SHIPM.',
+                    'unit_price' => $unitPrice,
+                    'selling_price' => $unitPrice,
+                    'subtotal' => $quantity * $unitPrice,
+                    'currency' => $article->currency ?? 'EUR',
+                    'formula_inputs' => [
+                        'service_context' => [
+                            'source' => 'sending_original_docs',
+                            'option' => $selected,
+                        ],
+                    ],
+                ]);
+            });
+        }
+
+        $this->refreshQuotationTotals();
+
+    }
+
+    protected function refreshQuotationTotals(): void
+    {
+        if (!$this->quotation) {
+            return;
+        }
+
+        $quotation = $this->quotation->fresh(['articles', 'pricingTier']);
+        $quotation->calculateTotals();
+        $this->quotation = $quotation->fresh(['articles', 'pricingTier']);
+
+    }
     
     /**
      * Extract port name and code from various formats:
@@ -810,6 +1054,9 @@ class QuotationCreator extends Component
     
     public function render()
     {
+        if ($this->quotation) {
+            $this->quotation = $this->quotation->fresh(['articles', 'selectedSchedule.carrier', 'commodityItems']);
+        }
         $isAirService = $this->isAirService();
 
         $polPorts = $isAirService
