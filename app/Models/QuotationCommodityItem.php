@@ -694,6 +694,22 @@ class QuotationCommodityItem extends Model
                         continue;
                     }
 
+                    // Ensure LM seafreight mappings are treated as parents
+                    $isLmSeafreight = false;
+                    $articleName = (string) ($article->article_name ?? '');
+                    $articleCommodityType = (string) ($article->commodity_type ?? '');
+                    $articleUnitType = strtoupper(trim((string) ($article->unit_type ?? '')));
+                    if (
+                        str_contains(strtoupper($articleCommodityType), 'LM CARGO')
+                        && ($articleUnitType === 'LM' || str_contains(strtoupper($articleName), 'LM SEAFREIGHT'))
+                    ) {
+                        $isLmSeafreight = true;
+                    }
+                    if ($isLmSeafreight && !$article->is_parent_item) {
+                        $article->is_parent_item = true;
+                        $article->saveQuietly();
+                    }
+
                     $articleType = strtoupper(trim((string) ($article->commodity_type ?? '')));
                     if ($articleType === '' || !$missingTypes->contains($articleType)) {
                         continue;
