@@ -5,6 +5,7 @@ namespace App\Filament\Resources\QuotationRequestResource\Pages;
 use App\Filament\Resources\QuotationRequestResource;
 use App\Notifications\QuotationQuotedNotification;
 use App\Notifications\QuotationStatusChangedNotification;
+use App\Services\Robaws\RobawsQuotationPushService;
 use Filament\Actions;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Infolists;
@@ -169,53 +170,47 @@ class ViewQuotationRequest extends ViewRecord
                 }),
                 
             Actions\Action::make('convertToOffer')
-                ->label('Convert to Robaws Offer')
+                ->label(fn () => $this->record->robaws_offer_id ? 'Update Robaws Offer' : 'Create Robaws Offer')
                 ->icon('heroicon-o-arrow-right-circle')
                 ->color('warning')
-                ->visible(fn () => 
-                    $this->record->status === 'quoted' && 
-                    $this->record->robaws_offer_id === null &&
-                    $this->record->articles()->exists()
+                ->visible(fn () => in_array($this->record->status, ['pending', 'processing', 'quoted'], true))
+                ->disabled(fn () => !$this->record->articles()->exists())
+                ->tooltip(fn () => $this->record->articles()->exists()
+                    ? null
+                    : 'Add at least one article before pushing to Robaws.'
                 )
                 ->requiresConfirmation()
-                ->modalHeading('Convert to Robaws Offer')
-                ->modalDescription('This will create an offer in Robaws with all articles and pricing. The client and contact will be synced automatically.')
-                ->modalSubmitActionLabel('Create Offer')
+                ->modalHeading(fn () => $this->record->robaws_offer_id ? 'Update Robaws Offer' : 'Create Robaws Offer')
+                ->modalDescription(fn () => $this->record->robaws_offer_id
+                    ? 'This will update the existing Robaws offer with the latest articles, pricing, and attachments.'
+                    : 'This will create a new offer in Robaws with all articles, pricing, and attachments.'
+                )
+                ->modalSubmitActionLabel(fn () => $this->record->robaws_offer_id ? 'Update Offer' : 'Create Offer')
                 ->action(function () {
                     try {
-                        // Use RobawsApiClient to create client, contact, and offer
-                        $apiClient = app(\App\Services\Export\Clients\RobawsApiClient::class);
-                        
-                        // 1. Find or create client
-                        $clientData = [
-                            'name' => $this->record->client_name ?? $this->record->contact_name,
-                            'email' => $this->record->client_email ?? $this->record->contact_email,
-                            'tel' => $this->record->client_tel ?? $this->record->contact_phone,
-                        ];
-                        $client = $apiClient->findOrCreateClient($clientData);
-                        
-                        // 2. Create contact person if needed
-                        if ($client && $this->record->contact_name) {
-                            $contactData = [
-                                'first_name' => $this->record->contact_name,
-                                'email' => $this->record->contact_email,
-                                'tel' => $this->record->contact_phone,
-                                'function' => $this->record->contact_function,
-                            ];
-                            $apiClient->findOrCreateClientContact($client['id'], $contactData);
-                        }
-                        
-                        // 3. Update the quotation with client ID
-                        $this->record->update([
-                            'robaws_client_id' => $client['id'] ?? null,
-                            'robaws_sync_status' => 'synced',
-                            'robaws_synced_at' => now(),
+                        $service = app(RobawsQuotationPushService::class);
+                        $result = $service->push($this->record, [
+                            'include_attachments' => true,
                         ]);
-                        
+
+                        if (!($result['success'] ?? false)) {
+                            throw new \RuntimeException($result['error'] ?? 'Robaws push failed.');
+                        }
+
+                        $attachments = $result['attachments'] ?? [];
+                        $attachmentSummary = '';
+                        if (!empty($attachments)) {
+                            $attachmentSummary = sprintf(
+                                ' Attachments: %d uploaded, %d failed.',
+                                $attachments['succeeded'] ?? 0,
+                                $attachments['failed'] ?? 0
+                            );
+                        }
+
                         \Filament\Notifications\Notification::make()
                             ->success()
-                            ->title('Client Synced to Robaws')
-                            ->body('Client and contact created in Robaws. Offer creation coming soon.')
+                            ->title('Robaws Offer Synced')
+                            ->body('Offer was successfully pushed to Robaws.' . $attachmentSummary)
                             ->send();
                             
                     } catch (\Exception $e) {

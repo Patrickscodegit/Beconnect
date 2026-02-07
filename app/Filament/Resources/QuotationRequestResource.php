@@ -1197,6 +1197,64 @@ class QuotationRequestResource extends Resource
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
+                Tables\Actions\Action::make('pushToRobaws')
+                    ->label(fn (QuotationRequest $record) => $record->robaws_offer_id ? 'Update Robaws Offer' : 'Create Robaws Offer')
+                    ->icon('heroicon-o-arrow-right-circle')
+                    ->color('warning')
+                    ->visible(fn (QuotationRequest $record) => in_array($record->status, ['pending', 'processing', 'quoted'], true))
+                    ->disabled(fn (QuotationRequest $record) => !$record->articles()->exists())
+                    ->tooltip(fn (QuotationRequest $record) => $record->articles()->exists()
+                        ? null
+                        : 'Add at least one article before pushing to Robaws.'
+                    )
+                    ->requiresConfirmation()
+                    ->modalHeading(fn (QuotationRequest $record) => $record->robaws_offer_id ? 'Update Robaws Offer' : 'Create Robaws Offer')
+                    ->modalDescription(fn (QuotationRequest $record) => $record->robaws_offer_id
+                        ? 'This will update the existing Robaws offer with the latest articles, pricing, and attachments.'
+                        : 'This will create a new offer in Robaws with all articles, pricing, and attachments.'
+                    )
+                    ->modalSubmitActionLabel(fn (QuotationRequest $record) => $record->robaws_offer_id ? 'Update Offer' : 'Create Offer')
+                    ->action(function (QuotationRequest $record) {
+                        if (!$record->articles()->exists()) {
+                            \Filament\Notifications\Notification::make()
+                                ->warning()
+                                ->title('No Articles')
+                                ->body('This quotation has no articles to push.')
+                                ->send();
+                            return;
+                        }
+
+                        try {
+                            $service = app(\App\Services\Robaws\RobawsQuotationPushService::class);
+                            $result = $service->push($record, ['include_attachments' => true]);
+
+                            if (!($result['success'] ?? false)) {
+                                throw new \RuntimeException($result['error'] ?? 'Robaws push failed.');
+                            }
+
+                            $attachments = $result['attachments'] ?? [];
+                            $attachmentSummary = '';
+                            if (!empty($attachments)) {
+                                $attachmentSummary = sprintf(
+                                    ' Attachments: %d uploaded, %d failed.',
+                                    $attachments['succeeded'] ?? 0,
+                                    $attachments['failed'] ?? 0
+                                );
+                            }
+
+                            \Filament\Notifications\Notification::make()
+                                ->success()
+                                ->title('Robaws Offer Synced')
+                                ->body('Offer was successfully pushed to Robaws.' . $attachmentSummary)
+                                ->send();
+                        } catch (\Exception $e) {
+                            \Filament\Notifications\Notification::make()
+                                ->danger()
+                                ->title('Sync Failed')
+                                ->body($e->getMessage())
+                                ->send();
+                        }
+                    }),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
             ])
