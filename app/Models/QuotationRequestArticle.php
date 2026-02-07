@@ -70,7 +70,15 @@ class QuotationRequestArticle extends Model
 
             $isPerShipment = $isAdminArticle || self::isPerShipmentUnitType($unitType);
             if ($isPerShipment && !$isOriginalDocsOption) {
-                $exists = self::perShipmentLineExists($model->quotation_request_id, $adminArticleIds);
+                $exists = false;
+                if ($isAdminArticle && !empty($adminArticleIds)) {
+                    $exists = self::where('quotation_request_id', $model->quotation_request_id)
+                        ->whereIn('article_cache_id', $adminArticleIds)
+                        ->exists();
+                } else {
+                    $exists = self::perShipmentLineExists($model->quotation_request_id, $adminArticleIds);
+                }
+
                 if ($exists) {
                     \Log::info('Skipped per-shipment line item (already exists on quote)', [
                         'quotation_request_id' => $model->quotation_request_id,
@@ -685,19 +693,13 @@ class QuotationRequestArticle extends Model
         $conditionMatcher = app(\App\Services\CompositeItems\ConditionMatcherService::class);
         
         // Find admin articles dynamically to identify them
-        $admin75 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 75')->where('unit_price', 75)->first();
-        $admin100 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 100')->where('unit_price', 100)->first();
-        $admin110 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 110')->where('unit_price', 110)->first();
-        $admin115 = \App\Models\RobawsArticleCache::where('article_name', 'Admin')->where('unit_price', 115)->first();
-        $admin125 = \App\Models\RobawsArticleCache::where('article_name', 'Admin 125')->where('unit_price', 125)->first();
-        
-        $adminArticleIds = array_filter([
-            $admin75 ? $admin75->id : null,
-            $admin100 ? $admin100->id : null,
-            $admin110 ? $admin110->id : null,
-            $admin115 ? $admin115->id : null,
-            $admin125 ? $admin125->id : null,
-        ]);
+        $adminArticleIds = array_values(array_unique(array_merge(
+            \App\Models\RobawsArticleCache::where('article_name', 'Admin 75')->where('unit_price', 75)->pluck('id')->all(),
+            \App\Models\RobawsArticleCache::where('article_name', 'Admin 100')->where('unit_price', 100)->pluck('id')->all(),
+            \App\Models\RobawsArticleCache::where('article_name', 'Admin 110')->where('unit_price', 110)->pluck('id')->all(),
+            \App\Models\RobawsArticleCache::where('article_name', 'Admin')->where('unit_price', 115)->pluck('id')->all(),
+            \App\Models\RobawsArticleCache::where('article_name', 'Admin 125')->where('unit_price', 125)->pluck('id')->all(),
+        )));
         
         // Separate admin articles from other children
         $adminChildren = collect();
@@ -727,10 +729,12 @@ class QuotationRequestArticle extends Model
                     $childUnitType = strtoupper(trim($adminChild->pivot->unit_type ?? $adminChild->unit_type ?? ''));
                     $isPerShipment = self::isPerShipmentUnitType($childUnitType) || in_array($adminChild->id, $adminArticleIds, true);
                     
-                    // If "per shipment", check if any "per shipment" article already exists
+                    // If "per shipment", only dedupe against existing admin articles
                     $exists = false;
-                    if ($isPerShipment) {
-                        $exists = self::perShipmentLineExists($quotationRequest->id, $adminArticleIds);
+                    if ($isPerShipment && !empty($adminArticleIds)) {
+                        $exists = self::where('quotation_request_id', $quotationRequest->id)
+                            ->whereIn('article_cache_id', $adminArticleIds)
+                            ->exists();
                     }
                     
                     if (!$exists) {

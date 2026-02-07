@@ -184,17 +184,30 @@ class QuotationRequest extends Model
 
         static::saved(function ($quotationRequest) {
             if (!$quotationRequest->wasChanged('selected_schedule_id')) {
+                // continue to check other triggers
+            } else {
+                if (!$quotationRequest->selected_schedule_id) {
+                    return;
+                }
+
+                \DB::afterCommit(function () use ($quotationRequest) {
+                    $orchestrator = app(\App\Services\Quotation\QuotationPricingOrchestrator::class);
+                    $orchestrator->recalculateForScheduleChange($quotationRequest);
+                });
+
                 return;
             }
 
-            if (!$quotationRequest->selected_schedule_id) {
-                return;
-            }
+            if ($quotationRequest->wasChanged('pod') || $quotationRequest->wasChanged('pod_port_id')) {
+                if (!$quotationRequest->selected_schedule_id) {
+                    return;
+                }
 
-            \DB::afterCommit(function () use ($quotationRequest) {
-                $orchestrator = app(\App\Services\Quotation\QuotationPricingOrchestrator::class);
-                $orchestrator->recalculateForScheduleChange($quotationRequest);
-            });
+                \DB::afterCommit(function () use ($quotationRequest) {
+                    $orchestrator = app(\App\Services\Quotation\QuotationPricingOrchestrator::class);
+                    $orchestrator->recalculateForScheduleChange($quotationRequest);
+                });
+            }
         });
     }
 

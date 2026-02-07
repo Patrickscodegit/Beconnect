@@ -665,7 +665,13 @@ class QuotationCommodityItem extends Model
 
             $existingParentTypes = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
                 ->whereIn('item_type', ['parent', 'standalone'])
-                ->with('articleCache:id,commodity_type')
+                ->whereHas('articleCache', function ($query) {
+                    $query->where(function ($q) {
+                        $q->whereNull('is_surcharge')
+                            ->orWhere('is_surcharge', false);
+                    });
+                })
+                ->with('articleCache:id,commodity_type,is_surcharge')
                 ->get()
                 ->pluck('articleCache.commodity_type')
                 ->filter()
@@ -718,6 +724,14 @@ class QuotationCommodityItem extends Model
                     $quotation->addArticle($article, 1);
                 }
             }
+        }
+
+        // Ensure parent articles have their children attached (e.g., Admin 75)
+        $parentArticles = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+            ->where('item_type', 'parent')
+            ->get();
+        foreach ($parentArticles as $parentArticle) {
+            $parentArticle->addChildArticles();
         }
 
         $itemsById = $commodityItems->keyBy('id');
