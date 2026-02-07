@@ -686,6 +686,32 @@ class QuotationCommodityItem extends Model
 
             if ($missingTypes->isNotEmpty()) {
                 $suggestionLimit = max(1, $missingTypes->count());
+                $mappedArticleIds = $selectionService->getStrictMappedArticleIdsForQuotation($quotation);
+                if (!empty($mappedArticleIds)) {
+                    $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
+                    $lmQuery = RobawsArticleCache::whereIn('id', $mappedArticleIds)
+                        ->where(function ($query) use ($useIlike) {
+                            if ($useIlike) {
+                                $query->where('commodity_type', 'ILIKE', '%LM CARGO%');
+                            } else {
+                                $query->whereRaw('LOWER(commodity_type) LIKE ?', ['%lm cargo%']);
+                            }
+                        })
+                        ->where(function ($query) use ($useIlike) {
+                            $query->whereRaw('UPPER(TRIM(unit_type)) = ?', ['LM']);
+                            if ($useIlike) {
+                                $query->orWhere('article_name', 'ILIKE', '%LM Seafreight%');
+                            } else {
+                                $query->orWhereRaw('LOWER(article_name) LIKE ?', ['%lm seafreight%']);
+                            }
+                        })
+                        ->where(function ($query) {
+                            $query->whereNull('is_parent_item')
+                                ->orWhere('is_parent_item', false);
+                        });
+
+                    $lmQuery->update(['is_parent_item' => true]);
+                }
                 $suggestions = $selectionService->getTopSuggestions($quotation, $suggestionLimit, 0);
 
                 foreach ($suggestions as $suggestion) {
