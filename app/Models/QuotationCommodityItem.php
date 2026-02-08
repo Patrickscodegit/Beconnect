@@ -497,6 +497,7 @@ class QuotationCommodityItem extends Model
             'platform_truck' => ['TRUCK', 'HH', 'LM CARGO'],
             'tipper_truck' => ['TRUCK', 'HH', 'LM CARGO'],
             'tank_truck' => ['TRUCK', 'HH', 'LM CARGO'],
+            'tank_trailer' => ['TRAILER', 'TRUCK', 'HH', 'LM CARGO'],
             'refuse_truck' => ['TRUCK', 'HH', 'LM CARGO'],
             'truck_chassis' => ['TRUCK', 'HH', 'LM CARGO'],
             'concrete_mixer' => ['TRUCK', 'HH', 'LM CARGO'],
@@ -684,56 +685,70 @@ class QuotationCommodityItem extends Model
                 ->reject(fn ($type) => $existingParentTypes->contains($type))
                 ->values();
 
+            $mappedArticleIds = $selectionService->getStrictMappedArticleIdsForQuotation($quotation);
+            $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
+
+            if (!empty($mappedArticleIds)) {
+                $lmQuery = RobawsArticleCache::whereIn('id', $mappedArticleIds)
+                    ->where(function ($query) use ($useIlike) {
+                        if ($useIlike) {
+                            $query->where('commodity_type', 'ILIKE', '%LM CARGO%');
+                        } else {
+                            $query->whereRaw('LOWER(commodity_type) LIKE ?', ['%lm cargo%']);
+                        }
+                    })
+                    ->where(function ($query) use ($useIlike) {
+                        $query->whereRaw('UPPER(TRIM(unit_type)) = ?', ['LM']);
+                        if ($useIlike) {
+                            $query->orWhere('article_name', 'ILIKE', '%LM Seafreight%');
+                        } else {
+                            $query->orWhereRaw('LOWER(article_name) LIKE ?', ['%lm seafreight%']);
+                        }
+                    });
+
+                // Promote LM seafreight parents for mapped routes
+                $lmQuery->where(function ($query) {
+                    $query->whereNull('is_parent_item')
+                        ->orWhere('is_parent_item', false);
+                })->update(['is_parent_item' => true]);
+
+                // Auto-add mapped LM seafreight parents even if missingTypes is empty
+                $lmCandidates = $lmQuery->get();
+                foreach ($lmCandidates as $article) {
+                    if (!$selectionService->isStrictlyEligible($quotation, $article)) {
+                        \Log::warning('Auto-add skipped by strict alignment', [
+                            'quotation_request_id' => $quotation->id,
+                            'article_id' => $article->id,
+                            'article_name' => $article->article_name,
+                        ]);
+                        continue;
+                    }
+
+                    $exists = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+                        ->where('article_cache_id', $article->id)
+                        ->exists();
+
+                    if ($exists) {
+                        continue;
+                    }
+
+                    \Log::info('Auto-adding mapped LM seafreight parent article', [
+                        'quotation_request_id' => $quotation->id,
+                        'article_id' => $article->id,
+                        'article_name' => $article->article_name,
+                    ]);
+                    $quotation->addArticle($article, 1);
+                }
+            }
+
             if ($missingTypes->isNotEmpty()) {
                 $suggestionLimit = max(1, $missingTypes->count());
-                $mappedArticleIds = $selectionService->getStrictMappedArticleIdsForQuotation($quotation);
-                if (!empty($mappedArticleIds)) {
-                    $useIlike = \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql';
-                    $lmQuery = RobawsArticleCache::whereIn('id', $mappedArticleIds)
-                        ->where(function ($query) use ($useIlike) {
-                            if ($useIlike) {
-                                $query->where('commodity_type', 'ILIKE', '%LM CARGO%');
-                            } else {
-                                $query->whereRaw('LOWER(commodity_type) LIKE ?', ['%lm cargo%']);
-                            }
-                        })
-                        ->where(function ($query) use ($useIlike) {
-                            $query->whereRaw('UPPER(TRIM(unit_type)) = ?', ['LM']);
-                            if ($useIlike) {
-                                $query->orWhere('article_name', 'ILIKE', '%LM Seafreight%');
-                            } else {
-                                $query->orWhereRaw('LOWER(article_name) LIKE ?', ['%lm seafreight%']);
-                            }
-                        })
-                        ->where(function ($query) {
-                            $query->whereNull('is_parent_item')
-                                ->orWhere('is_parent_item', false);
-                        });
-
-                    $lmQuery->update(['is_parent_item' => true]);
-                }
                 $suggestions = $selectionService->getTopSuggestions($quotation, $suggestionLimit, 0);
 
                 foreach ($suggestions as $suggestion) {
                     $article = $suggestion['article'] ?? null;
                     if (!$article) {
                         continue;
-                    }
-
-                    // Ensure LM seafreight mappings are treated as parents
-                    $isLmSeafreight = false;
-                    $articleName = (string) ($article->article_name ?? '');
-                    $articleCommodityType = (string) ($article->commodity_type ?? '');
-                    $articleUnitType = strtoupper(trim((string) ($article->unit_type ?? '')));
-                    if (
-                        str_contains(strtoupper($articleCommodityType), 'LM CARGO')
-                        && ($articleUnitType === 'LM' || str_contains(strtoupper($articleName), 'LM SEAFREIGHT'))
-                    ) {
-                        $isLmSeafreight = true;
-                    }
-                    if ($isLmSeafreight && !$article->is_parent_item) {
-                        $article->is_parent_item = true;
-                        $article->saveQuietly();
                     }
 
                     $articleType = strtoupper(trim((string) ($article->commodity_type ?? '')));

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\RobawsWebhookController;
 use App\Http\Controllers\IntakeStatusController;
+use App\Http\Controllers\RobawsWebhookController as RobawsOfferWebhookController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -24,3 +25,7 @@ Route::post('/webhooks/robaws/customers', [RobawsWebhookController::class, 'hand
 Route::post('/webhooks/robaws/suppliers', [RobawsWebhookController::class, 'handleSupplier'])
     ->middleware('throttle:60,1') // 60 requests per minute
     ->name('webhooks.robaws.suppliers');
+
+Route::post('/webhooks/robaws/offers', [RobawsOfferWebhookController::class, 'handle'])
+    ->middleware('throttle:60,1') // 60 requests per minute
+    ->name('webhooks.robaws.offers');

@@ -4,11 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Models\RobawsWebhookLog;
 use App\Models\QuotationRequest;
+use App\Services\Robaws\RobawsOfferSyncService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class RobawsWebhookController extends Controller
 {
+    public function __construct(private RobawsOfferSyncService $offerSyncService) {}
+
     /**
      * Handle incoming webhooks from Robaws
      * Built now, enabled when Robaws approves webhooks
@@ -26,6 +30,16 @@ class RobawsWebhookController extends Controller
                 'status' => 'webhooks_not_enabled',
                 'message' => 'Webhooks are not yet enabled. Please enable ROBAWS_WEBHOOKS_ENABLED in .env'
             ], 503);
+        }
+
+        // Verify webhook signature
+        if (!$this->verifySignature($request)) {
+            Log::warning('Invalid offer webhook signature', [
+                'ip' => $request->ip(),
+                'signature' => $request->header('Robaws-Signature'),
+            ]);
+
+            return response()->json(['error' => 'Invalid signature'], 401);
         }
 
         // Log webhook receipt
@@ -85,20 +99,11 @@ class RobawsWebhookController extends Controller
      */
     private function handleOfferUpdated(array $data): void
     {
-        $quotation = QuotationRequest::where('robaws_offer_id', $data['id'])->first();
+        $this->offerSyncService->syncOffer($data);
 
-        if ($quotation) {
-            $quotation->update([
-                'robaws_offer_number' => $data['offerNumber'] ?? $quotation->robaws_offer_number,
-                'robaws_sync_status' => 'synced',
-                'robaws_synced_at' => now()
-            ]);
-
-            Log::info('Quotation synced from Robaws webhook', [
-                'quotation_id' => $quotation->id,
-                'offer_id' => $data['id']
-            ]);
-        }
+        Log::info('Quotation synced from Robaws webhook', [
+            'offer_id' => $data['id'] ?? null
+        ]);
     }
 
     /**
@@ -215,5 +220,45 @@ class RobawsWebhookController extends Controller
             'event' => $event,
             'data' => $data
         ]);
+    }
+
+    private function verifySignature(Request $request, string $provider = 'robaws'): bool
+    {
+        $signatureHeader = $request->header('Robaws-Signature');
+
+        if (!$signatureHeader) {
+            return false;
+        }
+
+        $config = DB::table('webhook_configurations')
+            ->where('provider', $provider)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$config) {
+            Log::error('No active webhook configuration found', ['provider' => $provider]);
+            return false;
+        }
+
+        $secret = $config->secret;
+
+        parse_str(str_replace(',', '&', $signatureHeader), $parts);
+        $timestamp = $parts['t'] ?? null;
+        $receivedSignature = $parts['v1'] ?? null;
+
+        if (!$timestamp || !$receivedSignature) {
+            return false;
+        }
+
+        $age = time() - (int) $timestamp;
+        if ($age > 300) {
+            Log::warning('Webhook timestamp too old', ['age_seconds' => $age]);
+            return false;
+        }
+
+        $payload = $timestamp . '.' . $request->getContent();
+        $expectedSignature = hash_hmac('sha256', $payload, $secret);
+
+        return hash_equals($expectedSignature, $receivedSignature);
     }
 }
