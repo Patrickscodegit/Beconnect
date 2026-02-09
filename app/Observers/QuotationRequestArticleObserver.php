@@ -4,7 +4,9 @@ namespace App\Observers;
 
 use App\Models\QuotationRequestArticle;
 use App\Jobs\PushQuotationToRobawsJob;
+use App\Jobs\UpdateRobawsOfferJob;
 use App\Services\Pricing\VatResolverInterface;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
@@ -105,6 +107,16 @@ class QuotationRequestArticleObserver
         }
 
         if (!in_array($quotation->status, ['pending', 'processing', 'quoted'], true)) {
+            return;
+        }
+
+        if ($quotation->robaws_offer_id) {
+            $throttleKey = 'robaws_offer_update_' . $quotation->id;
+            if (Cache::add($throttleKey, true, 60)) {
+                UpdateRobawsOfferJob::dispatch($quotation->id)
+                    ->delay(now()->addSeconds(30))
+                    ->afterCommit();
+            }
             return;
         }
 

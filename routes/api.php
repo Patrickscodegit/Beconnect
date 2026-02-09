@@ -14,6 +14,10 @@ Route::get('/user', function (Request $request) {
 Route::get('/intakes/{intake}/status', [IntakeStatusController::class, 'show'])->name('intakes.status');
 
 // Robaws Webhooks (no auth - verified by signature)
+Route::post('/webhooks/robaws', [RobawsOfferWebhookController::class, 'handle'])
+    ->middleware('throttle:60,1') // 60 requests per minute
+    ->name('webhooks.robaws.all');
+
 Route::post('/webhooks/robaws/articles', [RobawsWebhookController::class, 'handleArticle'])
     ->middleware('throttle:60,1') // 60 requests per minute
     ->name('webhooks.robaws.articles');

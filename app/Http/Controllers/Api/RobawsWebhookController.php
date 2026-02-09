@@ -258,18 +258,21 @@ class RobawsWebhookController extends Controller
             return false;
         }
         
-        // Get secret from database
-        $config = DB::table('webhook_configurations')
-            ->where('provider', $provider)
-            ->where('is_active', true)
-            ->first();
-            
-        if (!$config) {
-            Log::error('No active webhook configuration found', ['provider' => $provider]);
-            return false;
+        $secret = config('services.robaws.webhook_secret');
+        if (!$secret) {
+            // Get secret from database
+            $config = DB::table('webhook_configurations')
+                ->where('provider', $provider)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$config) {
+                Log::error('No active webhook configuration found', ['provider' => $provider]);
+                return false;
+            }
+
+            $secret = $config->secret;
         }
-        
-        $secret = $config->secret;
         
         // Parse signature header: "t=1674742714,v1=signature"
         parse_str(str_replace(',', '&', $signatureHeader), $parts);

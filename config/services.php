@@ -103,6 +103,7 @@ return [
         'password'   => env('ROBAWS_PASSWORD'),
         'api_key'    => env('ROBAWS_API_KEY'),
         'api_secret' => env('ROBAWS_API_SECRET'),
+        'webhook_secret' => env('ROBAWS_WEBHOOK_SECRET'),
         'company_id' => env('ROBAWS_COMPANY_ID', env('ROBAWS_DEFAULT_COMPANY_ID')),
         'timeout'    => env('ROBAWS_TIMEOUT', 10),
         'connect_timeout' => env('ROBAWS_CONNECT_TIMEOUT', 5),

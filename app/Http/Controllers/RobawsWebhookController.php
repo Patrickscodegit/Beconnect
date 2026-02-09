@@ -5,14 +5,22 @@ namespace App\Http\Controllers;
 use App\Models\RobawsWebhookLog;
 use App\Models\QuotationRequest;
 use App\Jobs\SyncRobawsOfferJob;
+use App\Services\Quotation\RobawsArticlesSyncService;
+use App\Services\Robaws\RobawsCustomerSyncService;
 use App\Services\Robaws\RobawsOfferSyncService;
+use App\Services\Robaws\RobawsSupplierSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class RobawsWebhookController extends Controller
 {
-    public function __construct(private RobawsOfferSyncService $offerSyncService) {}
+    public function __construct(
+        private RobawsOfferSyncService $offerSyncService,
+        private RobawsArticlesSyncService $articlesSyncService,
+        private RobawsCustomerSyncService $customerSyncService,
+        private RobawsSupplierSyncService $supplierSyncService
+    ) {}
 
     /**
      * Handle incoming webhooks from Robaws
@@ -72,12 +80,18 @@ class RobawsWebhookController extends Controller
                 'offer.recalculated' => $this->handleOfferUpdated($data),
                 'offer.deleted' => $this->handleOfferDeleted($data),
                 'offer.status_changed' => $this->handleOfferStatusChanged($data),
+                'client.created' => $this->handleCustomerUpdated($data),
+                'client.updated' => $this->handleCustomerUpdated($data),
+                'article.created' => $this->handleArticleUpdated($data, $event),
+                'article.updated' => $this->handleArticleUpdated($data, $event),
+                'article.stock-changed' => $this->handleArticleUpdated($data, $event),
+                'supplier.created' => $this->handleSupplierUpdated($data, $event),
+                'supplier.updated' => $this->handleSupplierUpdated($data, $event),
                 'project.created' => $this->handleProjectCreated($data),
                 'project.updated' => $this->handleProjectUpdated($data),
                 'project.status_changed' => $this->handleProjectStatusChanged($data),
                 'invoice.created' => $this->handleInvoiceCreated($data),
                 'document.uploaded' => $this->handleDocumentUploaded($data),
-                'article.updated' => $this->handleArticleUpdated($data),
                 default => $this->handleUnknownEvent($event, $data)
             };
 
@@ -211,25 +225,38 @@ class RobawsWebhookController extends Controller
     /**
      * Handle article updated event
      */
-    private function handleArticleUpdated(array $data): void
+    private function handleArticleUpdated(array $data, string $event = 'article.updated'): void
     {
-        $article = \App\Models\RobawsArticleCache::where('robaws_article_id', $data['id'])->first();
+        $this->articlesSyncService->processArticleFromWebhook($data, $event);
 
-        if ($article) {
-            $article->update([
-                'article_code' => $data['code'] ?? $article->article_code,
-                'article_name' => $data['name'] ?? $article->article_name,
-                'description' => $data['description'] ?? $article->description,
-                'unit_price' => $data['unitPrice'] ?? $article->unit_price,
-                'is_active' => $data['isActive'] ?? $article->is_active,
-                'last_synced_at' => now()
-            ]);
+        Log::info('Article webhook processed', [
+            'event' => $event,
+            'robaws_article_id' => $data['id'] ?? null,
+        ]);
+    }
 
-            Log::info('Article updated from webhook', [
-                'article_id' => $article->id,
-                'robaws_article_id' => $data['id']
-            ]);
-        }
+    private function handleCustomerUpdated(array $data): void
+    {
+        $customer = $this->customerSyncService->processCustomerFromWebhook($data);
+
+        Log::info('Customer webhook processed', [
+            'client_id' => $data['id'] ?? null,
+            'customer_name' => $customer->name ?? null,
+        ]);
+    }
+
+    private function handleSupplierUpdated(array $data, string $event): void
+    {
+        $supplier = $this->supplierSyncService->processSupplierFromWebhook([
+            'event' => $event,
+            'data' => $data,
+        ]);
+
+        Log::info('Supplier webhook processed', [
+            'event' => $event,
+            'supplier_id' => $data['id'] ?? null,
+            'supplier_name' => $supplier->name ?? null,
+        ]);
     }
 
     /**
@@ -251,17 +278,20 @@ class RobawsWebhookController extends Controller
             return false;
         }
 
-        $config = DB::table('webhook_configurations')
-            ->where('provider', $provider)
-            ->where('is_active', true)
-            ->first();
+        $secret = config('services.robaws.webhook_secret');
+        if (!$secret) {
+            $config = DB::table('webhook_configurations')
+                ->where('provider', $provider)
+                ->where('is_active', true)
+                ->first();
 
-        if (!$config) {
-            Log::error('No active webhook configuration found', ['provider' => $provider]);
-            return false;
+            if (!$config) {
+                Log::error('No active webhook configuration found', ['provider' => $provider]);
+                return false;
+            }
+
+            $secret = $config->secret;
         }
-
-        $secret = $config->secret;
 
         parse_str(str_replace(',', '&', $signatureHeader), $parts);
         $timestamp = $parts['t'] ?? null;

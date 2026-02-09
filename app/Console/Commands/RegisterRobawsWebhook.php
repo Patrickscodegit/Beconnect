@@ -22,7 +22,17 @@ class RegisterRobawsWebhook extends Command
     public function handle(): int
     {
         $environment = config('app.env');
-        $webhookUrl = $this->option('url') ?? config('app.url') . '/api/webhooks/robaws/articles';
+        $webhookUrl = $this->option('url') ?? config('app.url') . '/api/webhooks/robaws';
+        $events = [
+            'offer.created',
+            'offer.updated',
+            'offer.recalculated',
+            'client.created',
+            'client.updated',
+            'article.created',
+            'article.updated',
+            'article.stock-changed',
+        ];
         
         $this->info("🔄 Registering webhook for {$environment} environment");
         $this->info("URL: {$webhookUrl}");
@@ -74,7 +84,7 @@ class RegisterRobawsWebhook extends Command
             // Register webhook with Robaws
             $result = $this->apiClient->registerWebhook([
                 'url' => $webhookUrl,
-                'events' => ['article.created', 'article.updated', 'article.stock-changed']
+                'events' => $events,
             ]);
             
             if ($result['success']) {
@@ -87,7 +97,7 @@ class RegisterRobawsWebhook extends Command
                     'webhook_id' => $webhookId,
                     'secret' => $secret,
                     'url' => $webhookUrl,
-                    'events' => json_encode(['article.created', 'article.updated', 'article.stock-changed']),
+                    'events' => json_encode($events),
                     'is_active' => true,
                     'registered_at' => now(),
                     'created_at' => now(),
