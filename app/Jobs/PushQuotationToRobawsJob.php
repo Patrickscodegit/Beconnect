@@ -4,7 +4,7 @@ namespace App\Jobs;
 
 use App\Models\QuotationRequest;
 use App\Services\Robaws\RobawsQuotationPushService;
-use App\Jobs\UpdateRobawsOfferJob;
+use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -29,6 +29,35 @@ class PushQuotationToRobawsJob implements ShouldQueue
             return;
         }
 
+        $articleCount = $quotation->quotationRequestArticles()->count();
+        $lastCreatedAt = $quotation->quotationRequestArticles()->max('created_at');
+        $maxAttempts = 5;
+
+        if ($articleCount === 0) {
+            if ($this->attempts() < $maxAttempts) {
+                Log::info('Auto-push delayed: no articles yet', [
+                    'quotation_id' => $quotation->id,
+                    'attempt' => $this->attempts(),
+                ]);
+                $this->release(10);
+            }
+            return;
+        }
+
+        if ($lastCreatedAt) {
+            $ageSeconds = now()->diffInSeconds(Carbon::parse($lastCreatedAt));
+            if ($ageSeconds < 5 && $this->attempts() < $maxAttempts) {
+                Log::info('Auto-push delayed: articles still settling', [
+                    'quotation_id' => $quotation->id,
+                    'article_count' => $articleCount,
+                    'age_seconds' => $ageSeconds,
+                    'attempt' => $this->attempts(),
+                ]);
+                $this->release(10);
+                return;
+            }
+        }
+
         try {
             $result = $service->push($quotation, ['include_attachments' => true]);
 
@@ -43,12 +72,6 @@ class PushQuotationToRobawsJob implements ShouldQueue
                     $this->release(120);
                     return;
                 }
-            }
-
-            if (!empty($result['offer_id'])) {
-                UpdateRobawsOfferJob::dispatch($quotation->id)
-                    ->delay(now()->addSeconds(45))
-                    ->afterCommit();
             }
         } catch (\Throwable $e) {
             Log::error('Auto-push to Robaws failed', [
