@@ -59,7 +59,11 @@ class RobawsQuotationPushService
         $idempotencyKey = $options['idempotency_key'] ?? $this->buildIdempotencyKey($quotation, $payload);
 
         if ($quotation->robaws_offer_id && !($options['create_new'] ?? false)) {
-            $result = $this->apiClient->updateQuotation((string) $quotation->robaws_offer_id, $payload, $idempotencyKey);
+            if (!empty($options['minimal_update'])) {
+                $result = $this->apiClient->patchQuotation((string) $quotation->robaws_offer_id, $payload, $idempotencyKey);
+            } else {
+                $result = $this->apiClient->updateQuotation((string) $quotation->robaws_offer_id, $payload, $idempotencyKey);
+            }
         } else {
             $result = $this->apiClient->createQuotation($payload, $idempotencyKey);
         }
