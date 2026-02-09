@@ -1105,7 +1105,9 @@ final class RobawsApiClient implements RobawsApiClientInterface
         try {
             $response = $this->getHttpClient()
                 ->withHeaders($headers)
-                ->patch("/api/v2/offers/{$quotationId}", $payload);
+                ->send('PATCH', "/api/v2/offers/{$quotationId}", [
+                    'body' => json_encode($payload),
+                ]);
 
             if ($response->successful()) {
                 $data = $response->json();
