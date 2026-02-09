@@ -30,6 +30,11 @@ class PushQuotationToRobawsJob implements ShouldQueue
         }
 
         $articleCount = $quotation->quotationRequestArticles()->count();
+        $mappedArticleCount = $quotation->quotationRequestArticles()
+            ->whereHas('articleCache', function ($query) {
+                $query->whereNotNull('robaws_article_id');
+            })
+            ->count();
         $lastCreatedAt = $quotation->quotationRequestArticles()->max('created_at');
         $articleCountStable = $quotation->quotationRequestArticles()
             ->where('created_at', '<=', now()->subSeconds(2))
@@ -44,6 +49,17 @@ class PushQuotationToRobawsJob implements ShouldQueue
                 ]);
                 $this->release(10);
             }
+            return;
+        }
+
+        if ($mappedArticleCount < 2 && $this->attempts() < $maxAttempts) {
+            Log::info('Auto-push delayed: waiting for mapped articles', [
+                'quotation_id' => $quotation->id,
+                'article_count' => $articleCount,
+                'mapped_article_count' => $mappedArticleCount,
+                'attempt' => $this->attempts(),
+            ]);
+            $this->release(10);
             return;
         }
 

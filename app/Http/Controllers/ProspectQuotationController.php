@@ -10,6 +10,7 @@ use App\Notifications\QuotationSubmittedNotification;
 use App\Services\RobawsFieldGenerator;
 use App\Services\OfferTemplateService;
 use App\Services\Commodity\CommodityMappingService;
+use App\Services\Robaws\RobawsQuotationPushService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
@@ -164,6 +165,23 @@ class ProspectQuotationController extends Controller
             // Handle file uploads if any
             if ($request->hasFile('supporting_files')) {
                 $this->handleFileUploads($quotationRequest, $request->file('supporting_files'));
+            }
+
+            try {
+                $result = app(RobawsQuotationPushService::class)->push($quotationRequest, [
+                    'include_attachments' => true,
+                ]);
+                if (!($result['success'] ?? false)) {
+                    \Log::warning('Robaws push failed on submit (prospect controller)', [
+                        'quotation_id' => $quotationRequest->id,
+                        'error' => $result['error'] ?? 'Unknown error',
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                \Log::error('Robaws push exception on submit (prospect controller)', [
+                    'quotation_id' => $quotationRequest->id,
+                    'error' => $e->getMessage(),
+                ]);
             }
 
             // Notify team about new quotation

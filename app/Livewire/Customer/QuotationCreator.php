@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Log;
 use App\Services\Ports\PortResolutionService;
 use App\Services\OfferTemplateService;
 use App\Services\RobawsFieldGenerator;
+use App\Services\Robaws\RobawsQuotationPushService;
 use Illuminate\Validation\Rule;
 
 class QuotationCreator extends Component
@@ -775,6 +776,23 @@ class QuotationCreator extends Component
         // Apply intro/end templates for confirmation display
         app(OfferTemplateService::class)->applyTemplates($this->quotation);
         
+        try {
+            $result = app(RobawsQuotationPushService::class)->push($this->quotation, [
+                'include_attachments' => true,
+            ]);
+            if (!($result['success'] ?? false)) {
+                Log::warning('Robaws push failed on submit (customer portal)', [
+                    'quotation_id' => $this->quotationId,
+                    'error' => $result['error'] ?? 'Unknown error',
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::error('Robaws push exception on submit (customer portal)', [
+                'quotation_id' => $this->quotationId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         // TODO: Send notification to admin team
         // Notification::route('mail', config('quotation.admin_email'))
         //     ->notify(new QuotationSubmittedNotification($this->quotation));

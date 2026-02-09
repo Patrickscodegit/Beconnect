@@ -3,7 +3,6 @@
 namespace App\Observers;
 
 use App\Models\QuotationRequest;
-use App\Jobs\PushQuotationToRobawsJob;
 use App\Services\Pricing\VatResolverInterface;
 use App\Services\Pricing\QuotationVatService;
 use App\Services\Waivers\WaiverService;
@@ -23,15 +22,7 @@ class QuotationRequestObserver
      */
     public function created(QuotationRequest $quotationRequest): void
     {
-        if ($this->shouldAutoPushOnCreate($quotationRequest)) {
-            Log::info('Auto-push queued on quotation create', [
-                'quotation_id' => $quotationRequest->id,
-                'status' => $quotationRequest->status,
-                'source' => $quotationRequest->source,
-                'requester_type' => $quotationRequest->requester_type,
-            ]);
-            PushQuotationToRobawsJob::dispatch($quotationRequest->id)->afterCommit();
-        }
+        // Auto-push disabled: Robaws push happens on explicit submit only.
     }
 
     /**
@@ -150,16 +141,6 @@ class QuotationRequestObserver
         if ($quotationRequest->isDirty('status') && $quotationRequest->intake_id) {
             $this->syncStatusToIntake($quotationRequest);
         }
-
-        if ($this->shouldAutoPushOnStatusChange($quotationRequest)) {
-            Log::info('Auto-push queued on status change', [
-                'quotation_id' => $quotationRequest->id,
-                'status' => $quotationRequest->status,
-                'source' => $quotationRequest->source,
-                'requester_type' => $quotationRequest->requester_type,
-            ]);
-            PushQuotationToRobawsJob::dispatch($quotationRequest->id)->afterCommit();
-        }
     }
 
     /**
@@ -201,62 +182,6 @@ class QuotationRequestObserver
                 'intake_status_new' => $intakeStatus,
             ]);
         }
-    }
-
-    protected function shouldAutoPushOnCreate(QuotationRequest $quotationRequest): bool
-    {
-        if ($quotationRequest->robaws_offer_id) {
-            Log::debug('Auto-push skipped: offer already linked', [
-                'quotation_id' => $quotationRequest->id,
-            ]);
-            return false;
-        }
-
-        $source = $quotationRequest->source ?? $quotationRequest->requester_type ?? null;
-        if (!in_array($source, ['customer', 'prospect'], true)) {
-            Log::debug('Auto-push skipped: non-portal source', [
-                'quotation_id' => $quotationRequest->id,
-                'source' => $source,
-            ]);
-            return false;
-        }
-
-        if (!in_array($quotationRequest->status, ['pending', 'processing', 'quoted'], true)) {
-            Log::debug('Auto-push skipped: status not eligible', [
-                'quotation_id' => $quotationRequest->id,
-                'status' => $quotationRequest->status,
-            ]);
-            return false;
-        }
-
-        return true;
-    }
-
-    protected function shouldAutoPushOnStatusChange(QuotationRequest $quotationRequest): bool
-    {
-        if ($quotationRequest->robaws_offer_id) {
-            Log::debug('Auto-push skipped on status change: offer already linked', [
-                'quotation_id' => $quotationRequest->id,
-            ]);
-            return false;
-        }
-
-        if (!$quotationRequest->wasChanged('status')) {
-            Log::debug('Auto-push skipped on status change: status unchanged', [
-                'quotation_id' => $quotationRequest->id,
-            ]);
-            return false;
-        }
-
-        if ($quotationRequest->status !== 'quoted') {
-            Log::debug('Auto-push skipped on status change: status not quoted', [
-                'quotation_id' => $quotationRequest->id,
-                'status' => $quotationRequest->status,
-            ]);
-            return false;
-        }
-
-        return true;
     }
 
     /**

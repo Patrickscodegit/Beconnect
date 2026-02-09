@@ -234,6 +234,9 @@ class RobawsQuotationPushService
 
         if (!empty($options['minimal_update'])) {
             return [
+                'companyId' => config('services.robaws.default_company_id', config('services.robaws.company_id', 1)),
+                'customerId' => $clientId,
+                'clientId' => $clientId,
                 'lineItems' => $lineItems,
                 'extraFields' => $extraFields,
             ];
