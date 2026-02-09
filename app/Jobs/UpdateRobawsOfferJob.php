@@ -24,6 +24,12 @@ class UpdateRobawsOfferJob implements ShouldQueue
             return;
         }
 
+        $articleCount = $quotation->quotationRequestArticles()->count();
+        if ($articleCount < 2) {
+            $this->release(30);
+            return;
+        }
+
         try {
             $result = $service->push($quotation, [
                 'include_attachments' => true,

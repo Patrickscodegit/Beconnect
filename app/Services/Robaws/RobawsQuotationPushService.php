@@ -218,6 +218,13 @@ class RobawsQuotationPushService
                 'quantity' => max(1, (int) $item->quantity),
             ];
         }
+        
+        if (empty($lineItems)) {
+            return [
+                'success' => false,
+                'error' => 'Quotation has no Robaws-mapped articles to push.',
+            ];
+        }
 
         return [
             'title' => $quotation->request_number ?? $quotation->customer_reference,
