@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\QuotationRequest;
 use App\Services\Robaws\RobawsQuotationPushService;
+use App\Jobs\UpdateRobawsOfferJob;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -42,6 +43,12 @@ class PushQuotationToRobawsJob implements ShouldQueue
                     $this->release(120);
                     return;
                 }
+            }
+
+            if (!empty($result['offer_id'])) {
+                UpdateRobawsOfferJob::dispatch($quotation->id)
+                    ->delay(now()->addSeconds(45))
+                    ->afterCommit();
             }
         } catch (\Throwable $e) {
             Log::error('Auto-push to Robaws failed', [
