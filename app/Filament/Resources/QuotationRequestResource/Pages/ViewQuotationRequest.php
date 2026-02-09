@@ -168,6 +168,44 @@ class ViewQuotationRequest extends ViewRecord
                         ->body('The quotation has been marked as rejected.')
                         ->send();
                 }),
+
+            Actions\Action::make('retryRobawsPush')
+                ->label('Retry Robaws Push')
+                ->icon('heroicon-o-arrow-path')
+                ->color('warning')
+                ->visible(fn () => $this->record->robaws_sync_status === 'failed')
+                ->requiresConfirmation()
+                ->modalHeading('Retry Robaws Push')
+                ->modalDescription('This will retry pushing the quotation to Robaws.')
+                ->action(function () {
+                    try {
+                        $service = app(RobawsQuotationPushService::class);
+                        $result = $service->push($this->record, [
+                            'include_attachments' => true,
+                        ]);
+
+                        if (!($result['success'] ?? false)) {
+                            throw new \RuntimeException($result['error'] ?? 'Robaws push failed.');
+                        }
+
+                        \Filament\Notifications\Notification::make()
+                            ->success()
+                            ->title('Robaws Offer Synced')
+                            ->body('Offer was successfully pushed to Robaws.')
+                            ->send();
+                    } catch (\Exception $e) {
+                        \Filament\Notifications\Notification::make()
+                            ->danger()
+                            ->title('Retry Failed')
+                            ->body($e->getMessage())
+                            ->send();
+
+                        \Log::error('Robaws retry failed', [
+                            'quotation_id' => $this->record->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                }),
                 
             Actions\Action::make('convertToOffer')
                 ->label(fn () => $this->record->robaws_offer_id ? 'Update Robaws Offer' : 'Create Robaws Offer')

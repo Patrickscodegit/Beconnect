@@ -4,6 +4,7 @@ namespace App\Console;
 
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
+use App\Jobs\AuditRobawsOfferLinksJob;
 use App\Jobs\UpdateShippingSchedulesJob;
 use App\Models\ScheduleSyncLog;
 
@@ -36,6 +37,11 @@ class Kernel extends ConsoleKernel
             UpdateShippingSchedulesJob::dispatchSync($syncLog->id);
         })
             ->dailyAt('03:00')
+            ->timezone('Europe/Brussels')
+            ->withoutOverlapping(60);
+
+        $schedule->job(new AuditRobawsOfferLinksJob())
+            ->dailyAt('03:30')
             ->timezone('Europe/Brussels')
             ->withoutOverlapping(60);
     }

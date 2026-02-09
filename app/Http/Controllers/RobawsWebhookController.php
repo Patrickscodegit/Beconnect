@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\RobawsWebhookLog;
 use App\Models\QuotationRequest;
+use App\Jobs\SyncRobawsOfferJob;
 use App\Services\Robaws\RobawsOfferSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -58,9 +59,18 @@ class RobawsWebhookController extends Controller
             $event = $request->input('event');
             $data = $request->input('data');
 
+            if (!$event || !is_array($data)) {
+                Log::warning('Robaws webhook missing event or data', [
+                    'event' => $event,
+                    'data_type' => gettype($data),
+                ]);
+            }
+
             match($event) {
                 'offer.created' => $this->handleOfferCreated($data),
                 'offer.updated' => $this->handleOfferUpdated($data),
+                'offer.recalculated' => $this->handleOfferUpdated($data),
+                'offer.deleted' => $this->handleOfferDeleted($data),
                 'offer.status_changed' => $this->handleOfferStatusChanged($data),
                 'project.created' => $this->handleProjectCreated($data),
                 'project.updated' => $this->handleProjectUpdated($data),
@@ -99,7 +109,7 @@ class RobawsWebhookController extends Controller
      */
     private function handleOfferUpdated(array $data): void
     {
-        $this->offerSyncService->syncOffer($data);
+        SyncRobawsOfferJob::dispatch('offer.updated', $data)->afterCommit();
 
         Log::info('Quotation synced from Robaws webhook', [
             'offer_id' => $data['id'] ?? null
@@ -111,6 +121,8 @@ class RobawsWebhookController extends Controller
      */
     private function handleOfferCreated(array $data): void
     {
+        SyncRobawsOfferJob::dispatch('offer.created', $data)->afterCommit();
+
         Log::info('Offer created webhook received', [
             'offer_id' => $data['id']
         ]);
@@ -123,6 +135,10 @@ class RobawsWebhookController extends Controller
      */
     private function handleOfferStatusChanged(array $data): void
     {
+        if (($data['status'] ?? null) === 'deleted') {
+            SyncRobawsOfferJob::dispatch('offer.deleted', $data)->afterCommit();
+        }
+
         $quotation = QuotationRequest::where('robaws_offer_id', $data['id'])->first();
 
         if ($quotation) {
@@ -133,6 +149,11 @@ class RobawsWebhookController extends Controller
                 'new_status' => $data['status'] ?? 'unknown'
             ]);
         }
+    }
+
+    private function handleOfferDeleted(array $data): void
+    {
+        SyncRobawsOfferJob::dispatch('offer.deleted', $data)->afterCommit();
     }
 
     /**

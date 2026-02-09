@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Models\QuotationRequestArticle;
+use App\Jobs\PushQuotationToRobawsJob;
 use App\Services\Pricing\VatResolverInterface;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -78,6 +79,48 @@ class QuotationRequestArticleObserver
             ]);
             // Don't throw - allow article to save even if VAT code assignment fails
         }
+    }
+
+    /**
+     * Trigger auto-push once the first article is created for portal quotes.
+     */
+    public function created(QuotationRequestArticle $line): void
+    {
+        if (!$line->relationLoaded('quotationRequest')) {
+            $line->load('quotationRequest');
+        }
+
+        $quotation = $line->quotationRequest;
+        if (!$quotation) {
+            return;
+        }
+
+        if ($quotation->robaws_offer_id) {
+            return;
+        }
+
+        $source = $quotation->source ?? $quotation->requester_type ?? null;
+        if (!in_array($source, ['customer', 'prospect'], true)) {
+            return;
+        }
+
+        if (!in_array($quotation->status, ['pending', 'processing', 'quoted'], true)) {
+            return;
+        }
+
+        $articleCount = $quotation->quotationRequestArticles()->count();
+        if ($articleCount !== 1) {
+            return;
+        }
+
+        Log::info('Auto-push queued after first article', [
+            'quotation_id' => $quotation->id,
+            'article_id' => $line->id,
+            'status' => $quotation->status,
+            'source' => $quotation->source,
+        ]);
+
+        PushQuotationToRobawsJob::dispatch($quotation->id)->afterCommit();
     }
 
     /**

@@ -39,6 +39,34 @@ class RobawsOfferSyncService
         });
     }
 
+    public function softDeleteOffer(array $data): void
+    {
+        $offerId = $data['id'] ?? null;
+        if (!$offerId) {
+            Log::warning('Robaws offer delete skipped: missing offer id');
+            return;
+        }
+
+        $quotation = QuotationRequest::where('robaws_offer_id', $offerId)->first();
+        if (!$quotation) {
+            Log::warning('Robaws offer delete skipped: quotation not found', [
+                'offer_id' => $offerId,
+            ]);
+            return;
+        }
+
+        if (method_exists($quotation, 'trashed') && $quotation->trashed()) {
+            return;
+        }
+
+        $quotation->delete();
+
+        Log::info('Quotation soft-deleted from Robaws delete webhook', [
+            'quotation_id' => $quotation->id,
+            'offer_id' => $offerId,
+        ]);
+    }
+
     private function buildQuotationUpdates(QuotationRequest $quotation, array $data): array
     {
         $updates = [
