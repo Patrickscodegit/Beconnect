@@ -52,7 +52,10 @@ class RobawsQuotationPushService
 
         $this->syncContact($clientId, $quotation);
 
-        $payload = $this->buildPayload($quotation, $clientId);
+        $payload = $this->buildPayload($quotation, $clientId, $options);
+        if (!empty($payload['success']) && $payload['success'] === false) {
+            return $payload;
+        }
         $idempotencyKey = $options['idempotency_key'] ?? $this->buildIdempotencyKey($quotation, $payload);
 
         if ($quotation->robaws_offer_id && !($options['create_new'] ?? false)) {
@@ -154,7 +157,7 @@ class RobawsQuotationPushService
         }
     }
 
-    private function buildPayload(QuotationRequest $quotation, int $clientId): array
+    private function buildPayload(QuotationRequest $quotation, int $clientId, array $options = []): array
     {
         $labels = config('services.robaws.labels', []);
         $extraFields = [];
@@ -223,6 +226,13 @@ class RobawsQuotationPushService
             return [
                 'success' => false,
                 'error' => 'Quotation has no Robaws-mapped articles to push.',
+            ];
+        }
+
+        if (!empty($options['minimal_update'])) {
+            return [
+                'lineItems' => $lineItems,
+                'extraFields' => $extraFields,
             ];
         }
 

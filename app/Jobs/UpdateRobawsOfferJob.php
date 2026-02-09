@@ -34,6 +34,7 @@ class UpdateRobawsOfferJob implements ShouldQueue
             $result = $service->push($quotation, [
                 'include_attachments' => true,
                 'create_new' => false,
+                'minimal_update' => true,
             ]);
 
             if (!($result['success'] ?? false)) {
