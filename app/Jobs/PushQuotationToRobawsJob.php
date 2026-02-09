@@ -31,6 +31,9 @@ class PushQuotationToRobawsJob implements ShouldQueue
 
         $articleCount = $quotation->quotationRequestArticles()->count();
         $lastCreatedAt = $quotation->quotationRequestArticles()->max('created_at');
+        $articleCountStable = $quotation->quotationRequestArticles()
+            ->where('created_at', '<=', now()->subSeconds(2))
+            ->count();
         $maxAttempts = 5;
 
         if ($articleCount === 0) {
@@ -45,11 +48,25 @@ class PushQuotationToRobawsJob implements ShouldQueue
         }
 
         if ($lastCreatedAt) {
-            $ageSeconds = now()->diffInSeconds(Carbon::parse($lastCreatedAt));
-            if ($ageSeconds < 5 && $this->attempts() < $maxAttempts) {
+            $lastCreatedUtc = Carbon::parse($lastCreatedAt)->utc();
+            $nowUtc = now()->utc();
+            $ageSeconds = max(0, $nowUtc->diffInSeconds($lastCreatedUtc, false));
+
+            if ($this->attempts() === 1 && $ageSeconds === 0) {
+                $dbNow = \DB::selectOne('select now() as now');
+                Log::info('Auto-push timestamp comparison (UTC)', [
+                    'quotation_id' => $quotation->id,
+                    'db_now' => $dbNow?->now ?? null,
+                    'app_now_utc' => $nowUtc->toDateTimeString(),
+                    'last_created_utc' => $lastCreatedUtc->toDateTimeString(),
+                ]);
+            }
+
+            if ($ageSeconds < 5 && $this->attempts() < $maxAttempts && $articleCountStable === 0) {
                 Log::info('Auto-push delayed: articles still settling', [
                     'quotation_id' => $quotation->id,
                     'article_count' => $articleCount,
+                    'stable_count' => $articleCountStable,
                     'age_seconds' => $ageSeconds,
                     'attempt' => $this->attempts(),
                 ]);
