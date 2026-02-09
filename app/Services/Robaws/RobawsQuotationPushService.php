@@ -60,7 +60,19 @@ class RobawsQuotationPushService
 
         if ($quotation->robaws_offer_id && !($options['create_new'] ?? false)) {
             if (!empty($options['minimal_update'])) {
-                $result = $this->apiClient->patchQuotation((string) $quotation->robaws_offer_id, $payload, $idempotencyKey);
+                $patchOps = [
+                    [
+                        'op' => 'replace',
+                        'path' => '/extraFields',
+                        'value' => $payload['extraFields'] ?? [],
+                    ],
+                    [
+                        'op' => 'replace',
+                        'path' => '/lineItems',
+                        'value' => $payload['lineItems'] ?? [],
+                    ],
+                ];
+                $result = $this->apiClient->patchQuotationJson((string) $quotation->robaws_offer_id, $patchOps, $idempotencyKey);
             } else {
                 $result = $this->apiClient->updateQuotation((string) $quotation->robaws_offer_id, $payload, $idempotencyKey);
             }
