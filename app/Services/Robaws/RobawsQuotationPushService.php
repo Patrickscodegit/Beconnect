@@ -188,6 +188,9 @@ class RobawsQuotationPushService
 
         if ($quotation->selectedSchedule) {
             $schedule = $quotation->selectedSchedule;
+            if ($schedule->carrier?->name) {
+                $put('shipping_line', $schedule->carrier->name);
+            }
             if ($schedule->vessel_name) {
                 $extraFields['VESSEL'] = ['stringValue' => $schedule->vessel_name];
             }

@@ -126,6 +126,7 @@ return [
             'contact' => 'Contact',
             'endcustomer' => 'Endcustomer',
             'customer_reference' => 'Customer reference',
+            'shipping_line' => 'SHIPPING LINE',
             'por' => 'POR',
             'pol' => 'POL', 
             'pot' => 'POT',
