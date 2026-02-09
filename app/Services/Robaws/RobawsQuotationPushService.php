@@ -56,28 +56,23 @@ class RobawsQuotationPushService
         if (!empty($payload['success']) && $payload['success'] === false) {
             return $payload;
         }
-        $idempotencyKey = $options['idempotency_key'] ?? $this->buildIdempotencyKey($quotation, $payload);
+
+        $payloadForRequest = $payload;
+        if (!empty($options['minimal_update'])) {
+            $fullOptions = $options;
+            unset($fullOptions['minimal_update']);
+            $payloadForRequest = $this->buildPayload($quotation, $clientId, $fullOptions);
+            if (!empty($payloadForRequest['success']) && $payloadForRequest['success'] === false) {
+                return $payloadForRequest;
+            }
+        }
+
+        $idempotencyKey = $options['idempotency_key'] ?? $this->buildIdempotencyKey($quotation, $payloadForRequest);
 
         if ($quotation->robaws_offer_id && !($options['create_new'] ?? false)) {
-            if (!empty($options['minimal_update'])) {
-                $patchOps = [
-                    [
-                        'op' => 'replace',
-                        'path' => '/extraFields',
-                        'value' => $payload['extraFields'] ?? [],
-                    ],
-                    [
-                        'op' => 'replace',
-                        'path' => '/lineItems',
-                        'value' => $payload['lineItems'] ?? [],
-                    ],
-                ];
-                $result = $this->apiClient->patchQuotationJson((string) $quotation->robaws_offer_id, $patchOps, $idempotencyKey);
-            } else {
-                $result = $this->apiClient->updateQuotation((string) $quotation->robaws_offer_id, $payload, $idempotencyKey);
-            }
+            $result = $this->apiClient->updateQuotation((string) $quotation->robaws_offer_id, $payloadForRequest, $idempotencyKey);
         } else {
-            $result = $this->apiClient->createQuotation($payload, $idempotencyKey);
+            $result = $this->apiClient->createQuotation($payloadForRequest, $idempotencyKey);
         }
 
         if (!($result['success'] ?? false)) {
