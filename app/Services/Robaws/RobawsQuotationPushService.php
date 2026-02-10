@@ -69,7 +69,8 @@ class RobawsQuotationPushService
 
         $idempotencyKey = $options['idempotency_key'] ?? $this->buildIdempotencyKey($quotation, $payloadForRequest);
 
-        if ($quotation->robaws_offer_id && !($options['create_new'] ?? false)) {
+        $action = $quotation->robaws_offer_id && !($options['create_new'] ?? false) ? 'update' : 'create';
+        if ($action === 'update') {
             $result = $this->apiClient->updateQuotation((string) $quotation->robaws_offer_id, $payloadForRequest, $idempotencyKey);
         } else {
             $result = $this->apiClient->createQuotation($payloadForRequest, $idempotencyKey);
@@ -93,13 +94,26 @@ class RobawsQuotationPushService
             ?? data_get($result, 'data.offer_number');
 
         if ($offerId) {
-            $quotation->update([
+            $updates = [
                 'robaws_offer_id' => $offerId,
-                'robaws_offer_number' => $offerNumber,
                 'robaws_client_id' => $clientId,
                 'robaws_sync_status' => 'synced',
                 'robaws_synced_at' => now(),
-            ]);
+            ];
+
+            if (!empty($offerNumber)) {
+                $updates['robaws_offer_number'] = $offerNumber;
+            } else {
+                Log::warning('Robaws offer number missing in API response', [
+                    'quotation_id' => $quotation->id,
+                    'request_number' => $quotation->request_number,
+                    'offer_id' => $offerId,
+                    'action' => $action,
+                    'status' => data_get($result, 'data.status'),
+                ]);
+            }
+
+            $quotation->update($updates);
         }
 
         $attachments = [

@@ -69,11 +69,25 @@ class RobawsOfferSyncService
 
     private function buildQuotationUpdates(QuotationRequest $quotation, array $data): array
     {
+        $offerNumber = $data['offerNumber'] ?? null;
+        $number = $data['number'] ?? null;
+        $incomingNumber = $offerNumber ?: $number;
+
         $updates = [
-            'robaws_offer_number' => $data['offerNumber'] ?? $quotation->robaws_offer_number,
             'robaws_sync_status' => 'synced',
             'robaws_synced_at' => now(),
         ];
+
+        if (!empty($incomingNumber)) {
+            $updates['robaws_offer_number'] = $incomingNumber;
+        } else {
+            Log::warning('Robaws webhook missing offer number', [
+                'quotation_id' => $quotation->id,
+                'request_number' => $quotation->request_number,
+                'offer_id' => $data['id'] ?? null,
+                'status' => $data['status'] ?? null,
+            ]);
+        }
 
         if (!empty($data['clientId'])) {
             $updates['robaws_client_id'] = (int) $data['clientId'];
