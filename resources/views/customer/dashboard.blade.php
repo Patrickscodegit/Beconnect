@@ -91,6 +91,90 @@
         </a>
     </div>
 
+    <!-- Robaws Profile & Offers -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow p-6 lg:col-span-1">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                <i class="fas fa-building mr-2"></i>Robaws Company Profile
+            </h2>
+
+            @if($robawsLink && $robawsProfile)
+                <div class="space-y-2">
+                    <p class="text-sm text-gray-600">
+                        <span class="font-medium text-gray-900">Company:</span>
+                        {{ data_get($robawsProfile, 'name', 'N/A') }}
+                    </p>
+                    <p class="text-sm text-gray-600">
+                        <span class="font-medium text-gray-900">Email:</span>
+                        {{ data_get($robawsProfile, 'email', 'N/A') }}
+                    </p>
+                    <p class="text-sm text-gray-600">
+                        <span class="font-medium text-gray-900">Phone:</span>
+                        {{ data_get($robawsProfile, 'tel', 'N/A') }}
+                    </p>
+                    <p class="text-sm text-gray-600">
+                        <span class="font-medium text-gray-900">Address:</span>
+                        {{ data_get($robawsProfile, 'address.addressLine1', 'N/A') }}
+                        @if(data_get($robawsProfile, 'address.city'))
+                            , {{ data_get($robawsProfile, 'address.city') }}
+                        @endif
+                        @if(data_get($robawsProfile, 'address.country'))
+                            , {{ data_get($robawsProfile, 'address.country') }}
+                        @endif
+                    </p>
+                </div>
+            @else
+                <div class="text-sm text-gray-500">
+                    Robaws profile not linked yet for this account.
+                </div>
+            @endif
+        </div>
+
+        <div class="bg-white rounded-lg shadow lg:col-span-2">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-lg font-semibold text-gray-900">
+                    <i class="fas fa-file-pdf mr-2"></i>Robaws Quotations
+                </h2>
+            </div>
+
+            @if($robawsLink && count($robawsOffers) > 0)
+                <div class="divide-y divide-gray-200">
+                    @foreach($robawsOffers as $offer)
+                        @php
+                            $offerId = data_get($offer, 'id');
+                            $offerNumber = data_get($offer, 'offerNumber')
+                                ?? data_get($offer, 'number')
+                                ?? $offerId;
+                            $offerStatus = data_get($offer, 'status', 'unknown');
+                            $offerUpdated = data_get($offer, 'updatedAt')
+                                ?? data_get($offer, 'updated_at');
+                        @endphp
+                        <div class="px-6 py-4 flex items-center justify-between">
+                            <div>
+                                <div class="text-sm font-semibold text-gray-900">{{ $offerNumber }}</div>
+                                <div class="text-xs text-gray-500">Status: {{ $offerStatus }}</div>
+                                @if($offerUpdated)
+                                    <div class="text-xs text-gray-500">Updated: {{ $offerUpdated }}</div>
+                                @endif
+                            </div>
+                            @if($offerId)
+                                <a href="{{ route('customer.robaws.offers.pdf', $offerId) }}"
+                                   target="_blank"
+                                   class="inline-flex items-center px-3 py-2 bg-red-600 text-white rounded-md text-xs font-medium hover:bg-red-700">
+                                    Open PDF
+                                </a>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+            @else
+                <div class="px-6 py-6 text-sm text-gray-500">
+                    No Robaws quotations available yet.
+                </div>
+            @endif
+        </div>
+    </div>
+
     <!-- Recent Quotations -->
     <div class="bg-white rounded-lg shadow">
         <div class="px-6 py-4 border-b border-gray-200">

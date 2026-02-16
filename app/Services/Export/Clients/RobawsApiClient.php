@@ -1125,6 +1125,102 @@ final class RobawsApiClient implements RobawsApiClientInterface
     }
 
     /**
+     * List offers for a given client
+     */
+    public function listOffersByClient(string $clientId, int $page = 0, int $size = 25): array
+    {
+        try {
+            $response = $this->getHttpClient()->get('/api/v2/offers', [
+                'clientId' => $clientId,
+                'page' => $page,
+                'size' => min($size, 100),
+                'sort' => 'updatedAt:desc',
+            ]);
+
+            if ($response->successful()) {
+                return [
+                    'success' => true,
+                    'data' => $response->json(),
+                ];
+            }
+
+            return [
+                'success' => false,
+                'error' => $response->body(),
+                'status' => $response->status(),
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'status' => 500,
+            ];
+        }
+    }
+
+    /**
+     * List documents attached to an offer
+     */
+    public function listOfferDocuments(string $offerId): array
+    {
+        try {
+            $response = $this->getHttpClient()->get("/api/v2/offers/{$offerId}/documents");
+
+            if ($response->successful()) {
+                return [
+                    'success' => true,
+                    'data' => $response->json(),
+                ];
+            }
+
+            return [
+                'success' => false,
+                'error' => $response->body(),
+                'status' => $response->status(),
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'status' => 500,
+            ];
+        }
+    }
+
+    /**
+     * Download a document by ID
+     */
+    public function downloadDocument(string $documentId): array
+    {
+        try {
+            $response = $this->getHttpClient()
+                ->withHeaders(['Accept' => 'application/pdf'])
+                ->get("/api/v2/documents/{$documentId}/download");
+
+            if ($response->successful()) {
+                return [
+                    'success' => true,
+                    'body' => $response->body(),
+                    'content_type' => $response->header('Content-Type'),
+                    'content_disposition' => $response->header('Content-Disposition'),
+                ];
+            }
+
+            return [
+                'success' => false,
+                'error' => $response->body(),
+                'status' => $response->status(),
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'status' => 500,
+            ];
+        }
+    }
+
+    /**
      * Attach a file to an offer
      */
     public function attachFileToOffer(int $offerId, string $filePath, ?string $filename = null): array

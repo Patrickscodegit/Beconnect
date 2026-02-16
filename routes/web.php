@@ -41,6 +41,10 @@ Route::middleware(['auth'])->prefix('customer')->name('customer.')->group(functi
         Route::get('/{quotationRequest}', [\App\Http\Controllers\CustomerQuotationController::class, 'show'])->name('show');
         Route::post('/{quotationRequest}/duplicate', [\App\Http\Controllers\CustomerQuotationController::class, 'duplicate'])->name('duplicate');
     });
+
+    // Robaws offers (customer portal)
+    Route::get('/robaws/offers/{offerId}/pdf', [\App\Http\Controllers\CustomerRobawsController::class, 'offerPdf'])
+        ->name('robaws.offers.pdf');
     
     // Schedules (customer view - with pricing)
     Route::prefix('schedules')->name('schedules.')->group(function () {
