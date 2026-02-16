@@ -2,6 +2,7 @@
 
 namespace App\Services\Export\Clients;
 
+use App\Models\QuotationRequest;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
@@ -10,6 +11,7 @@ use Illuminate\Support\Str;
 final class RobawsApiClient implements RobawsApiClientInterface
 {
     private ?PendingRequest $http = null;
+    private array $offerDetailCache = [];
     
     // Rate limiting properties
     private int $dailyLimit = 10000;
@@ -1122,6 +1124,123 @@ final class RobawsApiClient implements RobawsApiClientInterface
                 'status' => 500,
             ];
         }
+    }
+
+    /**
+     * Download offer PDF (Robaws v2)
+     */
+    public function getOfferPdf(string $offerId, ?string $type = null): array
+    {
+        try {
+            $query = [];
+            if ($type) {
+                $query['type'] = $type;
+            }
+
+            $response = $this->getHttpClient()
+                ->withHeaders(['Accept' => 'application/pdf'])
+                ->get("/api/v2/offers/{$offerId}/pdf", $query);
+
+            if ($response->successful()) {
+                return [
+                    'success' => true,
+                    'body' => $response->body(),
+                    'content_type' => $response->header('Content-Type'),
+                    'content_disposition' => $response->header('Content-Disposition'),
+                ];
+            }
+
+            return [
+                'success' => false,
+                'error' => $response->body(),
+                'status' => $response->status(),
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'status' => 500,
+            ];
+        }
+    }
+
+    private function extractOfferDisplayNumber(array $offer): ?string
+    {
+        foreach (['logicId', 'offerNumber', 'number', 'id'] as $key) {
+            $value = $offer[$key] ?? null;
+            if ($value !== null && $value !== '') {
+                return (string) $value;
+            }
+        }
+
+        return null;
+    }
+
+    private function extractBconnectRequestNumberFromOffer(array $offer): ?string
+    {
+        $externalId = $offer['externalId'] ?? $offer['external_id'] ?? null;
+        if (is_string($externalId)) {
+            if (preg_match('/^bconnect_quotation_(\d+)$/i', $externalId, $matches)) {
+                $quotation = QuotationRequest::withTrashed()->find((int) $matches[1]);
+                if ($quotation?->request_number) {
+                    return $quotation->request_number;
+                }
+            }
+        }
+
+        foreach (['project', 'title', 'clientReference', 'client_reference'] as $field) {
+            $value = $offer[$field] ?? null;
+            if (is_string($value) && preg_match('/QR-\d{4}-\d{4}/', $value, $matches)) {
+                return $matches[0];
+            }
+        }
+
+        return null;
+    }
+
+    private function getOfferDetailCached(string $offerId): ?array
+    {
+        if (array_key_exists($offerId, $this->offerDetailCache)) {
+            return $this->offerDetailCache[$offerId];
+        }
+
+        $result = $this->getOffer($offerId);
+        $detail = !empty($result['success']) ? ($result['data'] ?? null) : null;
+        $this->offerDetailCache[$offerId] = $detail;
+
+        return $detail;
+    }
+
+    public function getOfferDisplayNumber(array $offer): ?string
+    {
+        $display = $this->extractOfferDisplayNumber($offer);
+        if ($display) {
+            return $display;
+        }
+
+        $offerId = $offer['id'] ?? null;
+        if (!$offerId) {
+            return null;
+        }
+
+        $detail = $this->getOfferDetailCached((string) $offerId);
+        return $detail ? $this->extractOfferDisplayNumber($detail) : (string) $offerId;
+    }
+
+    public function getOfferBconnectRequestNumber(array $offer): ?string
+    {
+        $found = $this->extractBconnectRequestNumberFromOffer($offer);
+        if ($found) {
+            return $found;
+        }
+
+        $offerId = $offer['id'] ?? null;
+        if (!$offerId) {
+            return null;
+        }
+
+        $detail = $this->getOfferDetailCached((string) $offerId);
+        return $detail ? $this->extractBconnectRequestNumberFromOffer($detail) : null;
     }
 
     /**

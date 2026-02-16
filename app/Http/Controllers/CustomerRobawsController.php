@@ -37,6 +37,34 @@ class CustomerRobawsController extends Controller
             abort(403, 'Unauthorized access to this offer.');
         }
 
+        $requestedType = request()->query('type');
+        $allowedTypes = [
+            'DEFAULT',
+            'SIMPLE',
+            'NO_PRICES',
+            'NO_UNIT_PRICES',
+            'ONLY_UNIT_PRICES',
+            'BILL_OF_MATERIALS',
+            'BILL_OF_MACHINES',
+            'BILL_OF_SUBCONTRACTORS',
+            'BILL_OF_WORK',
+        ];
+        $pdfType = $requestedType ? strtoupper($requestedType) : null;
+        if ($pdfType && !in_array($pdfType, $allowedTypes, true)) {
+            $pdfType = null;
+        }
+
+        $pdfResult = $apiClient->getOfferPdf($offerId, $pdfType);
+        if (!empty($pdfResult['success'])) {
+            $filename = $this->extractFilename($pdfResult['content_disposition'] ?? '')
+                ?: "offer-{$offerId}.pdf";
+
+            return response($pdfResult['body'] ?? '', 200, [
+                'Content-Type' => $pdfResult['content_type'] ?? 'application/pdf',
+                'Content-Disposition' => 'inline; filename="' . $filename . '"',
+            ]);
+        }
+
         $documentsResult = $apiClient->listOfferDocuments($offerId);
         if (empty($documentsResult['success'])) {
             abort(404, 'Offer documents not found.');

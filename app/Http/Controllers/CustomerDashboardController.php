@@ -76,6 +76,58 @@ class CustomerDashboardController extends Controller
                 $offersResult = $apiClient->listOffersByClient((string) $robawsLink->robaws_client_id, 0, 10);
                 if (!empty($offersResult['success'])) {
                     $robawsOffers = $offersResult['data']['items'] ?? [];
+
+                    if (!empty($robawsOffers)) {
+                        $offersCollection = collect($robawsOffers);
+                        $offerIds = $offersCollection->pluck('id')->filter()->unique()->values();
+                        $offerNumbers = $offersCollection
+                            ->map(fn ($offer) => $apiClient->getOfferDisplayNumber($offer))
+                            ->filter()
+                            ->unique()
+                            ->values();
+
+                        $quotationQuery = QuotationRequest::query();
+                        if ($offerIds->isNotEmpty() || $offerNumbers->isNotEmpty()) {
+                            $quotationQuery->where(function ($q) use ($offerIds, $offerNumbers) {
+                                if ($offerIds->isNotEmpty()) {
+                                    $q->whereIn('robaws_offer_id', $offerIds);
+                                }
+                                if ($offerNumbers->isNotEmpty()) {
+                                    $method = $offerIds->isNotEmpty() ? 'orWhereIn' : 'whereIn';
+                                    $q->{$method}('robaws_offer_number', $offerNumbers);
+                                }
+                            });
+                        }
+
+                        $quotations = $quotationQuery
+                            ->get(['robaws_offer_id', 'robaws_offer_number', 'request_number']);
+                        $quotationsById = $quotations->keyBy('robaws_offer_id');
+                        $quotationsByNumber = $quotations->keyBy('robaws_offer_number');
+
+                        $robawsOffers = $offersCollection
+                            ->map(function ($offer) use ($apiClient, $quotationsById, $quotationsByNumber) {
+                                $offerId = $offer['id'] ?? null;
+                                $displayNumber = $apiClient->getOfferDisplayNumber($offer);
+
+                                $quotation = null;
+                                if ($offerId && $quotationsById->has($offerId)) {
+                                    $quotation = $quotationsById->get($offerId);
+                                } elseif ($displayNumber && $quotationsByNumber->has($displayNumber)) {
+                                    $quotation = $quotationsByNumber->get($displayNumber);
+                                }
+
+                                $offer['display_number'] = $displayNumber;
+                                $bconnectNumber = $quotation?->request_number
+                                    ?? $apiClient->getOfferBconnectRequestNumber($offer);
+                                if ($bconnectNumber) {
+                                    $offer['bconnect_request_number'] = $bconnectNumber;
+                                }
+
+                                return $offer;
+                            })
+                            ->values()
+                            ->all();
+                    }
                 }
             }
         } catch (\Throwable $e) {

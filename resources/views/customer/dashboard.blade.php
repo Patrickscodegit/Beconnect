@@ -142,9 +142,11 @@
                     @foreach($robawsOffers as $offer)
                         @php
                             $offerId = data_get($offer, 'id');
-                            $offerNumber = data_get($offer, 'offerNumber')
+                            $offerNumber = data_get($offer, 'display_number')
+                                ?? data_get($offer, 'offerNumber')
                                 ?? data_get($offer, 'number')
                                 ?? $offerId;
+                            $bconnectNumber = data_get($offer, 'bconnect_request_number');
                             $offerStatus = data_get($offer, 'status', 'unknown');
                             $offerUpdated = data_get($offer, 'updatedAt')
                                 ?? data_get($offer, 'updated_at');
@@ -152,12 +154,15 @@
                         <div class="px-6 py-4 flex items-center justify-between">
                             <div>
                                 <div class="text-sm font-semibold text-gray-900">{{ $offerNumber }}</div>
+                                @if($bconnectNumber)
+                                    <div class="text-xs text-gray-500">Bconnect: {{ $bconnectNumber }}</div>
+                                @endif
                                 <div class="text-xs text-gray-500">Status: {{ $offerStatus }}</div>
                                 @if($offerUpdated)
                                     <div class="text-xs text-gray-500">Updated: {{ $offerUpdated }}</div>
                                 @endif
                             </div>
-                            @if($offerId)
+                            @if($offerId && Route::has('customer.robaws.offers.pdf'))
                                 <a href="{{ route('customer.robaws.offers.pdf', $offerId) }}"
                                    target="_blank"
                                    class="inline-flex items-center px-3 py-2 bg-red-600 text-white rounded-md text-xs font-medium hover:bg-red-700">
