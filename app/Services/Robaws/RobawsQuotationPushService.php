@@ -105,6 +105,10 @@ class RobawsQuotationPushService
                 $offerNumber = $this->fetchOfferNumberWithRetry((string) $offerId);
             }
 
+            if (empty($offerNumber)) {
+                $offerNumber = $this->ensureOfferDateAndFetchNumber($quotation, (string) $offerId);
+            }
+
             if (!empty($offerNumber)) {
                 $updates['robaws_offer_number'] = $offerNumber;
             } else {
@@ -157,6 +161,37 @@ class RobawsQuotationPushService
         }
 
         return null;
+    }
+
+    private function ensureOfferDateAndFetchNumber(QuotationRequest $quotation, string $offerId): ?string
+    {
+        $result = $this->apiClient->getOffer($offerId);
+        $data = (!empty($result['success']) && !empty($result['data'])) ? $result['data'] : null;
+        if (!$data) {
+            return null;
+        }
+
+        $hasDate = !empty($data['date']);
+        if (!$hasDate) {
+            $date = $quotation->created_at?->format('Y-m-d') ?? now()->format('Y-m-d');
+            $patch = $this->apiClient->patchQuotation($offerId, ['date' => $date]);
+            if (empty($patch['success'])) {
+                Log::warning('Robaws offer date patch failed', [
+                    'quotation_id' => $quotation->id,
+                    'offer_id' => $offerId,
+                    'error' => $patch['error'] ?? null,
+                ]);
+                return null;
+            }
+
+            $result = $this->apiClient->getOffer($offerId);
+            $data = (!empty($result['success']) && !empty($result['data'])) ? $result['data'] : null;
+            if (!$data) {
+                return null;
+            }
+        }
+
+        return $data['logicId'] ?? $data['offerNumber'] ?? $data['number'] ?? null;
     }
 
     private function resolveClientId(QuotationRequest $quotation): ?int
@@ -281,6 +316,8 @@ class RobawsQuotationPushService
             ];
         }
 
+        $offerDate = $quotation->created_at?->format('Y-m-d') ?? now()->format('Y-m-d');
+
         if (!empty($options['minimal_update'])) {
             return [
                 'companyId' => config('services.robaws.default_company_id', config('services.robaws.company_id', 1)),
@@ -288,6 +325,7 @@ class RobawsQuotationPushService
                 'clientId' => $clientId,
                 'lineItems' => $lineItems,
                 'extraFields' => $extraFields,
+                'date' => $offerDate,
             ];
         }
 
@@ -301,6 +339,7 @@ class RobawsQuotationPushService
             'companyId' => config('services.robaws.default_company_id', config('services.robaws.company_id', 1)),
             'currency' => $quotation->pricing_currency ?? 'EUR',
             'status' => 'Draft',
+            'date' => $offerDate,
             'externalId' => 'bconnect_quotation_' . $quotation->id,
             'lineItems' => $lineItems,
             'extraFields' => $extraFields,

@@ -46,6 +46,23 @@ class BackfillRobawsOfferNumbers extends Command
                 }
 
                 $data = $result['data'];
+                if (empty($data['date'])) {
+                    $date = $quotation->created_at?->format('Y-m-d') ?? now()->format('Y-m-d');
+                    $patch = $apiClient->patchQuotation($offerId, ['date' => $date]);
+                    if (empty($patch['success'])) {
+                        Log::warning('Backfill Robaws offer date patch failed', [
+                            'quotation_id' => $quotation->id,
+                            'offer_id' => $offerId,
+                            'error' => $patch['error'] ?? null,
+                        ]);
+                    } else {
+                        $result = $apiClient->getOffer($offerId);
+                        if (!empty($result['success']) && !empty($result['data'])) {
+                            $data = $result['data'];
+                        }
+                    }
+                }
+
                 $number = $data['logicId'] ?? $data['offerNumber'] ?? $data['number'] ?? null;
                 if (!$number) {
                     continue;
