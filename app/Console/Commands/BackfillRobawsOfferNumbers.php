@@ -32,7 +32,7 @@ class BackfillRobawsOfferNumbers extends Command
         $count = 0;
         $updated = 0;
 
-        $query->chunkById(50, function ($rows) use ($apiClient, $dryRun, &$count, &$updated) {
+        $query->chunkById(50, function ($rows) use ($apiClient, $pushService, $dryRun, &$count, &$updated) {
             foreach ($rows as $quotation) {
                 $count++;
                 $offerId = (string) $quotation->robaws_offer_id;
