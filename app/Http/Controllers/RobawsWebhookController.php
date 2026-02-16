@@ -88,8 +88,13 @@ class RobawsWebhookController extends Controller
         $quotation = QuotationRequest::where('robaws_offer_id', $data['id'])->first();
 
         if ($quotation) {
+            $offerNumber = $data['offerNumber'] ?? null;
+            $number = $data['number'] ?? null;
+            $logicId = $data['logicId'] ?? null;
+            $incomingNumber = $offerNumber ?: $number ?: $logicId;
+
             $quotation->update([
-                'robaws_offer_number' => $data['offerNumber'] ?? $quotation->robaws_offer_number,
+                'robaws_offer_number' => $incomingNumber ?? $quotation->robaws_offer_number,
                 'robaws_sync_status' => 'synced',
                 'robaws_synced_at' => now()
             ]);

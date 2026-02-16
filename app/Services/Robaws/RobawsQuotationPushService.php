@@ -101,10 +101,14 @@ class RobawsQuotationPushService
                 'robaws_synced_at' => now(),
             ];
 
+            if (empty($offerNumber)) {
+                $offerNumber = $this->fetchOfferNumberWithRetry((string) $offerId);
+            }
+
             if (!empty($offerNumber)) {
                 $updates['robaws_offer_number'] = $offerNumber;
             } else {
-                Log::warning('Robaws offer number missing in API response', [
+                Log::warning('Robaws offer number missing after retries', [
                     'quotation_id' => $quotation->id,
                     'request_number' => $quotation->request_number,
                     'offer_id' => $offerId,
@@ -133,6 +137,26 @@ class RobawsQuotationPushService
             'offer_number' => $offerNumber,
             'attachments' => $attachments,
         ];
+    }
+
+    private function fetchOfferNumberWithRetry(string $offerId, int $attempts = 3, int $delaySeconds = 1): ?string
+    {
+        for ($try = 1; $try <= $attempts; $try++) {
+            $result = $this->apiClient->getOffer($offerId);
+            if (!empty($result['success']) && !empty($result['data'])) {
+                $data = $result['data'];
+                $number = $data['logicId'] ?? $data['offerNumber'] ?? $data['number'] ?? null;
+                if (!empty($number)) {
+                    return $number;
+                }
+            }
+
+            if ($try < $attempts) {
+                sleep($delaySeconds);
+            }
+        }
+
+        return null;
     }
 
     private function resolveClientId(QuotationRequest $quotation): ?int
