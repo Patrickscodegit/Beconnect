@@ -174,7 +174,9 @@ class RobawsQuotationPushService
         $hasDate = !empty($data['date']);
         if (!$hasDate) {
             $date = $quotation->created_at?->format('Y-m-d') ?? now()->format('Y-m-d');
-            $patch = $this->apiClient->patchQuotation($offerId, ['date' => $date]);
+            $patch = $this->apiClient->patchQuotationJson($offerId, [
+                ['op' => 'add', 'path' => '/date', 'value' => $date],
+            ]);
             if (empty($patch['success'])) {
                 Log::warning('Robaws offer date patch failed', [
                     'quotation_id' => $quotation->id,

@@ -1136,6 +1136,49 @@ final class RobawsApiClient implements RobawsApiClientInterface
     }
 
     /**
+     * Partially update an existing quotation/offer in Robaws (JSON patch)
+     */
+    public function patchQuotationJson(string $quotationId, array $payload, ?string $idempotencyKey = null): array
+    {
+        $headers = [
+            'Content-Type' => 'application/json-patch+json',
+        ];
+        if ($idempotencyKey) {
+            $headers['Idempotency-Key'] = $idempotencyKey;
+        }
+
+        try {
+            $response = $this->getHttpClient()
+                ->withHeaders($headers)
+                ->send('PATCH', "/api/v2/offers/{$quotationId}", [
+                    'body' => json_encode($payload),
+                ]);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                return [
+                    'success' => true,
+                    'quotation_id' => $quotationId,
+                    'data' => $data,
+                    'idempotency_key' => $idempotencyKey,
+                ];
+            }
+
+            return [
+                'success' => false,
+                'error' => $response->body(),
+                'status' => $response->status(),
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'status' => 500,
+            ];
+        }
+    }
+
+    /**
      * Get an offer by ID
      */
     public function getOffer(string $offerId, array $include = []): array
