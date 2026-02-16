@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\QuotationRequest;
 use App\Services\Export\Clients\RobawsApiClient;
+use App\Services\Robaws\RobawsQuotationPushService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -12,7 +13,7 @@ class BackfillRobawsOfferNumbers extends Command
     protected $signature = 'robaws:backfill-offer-numbers {--limit= : Max quotations to process} {--dry-run : Do not persist updates}';
     protected $description = 'Backfill robaws_offer_number using Robaws offer details (logicId/offerNumber/number).';
 
-    public function handle(RobawsApiClient $apiClient): int
+    public function handle(RobawsApiClient $apiClient, RobawsQuotationPushService $pushService): int
     {
         $limit = $this->option('limit') ? (int) $this->option('limit') : null;
         $dryRun = (bool) $this->option('dry-run');
@@ -47,21 +48,13 @@ class BackfillRobawsOfferNumbers extends Command
 
                 $data = $result['data'];
                 if (empty($data['date'])) {
-                    $date = $quotation->created_at?->format('Y-m-d') ?? now()->format('Y-m-d');
-                    $patch = $apiClient->patchQuotationJson($offerId, [
-                        ['op' => 'add', 'path' => '/date', 'value' => $date],
+                    $pushService->push($quotation, [
+                        'minimal_update' => true,
+                        'include_attachments' => false,
                     ]);
-                    if (empty($patch['success'])) {
-                        Log::warning('Backfill Robaws offer date patch failed', [
-                            'quotation_id' => $quotation->id,
-                            'offer_id' => $offerId,
-                            'error' => $patch['error'] ?? null,
-                        ]);
-                    } else {
-                        $result = $apiClient->getOffer($offerId);
-                        if (!empty($result['success']) && !empty($result['data'])) {
-                            $data = $result['data'];
-                        }
+                    $result = $apiClient->getOffer($offerId);
+                    if (!empty($result['success']) && !empty($result['data'])) {
+                        $data = $result['data'];
                     }
                 }
 
