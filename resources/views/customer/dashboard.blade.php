@@ -147,6 +147,8 @@
                                 ?? data_get($offer, 'number')
                                 ?? $offerId;
                             $bconnectNumber = data_get($offer, 'bconnect_request_number');
+                            $routeDisplay = data_get($offer, 'route_display');
+                            $cargoSummary = data_get($offer, 'cargo_summary');
                             $offerStatus = data_get($offer, 'status', 'unknown');
                             $offerUpdated = data_get($offer, 'updatedAt')
                                 ?? data_get($offer, 'updated_at');
@@ -158,6 +160,12 @@
                                     <div class="text-xs text-gray-500">Bconnect: {{ $bconnectNumber }}</div>
                                 @endif
                                 <div class="text-xs text-gray-500">Status: {{ $offerStatus }}</div>
+                                @if($routeDisplay)
+                                    <div class="text-xs text-gray-500">Route: {{ $routeDisplay }}</div>
+                                @endif
+                                @if($cargoSummary)
+                                    <div class="text-xs text-gray-500">Cargo: {{ $cargoSummary }}</div>
+                                @endif
                                 @if($offerUpdated)
                                     <div class="text-xs text-gray-500">Updated: {{ $offerUpdated }}</div>
                                 @endif

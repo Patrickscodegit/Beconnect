@@ -100,7 +100,17 @@ class CustomerDashboardController extends Controller
                         }
 
                         $quotations = $quotationQuery
-                            ->get(['robaws_offer_id', 'robaws_offer_number', 'request_number']);
+                            ->withCount('commodityItems')
+                            ->get([
+                                'robaws_offer_id',
+                                'robaws_offer_number',
+                                'request_number',
+                                'pol',
+                                'pod',
+                                'cargo_description',
+                                'cargo_details',
+                                'total_commodity_items',
+                            ]);
                         $quotationsById = $quotations->keyBy('robaws_offer_id');
                         $quotationsByNumber = $quotations->keyBy('robaws_offer_number');
 
@@ -121,6 +131,27 @@ class CustomerDashboardController extends Controller
                                     ?? $apiClient->getOfferBconnectRequestNumber($offer);
                                 if ($bconnectNumber) {
                                     $offer['bconnect_request_number'] = $bconnectNumber;
+                                }
+                                if ($quotation) {
+                                    $pol = $quotation->pol ?? null;
+                                    $pod = $quotation->pod ?? null;
+                                    if ($pol || $pod) {
+                                        $offer['route_display'] = ($pol ?: 'N/A') . ' → ' . ($pod ?: 'N/A');
+                                    }
+
+                                    $cargoSummary = null;
+                                    if (!empty($quotation->cargo_description)) {
+                                        $cargoSummary = $quotation->cargo_description;
+                                    } else {
+                                        $count = $quotation->commodity_items_count
+                                            ?? $quotation->total_commodity_items;
+                                        if ($count) {
+                                            $cargoSummary = "{$count} item" . ($count === 1 ? '' : 's');
+                                        }
+                                    }
+                                    if ($cargoSummary) {
+                                        $offer['cargo_summary'] = $cargoSummary;
+                                    }
                                 }
 
                                 return $offer;
