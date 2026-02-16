@@ -65,8 +65,12 @@ class CustomerDashboardController extends Controller
                 $apiClient = app(RobawsApiClient::class);
 
                 $clientResult = $apiClient->getClientById((string) $robawsLink->robaws_client_id, ['contacts']);
-                if (!empty($clientResult['success'])) {
-                    $robawsProfile = $clientResult['data'] ?? null;
+                if (is_array($clientResult)) {
+                    if (!empty($clientResult['success'])) {
+                        $robawsProfile = $clientResult['data'] ?? null;
+                    } else {
+                        $robawsProfile = $clientResult;
+                    }
                 }
 
                 $offersResult = $apiClient->listOffersByClient((string) $robawsLink->robaws_client_id, 0, 10);
