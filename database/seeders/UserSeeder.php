@@ -20,6 +20,13 @@ class UserSeeder extends Seeder
             'name' => 'Patrick',
             'password' => bcrypt('password'), // Change this to your preferred password
             'email_verified_at' => now(),
+            'role' => 'admin',
+            'status' => 'active',
+        ]);
+
+        User::where('email', 'patrick@belgaco.be')->update([
+            'role' => 'admin',
+            'status' => 'active',
         ]);
 
         $this->command->info('Admin user created: patrick@belgaco.be');

@@ -21,12 +21,22 @@ class FilamentUserSeeder extends Seeder
                 'email' => 'patrick@belgaco.be',
                 'password' => Hash::make('password'),
                 'email_verified_at' => now(),
+                'role' => 'admin',
+                'status' => 'active',
             ]
         );
 
         // Ensure email is verified
         if (!$user->email_verified_at) {
             $user->email_verified_at = now();
+        }
+
+        if ($user->role !== 'admin' || $user->status !== 'active') {
+            $user->role = 'admin';
+            $user->status = 'active';
+        }
+
+        if ($user->isDirty()) {
             $user->save();
         }
 

@@ -15,6 +15,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             \Illuminate\Http\Middleware\HandleCors::class,
         ]);
+        $middleware->alias([
+            'role' => \App\Http\Middleware\EnsureRole::class,
+            'active' => \App\Http\Middleware\EnsureActiveUser::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

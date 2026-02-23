@@ -12,6 +12,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         $tableName = 'shipping_schedules';
         $carrierFk = 'shipping_schedules_carrier_id_foreign';
         $polFk = 'shipping_schedules_pol_id_foreign';
@@ -85,6 +89,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         $tableName = 'shipping_schedules';
         $carrierFk = 'shipping_schedules_carrier_id_foreign';
         $polFk = 'shipping_schedules_pol_id_foreign';

@@ -30,7 +30,7 @@ Route::prefix('public/quotations')->name('public.quotations.')->group(function (
 Route::get('/api/schedules/search', [ScheduleSearchController::class, 'search'])->name('api.schedules.search');
 
 // Customer Portal Routes (authenticated)
-Route::middleware(['auth'])->prefix('customer')->name('customer.')->group(function () {
+Route::middleware(['auth', 'active', 'role:customer,admin'])->prefix('customer')->name('customer.')->group(function () {
     Route::get('/dashboard', [\App\Http\Controllers\CustomerDashboardController::class, 'index'])->name('dashboard');
     
     // Quotations
@@ -56,9 +56,9 @@ Route::middleware(['auth'])->prefix('customer')->name('customer.')->group(functi
 Route::get('/dashboard', function () {
     // Redirect to customer dashboard
     return redirect()->route('customer.dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+})->middleware(['auth', 'verified', 'active'])->name('dashboard');
 
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
@@ -108,7 +108,7 @@ Route::middleware('auth')->group(function () {
     });
     
     // Quotation System API (for Filament admin)
-    Route::prefix('admin/api/quotation')->name('admin.api.quotation.')->group(function () {
+    Route::prefix('admin/api/quotation')->middleware(['role:admin'])->name('admin.api.quotation.')->group(function () {
         Route::get('/articles', [\App\Http\Controllers\Api\QuotationArticleController::class, 'index'])
             ->name('articles.index');
     });
