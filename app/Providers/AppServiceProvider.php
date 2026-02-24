@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -108,6 +110,23 @@ class AppServiceProvider extends ServiceProvider
         
         // Configure Filament to display timestamps in Belgium timezone
         $this->configureFilamentTimezone();
+
+        ResetPassword::toMailUsing(function ($notifiable, $token) {
+            $resetUrl = url(route('password.reset', [
+                'token' => $token,
+                'email' => $notifiable->getEmailForPasswordReset(),
+            ], false));
+            $expire = config('auth.passwords.' . config('auth.defaults.passwords') . '.expire');
+
+            return (new MailMessage())
+                ->subject('Set your Bconnect password')
+                ->greeting('Hello!')
+                ->line('We received a request to set or reset your Bconnect password.')
+                ->action('Set Password', $resetUrl)
+                ->line("This link will expire in {$expire} minutes.")
+                ->line('If you did not request this, no further action is required.')
+                ->salutation('Regards, Bconnect');
+        });
     }
     
     /**
