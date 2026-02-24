@@ -56,6 +56,13 @@
  - Create test offer:
    - `php artisan robaws:test --create-offer --no-interaction`
  
+## Recent Robaws Changes
+- New env var: `ROBAWS_ASSIGNED_USER_ID` (e.g., `51`) to set `assignedUserId` on offer create/update so numbers persist.
+- After setting the env var, restart PHP in Forge, then run `php artisan config:clear`.
+- Verify runtime config:
+  - `php artisan tinker --execute="echo 'assigned_user_id='.(config('services.robaws.assigned_user_id') ?? '').PHP_EOL;"`
+- Assignee can be overwritten later by the team in Robaws.
+
  ## Notes
  - Keep secrets out of this file. Use placeholders and set values in Forge or `.env`.
  - If Robaws credentials are missing, logs will show warnings until set.

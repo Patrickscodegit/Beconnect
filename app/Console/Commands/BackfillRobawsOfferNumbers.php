@@ -47,7 +47,13 @@ class BackfillRobawsOfferNumbers extends Command
                 }
 
                 $data = $result['data'];
-                if (empty($data['date'])) {
+                $assignedUserId = config('services.robaws.assigned_user_id');
+                $needsUpdate = empty($data['date']);
+                if (!empty($assignedUserId) && empty($data['assignedUserId'])) {
+                    $needsUpdate = true;
+                }
+
+                if ($needsUpdate) {
                     $pushService->push($quotation, [
                         'minimal_update' => true,
                         'include_attachments' => false,

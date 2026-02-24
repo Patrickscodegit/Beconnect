@@ -58,22 +58,36 @@ class RobawsQuotationPushService
         }
 
         $payloadForRequest = $payload;
+        $payloadForFallbackUpdate = $payload;
         if (!empty($options['minimal_update'])) {
             $fullOptions = $options;
             unset($fullOptions['minimal_update']);
-            $payloadForRequest = $this->buildPayload($quotation, $clientId, $fullOptions);
-            if (!empty($payloadForRequest['success']) && $payloadForRequest['success'] === false) {
-                return $payloadForRequest;
+            $payloadForFallbackUpdate = $this->buildPayload($quotation, $clientId, $fullOptions);
+            if (!empty($payloadForFallbackUpdate['success']) && $payloadForFallbackUpdate['success'] === false) {
+                return $payloadForFallbackUpdate;
             }
         }
 
-        $idempotencyKey = $options['idempotency_key'] ?? $this->buildIdempotencyKey($quotation, $payloadForRequest);
+        $idempotencyKey = $options['idempotency_key'] ?? $this->buildIdempotencyKey($quotation, $payloadForFallbackUpdate);
 
         $action = $quotation->robaws_offer_id && !($options['create_new'] ?? false) ? 'update' : 'create';
         if ($action === 'update') {
-            $result = $this->apiClient->updateQuotation((string) $quotation->robaws_offer_id, $payloadForRequest, $idempotencyKey);
+            if (!empty($options['minimal_update'])) {
+                $result = $this->apiClient->patchQuotation((string) $quotation->robaws_offer_id, $payloadForRequest, $idempotencyKey);
+                if (!($result['success'] ?? false)) {
+                    Log::warning('Robaws PATCH update failed; falling back to PUT', [
+                        'quotation_id' => $quotation->id,
+                        'offer_id' => $quotation->robaws_offer_id,
+                        'error' => $result['error'] ?? null,
+                        'status' => $result['status'] ?? null,
+                    ]);
+                    $result = $this->apiClient->updateQuotation((string) $quotation->robaws_offer_id, $payloadForFallbackUpdate, $idempotencyKey);
+                }
+            } else {
+                $result = $this->apiClient->updateQuotation((string) $quotation->robaws_offer_id, $payloadForRequest, $idempotencyKey);
+            }
         } else {
-            $result = $this->apiClient->createQuotation($payloadForRequest, $idempotencyKey);
+            $result = $this->apiClient->createQuotation($payloadForFallbackUpdate, $idempotencyKey);
         }
 
         if (!($result['success'] ?? false)) {
@@ -106,7 +120,7 @@ class RobawsQuotationPushService
             }
 
             if (empty($offerNumber)) {
-                $offerNumber = $this->ensureOfferDateAndFetchNumber($quotation, (string) $offerId);
+                $offerNumber = $this->ensureOfferDateAndFetchNumber($quotation, (string) $offerId, $clientId);
             }
 
             if (!empty($offerNumber)) {
@@ -163,7 +177,7 @@ class RobawsQuotationPushService
         return null;
     }
 
-    private function ensureOfferDateAndFetchNumber(QuotationRequest $quotation, string $offerId): ?string
+    private function ensureOfferDateAndFetchNumber(QuotationRequest $quotation, string $offerId, int $clientId): ?string
     {
         $result = $this->apiClient->getOffer($offerId);
         $data = (!empty($result['success']) && !empty($result['data'])) ? $result['data'] : null;
@@ -174,16 +188,37 @@ class RobawsQuotationPushService
         $hasDate = !empty($data['date']);
         if (!$hasDate) {
             $date = $quotation->created_at?->format('Y-m-d') ?? now()->format('Y-m-d');
-            $patch = $this->apiClient->patchQuotationJson($offerId, [
-                ['op' => 'add', 'path' => '/date', 'value' => $date],
-            ]);
+            $assignedUserId = config('services.robaws.assigned_user_id');
+            $patchPayload = [
+                'date' => $date,
+            ];
+            if (!empty($assignedUserId)) {
+                $patchPayload['assignedUserId'] = (int) $assignedUserId;
+            }
+
+            $patch = $this->apiClient->patchQuotation($offerId, $patchPayload);
             if (empty($patch['success'])) {
-                Log::warning('Robaws offer date patch failed', [
+                Log::warning('Robaws offer date patch failed; falling back to PUT', [
                     'quotation_id' => $quotation->id,
                     'offer_id' => $offerId,
                     'error' => $patch['error'] ?? null,
+                    'status' => $patch['status'] ?? null,
                 ]);
-                return null;
+
+                $fullPayload = $this->buildPayload($quotation, $clientId, []);
+                if (!empty($fullPayload['success']) && $fullPayload['success'] === false) {
+                    return null;
+                }
+                $update = $this->apiClient->updateQuotation($offerId, $fullPayload);
+                if (empty($update['success'])) {
+                    Log::warning('Robaws offer date update failed', [
+                        'quotation_id' => $quotation->id,
+                        'offer_id' => $offerId,
+                        'error' => $update['error'] ?? null,
+                        'status' => $update['status'] ?? null,
+                    ]);
+                    return null;
+                }
             }
 
             $result = $this->apiClient->getOffer($offerId);
@@ -319,9 +354,10 @@ class RobawsQuotationPushService
         }
 
         $offerDate = $quotation->created_at?->format('Y-m-d') ?? now()->format('Y-m-d');
+        $assignedUserId = config('services.robaws.assigned_user_id');
 
         if (!empty($options['minimal_update'])) {
-            return [
+            $payload = [
                 'companyId' => config('services.robaws.default_company_id', config('services.robaws.company_id', 1)),
                 'customerId' => $clientId,
                 'clientId' => $clientId,
@@ -329,9 +365,15 @@ class RobawsQuotationPushService
                 'extraFields' => $extraFields,
                 'date' => $offerDate,
             ];
+
+            if (!empty($assignedUserId)) {
+                $payload['assignedUserId'] = (int) $assignedUserId;
+            }
+
+            return $payload;
         }
 
-        return [
+        $payload = [
             'title' => $quotation->request_number ?? $quotation->customer_reference,
             'project' => $quotation->request_number,
             'clientReference' => $quotation->customer_reference ?? $quotation->request_number,
@@ -346,6 +388,12 @@ class RobawsQuotationPushService
             'lineItems' => $lineItems,
             'extraFields' => $extraFields,
         ];
+
+        if (!empty($assignedUserId)) {
+            $payload['assignedUserId'] = (int) $assignedUserId;
+        }
+
+        return $payload;
     }
 
     private function buildIdempotencyKey(QuotationRequest $quotation, array $payload): string

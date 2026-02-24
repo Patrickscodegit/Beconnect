@@ -40,8 +40,17 @@ class EnsureFilamentUser extends Command
             // Ensure email is verified
             if (!$user->email_verified_at) {
                 $user->email_verified_at = now();
-                $user->save();
                 $this->info("📧 Email verification updated");
+            }
+
+            if ($user->role !== 'admin' || $user->status !== 'active') {
+                $user->role = 'admin';
+                $user->status = 'active';
+                $this->info("🛡️ Admin role/status applied");
+            }
+
+            if ($user->isDirty()) {
+                $user->save();
             }
             
             return Command::SUCCESS;
@@ -53,6 +62,8 @@ class EnsureFilamentUser extends Command
             'email' => $email,
             'password' => Hash::make($password),
             'email_verified_at' => now(),
+            'role' => 'admin',
+            'status' => 'active',
         ]);
 
         $this->info("🎉 Filament user created successfully!");
