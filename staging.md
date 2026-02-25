@@ -34,9 +34,9 @@
  - Verify:
    - `php artisan horizon:status`
  
- ## Verification Checklist
- - Migrations:
-   - `php artisan migrate --force`
+## Verification Checklist
+- Migrations:
+  - Run migrations (avoid destructive commands)
  - DB connection:
    - `php artisan tinker --execute="DB::connection()->getPdo(); echo 'DB ok'.PHP_EOL;"`
  - Spaces:
@@ -48,6 +48,11 @@
    - Test:
      - `php artisan robaws:test-webhook --url="https://beconnect-rn6k77zh.on-forge.com/api/webhooks/robaws/articles"`
  
+## Mail (Resend)
+- Use `MAIL_MAILER=resend`.
+- Set `RESEND_KEY` (note: key name is `RESEND_KEY`, not `RESEND_API_KEY`).
+- After updating `.env`, run `php artisan config:clear` and `php artisan queue:restart`.
+
  ## Robaws Test Commands
  - Sync extra fields:
    - `php artisan robaws:sync-extra-fields --batch-size=50 --delay=0.5`
