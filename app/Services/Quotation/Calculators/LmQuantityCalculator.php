@@ -86,11 +86,6 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
             // PRIORITY 1: Use stack/overall dimensions if available (for stacks)
             $stackLength = $item->stack_length_cm;
             $stackWidth = $item->stack_width_cm;
-            if ((!$stackLength || !$stackWidth) && $this->isTrailerCategory($item->category)) {
-                // Use average trailer dimensions when measurements are missing.
-                $stackLength = self::DEFAULT_TRAILER_LENGTH_CM;
-                $stackWidth = self::DEFAULT_TRAILER_WIDTH_CM;
-            }
 
             if ($stackLength && $stackWidth) {
                 $processedItems[] = $item->id;
@@ -159,11 +154,6 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
                 $lm = 0.0;
                 $stackLength = $baseItem->stack_length_cm;
                 $stackWidth = $baseItem->stack_width_cm;
-                if ((!$stackLength || !$stackWidth) && $this->isTrailerCategory($baseItem->category)) {
-                    // Use average trailer dimensions when measurements are missing.
-                    $stackLength = self::DEFAULT_TRAILER_LENGTH_CM;
-                    $stackWidth = self::DEFAULT_TRAILER_WIDTH_CM;
-                }
 
                 if ($stackLength && $stackWidth) {
                     $result = $service->computeChargeableLm(

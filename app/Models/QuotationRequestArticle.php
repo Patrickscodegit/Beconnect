@@ -546,10 +546,6 @@ class QuotationRequestArticle extends Model
 
             $stackLength = $item->stack_length_cm;
             $stackWidth = $item->stack_width_cm;
-            if ((!$stackLength || !$stackWidth) && in_array($item->category, ['trailer', 'trailer_stack', 'tank_trailer'], true)) {
-                $stackLength = 1360.0;
-                $stackWidth = 250.0;
-            }
 
             if ($stackLength && $stackWidth) {
                 $processedItems[] = $item->id;
