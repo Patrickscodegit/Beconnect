@@ -203,6 +203,25 @@ class CommodityItemsRepeater extends Component
     {
         if (isset($this->items[$index])) {
             $item = $this->items[$index];
+            $removedItemId = $item['id'] ?? null;
+            $removedRelatedItemId = $item['related_item_id'] ?? null;
+
+            // If the removed item was attached to another, clear reverse relationship first
+            if ($removedRelatedItemId && $removedItemId) {
+                $this->clearReverseRelationship($removedRelatedItemId, $removedItemId);
+            }
+
+            // If any remaining items pointed to the removed item, normalize them to standalone
+            foreach ($this->items as $otherIndex => $otherItem) {
+                if ($otherIndex === $index) {
+                    continue;
+                }
+
+                if (($otherItem['related_item_id'] ?? null) == $removedItemId) {
+                    $this->items[$otherIndex]['relationship_type'] = 'separate';
+                    $this->items[$otherIndex]['related_item_id'] = null;
+                }
+            }
             
             // Delete from database if it has a database ID (not a temporary ID)
             if (isset($item['id']) && is_numeric($item['id']) && $this->quotationId) {
