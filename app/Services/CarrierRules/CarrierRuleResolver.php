@@ -64,10 +64,16 @@ class CarrierRuleResolver
     ): ?CarrierAcceptanceRule {
         // Resolve port group IDs once if portId is provided
         $portGroupIds = [];
+        $portGroupIdVariants = [];
         if ($portId !== null) {
             $portGroupIds = $this->resolvePortGroupIdsForPort($carrierId, $portId);
-            // Convert to strings since JSON stores them as strings
-            $portGroupIds = array_map('strval', $portGroupIds);
+            // Keep both numeric and string variants to match JSON arrays across DB types.
+            if (!empty($portGroupIds)) {
+                $portGroupIdVariants = array_values(array_merge(
+                    array_map('intval', $portGroupIds),
+                    array_map('strval', $portGroupIds)
+                ));
+            }
         }
 
         $rules = CarrierAcceptanceRule::where('carrier_id', $carrierId)
@@ -87,8 +93,8 @@ class CarrierRuleResolver
                     
                     // Port groups (if any found)
                     // portGroupIds are already converted to strings above
-                    if (!empty($portGroupIds)) {
-                        foreach ($portGroupIds as $groupId) {
+                    if (!empty($portGroupIdVariants)) {
+                        foreach ($portGroupIdVariants as $groupId) {
                             $q->orWhereJsonContains('port_group_ids', $groupId);
                         }
                     }

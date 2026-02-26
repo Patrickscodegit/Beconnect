@@ -365,7 +365,11 @@
                                 $lmBreakdown = $articleModel ? $articleModel->getLmCalculationBreakdown() : null;
                                 $unitType = strtoupper(trim($article->pivot->unit_type ?? $article->unit_type ?? 'UNIT'));
                                 $displayQty = $articleModel ? $articleModel->display_quantity : ($article->pivot->quantity ?? 1);
-                                $unitPrice = $article->pivot->unit_price ?? $article->unit_price ?? 0;
+                                $unitPrice = $articleModel?->selling_price
+                                    ?? $article->pivot->selling_price
+                                    ?? $article->pivot->unit_price
+                                    ?? $article->unit_price
+                                    ?? 0;
                                 $subtotal = $article->pivot->subtotal ?? ($displayQty * $unitPrice);
                                 // Primary display: sales_name > article_name > description
                                 $primaryName = $article->sales_name ?? $article->article_name ?? $article->description ?? 'N/A';

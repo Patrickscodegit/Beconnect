@@ -489,6 +489,8 @@ class QuotationCommodityItem extends Model
             'truck' => ['TRUCK', 'HH', 'LM CARGO'],
             'truckhead' => ['TRUCKHEAD', 'HH', 'LM CARGO'],
             'trailer' => ['TRAILER', 'TRUCK', 'HH', 'LM CARGO'],
+            'trailer_stack' => ['TRAILER', 'TRUCK', 'HH', 'LM CARGO'],
+            'tank_trailer' => ['TRAILER', 'TRUCK', 'HH', 'LM CARGO'],
             'bus' => ['BUS', 'HH', 'LM CARGO'],
             'motorcycle' => ['MOTORCYCLE'],
             // Truck variants that should map to LM CARGO
