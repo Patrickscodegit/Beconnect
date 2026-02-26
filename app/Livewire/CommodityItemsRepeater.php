@@ -1175,6 +1175,13 @@ class CommodityItemsRepeater extends Component
                 if ($oldRelatedItemId) {
                     $this->clearReverseRelationship($oldRelatedItemId, $currentItem['id'] ?? null);
                 }
+                $this->recalculateStandaloneItem($index);
+                if ($oldRelatedItemId) {
+                    $relatedIndex = $this->findItemIndexById($oldRelatedItemId);
+                    if ($relatedIndex !== null) {
+                        $this->recalculateStandaloneItem($relatedIndex);
+                    }
+                }
             } else {
                 $this->clearItemLmCbm($index);
             }
@@ -1215,6 +1222,13 @@ class CommodityItemsRepeater extends Component
                 $oldRelatedItemId = $this->getOriginalRelatedItemId($index);
                 if ($oldRelatedItemId) {
                     $this->clearReverseRelationship($oldRelatedItemId, $currentItemId);
+                }
+                $this->recalculateStandaloneItem($index);
+                if ($oldRelatedItemId) {
+                    $relatedIndex = $this->findItemIndexById($oldRelatedItemId);
+                    if ($relatedIndex !== null) {
+                        $this->recalculateStandaloneItem($relatedIndex);
+                    }
                 }
             }
         }
@@ -1648,6 +1662,28 @@ class CommodityItemsRepeater extends Component
 
         $this->items[$index]['lm'] = '';
         $this->items[$index]['cbm'] = '';
+    }
+
+    protected function recalculateStandaloneItem(int $index): void
+    {
+        if (!isset($this->items[$index])) {
+            return;
+        }
+
+        if ($this->isStackBase($index) || $this->isConnectedItem($index) || $this->isLoadedItem($index)) {
+            return;
+        }
+
+        $this->calculateLm($index);
+        if (!empty($this->items[$index]['height_cm'] ?? '')) {
+            $this->calculateCbm($index);
+        }
+
+        if ($this->quotationId
+            && isset($this->items[$index]['id'])
+            && is_numeric($this->items[$index]['id'])) {
+            $this->saveItemToDatabase($index, $this->items[$index]);
+        }
     }
 
     protected function findItemIndexById($itemId): ?int
