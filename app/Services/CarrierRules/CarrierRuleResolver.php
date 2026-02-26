@@ -529,6 +529,10 @@ class CarrierRuleResolver
                         }
                     }
                 }
+                if ($item->isConnected() && !$item->related_item_id) {
+                    \Log::info('shouldApplyTowing: Connected without related item, treating as standalone');
+                    return true;
+                }
                 
                 // If trailer is loaded but NOT connected to truck/truckhead, YES towing
                 if ($item->isLoadedWith()) {

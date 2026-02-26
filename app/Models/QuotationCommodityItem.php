@@ -1474,6 +1474,11 @@ class QuotationCommodityItem extends Model
                                     $relatedItem->related_item_id = null;
                                     $relatedItem->saveQuietly();
                                 }
+                                if ($relatedItem->related_item_id === null
+                                    && in_array($relatedItem->relationship_type, ['connected_to', 'loaded_with'], true)) {
+                                    $relatedItem->relationship_type = 'separate';
+                                    $relatedItem->saveQuietly();
+                                }
 
                                 if (!$relatedItem->isInStack()) {
                                     $relatedItem->stack_length_cm = null;
