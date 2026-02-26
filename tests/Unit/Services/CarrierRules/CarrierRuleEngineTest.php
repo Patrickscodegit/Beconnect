@@ -74,7 +74,8 @@ class CarrierRuleEngineTest extends TestCase
 
         $result = $this->engine->processCargo($input);
 
-        $this->assertEquals('NOT_ALLOWED', $result->acceptanceStatus);
+        $this->assertEquals('ALLOWED_WITH_SURCHARGES', $result->acceptanceStatus);
+        $this->assertContains('transformed_due_to_max_exceeded', $result->warnings);
         $this->assertContains('max_length_exceeded', $result->violations);
         $this->assertContains('max_width_exceeded', $result->violations);
         $this->assertContains('max_height_exceeded', $result->violations);
