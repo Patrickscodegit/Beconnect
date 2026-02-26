@@ -568,6 +568,11 @@ class QuotationRequestArticle extends Model
                 continue;
             }
 
+            if ($item->isInStack()) {
+                $processedItems[] = $item->id;
+                continue;
+            }
+
             $itemLength = $item->length_cm;
             $itemWidth = $item->width_cm;
             if ((!$itemLength || !$itemWidth) && in_array($item->category, ['trailer', 'trailer_stack', 'tank_trailer'], true)) {

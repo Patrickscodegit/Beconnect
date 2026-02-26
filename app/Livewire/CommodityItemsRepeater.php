@@ -266,6 +266,16 @@ class CommodityItemsRepeater extends Component
     public function calculateCbm($index)
     {
         $item = &$this->items[$index];
+
+        $isStackItem = $this->isStackBase($index)
+            || $this->isConnectedItem($index)
+            || $this->isLoadedItem($index);
+
+        if ($isStackItem) {
+            $item['cbm'] = '';
+            $item['lm'] = '';
+            return;
+        }
         
         $length = floatval($item['length_cm'] ?? 0);
         $width = floatval($item['width_cm'] ?? 0);
@@ -292,6 +302,15 @@ class CommodityItemsRepeater extends Component
     public function calculateLm($index)
     {
         $item = &$this->items[$index];
+
+        $isStackItem = $this->isStackBase($index)
+            || $this->isConnectedItem($index)
+            || $this->isLoadedItem($index);
+
+        if ($isStackItem) {
+            $item['lm'] = '';
+            return;
+        }
         
         $length = floatval($item['length_cm'] ?? 0);
         $width = floatval($item['width_cm'] ?? 0);
@@ -405,6 +424,10 @@ class CommodityItemsRepeater extends Component
         }
         
         foreach ($this->items as $index => $item) {
+            if ($this->isStackBase($index) || $this->isConnectedItem($index) || $this->isLoadedItem($index)) {
+                continue;
+            }
+
             if (!empty($item['length_cm']) && !empty($item['width_cm'])) {
                 $this->calculateLm($index);
                 
@@ -1152,6 +1175,8 @@ class CommodityItemsRepeater extends Component
                 if ($oldRelatedItemId) {
                     $this->clearReverseRelationship($oldRelatedItemId, $currentItem['id'] ?? null);
                 }
+            } else {
+                $this->clearItemLmCbm($index);
             }
         }
 
@@ -1180,6 +1205,11 @@ class CommodityItemsRepeater extends Component
                 
                 // Set reverse relationship on the related item
                 $this->setReverseRelationship($relatedItemId, $currentItemId, $relationshipType);
+                $this->clearItemLmCbm($index);
+                $relatedIndex = $this->findItemIndexById($relatedItemId);
+                if ($relatedIndex !== null) {
+                    $this->clearItemLmCbm($relatedIndex);
+                }
             } elseif (!$relatedItemId) {
                 // Relationship is being cleared, clear reverse relationship
                 $oldRelatedItemId = $this->getOriginalRelatedItemId($index);
@@ -1604,6 +1634,31 @@ class CommodityItemsRepeater extends Component
                     // Otherwise, the related item hasn't been saved yet, return null
                     return null;
                 }
+            }
+        }
+
+        return null;
+    }
+
+    protected function clearItemLmCbm(int $index): void
+    {
+        if (!isset($this->items[$index])) {
+            return;
+        }
+
+        $this->items[$index]['lm'] = '';
+        $this->items[$index]['cbm'] = '';
+    }
+
+    protected function findItemIndexById($itemId): ?int
+    {
+        foreach ($this->items as $idx => $item) {
+            $candidateId = $item['id'] ?? null;
+            if ($candidateId && (
+                (is_numeric($candidateId) && is_numeric($itemId) && $candidateId == $itemId) ||
+                $candidateId === $itemId
+            )) {
+                return $idx;
             }
         }
 
