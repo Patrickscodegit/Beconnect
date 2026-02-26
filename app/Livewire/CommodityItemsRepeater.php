@@ -1648,6 +1648,13 @@ class CommodityItemsRepeater extends Component
             if ($commodityType === 'general_cargo') {
                 $rules["items.{$index}.category"] = 'required';
             }
+
+            // Require overall dimensions for stack bases (connected/loaded combinations)
+            if ($this->isStackBaseForDimensions($index)) {
+                $rules["items.{$index}.stack_length_cm"] = 'required|numeric|min:1';
+                $rules["items.{$index}.stack_width_cm"] = 'required|numeric|min:1';
+                $rules["items.{$index}.stack_height_cm"] = 'required|numeric|min:1';
+            }
         }
         
         return $rules;
@@ -1663,6 +1670,9 @@ class CommodityItemsRepeater extends Component
         'items.*.length_cm.required' => 'Length is required',
         'items.*.width_cm.required' => 'Width is required',
         'items.*.height_cm.required' => 'Height is required',
+        'items.*.stack_length_cm.required' => 'Overall length is required for connected/loaded items',
+        'items.*.stack_width_cm.required' => 'Overall width is required for connected/loaded items',
+        'items.*.stack_height_cm.required' => 'Overall height is required for connected/loaded items',
         'items.*.condition.required' => 'Condition is required',
         'items.*.fuel_type.required' => 'Fuel Type is required',
         'items.*.category.required' => 'Category is required',

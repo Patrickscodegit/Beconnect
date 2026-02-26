@@ -105,6 +105,12 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
                 $totalLm += $lmPerStack;
                 continue;
             }
+            // If item is part of a stack (connected/loaded), require overall dimensions.
+            if ($item->isInStack()) {
+                $processedItems[] = $item->id;
+                continue;
+            }
+
             // PRIORITY 2: Use individual item dimensions (for standalone items)
             $itemLength = $item->length_cm;
             $itemWidth = $item->width_cm;
@@ -167,6 +173,9 @@ class LmQuantityCalculator implements QuantityCalculatorInterface
                     );
                     // stack_length/stack_width represent overall stack dimensions.
                     $lm = $result->chargeableLm;
+                } elseif ($baseItem->isInStack()) {
+                    // Stacks require overall dimensions; do not fall back to individual dims.
+                    $lm = 0.0;
                 } else {
                     $itemLength = $baseItem->length_cm;
                     $itemWidth = $baseItem->width_cm;

@@ -1176,14 +1176,22 @@ class QuotationCommodityItem extends Model
         parent::boot();
 
         static::saving(function ($item) {
-            // Auto-calculate CBM if dimensions are present
-            if ($item->length_cm && $item->width_cm && $item->height_cm) {
-                $item->cbm = $item->calculateCbm();
-            }
+            $isStackItem = in_array($item->relationship_type, ['connected_to', 'loaded_with'], true)
+                || ($item->id ? $item->isStackBase() : false);
 
-            // Auto-calculate LM if length and width are present
-            if ($item->length_cm && $item->width_cm) {
-                $item->lm = $item->calculateLm();
+            // Auto-calculate CBM/LM from individual dimensions only for standalone items
+            if (!$isStackItem) {
+                if ($item->length_cm && $item->width_cm && $item->height_cm) {
+                    $item->cbm = $item->calculateCbm();
+                }
+
+                if ($item->length_cm && $item->width_cm) {
+                    $item->lm = $item->calculateLm();
+                }
+            } else {
+                // Connected/loaded stacks must use overall dimensions only
+                $item->cbm = null;
+                $item->lm = null;
             }
 
             // Auto-calculate stack CBM if stack dimensions are present
