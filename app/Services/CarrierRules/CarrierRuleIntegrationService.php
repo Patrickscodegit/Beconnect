@@ -238,6 +238,15 @@ class CarrierRuleIntegrationService
             return;
         }
 
+        $towingEventCodes = ['TOWING', 'TOWING_WAF'];
+        $hasTowing = collect($quoteLineDrafts)->contains(function ($draft) use ($towingEventCodes) {
+            $eventCode = $draft['meta']['event_code'] ?? null;
+            return $eventCode && in_array($eventCode, $towingEventCodes, true);
+        });
+        if ($hasTowing) {
+            $this->removeOrphanedCarrierRuleArticles($quotation, $towingEventCodes);
+        }
+
         foreach ($quoteLineDrafts as $draft) {
             // Check if article already exists for this quotation with same event code
             $eventCode = $draft['meta']['event_code'] ?? null;
@@ -472,6 +481,87 @@ class CarrierRuleIntegrationService
                     'removal_reason' => $removalReason,
                 ]);
                 $articleRecord->delete();
+            }
+        }
+    }
+
+    /**
+     * Remove carrier-rule articles that are orphaned or duplicated.
+     */
+    public function removeOrphanedCarrierRuleArticles(QuotationRequest $quotation, ?array $eventCodes = null): void
+    {
+        $hasCarrierRuleColumns = Schema::hasColumn('quotation_request_articles', 'carrier_rule_applied')
+            && Schema::hasColumn('quotation_request_articles', 'carrier_rule_commodity_item_id')
+            && Schema::hasColumn('quotation_request_articles', 'carrier_rule_event_code');
+        if (!$hasCarrierRuleColumns) {
+            Log::warning('CarrierRuleIntegration: carrier rule columns missing, skipping orphan cleanup', [
+                'quotation_id' => $quotation->id,
+            ]);
+            return;
+        }
+
+        $commodityItemIds = $quotation->commodityItems()->pluck('id')->toArray();
+
+        $orphanQuery = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+            ->where('carrier_rule_applied', true);
+        if ($eventCodes) {
+            $orphanQuery->whereIn('carrier_rule_event_code', $eventCodes);
+        }
+
+        $orphanQuery->where(function ($q) use ($commodityItemIds) {
+            $q->whereNull('carrier_rule_commodity_item_id');
+            if (!empty($commodityItemIds)) {
+                $q->orWhereNotIn('carrier_rule_commodity_item_id', $commodityItemIds);
+            } else {
+                $q->orWhereNotNull('carrier_rule_commodity_item_id');
+            }
+        });
+
+        $orphans = $orphanQuery->get();
+        foreach ($orphans as $orphan) {
+            Log::info('CarrierRuleIntegration: Removing orphaned carrier-rule article', [
+                'quotation_id' => $quotation->id,
+                'article_id' => $orphan->id,
+                'event_code' => $orphan->carrier_rule_event_code,
+                'commodity_item_id' => $orphan->carrier_rule_commodity_item_id,
+            ]);
+            $orphan->delete();
+        }
+
+        if (!$eventCodes) {
+            return;
+        }
+
+        $dedupeRows = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+            ->where('carrier_rule_applied', true)
+            ->whereIn('carrier_rule_event_code', $eventCodes)
+            ->whereNotNull('carrier_rule_commodity_item_id')
+            ->orderBy('id')
+            ->get();
+
+        $groups = $dedupeRows->groupBy(function ($row) {
+            return implode('|', [
+                $row->carrier_rule_commodity_item_id,
+                $row->carrier_rule_event_code,
+                $row->article_cache_id,
+            ]);
+        });
+
+        foreach ($groups as $group) {
+            if ($group->count() <= 1) {
+                continue;
+            }
+            $toKeep = $group->first();
+            $extras = $group->slice(1);
+            foreach ($extras as $extra) {
+                Log::info('CarrierRuleIntegration: Removing duplicate carrier-rule article', [
+                    'quotation_id' => $quotation->id,
+                    'article_id' => $extra->id,
+                    'kept_article_id' => $toKeep->id,
+                    'event_code' => $extra->carrier_rule_event_code,
+                    'commodity_item_id' => $extra->carrier_rule_commodity_item_id,
+                ]);
+                $extra->delete();
             }
         }
     }

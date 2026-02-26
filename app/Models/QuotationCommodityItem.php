@@ -1530,8 +1530,10 @@ class QuotationCommodityItem extends Model
                     }
                 }
 
+                $integrationService = $integrationService ?? app(\App\Services\CarrierRules\CarrierRuleIntegrationService::class);
+                $integrationService->removeOrphanedCarrierRuleArticles($quotation, ['TOWING', 'TOWING_WAF']);
+
                 // Remove articles that no longer match any remaining commodity items
-                $integrationService = app(\App\Services\CarrierRules\CarrierRuleIntegrationService::class);
                 $integrationService->removeNonMatchingArticles($quotation);
 
                 // Recalculate all remaining articles based on remaining commodity items
