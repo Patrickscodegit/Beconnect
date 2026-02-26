@@ -299,7 +299,7 @@ class CarrierRuleResolver
         // Get rules from database (DO NOT return early - we need to filter them)
         $rules = CarrierSurchargeRule::where('carrier_id', $carrierId)
             ->active()
-            ->where(function ($q) use ($portId, $portGroupIds) {
+            ->where(function ($q) use ($portId, $portGroupIdVariants) {
                 $q->where(function ($q2) {
                     $q2->whereNull('port_id')
                        ->whereNull('port_ids')
