@@ -35,7 +35,7 @@
             <div class="space-y-4">
                 @foreach($items as $index => $item)
                     <div class="bg-white rounded-lg border border-gray-200 p-6 shadow-sm" 
-                         wire:key="item-{{ $item['id'] ?? $index }}">
+                         wire:key="item-{{ $item['local_id'] ?? ($item['id'] ?? $index) }}">
                         
                         <!-- Item Header -->
                         <div class="flex justify-between items-center mb-4">

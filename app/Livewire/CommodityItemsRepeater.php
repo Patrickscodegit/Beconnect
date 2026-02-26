@@ -51,7 +51,7 @@ class CommodityItemsRepeater extends Component
         // Only initialize items if they haven't been set yet (mount is only called once)
         // If existingItems is provided, use them; otherwise start with empty array
         if (!empty($existingItems)) {
-            $this->items = $existingItems;
+            $this->items = $this->ensureLocalIds($existingItems);
         } elseif (empty($this->items)) {
             // Only set to empty array if items is not already set
             $this->items = [];
@@ -67,9 +67,21 @@ class CommodityItemsRepeater extends Component
         // Only update items if they're currently empty and new value is provided
         // This prevents parent re-renders from overwriting items that were added
         if (empty($this->items) && !empty($value)) {
-            $this->items = $value;
+            $this->items = $this->ensureLocalIds($value);
         }
         // Otherwise, ignore the prop update to preserve user-added items
+    }
+
+    protected function ensureLocalIds(array $items): array
+    {
+        foreach ($items as $idx => $item) {
+            if (empty($item['local_id'])) {
+                $source = $item['id'] ?? $idx;
+                $items[$idx]['local_id'] = 'local_' . $source;
+            }
+        }
+
+        return $items;
     }
 
     public function getEffectiveCommodityTypeForItem(int $index): ?string
@@ -119,6 +131,7 @@ class CommodityItemsRepeater extends Component
             
             $this->items[] = [
                 'id' => $tempId, // Temporary ID until commodity_type is selected
+                'local_id' => uniqid('local_'),
                 'relationship_type' => $relationshipType, // Set from parameter
                 'related_item_id' => $relatedItemId, // Set from parameter
                 'commodity_type' => '',  // This will be used for form display
@@ -1400,6 +1413,9 @@ class CommodityItemsRepeater extends Component
             
             // Update the item's ID from temporary to database ID
             $this->items[$index]['id'] = $dbItem->id;
+            if (empty($this->items[$index]['local_id'])) {
+                $this->items[$index]['local_id'] = 'local_' . $dbItem->id;
+            }
             
             // Touch parent quotation to update updated_at timestamp
             // This ensures cache keys change when commodity items are created
