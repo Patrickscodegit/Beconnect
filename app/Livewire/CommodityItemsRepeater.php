@@ -225,6 +225,7 @@ class CommodityItemsRepeater extends Component
             
             // Update line numbers for remaining items
             $this->updateLineNumbers();
+            $this->recalculateRemainingStandaloneItems();
 
             if (count($this->items) === 0) {
                 $this->dispatch('commodity-items-cleared', [
@@ -1674,6 +1675,14 @@ class CommodityItemsRepeater extends Component
             return;
         }
 
+        $this->items[$index]['stack_length_cm'] = '';
+        $this->items[$index]['stack_width_cm'] = '';
+        $this->items[$index]['stack_height_cm'] = '';
+        $this->items[$index]['stack_weight_kg'] = '';
+        $this->items[$index]['stack_cbm'] = '';
+        $this->items[$index]['stack_lm'] = '';
+        $this->items[$index]['stack_unit_count'] = 0;
+
         $this->calculateLm($index);
         if (!empty($this->items[$index]['height_cm'] ?? '')) {
             $this->calculateCbm($index);
@@ -1683,6 +1692,13 @@ class CommodityItemsRepeater extends Component
             && isset($this->items[$index]['id'])
             && is_numeric($this->items[$index]['id'])) {
             $this->saveItemToDatabase($index, $this->items[$index]);
+        }
+    }
+
+    protected function recalculateRemainingStandaloneItems(): void
+    {
+        foreach (array_keys($this->items) as $index) {
+            $this->recalculateStandaloneItem($index);
         }
     }
 

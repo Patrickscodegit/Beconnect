@@ -1355,6 +1355,7 @@ class QuotationCommodityItem extends Model
             static::$deletedItemRelatedItems[$item->id] = [
                 'quotation_request_id' => $item->quotation_request_id,
                 'related_item_ids' => $relatedItems->pluck('id')->toArray(),
+                'base_item_id' => $item->related_item_id,
             ];
             
             \Log::info('QuotationCommodityItem: Item being deleted, found related items to reprocess', [
@@ -1375,6 +1376,7 @@ class QuotationCommodityItem extends Model
             // Get the related item IDs that were captured in the deleting event
             $deletionData = static::$deletedItemRelatedItems[$deletedItemId] ?? null;
             $relatedItemIds = $deletionData['related_item_ids'] ?? [];
+            $baseItemId = $deletionData['base_item_id'] ?? null;
             
             // Clean up the static array
             if (isset(static::$deletedItemRelatedItems[$deletedItemId])) {
@@ -1382,7 +1384,7 @@ class QuotationCommodityItem extends Model
             }
 
             // Use DB::afterCommit to ensure the deletion transaction is complete
-            \DB::afterCommit(function () use ($deletedItemId, $quotationRequestId, $relatedItemIds) {
+            \DB::afterCommit(function () use ($deletedItemId, $quotationRequestId, $relatedItemIds, $baseItemId) {
                 $quotation = \App\Models\QuotationRequest::find($quotationRequestId);
                 if (!$quotation) {
                     return; // Quotation no longer exists
@@ -1444,20 +1446,25 @@ class QuotationCommodityItem extends Model
                     return; // Early return - no need to recalculate
                 }
 
-                // Reprocess related items if they exist (trucks/trailers)
-                if (!empty($relatedItemIds)) {
+                $affectedItemIds = array_values(array_filter(array_unique(array_merge(
+                    $relatedItemIds,
+                    $baseItemId ? [$baseItemId] : []
+                ))));
+
+                // Reprocess affected items if they exist (trucks/trailers/base)
+                if (!empty($affectedItemIds)) {
                     $integrationService = app(\App\Services\CarrierRules\CarrierRuleIntegrationService::class);
                     
                     \Log::info('QuotationCommodityItem: Reprocessing related items after deletion', [
                         'deleted_item_id' => $deletedItemId,
                         'quotation_request_id' => $quotationRequestId,
-                        'related_item_ids' => $relatedItemIds,
+                        'related_item_ids' => $affectedItemIds,
                     ]);
 
                     // Reprocess each related item through carrier rules
                     // This will update towing surcharges if the deleted item was a truck/truckhead
                     // Also recalculates LM when trailer is deleted (truck LM should be recalculated)
-                    foreach ($relatedItemIds as $relatedItemId) {
+                    foreach ($affectedItemIds as $relatedItemId) {
                         try {
                             $relatedItem = static::find($relatedItemId);
                             if ($relatedItem && $relatedItem->quotation_request_id === $quotationRequestId) {
@@ -1467,13 +1474,23 @@ class QuotationCommodityItem extends Model
                                     $relatedItem->related_item_id = null;
                                     $relatedItem->saveQuietly();
                                 }
+
+                                if (!$relatedItem->isInStack()) {
+                                    $relatedItem->stack_length_cm = null;
+                                    $relatedItem->stack_width_cm = null;
+                                    $relatedItem->stack_height_cm = null;
+                                    $relatedItem->stack_weight_kg = null;
+                                    $relatedItem->stack_cbm = null;
+                                    $relatedItem->stack_lm = null;
+                                    $relatedItem->stack_unit_count = null;
+                                }
                                 
                                 // Reprocess through carrier rules to update surcharges (e.g., add towing if trailer is now standalone)
                                 $integrationService->processCommodityItem($relatedItem);
                                 
                                 // Explicitly recalculate LM after reprocessing to ensure it reflects current state
                                 // This is especially important when a trailer is deleted - truck LM should be recalculated
-                                if ($relatedItem->length_cm && $relatedItem->width_cm) {
+                                if (!$relatedItem->isInStack() && $relatedItem->length_cm && $relatedItem->width_cm) {
                                     $oldLm = $relatedItem->lm;
                                     $relatedItem->lm = $relatedItem->calculateLm();
                                     
@@ -1483,6 +1500,12 @@ class QuotationCommodityItem extends Model
                                         'old_lm' => $oldLm,
                                         'new_lm' => $relatedItem->lm,
                                     ]);
+                                }
+                                if (!$relatedItem->isInStack()
+                                    && $relatedItem->length_cm
+                                    && $relatedItem->width_cm
+                                    && $relatedItem->height_cm) {
+                                    $relatedItem->cbm = $relatedItem->calculateCbm();
                                 }
                                 
                                 // Save normally (not saveQuietly) to trigger saved event which recalculates all articles
