@@ -471,6 +471,35 @@ class QuotationCommodityItem extends Model
     }
 
     /**
+     * Normalize commodity types for auto-add so we don't over-suggest.
+     * This keeps tank categories to a single primary type.
+     */
+    public static function normalizeCommodityTypesForAutoAdd($commodityItem): array
+    {
+        $types = static::normalizeCommodityTypes($commodityItem);
+        if (empty($types)) {
+            return [];
+        }
+
+        $type = $commodityItem->commodity_type ?? null;
+        if ($type !== 'vehicles') {
+            return $types;
+        }
+
+        $category = $commodityItem->category ?? $commodityItem->vehicle_category ?? null;
+        $primaryByCategory = [
+            'tank_trailer' => 'TRAILER',
+            'tank_truck' => 'TRUCK',
+        ];
+        $primary = $primaryByCategory[$category] ?? null;
+        if ($primary) {
+            return [$primary];
+        }
+
+        return $types;
+    }
+
+    /**
      * Get specific vehicle category mappings to Robaws article types
      * 
      * @param mixed $commodityItem
@@ -660,7 +689,7 @@ class QuotationCommodityItem extends Model
                 $selectionService->clearCache($quotation);
 
                 $distinctCommodityTypes = $commodityItems
-                    ->flatMap(fn ($item) => static::normalizeCommodityTypes($item))
+                    ->flatMap(fn ($item) => static::normalizeCommodityTypesForAutoAdd($item))
                     ->filter()
                     ->unique()
                     ->values();
@@ -673,11 +702,27 @@ class QuotationCommodityItem extends Model
                             ->orWhere('is_surcharge', false);
                     });
                 })
-                ->with('articleCache:id,commodity_type,is_surcharge')
+                ->with('articleCache:id,commodity_type,is_surcharge,article_code')
                 ->get()
                 ->pluck('articleCache.commodity_type')
                 ->filter()
                 ->map(fn ($type) => strtoupper(trim($type)))
+                ->unique()
+                ->values();
+
+            $existingParentArticleCodes = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+                ->whereIn('item_type', ['parent', 'standalone'])
+                ->whereHas('articleCache', function ($query) {
+                    $query->where(function ($q) {
+                        $q->whereNull('is_surcharge')
+                            ->orWhere('is_surcharge', false);
+                    });
+                })
+                ->with('articleCache:id,article_code,is_surcharge')
+                ->get()
+                ->pluck('articleCache.article_code')
+                ->filter()
+                ->map(fn ($code) => strtoupper(trim($code)))
                 ->unique()
                 ->values();
 
@@ -710,9 +755,14 @@ class QuotationCommodityItem extends Model
                         continue;
                     }
 
+                    $articleCode = strtoupper(trim((string) ($article->article_code ?? '')));
                     $exists = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
                         ->where('article_cache_id', $article->id)
                         ->exists();
+
+                    if (!$exists && $articleCode !== '' && $existingParentArticleCodes->contains($articleCode)) {
+                        $exists = true;
+                    }
 
                     if ($exists) {
                         continue;

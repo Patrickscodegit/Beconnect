@@ -1310,6 +1310,16 @@ class CommodityItemsRepeater extends Component
                     return; // Don't continue to saveItemToDatabase - we just created it
                 }
             }
+
+            // If category is selected while the item is still temporary, persist it now.
+            if (strpos($propertyName, '.category') !== false
+                && isset($item['id'])
+                && is_string($item['id'])
+                && str_starts_with($item['id'], 'temp_')
+                && !empty($item['commodity_type'])) {
+                $this->createItemInDatabase($itemIndex, $item);
+                return;
+            }
             
             // Only save if item has a database ID (not a temporary ID)
             if (isset($item['id']) && is_numeric($item['id'])) {
@@ -1337,7 +1347,7 @@ class CommodityItemsRepeater extends Component
                 'commodity_type' => $item['commodity_type'] ?? 'empty',
                 'reason' => !$this->quotationId ? 'no_quotation_id' : 'no_commodity_type'
             ]);
-            return;
+            return null;
         }
         
         try {
@@ -1406,12 +1416,14 @@ class CommodityItemsRepeater extends Component
             $this->dispatch('commodity-item-saved', [
                 'quotation_id' => $this->quotationId
             ]);
+            return $dbItem;
         } catch (\Exception $e) {
             \Log::error('CommodityItemsRepeater::createItemInDatabase() failed', [
                 'quotation_id' => $this->quotationId,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
+            return null;
         }
     }
     
