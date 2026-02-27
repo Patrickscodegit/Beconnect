@@ -238,13 +238,14 @@ class CarrierRuleIntegrationService
             return;
         }
 
-        $towingEventCodes = ['TOWING', 'TOWING_WAF'];
-        $hasTowing = collect($quoteLineDrafts)->contains(function ($draft) use ($towingEventCodes) {
-            $eventCode = $draft['meta']['event_code'] ?? null;
-            return $eventCode && in_array($eventCode, $towingEventCodes, true);
-        });
-        if ($hasTowing) {
-            $this->removeOrphanedCarrierRuleArticles($quotation, $towingEventCodes);
+        $eventCodes = collect($quoteLineDrafts)
+            ->map(fn ($draft) => $draft['meta']['event_code'] ?? null)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+        if (!empty($eventCodes)) {
+            $this->removeOrphanedCarrierRuleArticles($quotation, $eventCodes);
         }
 
         foreach ($quoteLineDrafts as $draft) {
