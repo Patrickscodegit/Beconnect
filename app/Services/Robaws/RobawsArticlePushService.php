@@ -477,6 +477,49 @@ class RobawsArticlePushService
     }
 
     /**
+     * Build payload for creating a new article in Robaws
+     */
+    private function buildCreateArticlePayload(RobawsArticleCache $article, array $mainPayload, array $extraFields): array
+    {
+        $payload = [
+            'name' => $article->article_name ?? $article->sales_name,
+            'saleName' => $article->sales_name ?? $article->article_name,
+            'description' => $article->description,
+            'code' => $article->article_code ?? $article->article_number,
+            'articleNumber' => $article->article_number ?? $article->article_code,
+            'unitType' => $article->unit_type,
+            'salePrice' => $article->unit_price,
+            'costPrice' => $article->cost_price,
+            'salePriceStrategy' => $article->sale_price_strategy,
+            'costPriceStrategy' => $article->cost_price_strategy,
+            'margin' => $article->margin,
+            'weightKg' => $article->weight_kg,
+            'vatTariffId' => $article->vat_tariff_id,
+            'stockArticle' => $article->stock_article,
+            'timeOperation' => $article->time_operation,
+            'installation' => $article->installation,
+            'wappy' => $article->wappy,
+            'imageId' => $article->image_id,
+            'brand' => $article->brand,
+            'barcode' => $article->barcode,
+            'category' => $article->category,
+            'currency' => $article->currency,
+        ];
+
+        // Remove nulls but keep false/0 values
+        $payload = array_filter($payload, fn($value) => $value !== null);
+
+        if (!empty($mainPayload)) {
+            $payload = array_merge($payload, $mainPayload);
+        }
+        if (!empty($extraFields)) {
+            $payload['extraFields'] = $extraFields;
+        }
+
+        return $payload;
+    }
+
+    /**
      * Get field value from article using getter configuration
      */
     private function getFieldValue(RobawsArticleCache $article, array $config)
@@ -846,6 +889,8 @@ class RobawsArticlePushService
                     }
                 }
                 
+                $isCreating = str_starts_with((string) $article->robaws_article_id, 'LOCAL_') || empty($currentArticle);
+
                 // Filter out fields that are already set to the same value in Robaws
                 // CRITICAL: SELECT fields that don't exist in Robaws cannot be created - Robaws silently rejects them
                 // Only push SELECT fields if they already exist in Robaws (can be updated) or if we're updating an existing value
@@ -860,7 +905,7 @@ class RobawsArticlePushService
                     // Robaws requires SELECT field values to be predefined options - you can't create new ones via API
                     // TEXT and CHECKBOX fields can be created if they don't exist
                     // Note: A SELECT field can exist in Robaws with a null value, so we check key existence, not value null
-                    if ($fieldData['type'] === 'SELECT' && !$fieldExistsInRobaws) {
+                    if ($fieldData['type'] === 'SELECT' && !$fieldExistsInRobaws && !$isCreating) {
                         // #region agent log
                         $this->debugLog('RobawsArticlePushService.php:489', 'Skipping SELECT field (does not exist in Robaws)', [
                             'field_name' => $fieldName,
@@ -1056,7 +1101,8 @@ class RobawsArticlePushService
                 if (!($response['success'] ?? false)
                     && ($response['status'] ?? null) === 404
                     && str_starts_with((string) $article->robaws_article_id, 'LOCAL_')) {
-                    $createResponse = $this->apiClient->createArticle($payload);
+                    $createPayload = $this->buildCreateArticlePayload($article, $filteredMainArticlePayload, $filteredExtraFields);
+                    $createResponse = $this->apiClient->createArticle($createPayload);
 
                     // #region agent log
                     $this->debugLog('RobawsArticlePushService.php:478', 'Create article response received', [
