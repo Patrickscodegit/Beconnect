@@ -308,11 +308,17 @@ class CarrierRuleEngine
             }
 
             $isLoadedCargo = ($input->relationshipType === 'loaded_with') && !empty($input->relatedItemId);
-            if ($isLoadedCargo) {
-                $loadedMode = strtoupper((string) ($rule->loaded_cargo_mode ?? 'IGNORE'));
-                if ($loadedMode === 'FREE') {
-                    continue;
-                }
+            $eventCode = strtoupper((string) ($rule->event_code ?? ''));
+            $isLoadedCargoRule = $eventCode === 'LOADED_CARGO';
+
+            // Loaded cargo is only priced by the dedicated LOADED_CARGO event.
+            if ($isLoadedCargo && !$isLoadedCargoRule) {
+                continue;
+            }
+
+            // LOADED_CARGO should never apply to non-loaded items.
+            if (!$isLoadedCargo && $isLoadedCargoRule) {
+                continue;
             }
 
             $calculation = $this->surchargeCalculator->calculate(

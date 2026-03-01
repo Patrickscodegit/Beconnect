@@ -1333,7 +1333,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->required()
                                             ->maxLength(50)
                                             ->placeholder('e.g., TRACKING_PERCENT, OVERWIDTH_STEP_BLOCKS')
-                                            ->helperText('Unique identifier for this surcharge event')
+                                            ->helperText('Use LOADED_CARGO only for loaded_with items; other events are ignored for loaded cargo.')
                                             ->columnSpan(1),
 
                                         Forms\Components\Select::make('loaded_cargo_mode')

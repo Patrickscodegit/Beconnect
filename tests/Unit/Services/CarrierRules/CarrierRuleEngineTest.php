@@ -155,6 +155,67 @@ class CarrierRuleEngineTest extends TestCase
     }
 
     /** @test */
+    public function it_applies_loaded_cargo_as_dedicated_event_only()
+    {
+        CarrierSurchargeRule::create([
+            'carrier_id' => $this->carrier->id,
+            'event_code' => 'LOADED_CARGO',
+            'name' => 'Loaded Cargo Surcharge',
+            'calc_mode' => 'PER_UNIT',
+            'params' => ['amount' => 25],
+            'priority' => 10,
+            'is_active' => true,
+            'effective_from' => now()->subYear(),
+        ]);
+
+        CarrierSurchargeRule::create([
+            'carrier_id' => $this->carrier->id,
+            'event_code' => 'TOWING',
+            'name' => 'Towing Surcharge',
+            'calc_mode' => 'PER_UNIT',
+            'params' => ['amount' => 150],
+            'priority' => 10,
+            'is_active' => true,
+            'effective_from' => now()->subYear(),
+        ]);
+
+        $loadedInput = new CargoInputDTO(
+            carrierId: $this->carrier->id,
+            podPortId: null,
+            lengthCm: 500,
+            widthCm: 200,
+            heightCm: 180,
+            cbm: 18,
+            weightKg: 1500,
+            unitCount: 1,
+            category: 'car',
+            relationshipType: 'loaded_with',
+            relatedItemId: 123
+        );
+
+        $loadedResult = $this->engine->processCargo($loadedInput);
+        $this->assertCount(1, $loadedResult->surchargeEvents);
+        $this->assertEquals('LOADED_CARGO', $loadedResult->surchargeEvents[0]['event_code']);
+
+        $separateInput = new CargoInputDTO(
+            carrierId: $this->carrier->id,
+            podPortId: null,
+            lengthCm: 500,
+            widthCm: 200,
+            heightCm: 180,
+            cbm: 18,
+            weightKg: 1500,
+            unitCount: 1,
+            category: 'car',
+            relationshipType: 'separate'
+        );
+
+        $separateResult = $this->engine->processCargo($separateInput);
+        $this->assertCount(1, $separateResult->surchargeEvents);
+        $this->assertEquals('TOWING', $separateResult->surchargeEvents[0]['event_code']);
+    }
+
+    /** @test */
     public function it_applies_exclusive_group_logic()
     {
         // Create two overwidth rules in same exclusive group
