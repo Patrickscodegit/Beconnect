@@ -26,6 +26,7 @@ class CarrierSurchargeRule extends Model
         'vessel_class',
         'vessel_classes',
         'event_code',
+        'loaded_cargo_mode',
         'name',
         'calc_mode',
         'params',

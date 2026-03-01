@@ -1336,6 +1336,17 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->helperText('Unique identifier for this surcharge event')
                                             ->columnSpan(1),
 
+                                        Forms\Components\Select::make('loaded_cargo_mode')
+                                            ->label('Loaded Cargo')
+                                            ->options([
+                                                'IGNORE' => 'Ignore (default)',
+                                                'FREE' => 'Free for loaded cargo',
+                                                'CHARGE' => 'Charge for loaded cargo',
+                                            ])
+                                            ->default('IGNORE')
+                                            ->helperText('Applies only when the item is loaded_with another unit.')
+                                            ->columnSpan(1),
+
                                         Forms\Components\Select::make('article_id')
                                             ->label('Robaws Article')
                                             ->options(function ($get, $livewire) {

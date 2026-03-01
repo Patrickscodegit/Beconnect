@@ -307,6 +307,14 @@ class CarrierRuleEngine
                 continue; // Skip if another rule in same exclusive group already applied
             }
 
+            $isLoadedCargo = ($input->relationshipType === 'loaded_with') && !empty($input->relatedItemId);
+            if ($isLoadedCargo) {
+                $loadedMode = strtoupper((string) ($rule->loaded_cargo_mode ?? 'IGNORE'));
+                if ($loadedMode === 'FREE') {
+                    continue;
+                }
+            }
+
             $calculation = $this->surchargeCalculator->calculate(
                 $rule,
                 $input,
