@@ -216,6 +216,57 @@ class CarrierRuleEngineTest extends TestCase
     }
 
     /** @test */
+    public function it_forces_loaded_cargo_free_override_for_seafreight()
+    {
+        $article = RobawsArticleCache::create([
+            'robaws_article_id' => 'LOCAL_TEST_1',
+            'article_code' => 'SEA_TEST',
+            'article_name' => 'Seafreight Test Article',
+            'category' => 'seafreight',
+            'service_type' => 'SEAFREIGHT',
+            'article_type' => 'SEAFREIGHT SURCHARGES',
+            'cost_side' => 'SEA',
+            'unit_price' => 120,
+            'currency' => 'EUR',
+            'unit_type' => 'unit',
+            'is_active' => true,
+            'last_synced_at' => now(),
+        ]);
+
+        CarrierSurchargeRule::create([
+            'carrier_id' => $this->carrier->id,
+            'event_code' => 'LOADED_CARGO',
+            'name' => 'Loaded Cargo Surcharge',
+            'calc_mode' => 'PER_UNIT',
+            'params' => ['amount' => 25],
+            'loaded_cargo_mode' => 'FREE',
+            'priority' => 10,
+            'is_active' => true,
+            'effective_from' => now()->subYear(),
+            'article_id' => $article->id,
+        ]);
+
+        $input = new CargoInputDTO(
+            carrierId: $this->carrier->id,
+            podPortId: null,
+            lengthCm: 500,
+            widthCm: 200,
+            heightCm: 180,
+            cbm: 18,
+            weightKg: 1500,
+            unitCount: 1,
+            category: 'car',
+            relationshipType: 'loaded_with',
+            relatedItemId: 123
+        );
+
+        $result = $this->engine->processCargo($input);
+        $this->assertCount(1, $result->quoteLineDrafts);
+        $this->assertEquals('LOADED_CARGO', $result->quoteLineDrafts[0]['meta']['event_code']);
+        $this->assertSame(0, $result->quoteLineDrafts[0]['amount_override']);
+    }
+
+    /** @test */
     public function it_applies_exclusive_group_logic()
     {
         // Create two overwidth rules in same exclusive group

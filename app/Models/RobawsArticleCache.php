@@ -132,6 +132,31 @@ class RobawsArticleCache extends Model
         'max_dimensions_breakdown' => 'array',
     ];
 
+    public function isSeafreight(): bool
+    {
+        $category = strtolower((string) ($this->category ?? ''));
+        if ($category === 'seafreight') {
+            return true;
+        }
+
+        $serviceType = strtoupper((string) ($this->service_type ?? ''));
+        if (str_contains($serviceType, 'SEAFREIGHT')) {
+            return true;
+        }
+
+        $articleType = strtoupper((string) ($this->article_type ?? ''));
+        if (str_contains($articleType, 'SEAFREIGHT')) {
+            return true;
+        }
+
+        $costSide = strtoupper((string) ($this->cost_side ?? ''));
+        if ($costSide === 'SEA') {
+            return true;
+        }
+
+        return false;
+    }
+
     protected static function boot()
     {
         parent::boot();

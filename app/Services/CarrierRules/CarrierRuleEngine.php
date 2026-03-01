@@ -303,6 +303,9 @@ class CarrierRuleEngine
         foreach ($rules as $rule) {
             // Check exclusive group
             $exclusiveGroup = $rule->getExclusiveGroup();
+            if (!$exclusiveGroup && strtoupper((string) ($rule->event_code ?? '')) === 'LOADED_CARGO') {
+                $exclusiveGroup = 'LOADED_CARGO';
+            }
             if ($exclusiveGroup && isset($exclusiveGroups[$exclusiveGroup])) {
                 continue; // Skip if another rule in same exclusive group already applied
             }
@@ -341,6 +344,8 @@ class CarrierRuleEngine
                 'params' => $rule->params,
                 'matched_rule_id' => $rule->id,
                 'reason' => $this->getSurchargeReason($rule, $input, $calculation),
+                'is_loaded_cargo' => $isLoadedCargo,
+                'loaded_cargo_mode' => $rule->loaded_cargo_mode ?? null,
             ];
 
             // Mark exclusive group as used
@@ -397,14 +402,30 @@ class CarrierRuleEngine
                 continue; // No article assigned to rule
             }
 
+            $article = \App\Models\RobawsArticleCache::find($rule->article_id);
+            $isSeafreight = $article?->isSeafreight() ?? false;
+            $isLoadedCargo = (bool) ($event['is_loaded_cargo'] ?? false);
+            $loadedCargoMode = strtoupper((string) ($event['loaded_cargo_mode'] ?? ''));
+            $forceLoadedCargoFree = $isLoadedCargo
+                && $loadedCargoMode === 'FREE'
+                && strtoupper((string) ($event['event_code'] ?? '')) === 'LOADED_CARGO'
+                && $isSeafreight;
+
+            $amountOverride = ($event['amount'] ?? 0) > 0 ? $event['amount'] : null;
+            if ($forceLoadedCargoFree) {
+                $amountOverride = 0;
+            }
+
             $drafts[] = [
                 'article_id' => $rule->article_id,
                 'qty' => $event['qty'],
-                'amount_override' => $event['amount'] > 0 ? $event['amount'] : null,
+                'amount_override' => $amountOverride,
                 'meta' => [
                     'event_code' => $event['event_code'],
                     'reason' => $event['reason'],
                     'matched_rule_id' => $event['matched_rule_id'],
+                    'is_loaded_cargo' => $isLoadedCargo,
+                    'loaded_cargo_mode' => $loadedCargoMode,
                 ],
             ];
         }

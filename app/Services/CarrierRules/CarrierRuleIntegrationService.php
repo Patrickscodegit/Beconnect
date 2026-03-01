@@ -266,20 +266,6 @@ class CarrierRuleIntegrationService
                     ->first();
             }
 
-            if ($existingArticle) {
-                // Update quantity and notes if needed
-                if ($draft['qty'] > 0) {
-                    $existingArticle->quantity = $draft['qty'];
-                }
-                
-                $existingArticle->carrier_rule_applied = true;
-                $existingArticle->carrier_rule_event_code = $draft['meta']['event_code'] ?? null;
-                $existingArticle->carrier_rule_commodity_item_id = $item->id;
-                
-                $existingArticle->save();
-                continue;
-            }
-
             // Get article
             $article = RobawsArticleCache::find($draft['article_id']);
             if (!$article) {
@@ -288,6 +274,11 @@ class CarrierRuleIntegrationService
                 ]);
                 continue;
             }
+
+            $forceLoadedCargoFree = ($draft['meta']['event_code'] ?? null) === 'LOADED_CARGO'
+                && ($draft['meta']['loaded_cargo_mode'] ?? null) === 'FREE'
+                && ($draft['meta']['is_loaded_cargo'] ?? false)
+                && $article->isSeafreight();
 
             // Calculate selling price
             $sellingPrice = null;
@@ -306,6 +297,27 @@ class CarrierRuleIntegrationService
 
             // Use amount override if provided, otherwise use selling price
             $unitPrice = $draft['amount_override'] ?? $sellingPrice ?? $article->unit_price ?? 0;
+            if ($forceLoadedCargoFree) {
+                $unitPrice = 0;
+            }
+
+            if ($existingArticle) {
+                // Update quantity and pricing if needed
+                if ($draft['qty'] > 0) {
+                    $existingArticle->quantity = $draft['qty'];
+                }
+
+                $existingArticle->unit_price = $article->unit_price ?? 0;
+                $existingArticle->selling_price = $unitPrice;
+                $existingArticle->subtotal = $unitPrice * $draft['qty'];
+                $existingArticle->currency = $article->currency ?? 'EUR';
+                $existingArticle->carrier_rule_applied = true;
+                $existingArticle->carrier_rule_event_code = $draft['meta']['event_code'] ?? null;
+                $existingArticle->carrier_rule_commodity_item_id = $item->id;
+
+                $existingArticle->save();
+                continue;
+            }
 
             // Create article
             QuotationRequestArticle::create([
