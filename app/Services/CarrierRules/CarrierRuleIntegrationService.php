@@ -105,6 +105,9 @@ class CarrierRuleIntegrationService
             // Sync surcharge articles: remove old ones no longer applicable, add/update new ones
             $this->syncSurchargeArticles($quotation, $result->quoteLineDrafts, $item);
 
+            // Apply loaded-cargo FREE override to loaded item seafreight line if needed
+            $this->applyLoadedCargoSeafreightOverride($quotation, $item, $input);
+
             // Sync carrier clauses to quotation (for display on customer/admin/PDF)
             $this->syncCarrierClauses($quotation, $input->carrierId, $input->podPortId, $input->vesselName, $input->vesselClass);
             
@@ -128,6 +131,88 @@ class CarrierRuleIntegrationService
                 'trace' => $e->getTraceAsString(),
             ]);
         }
+    }
+
+    private function applyLoadedCargoSeafreightOverride(
+        QuotationRequest $quotation,
+        QuotationCommodityItem $item,
+        CargoInputDTO $input
+    ): void {
+        if (($item->relationship_type ?? null) !== 'loaded_with' || empty($item->related_item_id)) {
+            return;
+        }
+
+        $rules = $this->resolver->resolveSurchargeRules(
+            $input->carrierId,
+            $input->podPortId,
+            $input->category,
+            $input->categoryGroupId,
+            $input->vesselName,
+            $input->vesselClass,
+            $input->commodityItemId
+        );
+
+        $loadedRule = $rules->first(fn ($rule) => strtoupper((string) ($rule->event_code ?? '')) === 'LOADED_CARGO');
+        if (!$loadedRule) {
+            return;
+        }
+
+        $mode = strtoupper((string) ($loadedRule->loaded_cargo_mode ?? ''));
+        if ($mode === '' || $mode === 'IGNORE') {
+            return;
+        }
+
+        $types = QuotationCommodityItem::normalizeCommodityTypes($item);
+        if (empty($types)) {
+            return;
+        }
+        $typesUpper = array_map(fn ($t) => strtoupper(trim((string) $t)), $types);
+
+        $articles = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+            ->whereIn('item_type', ['parent', 'standalone'])
+            ->with('articleCache')
+            ->get()
+            ->filter(function ($articleRecord) use ($typesUpper) {
+                $article = $articleRecord->articleCache;
+                if (!$article || !$article->isSeafreight()) {
+                    return false;
+                }
+                $commodityType = strtoupper(trim((string) ($article->commodity_type ?? '')));
+                return $commodityType !== '' && in_array($commodityType, $typesUpper, true);
+            });
+
+        if ($articles->isEmpty()) {
+            return;
+        }
+
+        foreach ($articles as $articleRecord) {
+            $article = $articleRecord->articleCache;
+            $sellingPrice = null;
+            try {
+                if ($quotation->pricing_tier_id && $quotation->pricingTier) {
+                    $sellingPrice = $article->getPriceForTier($quotation->pricingTier);
+                }
+            } catch (\Exception $e) {
+                $sellingPrice = null;
+            }
+
+            if ($sellingPrice === null) {
+                $role = $quotation->customer_role ?? 'default';
+                $sellingPrice = $article->getPriceForRole($role);
+            }
+
+            $finalPrice = $sellingPrice ?? $article->unit_price ?? 0;
+            if ($mode === 'FREE') {
+                $finalPrice = 0;
+            }
+
+            $articleRecord->selling_price = $finalPrice;
+            $articleRecord->subtotal = $finalPrice * ($articleRecord->quantity ?? 1);
+            $articleRecord->save();
+        }
+
+        $quotation->calculateTotals();
+        $quotation->save();
     }
 
     private function syncCarrierClauses(

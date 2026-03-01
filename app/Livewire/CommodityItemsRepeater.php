@@ -1198,6 +1198,14 @@ class CommodityItemsRepeater extends Component
             $index = (int) $matches[1];
             $currentItem = $this->items[$index];
             $newRelationshipType = $currentItem['relationship_type'] ?? 'separate';
+
+            if (isset($currentItem['id'])
+                && is_string($currentItem['id'])
+                && str_starts_with($currentItem['id'], 'temp_')
+                && !empty($currentItem['commodity_type'])) {
+                $this->createItemInDatabase($index, $currentItem);
+                return;
+            }
             
             // If relationship_type is set to 'separate', clear related_item_id and update related item
             if ($newRelationshipType === 'separate') {
@@ -1227,6 +1235,14 @@ class CommodityItemsRepeater extends Component
             $relatedItemId = $currentItem['related_item_id'] ?? null;
             $currentItemId = $currentItem['id'] ?? null;
             $relationshipType = $currentItem['relationship_type'] ?? 'separate';
+
+            if (isset($currentItem['id'])
+                && is_string($currentItem['id'])
+                && str_starts_with($currentItem['id'], 'temp_')
+                && !empty($currentItem['commodity_type'])) {
+                $this->createItemInDatabase($index, $currentItem);
+                return;
+            }
             
             // Prevent item from relating to itself
             if ($relatedItemId && $currentItemId && $relatedItemId == $currentItemId) {
@@ -1383,6 +1399,7 @@ class CommodityItemsRepeater extends Component
         }
         
         try {
+            $tempId = $item['id'] ?? null;
             // Prepare data for database creation
             $data = [
                 'quotation_request_id' => $this->quotationId,
@@ -1432,9 +1449,14 @@ class CommodityItemsRepeater extends Component
             
             // Update the item's ID from temporary to database ID
             $this->items[$index]['id'] = $dbItem->id;
+            if ($tempId && is_string($tempId) && str_starts_with($tempId, 'temp_')) {
+                $this->items[$index]['temp_id'] = $tempId;
+            }
             if (empty($this->items[$index]['local_id'])) {
                 $this->items[$index]['local_id'] = 'local_' . $dbItem->id;
             }
+
+            $this->replaceTempRelatedItemIds($tempId, $dbItem->id);
             
             // Touch parent quotation to update updated_at timestamp
             // This ensures cache keys change when commodity items are created
@@ -1444,7 +1466,7 @@ class CommodityItemsRepeater extends Component
                 'item_id' => $dbItem->id,
                 'quotation_id' => $this->quotationId,
                 'commodity_type' => $item['commodity_type'],
-                'temp_id' => $item['id']
+                'temp_id' => $tempId
             ]);
             
             // Dispatch event to parent component when commodity_type is saved
@@ -1688,18 +1710,34 @@ class CommodityItemsRepeater extends Component
         // If it's a temporary ID, find the corresponding item in $this->items
         if (is_string($relatedItemId) && strpos($relatedItemId, 'temp_') === 0) {
             foreach ($this->items as $item) {
-                if (isset($item['id']) && $item['id'] === $relatedItemId) {
-                    // If this item has a database ID, return it
-                    if (isset($item['id']) && is_numeric($item['id'])) {
-                        return (int) $item['id'];
+                $itemTempId = $item['temp_id'] ?? null;
+                $itemId = $item['id'] ?? null;
+                if ($itemTempId === $relatedItemId) {
+                    if ($itemId && is_numeric($itemId)) {
+                        return (int) $itemId;
                     }
-                    // Otherwise, the related item hasn't been saved yet, return null
                     return null;
                 }
             }
         }
 
         return null;
+    }
+
+    protected function replaceTempRelatedItemIds(?string $tempId, int $newId): void
+    {
+        if (!$tempId || !is_string($tempId) || !str_starts_with($tempId, 'temp_')) {
+            return;
+        }
+
+        foreach ($this->items as $idx => $item) {
+            if (($item['related_item_id'] ?? null) === $tempId) {
+                $this->items[$idx]['related_item_id'] = $newId;
+                if (isset($this->items[$idx]['id']) && is_numeric($this->items[$idx]['id']) && $this->quotationId) {
+                    $this->saveItemToDatabase($idx, $this->items[$idx]);
+                }
+            }
+        }
     }
 
     protected function clearItemLmCbm(int $index): void
