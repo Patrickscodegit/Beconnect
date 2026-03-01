@@ -9,6 +9,7 @@ use Filament\Resources\Pages\ViewRecord;
 use Filament\Infolists;
 use Filament\Infolists\Infolist;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Str;
 
 class ViewRobawsArticle extends ViewRecord
 {
@@ -17,6 +18,54 @@ class ViewRobawsArticle extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('duplicate')
+                ->label('Copy')
+                ->icon('heroicon-o-document-duplicate')
+                ->color('gray')
+                ->requiresConfirmation()
+                ->modalHeading('Copy this article?')
+                ->modalDescription('A new local article will be created so it can be edited and pushed to Robaws as a new article.')
+                ->action(function () {
+                    $record = $this->record;
+                    $copy = $record->replicate();
+
+                    $copy->robaws_article_id = 'LOCAL_' . Str::uuid()->toString();
+                    $copy->last_synced_at = null;
+                    $copy->last_modified_at = null;
+                    $copy->last_pushed_dates_at = null;
+                    $copy->last_pushed_update_date = null;
+                    $copy->last_pushed_validity_date = null;
+                    $copy->last_pushed_to_robaws_at = null;
+
+                    $baseName = trim($record->article_name . ' (Copy)');
+                    $name = $baseName;
+                    $nameIndex = 2;
+                    while (\App\Models\RobawsArticleCache::where('article_name', $name)->exists()) {
+                        $name = $baseName . ' ' . $nameIndex;
+                        $nameIndex++;
+                    }
+                    $copy->article_name = $name;
+
+                    $baseCodeSource = $record->article_code ?: Str::slug($record->article_name, '-');
+                    $baseCode = trim($baseCodeSource . '-COPY', '-');
+                    $code = $baseCode;
+                    $codeIndex = 2;
+                    while (\App\Models\RobawsArticleCache::where('article_code', $code)->exists()) {
+                        $code = $baseCode . '-' . $codeIndex;
+                        $codeIndex++;
+                    }
+                    $copy->article_code = $code;
+
+                    $copy->save();
+
+                    Notification::make()
+                        ->title('Article copied')
+                        ->body("Created copy: {$copy->article_name}")
+                        ->success()
+                        ->send();
+
+                    return redirect()->route('filament.admin.resources.robaws-articles.edit', ['record' => $copy]);
+                }),
             Actions\Action::make('push_to_robaws')
                 ->label('Push to Robaws')
                 ->icon('heroicon-o-arrow-up-tray')
