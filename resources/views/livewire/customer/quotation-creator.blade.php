@@ -346,9 +346,11 @@
                     @php
                         // Get the QuotationRequestArticle model to access methods
                         // The pivot relationship gives us access to the pivot data, but we need the full model
-                        $articleModel = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotation->id)
-                            ->where('article_cache_id', $article->id)
-                            ->first();
+                        $articleModel = $article->pivot?->id
+                            ? \App\Models\QuotationRequestArticle::find($article->pivot->id)
+                            : \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+                                ->where('article_cache_id', $article->id)
+                                ->first();
                         $isLmArticle = strtoupper(trim($article->pivot->unit_type ?? '')) === 'LM';
                         $lmBreakdown = $articleModel ? $articleModel->getLmCalculationBreakdown() : null;
                     @endphp
@@ -373,7 +375,7 @@
                                             ?? $article->pivot->selling_price
                                             ?? $article->pivot->unit_price
                                             ?? 0;
-                                        $subtotal = $article->pivot->subtotal ?? ($displayQty * $unitPrice);
+                                        $subtotal = $articleModel?->subtotal ?? $article->pivot->subtotal ?? ($displayQty * $unitPrice);
                                     @endphp
                                     <br>
                                     Qty: {{ number_format($displayQty, 2) }} × 

@@ -351,6 +351,7 @@ class AdditionalServicesSelectionService
                 'commodity_types' => $context['commodity_types'],
                 'vehicle_categories' => $context['categories'],
                 'line_numbers' => $context['line_numbers'],
+                'member_ids' => $context['member_ids'] ?? [],
                 'is_combination' => $context['is_combination'],
             ],
         ];

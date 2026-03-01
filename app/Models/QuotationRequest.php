@@ -339,7 +339,7 @@ class QuotationRequest extends Model
     public function articles(): BelongsToMany
     {
         return $this->belongsToMany(RobawsArticleCache::class, 'quotation_request_articles', 'quotation_request_id', 'article_cache_id')
-            ->withPivot(['parent_article_id', 'item_type', 'quantity', 'unit_price', 'unit_type', 'selling_price', 'subtotal', 'currency', 'formula_inputs', 'calculated_price', 'notes'])
+            ->withPivot(['id', 'parent_article_id', 'item_type', 'quantity', 'unit_price', 'unit_type', 'selling_price', 'subtotal', 'currency', 'formula_inputs', 'calculated_price', 'notes'])
             ->withTimestamps()
             ->orderBy('quotation_request_articles.id'); // Preserve insertion order
     }

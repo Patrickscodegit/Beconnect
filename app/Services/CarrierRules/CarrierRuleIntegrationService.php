@@ -172,11 +172,19 @@ class CarrierRuleIntegrationService
             ->whereIn('item_type', ['parent', 'standalone'])
             ->with('articleCache')
             ->get()
-            ->filter(function ($articleRecord) use ($typesUpper) {
+            ->filter(function ($articleRecord) use ($typesUpper, $item) {
                 $article = $articleRecord->articleCache;
                 if (!$article || !$article->isSeafreight()) {
                     return false;
                 }
+
+                $serviceContext = $articleRecord->formula_inputs['service_context'] ?? null;
+                if (is_array($serviceContext) && !empty($serviceContext['member_ids'])) {
+                    if (!in_array($item->id, $serviceContext['member_ids'], true)) {
+                        return false;
+                    }
+                }
+
                 $commodityType = strtoupper(trim((string) ($article->commodity_type ?? '')));
                 return $commodityType !== '' && in_array($commodityType, $typesUpper, true);
             });

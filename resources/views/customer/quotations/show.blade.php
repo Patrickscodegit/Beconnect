@@ -358,9 +358,11 @@
                         @foreach($quotationRequest->articles as $article)
                             @php
                                 // Get the QuotationRequestArticle model to access methods
-                                $articleModel = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotationRequest->id)
-                                    ->where('article_cache_id', $article->id)
-                                    ->first();
+                                $articleModel = $article->pivot?->id
+                                    ? \App\Models\QuotationRequestArticle::find($article->pivot->id)
+                                    : \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotationRequest->id)
+                                        ->where('article_cache_id', $article->id)
+                                        ->first();
                                 $isLmArticle = strtoupper(trim($article->pivot->unit_type ?? $article->unit_type ?? '')) === 'LM';
                                 $lmBreakdown = $articleModel ? $articleModel->getLmCalculationBreakdown() : null;
                                 $unitType = strtoupper(trim($article->pivot->unit_type ?? $article->unit_type ?? 'UNIT'));
@@ -370,7 +372,7 @@
                                     ?? $article->pivot->unit_price
                                     ?? $article->unit_price
                                     ?? 0;
-                                $subtotal = $article->pivot->subtotal ?? ($displayQty * $unitPrice);
+                                $subtotal = $articleModel?->subtotal ?? $article->pivot->subtotal ?? ($displayQty * $unitPrice);
                                 // Primary display: sales_name > article_name > description
                                 $primaryName = $article->sales_name ?? $article->article_name ?? $article->description ?? 'N/A';
                                 // Secondary description if different from primary

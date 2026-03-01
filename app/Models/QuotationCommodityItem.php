@@ -1103,6 +1103,7 @@ class QuotationCommodityItem extends Model
                     'commodity_types' => $context['commodity_types'],
                     'vehicle_categories' => $context['categories'],
                     'line_numbers' => $context['line_numbers'],
+                    'member_ids' => $context['member_ids'] ?? [],
                     'is_combination' => $context['is_combination'],
                 ],
             ]);
@@ -1180,6 +1181,7 @@ class QuotationCommodityItem extends Model
                 'categories' => $categories,
                 'commodity_types' => $commodityTypes,
                 'line_numbers' => $lineNumbers,
+                'member_ids' => $stackMembers->pluck('id')->all(),
                 'is_combination' => $isCombination,
             ];
         }
