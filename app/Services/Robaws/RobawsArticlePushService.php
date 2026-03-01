@@ -170,6 +170,11 @@ class RobawsArticlePushService
      * Main article fields mapping (fields that go in the main article payload, not extraFields)
      */
     private const MAIN_ARTICLE_FIELDS = [
+        'article_name' => [
+            'robaws_field' => 'name',
+            'label' => 'Article Name',
+            'group' => 'ARTICLE INFO',
+        ],
         'sales_name' => [
             'robaws_field' => 'saleName',
             'label' => 'Salesname',
@@ -481,9 +486,18 @@ class RobawsArticlePushService
      */
     private function buildCreateArticlePayload(RobawsArticleCache $article, array $mainPayload, array $extraFields): array
     {
+        $nameValue = $article->article_name
+            ?? $article->sales_name
+            ?? $article->article_code
+            ?? $article->article_number;
+        $saleNameValue = $article->sales_name
+            ?? $article->article_name
+            ?? $article->article_code
+            ?? $article->article_number;
+
         $payload = [
-            'name' => $article->article_name ?? $article->sales_name,
-            'saleName' => $article->sales_name ?? $article->article_name,
+            'name' => $nameValue,
+            'saleName' => $saleNameValue,
             'description' => $article->description,
             'code' => $article->article_code ?? $article->article_number,
             'articleNumber' => $article->article_number ?? $article->article_code,
