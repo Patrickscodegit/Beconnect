@@ -28,7 +28,7 @@ class EditRobawsArticle extends EditRecord
                     $copy = $record->replicate();
 
                     $copy->robaws_article_id = 'LOCAL_' . Str::uuid()->toString();
-                    $copy->last_synced_at = null;
+                    $copy->last_synced_at = $record->last_synced_at ?? now();
                     $copy->last_modified_at = null;
                     $copy->last_pushed_dates_at = null;
                     $copy->last_pushed_update_date = null;
