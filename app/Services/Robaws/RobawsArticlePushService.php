@@ -850,6 +850,7 @@ class RobawsArticlePushService
                 // CRITICAL: SELECT fields that don't exist in Robaws cannot be created - Robaws silently rejects them
                 // Only push SELECT fields if they already exist in Robaws (can be updated) or if we're updating an existing value
                 $filteredExtraFields = [];
+                $currentExtraFields = is_array($currentExtraFields) ? $currentExtraFields : [];
                 foreach ($extraFields as $fieldName => $fieldData) {
                     // Check if field exists in Robaws (key exists, even if value is null)
                     $fieldExistsInRobaws = array_key_exists($fieldName, $currentExtraFields);
