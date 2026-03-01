@@ -296,4 +296,79 @@ class QuotationCarrierRulesIntegrationTest extends TestCase
             'carrier_rule_commodity_item_id' => $item->id,
         ]);
     }
+
+    #[Test]
+    public function it_sets_unit_price_zero_for_loaded_cargo_free(): void
+    {
+        $carrier = $this->createCarrier();
+        $pol = $this->createPort('Antwerp', 'ANR');
+        $pod = $this->createPort('Abidjan', 'ABJ');
+        $schedule = $this->createSchedule($carrier, $pol, $pod);
+
+        $quotation = $this->createQuotation([
+            'selected_schedule_id' => $schedule->id,
+            'pol' => $pol->formatFull(),
+            'pod' => $pod->formatFull(),
+            'pol_port_id' => $pol->id,
+            'pod_port_id' => $pod->id,
+        ]);
+
+        $baseItem = QuotationCommodityItem::create([
+            'quotation_request_id' => $quotation->id,
+            'line_number' => 1,
+            'commodity_type' => 'vehicles',
+            'category' => 'car',
+            'quantity' => 1,
+        ]);
+
+        $loadedItem = QuotationCommodityItem::create([
+            'quotation_request_id' => $quotation->id,
+            'line_number' => 2,
+            'commodity_type' => 'vehicles',
+            'category' => 'car',
+            'quantity' => 1,
+            'relationship_type' => 'loaded_with',
+            'related_item_id' => $baseItem->id,
+        ]);
+
+        $surchargeArticle = RobawsArticleCache::create([
+            'robaws_article_id' => 'LOAD-001',
+            'article_name' => 'Loaded Cargo',
+            'category' => 'seafreight',
+            'is_active' => true,
+            'is_parent_item' => true,
+            'is_parent_article' => true,
+            'last_synced_at' => now(),
+            'unit_price' => 100,
+            'currency' => 'EUR',
+            'service_type' => 'RORO_EXPORT',
+            'transport_mode' => 'RORO',
+        ]);
+
+        CarrierSurchargeRule::create([
+            'carrier_id' => $carrier->id,
+            'port_id' => $pod->id,
+            'vehicle_category' => 'car',
+            'event_code' => 'LOADED_CARGO',
+            'loaded_cargo_mode' => 'FREE',
+            'name' => 'Loaded cargo free',
+            'calc_mode' => 'FLAT',
+            'params' => ['amount' => 100],
+            'is_active' => true,
+            'article_id' => $surchargeArticle->id,
+        ]);
+
+        $service = app(CarrierRuleIntegrationService::class);
+        $service->processCommodityItem($loadedItem->fresh(['quotationRequest.selectedSchedule.podPort']));
+
+        $quoteLine = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+            ->where('carrier_rule_event_code', 'LOADED_CARGO')
+            ->where('carrier_rule_commodity_item_id', $loadedItem->id)
+            ->first();
+
+        $this->assertNotNull($quoteLine);
+        $this->assertSame('0.00', (string) $quoteLine->unit_price);
+        $this->assertSame('0.00', (string) $quoteLine->selling_price);
+        $this->assertSame('0.00', (string) $quoteLine->subtotal);
+    }
 }

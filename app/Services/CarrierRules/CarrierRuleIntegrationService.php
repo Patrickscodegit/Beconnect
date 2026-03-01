@@ -207,6 +207,9 @@ class CarrierRuleIntegrationService
             }
 
             $articleRecord->selling_price = $finalPrice;
+            if ($mode === 'FREE') {
+                $articleRecord->unit_price = 0;
+            }
             $articleRecord->subtotal = $finalPrice * ($articleRecord->quantity ?? 1);
             $articleRecord->save();
         }
@@ -360,10 +363,14 @@ class CarrierRuleIntegrationService
                 continue;
             }
 
-            $forceLoadedCargoFree = ($draft['meta']['event_code'] ?? null) === 'LOADED_CARGO'
-                && ($draft['meta']['loaded_cargo_mode'] ?? null) === 'FREE'
-                && ($draft['meta']['is_loaded_cargo'] ?? false)
-                && $article->isSeafreight();
+            $eventCode = strtoupper((string) ($draft['meta']['event_code'] ?? ''));
+            $loadedCargoMode = strtoupper((string) ($draft['meta']['loaded_cargo_mode'] ?? ''));
+            $isLoadedCargo = (bool) ($draft['meta']['is_loaded_cargo'] ?? false);
+            $isLoadedCargoFree = $isLoadedCargo
+                && $loadedCargoMode === 'FREE'
+                && $eventCode === 'LOADED_CARGO';
+
+            $forceLoadedCargoFree = $isLoadedCargoFree && $article->isSeafreight();
 
             // Calculate selling price
             $sellingPrice = null;
@@ -382,7 +389,7 @@ class CarrierRuleIntegrationService
 
             // Use amount override if provided, otherwise use selling price
             $unitPrice = $draft['amount_override'] ?? $sellingPrice ?? $article->unit_price ?? 0;
-            if ($forceLoadedCargoFree) {
+            if ($forceLoadedCargoFree || $isLoadedCargoFree) {
                 $unitPrice = 0;
             }
 
@@ -392,7 +399,7 @@ class CarrierRuleIntegrationService
                     $existingArticle->quantity = $draft['qty'];
                 }
 
-                $existingArticle->unit_price = $article->unit_price ?? 0;
+                $existingArticle->unit_price = $isLoadedCargoFree ? 0 : ($article->unit_price ?? 0);
                 $existingArticle->selling_price = $unitPrice;
                 $existingArticle->subtotal = $unitPrice * $draft['qty'];
                 $existingArticle->currency = $article->currency ?? 'EUR';
@@ -411,7 +418,7 @@ class CarrierRuleIntegrationService
                 'item_type' => 'standalone',
                 'quantity' => $draft['qty'],
                 'unit_type' => $article->unit_type ?? 'unit',
-                'unit_price' => $article->unit_price ?? 0,
+                'unit_price' => $isLoadedCargoFree ? 0 : ($article->unit_price ?? 0),
                 'selling_price' => $unitPrice,
                 'subtotal' => $unitPrice * $draft['qty'],
                 'currency' => $article->currency ?? 'EUR',
