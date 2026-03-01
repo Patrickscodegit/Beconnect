@@ -2596,6 +2596,61 @@ final class RobawsApiClient implements RobawsApiClientInterface
     }
 
     /**
+     * Create an article in Robaws
+     * POST /api/v2/articles
+     *
+     * @param array $payload Create payload with extraFields structure
+     * @return array Response wrapper: ['success' => bool, 'data'|'error' => mixed, 'status' => int]
+     */
+    public function createArticle(array $payload): array
+    {
+        try {
+            $this->enforceRateLimit();
+
+            $jsonBody = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+            $response = $this->getHttpClient()
+                ->withHeaders([
+                    'Accept' => 'application/json',
+                ])
+                ->withBody($jsonBody, 'application/json')
+                ->post('/api/v2/articles');
+
+            $this->updateRateLimitsFromResponse($response);
+
+            $responseBody = $response->body();
+            $responseJson = $response->json();
+            $responseStatus = $response->status();
+
+            if ($response->successful()) {
+                return [
+                    'success' => true,
+                    'data' => $responseJson,
+                    'status' => $responseStatus,
+                    'body' => $responseBody,
+                ];
+            }
+
+            return [
+                'success' => false,
+                'error' => $responseBody,
+                'status' => $responseStatus,
+                'body' => $responseBody,
+            ];
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to create Robaws article', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'status' => 500,
+            ];
+        }
+    }
+
+    /**
      * Register webhook endpoint with Robaws
      */
     public function registerWebhook(array $payload): array

@@ -1052,6 +1052,40 @@ class RobawsArticlePushService
                 ]);
                 // #endregion
 
+                // If update fails with 404 for a local (new) article, attempt to create it
+                if (!($response['success'] ?? false)
+                    && ($response['status'] ?? null) === 404
+                    && str_starts_with((string) $article->robaws_article_id, 'LOCAL_')) {
+                    $createResponse = $this->apiClient->createArticle($payload);
+
+                    // #region agent log
+                    $this->debugLog('RobawsArticlePushService.php:478', 'Create article response received', [
+                        'article_id' => $article->id,
+                        'response_success' => $createResponse['success'] ?? false,
+                        'response_status' => $createResponse['status'] ?? null,
+                        'response_error' => $createResponse['error'] ?? null,
+                        'response_body' => $createResponse['body'] ?? null,
+                        'hypothesisId' => 'A,B,C,D,E',
+                    ]);
+                    // #endregion
+
+                    if ($createResponse['success'] ?? false) {
+                        $createdData = $createResponse['data'] ?? [];
+                        $newRobawsId = $createdData['id']
+                            ?? $createdData['articleId']
+                            ?? $createdData['robaws_article_id']
+                            ?? null;
+
+                        if ($newRobawsId) {
+                            $article->robaws_article_id = (string) $newRobawsId;
+                        }
+                        $article->last_pushed_to_robaws_at = now();
+                        $article->save();
+                    }
+
+                    $response = $createResponse;
+                }
+
                 if ($response['success'] ?? false) {
                     // Verify the update by fetching the article again
                     $verificationFields = null;
