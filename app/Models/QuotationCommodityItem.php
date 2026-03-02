@@ -176,21 +176,16 @@ class QuotationCommodityItem extends Model
      */
     public function getStackGroup(): ?int
     {
-        // If this item is separate or is a base (others point to it), it's the base
-        if ($this->isSeparate() || $this->isStackBase()) {
-            return $this->id;
-        }
-        
-        // If this item is loaded_with or connected_to another, find the base
         if ($this->related_item_id) {
             $baseItem = static::find($this->related_item_id);
             if ($baseItem) {
-                // Recursively find the base (in case of chains)
+                // Recursively find the top-most base (in case of chains)
                 return $baseItem->getStackGroup();
             }
         }
-        
-        return $this->id; // Fallback: this item is the base
+
+        // No related item: this is the base
+        return $this->id;
     }
 
     /**
@@ -238,6 +233,10 @@ class QuotationCommodityItem extends Model
      */
     public function isStackBase(): bool
     {
+        if (!empty($this->related_item_id)) {
+            return false;
+        }
+
         return static::where('quotation_request_id', $this->quotation_request_id)
             ->where('related_item_id', $this->id)
             ->whereIn('relationship_type', ['loaded_with', 'connected_to'])
@@ -1104,6 +1103,39 @@ class QuotationCommodityItem extends Model
             ->sortBy('base_line_number')
             ->values();
 
+        if ($lmArticles->count() < $contextsByIndex->count()) {
+            $baseArticle = $lmArticles->first();
+            $baseCache = $baseArticle->relationLoaded('articleCache') ? $baseArticle->articleCache : null;
+            if (!$baseCache) {
+                $baseCache = \App\Models\RobawsArticleCache::find($baseArticle->article_cache_id);
+            }
+
+            $missingCount = $contextsByIndex->count() - $lmArticles->count();
+            for ($i = 0; $i < $missingCount; $i++) {
+                QuotationRequestArticle::create([
+                    'quotation_request_id' => $quotation->id,
+                    'article_cache_id' => $baseArticle->article_cache_id,
+                    'item_type' => $baseArticle->item_type ?? ($baseCache?->is_parent_item ? 'parent' : 'standalone'),
+                    'quantity' => $baseArticle->quantity,
+                    'unit_type' => $baseArticle->unit_type ?? ($baseCache->unit_type ?? 'unit'),
+                    'unit_price' => $baseArticle->unit_price ?? ($baseCache->unit_price ?? 0),
+                    'selling_price' => $baseArticle->selling_price ?? ($baseCache->unit_price ?? 0),
+                    'currency' => $baseArticle->currency ?? ($baseCache->currency ?? 'EUR'),
+                    'carrier_rule_applied' => false,
+                ]);
+            }
+
+            $lmArticles = QuotationRequestArticle::query()
+                ->where('quotation_request_id', $quotation->id)
+                ->whereRaw('UPPER(TRIM(unit_type)) = ?', ['LM'])
+                ->where(function ($query) {
+                    $query->whereNull('carrier_rule_applied')
+                        ->orWhere('carrier_rule_applied', false);
+                })
+                ->orderBy('id')
+                ->get();
+        }
+
         $assignedBaseIds = [];
 
         foreach ($lmArticles as $index => $article) {
@@ -1175,12 +1207,12 @@ class QuotationCommodityItem extends Model
         $processed = [];
 
         foreach ($commodityItems as $item) {
-            if (in_array($item->id, $processed, true)) {
+            if (in_array((int) $item->id, $processed, true)) {
                 continue;
             }
 
             $stackMembers = $item->getStackMembers();
-            $stackMembers->each(fn ($member) => $processed[] = $member->id);
+            $stackMembers->each(fn ($member) => $processed[] = (int) $member->id);
 
             $baseItem = $stackMembers->first(function ($candidate) {
                 return $candidate->id === $candidate->getStackGroup();
@@ -1203,7 +1235,7 @@ class QuotationCommodityItem extends Model
                 'categories' => $categories,
                 'commodity_types' => $commodityTypes,
                 'line_numbers' => $lineNumbers,
-                'member_ids' => $stackMembers->pluck('id')->all(),
+                'member_ids' => $stackMembers->pluck('id')->map(fn ($id) => (int) $id)->all(),
                 'is_combination' => $isCombination,
             ];
         }
