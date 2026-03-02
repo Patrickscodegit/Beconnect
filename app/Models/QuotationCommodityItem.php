@@ -1162,34 +1162,6 @@ class QuotationCommodityItem extends Model
                 ],
             ]);
             $article->notes = static::buildBaseServiceNote($context);
-            if (
-                $article->selling_price === null
-                || (float) $article->selling_price <= 0.0
-            ) {
-                if (!$article->relationLoaded('articleCache')) {
-                    $article->load('articleCache');
-                }
-                $articleCache = $article->articleCache;
-                if ($articleCache) {
-                    $sellingPrice = null;
-                    try {
-                        if ($quotation->pricing_tier_id && $quotation->pricingTier) {
-                            $sellingPrice = $articleCache->getPriceForTier($quotation->pricingTier);
-                        }
-                    } catch (\Exception $e) {
-                        $sellingPrice = null;
-                    }
-                    if ($sellingPrice === null) {
-                        $role = $quotation->customer_role ?? 'default';
-                        $sellingPrice = $articleCache->getPriceForRole($role);
-                    }
-                    if ($sellingPrice === null) {
-                        $sellingPrice = $articleCache->unit_price ?? 0;
-                    }
-                    $article->unit_price = $articleCache->unit_price ?? $article->unit_price ?? 0;
-                    $article->selling_price = $sellingPrice;
-                }
-            }
             $article->saveQuietly();
             $assignedBaseIds[] = $context['base_item_id'];
 
