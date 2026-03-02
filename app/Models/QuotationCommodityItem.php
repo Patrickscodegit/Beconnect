@@ -1052,15 +1052,6 @@ class QuotationCommodityItem extends Model
 
         static::applyBaseServiceNotes($quotation, $commodityItems);
 
-        $loadedItems = $commodityItems->filter(fn ($item) => ($item->relationship_type ?? null) === 'loaded_with'
-            && !empty($item->related_item_id));
-        if ($loadedItems->isNotEmpty()) {
-            $integrationService = app(\App\Services\CarrierRules\CarrierRuleIntegrationService::class);
-            foreach ($loadedItems as $loadedItem) {
-                $integrationService->applyLoadedCargoOverrideForItem($loadedItem);
-            }
-        }
-
         \Log::info('QuotationCommodityItem: Articles recalculation completed', [
             'quotation_request_id' => $quotationRequestId,
         ]);
