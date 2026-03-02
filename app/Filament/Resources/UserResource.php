@@ -3,7 +3,11 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\UserResource\Pages;
+use App\Filament\Resources\UserResource\RelationManagers\RobawsPortalLinkRelationManager;
+use App\Models\RobawsCustomerCache;
+use App\Models\RobawsCustomerPortalLink;
 use App\Models\User;
+use App\Services\Robaws\RobawsPortalLinkResolver;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
@@ -79,6 +83,23 @@ class UserResource extends Resource
                         'danger' => 'blocked',
                     ])
                     ->sortable(),
+                Tables\Columns\TextColumn::make('portalLink.cachedCustomer.name')
+                    ->label('Robaws Company')
+                    ->placeholder('—')
+                    ->searchable(query: function ($query, string $search) {
+                        $query->whereHas('portalLink.cachedCustomer', fn ($q) =>
+                            $q->where('name', 'like', "%{$search}%")
+                        );
+                    })
+                    ->toggleable(),
+                Tables\Columns\BadgeColumn::make('portalLink.source')
+                    ->label('Link Status')
+                    ->formatStateUsing(fn ($state) => $state ? ucfirst($state) : 'Not linked')
+                    ->colors([
+                        'success' => fn ($state) => in_array($state, ['email', 'domain', 'manual']),
+                        'warning' => fn ($state) => $state === null,
+                    ])
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -91,9 +112,7 @@ class UserResource extends Resource
                     ->requiresConfirmation()
                     ->visible(fn (User $record) => $record->status !== 'active')
                     ->action(function (User $record) {
-                        $record->update([
-                            'status' => 'active',
-                        ]);
+                        $record->update(['status' => 'active']);
 
                         $token = Password::broker()->createToken($record);
                         $record->sendPasswordResetNotification($token);
@@ -103,6 +122,102 @@ class UserResource extends Resource
                             ->success()
                             ->send();
                     }),
+
+                Tables\Actions\Action::make('resolveLink')
+                    ->label('Resolve Link')
+                    ->icon('heroicon-o-link')
+                    ->color('info')
+                    ->requiresConfirmation()
+                    ->modalHeading('Resolve Robaws Link')
+                    ->modalDescription('This will search Robaws CRM for a matching company using this user\'s email address and create the link automatically.')
+                    ->visible(fn (User $record) => $record->role === 'customer' && ! $record->portalLink)
+                    ->action(function (User $record) {
+                        $link = app(RobawsPortalLinkResolver::class)->resolveForUser($record);
+
+                        if ($link) {
+                            $companyName = RobawsCustomerCache::where('robaws_client_id', $link->robaws_client_id)
+                                ->value('name') ?? $link->robaws_client_id;
+
+                            Notification::make()
+                                ->title('Link established')
+                                ->body("Linked to: {$companyName} (via {$link->source})")
+                                ->success()
+                                ->send();
+                        } else {
+                            Notification::make()
+                                ->title('No match found')
+                                ->body('No Robaws company could be matched to this email address.')
+                                ->warning()
+                                ->send();
+                        }
+                    }),
+
+                Tables\Actions\Action::make('clearLink')
+                    ->label('Clear Link')
+                    ->icon('heroicon-o-x-circle')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->modalHeading('Clear Robaws Link')
+                    ->modalDescription('This will remove the current Robaws company link. The link will be re-resolved automatically next time the user visits the portal.')
+                    ->visible(fn (User $record) => $record->role === 'customer' && (bool) $record->portalLink)
+                    ->action(function (User $record) {
+                        $record->portalLink?->delete();
+
+                        Notification::make()
+                            ->title('Link cleared')
+                            ->body('The Robaws company link has been removed.')
+                            ->success()
+                            ->send();
+                    }),
+
+                Tables\Actions\Action::make('setLinkManually')
+                    ->label('Set Link Manually')
+                    ->icon('heroicon-o-building-office')
+                    ->color('warning')
+                    ->visible(fn (User $record) => $record->role === 'customer')
+                    ->form([
+                        Forms\Components\Select::make('robaws_client_id')
+                            ->label('Robaws Company')
+                            ->placeholder('Search by name, email or city…')
+                            ->searchable()
+                            ->required()
+                            ->getSearchResultsUsing(function (string $search) {
+                                return RobawsCustomerCache::where(function ($q) use ($search) {
+                                    $q->where('name', 'like', "%{$search}%")
+                                      ->orWhere('email', 'like', "%{$search}%")
+                                      ->orWhere('city', 'like', "%{$search}%")
+                                      ->orWhere('vat_number', 'like', "%{$search}%");
+                                })
+                                ->limit(30)
+                                ->get()
+                                ->mapWithKeys(fn ($c) => [
+                                    $c->robaws_client_id => $c->name_with_details,
+                                ]);
+                            })
+                            ->getOptionLabelUsing(function ($value) {
+                                $cache = RobawsCustomerCache::where('robaws_client_id', $value)->first();
+                                return $cache?->name_with_details ?? $value;
+                            }),
+                    ])
+                    ->action(function (User $record, array $data) {
+                        RobawsCustomerPortalLink::updateOrCreate(
+                            ['user_id' => $record->id],
+                            [
+                                'robaws_client_id' => $data['robaws_client_id'],
+                                'source' => 'manual',
+                            ]
+                        );
+
+                        $companyName = RobawsCustomerCache::where('robaws_client_id', $data['robaws_client_id'])
+                            ->value('name') ?? $data['robaws_client_id'];
+
+                        Notification::make()
+                            ->title('Link saved')
+                            ->body("Manually linked to: {$companyName}")
+                            ->success()
+                            ->send();
+                    }),
+
                 Tables\Actions\EditAction::make(),
             ])
             ->bulkActions([
@@ -110,6 +225,13 @@ class UserResource extends Resource
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ]);
+    }
+
+    public static function getRelationManagers(): array
+    {
+        return [
+            RobawsPortalLinkRelationManager::class,
+        ];
     }
 
     public static function getPages(): array

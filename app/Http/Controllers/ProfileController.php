@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Models\RobawsCustomerCache;
 use App\Models\RobawsCustomerPortalLink;
+use App\Services\Export\Clients\RobawsApiClient;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -30,11 +31,26 @@ class ProfileController extends Controller
     {
         $user = $request->user();
         $robawsLink = RobawsCustomerPortalLink::where('user_id', $user->id)->first();
-        $robawsCache = $robawsLink
-            ? RobawsCustomerCache::where('robaws_client_id', $robawsLink->robaws_client_id)->first()
-            : null;
+        $robawsCache = null;
+        $robawsLiveProfile = null;
 
-        return view('customer.profile.edit', compact('user', 'robawsCache'));
+        if ($robawsLink) {
+            $robawsCache = RobawsCustomerCache::where('robaws_client_id', $robawsLink->robaws_client_id)->first();
+
+            // Fall back to a live API call if the local cache hasn't been populated yet.
+            if (! $robawsCache) {
+                try {
+                    $result = app(RobawsApiClient::class)->getClientById((string) $robawsLink->robaws_client_id);
+                    if (is_array($result)) {
+                        $robawsLiveProfile = ! empty($result['success']) ? ($result['data'] ?? null) : $result;
+                    }
+                } catch (\Throwable) {
+                    // Silently ignore API failures — the view handles null gracefully.
+                }
+            }
+        }
+
+        return view('customer.profile.edit', compact('user', 'robawsCache', 'robawsLiveProfile'));
     }
 
     /**
