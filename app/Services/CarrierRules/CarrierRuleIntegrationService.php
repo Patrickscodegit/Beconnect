@@ -133,31 +133,6 @@ class CarrierRuleIntegrationService
         }
     }
 
-    public function applyLoadedCargoOverrideForItem(QuotationCommodityItem $item): void
-    {
-        $quotation = $item->quotationRequest;
-        if (!$quotation) {
-            return;
-        }
-
-        $schedule = $quotation->selectedSchedule;
-        if (!$schedule || !$schedule->carrier_id) {
-            return;
-        }
-
-        $schedule->load('podPort');
-        $podPort = $schedule->podPort;
-        if (!$podPort) {
-            return;
-        }
-
-        $input = CargoInputDTO::fromCommodityItem($item, $podPort, $schedule);
-        $input->carrierId = $schedule->carrier_id;
-        $input->podPortId = $schedule->pod_id ?? $podPort->id;
-
-        $this->applyLoadedCargoSeafreightOverride($quotation, $item, $input);
-    }
-
     private function applyLoadedCargoSeafreightOverride(
         QuotationRequest $quotation,
         QuotationCommodityItem $item,
