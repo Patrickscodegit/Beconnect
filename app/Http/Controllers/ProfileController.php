@@ -42,15 +42,22 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $user = $request->user();
 
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
+        if ($user->isCustomer()) {
+            // Customers cannot change their login email — only name is updated.
+            $user->name = $request->validated()['name'];
+        } else {
+            $user->fill($request->validated());
+
+            if ($user->isDirty('email')) {
+                $user->email_verified_at = null;
+            }
         }
 
-        $request->user()->save();
+        $user->save();
 
-        $redirectRoute = $request->user()->isCustomer() ? 'customer.profile.edit' : 'profile.edit';
+        $redirectRoute = $user->isCustomer() ? 'customer.profile.edit' : 'profile.edit';
 
         return Redirect::route($redirectRoute)->with('status', 'profile-updated');
     }
