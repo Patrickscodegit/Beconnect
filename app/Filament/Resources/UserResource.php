@@ -36,27 +36,120 @@ class UserResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('name')
-                    ->required()
-                    ->maxLength(255),
-                Forms\Components\TextInput::make('email')
-                    ->email()
-                    ->required()
-                    ->maxLength(255)
-                    ->unique(ignoreRecord: true),
-                Forms\Components\Select::make('role')
-                    ->options([
-                        'admin' => 'Admin',
-                        'customer' => 'Customer',
+                Forms\Components\Section::make('Account')
+                    ->schema([
+                        Forms\Components\TextInput::make('name')
+                            ->required()
+                            ->maxLength(255),
+                        Forms\Components\TextInput::make('email')
+                            ->email()
+                            ->required()
+                            ->maxLength(255)
+                            ->unique(ignoreRecord: true),
+                        Forms\Components\Select::make('role')
+                            ->options([
+                                'admin' => 'Admin',
+                                'customer' => 'Customer',
+                            ])
+                            ->required(),
+                        Forms\Components\Select::make('status')
+                            ->options([
+                                'pending' => 'Pending',
+                                'active' => 'Active',
+                                'blocked' => 'Blocked',
+                            ])
+                            ->required(),
                     ])
-                    ->required(),
-                Forms\Components\Select::make('status')
-                    ->options([
-                        'pending' => 'Pending',
-                        'active' => 'Active',
-                        'blocked' => 'Blocked',
+                    ->columns(2),
+
+                // Shown for customer accounts with a confirmed portal link + cached data
+                Forms\Components\Section::make('Robaws Company')
+                    ->description('Read-only data synced from Robaws CRM.')
+                    ->collapsible()
+                    ->schema([
+                        Forms\Components\Placeholder::make('co_name')
+                            ->label('Company Name')
+                            ->content(fn ($record) => $record?->portalLink?->cachedCustomer?->name ?? '—'),
+
+                        Forms\Components\Placeholder::make('co_type')
+                            ->label('Type / Role')
+                            ->content(fn ($record) => implode(' · ', array_filter([
+                                $record?->portalLink?->cachedCustomer?->client_type,
+                                $record?->portalLink?->cachedCustomer?->role,
+                            ])) ?: '—'),
+
+                        Forms\Components\Placeholder::make('co_email')
+                            ->label('Company Email')
+                            ->content(fn ($record) => $record?->portalLink?->cachedCustomer?->email ?? '—'),
+
+                        Forms\Components\Placeholder::make('co_phone')
+                            ->label('Phone')
+                            ->content(fn ($record) => $record?->portalLink?->cachedCustomer?->phone ?? '—'),
+
+                        Forms\Components\Placeholder::make('co_mobile')
+                            ->label('Mobile')
+                            ->content(fn ($record) => $record?->portalLink?->cachedCustomer?->mobile ?? '—'),
+
+                        Forms\Components\Placeholder::make('co_website')
+                            ->label('Website')
+                            ->content(fn ($record) => $record?->portalLink?->cachedCustomer?->website ?? '—'),
+
+                        Forms\Components\Placeholder::make('co_address')
+                            ->label('Address')
+                            ->columnSpanFull()
+                            ->content(function ($record) {
+                                $c = $record?->portalLink?->cachedCustomer;
+                                if (! $c) return '—';
+                                $parts = array_filter([
+                                    trim(($c->street ?? '') . ' ' . ($c->street_number ?? '')),
+                                    $c->city,
+                                    trim(($c->postal_code ?? '') . ' ' . ($c->country ?? '')),
+                                ]);
+                                return implode(', ', $parts) ?: '—';
+                            }),
+
+                        Forms\Components\Placeholder::make('co_vat')
+                            ->label('VAT Number')
+                            ->content(fn ($record) => $record?->portalLink?->cachedCustomer?->vat_number ?? '—'),
+
+                        Forms\Components\Placeholder::make('co_language')
+                            ->label('Language / Currency')
+                            ->content(function ($record) {
+                                $c = $record?->portalLink?->cachedCustomer;
+                                return implode(' · ', array_filter([
+                                    $c?->language ? strtoupper($c->language) : null,
+                                    $c?->currency,
+                                ])) ?: '—';
+                            }),
+
+                        Forms\Components\Placeholder::make('co_active')
+                            ->label('Active in Robaws')
+                            ->content(fn ($record) => match($record?->portalLink?->cachedCustomer?->is_active) {
+                                true  => 'Yes',
+                                false => 'No',
+                                null  => '—',
+                            }),
+
+                        Forms\Components\Placeholder::make('co_synced')
+                            ->label('Last Synced')
+                            ->content(fn ($record) => $record?->portalLink?->cachedCustomer?->last_synced_at
+                                ?->diffForHumans() ?? '—'),
+
+                        Forms\Components\Placeholder::make('co_robaws_id')
+                            ->label('Robaws Client ID')
+                            ->content(fn ($record) => $record?->portalLink?->robaws_client_id ?? '—'),
                     ])
-                    ->required(),
+                    ->columns(2)
+                    ->visible(fn ($record) => $record?->portalLink !== null),
+
+                // Shown for customer accounts not yet linked to Robaws
+                Forms\Components\Section::make('Robaws Company')
+                    ->schema([
+                        Forms\Components\Placeholder::make('no_link_notice')
+                            ->label('')
+                            ->content('This customer is not yet linked to a Robaws company. Use the "Resolve Link" or "Set Link Manually" actions on the Users list to establish a link.'),
+                    ])
+                    ->visible(fn ($record) => $record?->role === 'customer' && $record?->portalLink === null),
             ]);
     }
 
