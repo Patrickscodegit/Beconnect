@@ -1103,65 +1103,38 @@ class QuotationCommodityItem extends Model
             ->sortBy('base_line_number')
             ->values();
 
-        if ($lmArticles->count() < $contextsByIndex->count()) {
-            $baseArticle = $lmArticles->first();
-            $baseCache = $baseArticle->relationLoaded('articleCache') ? $baseArticle->articleCache : null;
-            if (!$baseCache) {
-                $baseCache = \App\Models\RobawsArticleCache::find($baseArticle->article_cache_id);
-            }
+        $mergedContext = [
+            'base_item_id' => $contextsByIndex->first()['base_item_id'] ?? null,
+            'base_line_number' => $contextsByIndex->first()['base_line_number'] ?? null,
+            'base_item' => $contextsByIndex->first()['base_item'] ?? null,
+            'categories' => $contextsByIndex->flatMap(fn ($c) => $c['categories'] ?? [])->unique()->values()->all(),
+            'commodity_types' => $contextsByIndex->flatMap(fn ($c) => $c['commodity_types'] ?? [])->unique()->values()->all(),
+            'line_numbers' => $contextsByIndex->flatMap(fn ($c) => $c['line_numbers'] ?? [])->unique()->sort()->values()->all(),
+            'member_ids' => $contextsByIndex->flatMap(fn ($c) => $c['member_ids'] ?? [])->unique()->values()->all(),
+            'is_combination' => $contextsByIndex->count() > 1 || $contextsByIndex->contains(fn ($c) => !empty($c['is_combination'])),
+        ];
 
-            $missingCount = $contextsByIndex->count() - $lmArticles->count();
-            for ($i = 0; $i < $missingCount; $i++) {
-                QuotationRequestArticle::create([
-                    'quotation_request_id' => $quotation->id,
-                    'article_cache_id' => $baseArticle->article_cache_id,
-                    'item_type' => $baseArticle->item_type ?? ($baseCache?->is_parent_item ? 'parent' : 'standalone'),
-                    'quantity' => $baseArticle->quantity,
-                    'unit_type' => $baseArticle->unit_type ?? ($baseCache->unit_type ?? 'unit'),
-                    'unit_price' => $baseArticle->unit_price ?? ($baseCache->unit_price ?? 0),
-                    'selling_price' => $baseArticle->selling_price ?? ($baseCache->unit_price ?? 0),
-                    'currency' => $baseArticle->currency ?? ($baseCache->currency ?? 'EUR'),
-                    'carrier_rule_applied' => false,
-                ]);
-            }
-
-            $lmArticles = QuotationRequestArticle::query()
-                ->where('quotation_request_id', $quotation->id)
-                ->whereRaw('UPPER(TRIM(unit_type)) = ?', ['LM'])
-                ->where(function ($query) {
-                    $query->whereNull('carrier_rule_applied')
-                        ->orWhere('carrier_rule_applied', false);
-                })
-                ->orderBy('id')
-                ->get();
-        }
-
-        $assignedBaseIds = [];
-
-        foreach ($lmArticles as $index => $article) {
-            $context = $contextsByIndex->get($index);
-            if (!$context) {
-                continue;
-            }
-
-            if (in_array($context['base_item_id'], $assignedBaseIds, true)) {
-                $article->delete();
-                continue;
+        $lmArticlesByCache = $lmArticles->groupBy('article_cache_id');
+        foreach ($lmArticlesByCache as $articleCacheId => $group) {
+            $article = $group->first();
+            $duplicates = $group->slice(1);
+            if ($duplicates->isNotEmpty()) {
+                $duplicates->each(fn (QuotationRequestArticle $duplicate) => $duplicate->delete());
             }
 
             $article->formula_inputs = array_merge($article->formula_inputs ?? [], [
                 'service_context' => [
                     'source' => 'base_service',
-                    'base_item_id' => $context['base_item_id'],
-                    'base_line_number' => $context['base_line_number'],
-                    'commodity_types' => $context['commodity_types'],
-                    'vehicle_categories' => $context['categories'],
-                    'line_numbers' => $context['line_numbers'],
-                    'member_ids' => $context['member_ids'] ?? [],
-                    'is_combination' => $context['is_combination'],
+                    'base_item_id' => $mergedContext['base_item_id'],
+                    'base_line_number' => $mergedContext['base_line_number'],
+                    'commodity_types' => $mergedContext['commodity_types'],
+                    'vehicle_categories' => $mergedContext['categories'],
+                    'line_numbers' => $mergedContext['line_numbers'],
+                    'member_ids' => $mergedContext['member_ids'],
+                    'is_combination' => $mergedContext['is_combination'],
                 ],
             ]);
-            $article->notes = static::buildBaseServiceNote($context);
+            $article->notes = static::buildBaseServiceNote($mergedContext);
             if (
                 $article->selling_price === null
                 || (float) $article->selling_price <= 0.0
@@ -1191,19 +1164,18 @@ class QuotationCommodityItem extends Model
                 }
             }
             $article->saveQuietly();
-            $assignedBaseIds[] = $context['base_item_id'];
 
-            $baseItem = $context['base_item'];
+            $baseItem = $mergedContext['base_item'];
             if ($baseItem) {
                 $meta = $baseItem->carrier_rule_meta ?? [];
                 $baseServices = $meta['base_services'] ?? [];
                 $baseServices[] = [
                     'article_id' => $article->article_cache_id,
-                    'base_item_id' => $context['base_item_id'],
-                    'line_numbers' => $context['line_numbers'],
-                    'commodity_types' => $context['commodity_types'],
-                    'vehicle_categories' => $context['categories'],
-                    'is_combination' => $context['is_combination'],
+                    'base_item_id' => $mergedContext['base_item_id'],
+                    'line_numbers' => $mergedContext['line_numbers'],
+                    'commodity_types' => $mergedContext['commodity_types'],
+                    'vehicle_categories' => $mergedContext['categories'],
+                    'is_combination' => $mergedContext['is_combination'],
                 ];
 
                 $meta['base_services'] = collect($baseServices)
@@ -1215,18 +1187,6 @@ class QuotationCommodityItem extends Model
                 $baseItem->saveQuietly();
             }
         }
-
-        $staleBaseIds = collect($assignedBaseIds)->flip();
-        $lmArticles->each(function (QuotationRequestArticle $article) use ($staleBaseIds) {
-            $serviceContext = $article->formula_inputs['service_context'] ?? null;
-            if (!is_array($serviceContext) || ($serviceContext['source'] ?? null) !== 'base_service') {
-                return;
-            }
-            $baseItemId = $serviceContext['base_item_id'] ?? null;
-            if (!$baseItemId || !$staleBaseIds->has($baseItemId)) {
-                $article->delete();
-            }
-        });
     }
 
     private static function buildStackContexts($commodityItems): array
