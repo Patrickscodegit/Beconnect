@@ -132,7 +132,23 @@ class UserResource extends Resource
                     ->modalDescription('This will search Robaws CRM for a matching company using this user\'s email address and create the link automatically.')
                     ->visible(fn (User $record) => $record->role === 'customer' && ! $record->portalLink)
                     ->action(function (User $record) {
-                        $link = app(RobawsPortalLinkResolver::class)->resolveForUser($record);
+                        try {
+                            $link = app(RobawsPortalLinkResolver::class)->resolveForUser($record);
+                        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+                            Notification::make()
+                                ->title('Robaws connection timeout')
+                                ->body('Could not reach Robaws CRM. Please try again in a moment.')
+                                ->danger()
+                                ->send();
+                            return;
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->title('Error resolving link')
+                                ->body('An unexpected error occurred: ' . $e->getMessage())
+                                ->danger()
+                                ->send();
+                            return;
+                        }
 
                         if ($link) {
                             $companyName = RobawsCustomerCache::where('robaws_client_id', $link->robaws_client_id)
