@@ -19,4 +19,9 @@ class RobawsCustomerPortalLink extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function cachedCustomer(): BelongsTo
+    {
+        return $this->belongsTo(RobawsCustomerCache::class, 'robaws_client_id', 'robaws_client_id');
+    }
 }

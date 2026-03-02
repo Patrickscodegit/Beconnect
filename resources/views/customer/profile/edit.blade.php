@@ -15,6 +15,53 @@
     <h1 class="text-2xl font-bold text-gray-900 mb-8">My Profile</h1>
 
     {{-- ── Company Information ─────────────────────────────────────────── --}}
+    @php
+        // Normalise data source: prefer local cache, fall back to live API array.
+        $co = null;
+        $coIsLive = false;
+        if ($robawsCache) {
+            $co = [
+                'name'        => $robawsCache->name,
+                'client_type' => $robawsCache->client_type,
+                'role'        => $robawsCache->role,
+                'currency'    => $robawsCache->currency,
+                'language'    => $robawsCache->language,
+                'email'       => $robawsCache->email,
+                'phone'       => $robawsCache->phone,
+                'mobile'      => $robawsCache->mobile,
+                'website'     => $robawsCache->website,
+                'address'     => implode(', ', array_filter([
+                    trim(($robawsCache->street ?? '') . ' ' . ($robawsCache->street_number ?? '')),
+                    $robawsCache->city,
+                    trim(($robawsCache->postal_code ?? '') . ' ' . ($robawsCache->country ?? '')),
+                ])),
+                'vat_number'     => $robawsCache->vat_number,
+                'last_synced_at' => $robawsCache->last_synced_at,
+            ];
+        } elseif (!empty($robawsLiveProfile)) {
+            $coIsLive = true;
+            $addr = $robawsLiveProfile['address'] ?? [];
+            $co = [
+                'name'        => $robawsLiveProfile['name'] ?? null,
+                'client_type' => $robawsLiveProfile['clientType'] ?? null,
+                'role'        => $robawsLiveProfile['role'] ?? null,
+                'currency'    => $robawsLiveProfile['currency'] ?? null,
+                'language'    => $robawsLiveProfile['language'] ?? null,
+                'email'       => $robawsLiveProfile['email'] ?? null,
+                'phone'       => $robawsLiveProfile['tel'] ?? $robawsLiveProfile['phone'] ?? null,
+                'mobile'      => $robawsLiveProfile['mobile'] ?? null,
+                'website'     => $robawsLiveProfile['website'] ?? null,
+                'address'     => implode(', ', array_filter([
+                    $addr['addressLine1'] ?? null,
+                    $addr['city'] ?? null,
+                    $addr['country'] ?? null,
+                ])),
+                'vat_number'     => $robawsLiveProfile['vatNumber'] ?? $robawsLiveProfile['vat_number'] ?? null,
+                'last_synced_at' => null,
+            ];
+        }
+    @endphp
+
     <div class="bg-white shadow rounded-lg p-6 mb-6">
         <div class="flex items-center justify-between mb-5">
             <div>
@@ -23,9 +70,9 @@
                 </h2>
                 <p class="mt-1 text-sm text-gray-500">Managed in Robaws CRM — contact your account manager to make changes.</p>
             </div>
-            @if($robawsCache)
+            @if($co)
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    <i class="fas fa-check-circle mr-1"></i>Linked
+                    <i class="fas fa-check-circle mr-1"></i>{{ $coIsLive ? 'Linked (live)' : 'Linked' }}
                 </span>
             @else
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
@@ -34,29 +81,29 @@
             @endif
         </div>
 
-        @if($robawsCache)
+        @if($co)
             {{-- Name + badges --}}
             <div class="mb-5 pb-5 border-b border-gray-100">
-                <p class="text-xl font-semibold text-gray-900">{{ $robawsCache->name }}</p>
+                <p class="text-xl font-semibold text-gray-900">{{ $co['name'] ?? '—' }}</p>
                 <div class="mt-2 flex flex-wrap gap-2">
-                    @if($robawsCache->client_type)
+                    @if($co['client_type'])
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 capitalize">
-                            {{ $robawsCache->client_type }}
+                            {{ $co['client_type'] }}
                         </span>
                     @endif
-                    @if($robawsCache->role)
+                    @if($co['role'])
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                            {{ $robawsCache->role }}
+                            {{ $co['role'] }}
                         </span>
                     @endif
-                    @if($robawsCache->currency)
+                    @if($co['currency'])
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                            <i class="fas fa-coins mr-1"></i>{{ $robawsCache->currency }}
+                            <i class="fas fa-coins mr-1"></i>{{ $co['currency'] }}
                         </span>
                     @endif
-                    @if($robawsCache->language)
+                    @if($co['language'])
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                            <i class="fas fa-globe mr-1"></i>{{ strtoupper($robawsCache->language) }}
+                            <i class="fas fa-globe mr-1"></i>{{ strtoupper($co['language']) }}
                         </span>
                     @endif
                 </div>
@@ -67,8 +114,8 @@
                 <div>
                     <p class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Email</p>
                     <p class="text-sm text-gray-800">
-                        @if($robawsCache->email)
-                            <a href="mailto:{{ $robawsCache->email }}" class="text-blue-600 hover:underline">{{ $robawsCache->email }}</a>
+                        @if($co['email'])
+                            <a href="mailto:{{ $co['email'] }}" class="text-blue-600 hover:underline">{{ $co['email'] }}</a>
                         @else
                             <span class="text-gray-400">—</span>
                         @endif
@@ -77,68 +124,55 @@
                 <div>
                     <p class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Phone</p>
                     <p class="text-sm text-gray-800">
-                        @if($robawsCache->phone)
-                            <a href="tel:{{ $robawsCache->phone }}" class="text-blue-600 hover:underline">{{ $robawsCache->phone }}</a>
+                        @if($co['phone'])
+                            <a href="tel:{{ $co['phone'] }}" class="text-blue-600 hover:underline">{{ $co['phone'] }}</a>
                         @else
                             <span class="text-gray-400">—</span>
                         @endif
                     </p>
                 </div>
-                @if($robawsCache->mobile)
+                @if($co['mobile'])
                 <div>
                     <p class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Mobile</p>
                     <p class="text-sm text-gray-800">
-                        <a href="tel:{{ $robawsCache->mobile }}" class="text-blue-600 hover:underline">{{ $robawsCache->mobile }}</a>
+                        <a href="tel:{{ $co['mobile'] }}" class="text-blue-600 hover:underline">{{ $co['mobile'] }}</a>
                     </p>
                 </div>
                 @endif
-                @if($robawsCache->website)
+                @if($co['website'])
                 <div>
                     <p class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Website</p>
                     <p class="text-sm text-gray-800">
-                        <a href="{{ $robawsCache->website }}" target="_blank" rel="noopener" class="text-blue-600 hover:underline">
-                            {{ $robawsCache->website }}
-                        </a>
+                        <a href="{{ $co['website'] }}" target="_blank" rel="noopener" class="text-blue-600 hover:underline">{{ $co['website'] }}</a>
                     </p>
                 </div>
                 @endif
             </div>
 
             {{-- Address --}}
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5 pb-5 border-b border-gray-100">
-                <div class="sm:col-span-2">
-                    <p class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Address</p>
-                    <p class="text-sm text-gray-800">
-                        @php
-                            $addressParts = array_filter([
-                                trim(($robawsCache->street ?? '') . ' ' . ($robawsCache->street_number ?? '')),
-                                $robawsCache->city,
-                                trim(($robawsCache->postal_code ?? '') . ' ' . ($robawsCache->country ?? '')),
-                            ]);
-                        @endphp
-                        @if($addressParts)
-                            {{ implode(', ', $addressParts) }}
-                        @else
-                            <span class="text-gray-400">—</span>
-                        @endif
-                    </p>
-                </div>
+            @if($co['address'])
+            <div class="mb-5 pb-5 border-b border-gray-100">
+                <p class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Address</p>
+                <p class="text-sm text-gray-800">{{ $co['address'] }}</p>
             </div>
+            @endif
 
             {{-- VAT --}}
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                @if($robawsCache->vat_number)
-                <div>
-                    <p class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">VAT Number</p>
-                    <p class="text-sm text-gray-800 font-mono">{{ $robawsCache->vat_number }}</p>
-                </div>
-                @endif
+            @if($co['vat_number'])
+            <div class="mb-4">
+                <p class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">VAT Number</p>
+                <p class="text-sm text-gray-800 font-mono">{{ $co['vat_number'] }}</p>
             </div>
+            @endif
 
-            {{-- Last synced --}}
-            @if($robawsCache->last_synced_at)
+            {{-- Last synced (cache only) --}}
+            @if($co['last_synced_at'])
                 <p class="text-xs text-gray-400 mt-2">
-                    <i class="fas fa-sync-alt mr-1"></i>Last synced: {{ $robawsCache->last_synced_at->diffForHumans() }}
+                    <i class="fas fa-sync-alt mr-1"></i>Last synced: {{ $co['last_synced_at']->diffForHumans() }}
+                </p>
+            @elseif($coIsLive)
+                <p class="text-xs text-gray-400 mt-2">
+                    <i class="fas fa-wifi mr-1"></i>Data loaded live from Robaws CRM (local cache pending sync).
                 </p>
             @endif
 

@@ -299,8 +299,10 @@ class RobawsCustomerSyncService
         $stats = ['pushed' => 0, 'failed' => 0];
         
         // Find customers updated locally but not yet pushed
-        $customers = RobawsCustomerCache::where('updated_at', '>', 'last_pushed_to_robaws_at')
-            ->orWhereNull('last_pushed_to_robaws_at')
+        $customers = RobawsCustomerCache::where(function ($q) {
+                $q->whereColumn('updated_at', '>', 'last_pushed_to_robaws_at')
+                  ->orWhereNull('last_pushed_to_robaws_at');
+            })
             ->where('is_active', true)
             ->get();
         
