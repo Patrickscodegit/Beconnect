@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Models\RobawsCustomerCache;
+use App\Models\RobawsCustomerPortalLink;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -26,9 +28,13 @@ class ProfileController extends Controller
      */
     public function editCustomer(Request $request): View
     {
-        return view('customer.profile.edit', [
-            'user' => $request->user(),
-        ]);
+        $user = $request->user();
+        $robawsLink = RobawsCustomerPortalLink::where('user_id', $user->id)->first();
+        $robawsCache = $robawsLink
+            ? RobawsCustomerCache::where('robaws_client_id', $robawsLink->robaws_client_id)->first()
+            : null;
+
+        return view('customer.profile.edit', compact('user', 'robawsCache'));
     }
 
     /**
