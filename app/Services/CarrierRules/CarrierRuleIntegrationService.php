@@ -205,12 +205,6 @@ class CarrierRuleIntegrationService
 
                 $serviceContext = $articleRecord->formula_inputs['service_context'] ?? null;
                 if (is_array($serviceContext) && !empty($serviceContext['member_ids'])) {
-                    if (
-                        ($serviceContext['source'] ?? null) === 'base_service'
-                        && !empty($serviceContext['is_combination'])
-                    ) {
-                        return false;
-                    }
                     if (!in_array($item->id, $serviceContext['member_ids'], true)) {
                         return false;
                     }
