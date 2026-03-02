@@ -6,6 +6,7 @@ use App\Models\RobawsCustomerPortalLink;
 use App\Models\RobawsDomainMapping;
 use App\Models\User;
 use App\Services\Export\Clients\RobawsApiClient;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Log;
 
 class RobawsPortalLinkResolver
@@ -34,7 +35,17 @@ class RobawsPortalLinkResolver
 
         $mapping = RobawsDomainMapping::where('domain', $domain)->first();
         if ($mapping) {
-            $mappedClient = $this->apiClient->getClientById((string) $mapping->robaws_client_id, ['contacts']);
+            try {
+                $mappedClient = $this->apiClient->getClientById((string) $mapping->robaws_client_id, ['contacts']);
+            } catch (ConnectionException $e) {
+                Log::warning('Robaws connection timeout resolving domain mapping', [
+                    'user_id' => $user->id,
+                    'domain' => $domain,
+                    'error' => $e->getMessage(),
+                ]);
+                throw $e;
+            }
+
             if ($mappedClient) {
                 return RobawsCustomerPortalLink::create([
                     'user_id' => $user->id,
@@ -51,9 +62,18 @@ class RobawsPortalLinkResolver
             ]);
         }
 
-        $client = $this->apiClient->findClientByEmailRobust($email);
-        if (!$client) {
-            $client = $this->apiClient->scanClientsForEmail($email);
+        try {
+            $client = $this->apiClient->findClientByEmailRobust($email);
+            if (!$client) {
+                $client = $this->apiClient->scanClientsForEmail($email);
+            }
+        } catch (ConnectionException $e) {
+            Log::warning('Robaws connection timeout searching by email', [
+                'user_id' => $user->id,
+                'email' => $email,
+                'error' => $e->getMessage(),
+            ]);
+            throw $e;
         }
 
         if ($client) {
@@ -64,7 +84,7 @@ class RobawsPortalLinkResolver
             ]);
         }
 
-        Log::info('No Robaws domain mapping found for portal user', [
+        Log::info('No Robaws client found for portal user', [
             'user_id' => $user->id,
             'email' => $email,
             'domain' => $domain,
