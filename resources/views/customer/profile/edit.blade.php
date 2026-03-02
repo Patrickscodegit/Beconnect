@@ -161,13 +161,9 @@
                     <i class="fas fa-user mr-2 text-blue-500"></i>Account Information
                 </h2>
                 <p class="mt-1 text-sm text-gray-600">
-                    {{ __("Update your login name and email address.") }}
+                    {{ __("Update your display name. Your login email address is fixed and cannot be changed.") }}
                 </p>
             </header>
-
-            <form id="send-verification" method="post" action="{{ route('verification.send') }}">
-                @csrf
-            </form>
 
             <form method="post" action="{{ route('profile.update') }}" class="space-y-5">
                 @csrf
@@ -184,29 +180,16 @@
                 </div>
 
                 <div>
-                    <label for="email" class="block text-sm font-medium text-gray-700 mb-1">{{ __('Email') }}</label>
-                    <input id="email" name="email" type="email"
-                           class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                           value="{{ old('email', $user->email) }}" required autocomplete="username" />
-                    @error('email')
-                        <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                    @enderror
-
-                    @if ($user instanceof \Illuminate\Contracts\Auth\MustVerifyEmail && ! $user->hasVerifiedEmail())
-                        <div class="mt-2">
-                            <p class="text-sm text-gray-800">
-                                {{ __('Your email address is unverified.') }}
-                                <button form="send-verification" class="underline text-sm text-blue-600 hover:text-blue-800">
-                                    {{ __('Click here to re-send the verification email.') }}
-                                </button>
-                            </p>
-                            @if (session('status') === 'verification-link-sent')
-                                <p class="mt-2 font-medium text-sm text-green-600">
-                                    {{ __('A new verification link has been sent to your email address.') }}
-                                </p>
-                            @endif
-                        </div>
-                    @endif
+                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ __('Login Email') }}</label>
+                    <div class="flex items-center gap-2">
+                        <p class="block w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500 sm:text-sm">
+                            {{ $user->email }}
+                        </p>
+                        <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-500 whitespace-nowrap">
+                            <i class="fas fa-lock mr-1"></i>Fixed
+                        </span>
+                    </div>
+                    <p class="mt-1 text-xs text-gray-400">Contact your account manager to change your login email.</p>
                 </div>
 
                 <div class="flex items-center gap-4 pt-2">
