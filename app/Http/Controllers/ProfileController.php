@@ -12,11 +12,21 @@ use Illuminate\View\View;
 class ProfileController extends Controller
 {
     /**
-     * Display the user's profile form.
+     * Display the user's profile form (admin/staff layout).
      */
     public function edit(Request $request): View
     {
         return view('profile.edit', [
+            'user' => $request->user(),
+        ]);
+    }
+
+    /**
+     * Display the user's profile form (customer portal layout).
+     */
+    public function editCustomer(Request $request): View
+    {
+        return view('customer.profile.edit', [
             'user' => $request->user(),
         ]);
     }
@@ -34,7 +44,9 @@ class ProfileController extends Controller
 
         $request->user()->save();
 
-        return Redirect::route('profile.edit')->with('status', 'profile-updated');
+        $redirectRoute = $request->user()->isCustomer() ? 'customer.profile.edit' : 'profile.edit';
+
+        return Redirect::route($redirectRoute)->with('status', 'profile-updated');
     }
 
     /**

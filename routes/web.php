@@ -32,6 +32,9 @@ Route::get('/api/schedules/search', [ScheduleSearchController::class, 'search'])
 // Customer Portal Routes (authenticated)
 Route::middleware(['auth', 'active', 'role:customer,admin'])->prefix('customer')->name('customer.')->group(function () {
     Route::get('/dashboard', [\App\Http\Controllers\CustomerDashboardController::class, 'index'])->name('dashboard');
+
+    // Profile (customer-specific view with customer portal layout)
+    Route::get('/profile', [ProfileController::class, 'editCustomer'])->name('profile.edit');
     
     // Quotations
     Route::prefix('quotations')->name('quotations.')->group(function () {
