@@ -205,32 +205,19 @@ class QuotationCommodityItem extends Model
         if (!$baseItem) {
             return collect([$this]);
         }
-
-        // Collect ALL items in the stack, including chained relationships
-        $stackMemberIds = collect([$baseId]);
-        $queue = [$baseId];
-
-        while (!empty($queue)) {
-            $currentIds = $queue;
-            $queue = [];
-
-            $children = static::where('quotation_request_id', $this->quotation_request_id)
-                ->whereIn('related_item_id', $currentIds)
-                ->whereIn('relationship_type', ['loaded_with', 'connected_to'])
-                ->pluck('id')
-                ->all();
-
-            foreach ($children as $childId) {
-                if (!$stackMemberIds->contains($childId)) {
-                    $stackMemberIds->push($childId);
-                    $queue[] = $childId;
-                }
-            }
-        }
-
-        return static::where('quotation_request_id', $this->quotation_request_id)
-            ->whereIn('id', $stackMemberIds->all())
+        
+        // Get all items that point to this base
+        $stackedItems = static::where('quotation_request_id', $this->quotation_request_id)
+            ->where(function ($query) use ($baseId) {
+                $query->where('id', $baseId)
+                    ->orWhere(function ($q) use ($baseId) {
+                        $q->where('related_item_id', $baseId)
+                            ->whereIn('relationship_type', ['loaded_with', 'connected_to']);
+                    });
+            })
             ->get();
+        
+        return $stackedItems;
     }
 
     /**
