@@ -162,8 +162,9 @@ class UserResource extends Resource
                         } else {
                             Notification::make()
                                 ->title('No match found')
-                                ->body('No Robaws company could be matched to this email address.')
+                                ->body('No Robaws company could be matched to this email address. If the customer exists under a different email, use "Set Link Manually" to assign the correct company.')
                                 ->warning()
+                                ->persistent()
                                 ->send();
                         }
                     }),
