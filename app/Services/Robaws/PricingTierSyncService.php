@@ -28,28 +28,18 @@ class PricingTierSyncService
             $robawsValue = 'TIER ' . strtoupper($user->pricingTier->code);
         }
 
-        $customerData = [
-            'extraFields' => [
-                'PRICING' => ['stringValue' => $robawsValue],
-            ],
-        ];
-
         try {
-            $result = $this->apiClient->updateClient(
+            $this->apiClient->pushClientExtraField(
                 (int) $link->robaws_client_id,
-                $customerData
+                'PRICING',
+                $robawsValue
             );
-
-            if ($result) {
-                Log::info('Pushed pricing tier to Robaws', [
-                    'user_id' => $user->id,
-                    'robaws_client_id' => $link->robaws_client_id,
-                    'pricing_value' => $robawsValue,
-                ]);
-                return true;
-            }
-
-            return false;
+            Log::info('Pushed pricing tier to Robaws', [
+                'user_id' => $user->id,
+                'robaws_client_id' => $link->robaws_client_id,
+                'pricing_value' => $robawsValue,
+            ]);
+            return true;
         } catch (\Throwable $e) {
             Log::error('Failed to push pricing tier to Robaws', [
                 'user_id' => $user->id,

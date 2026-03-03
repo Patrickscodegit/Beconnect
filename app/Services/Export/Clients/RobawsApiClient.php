@@ -888,9 +888,9 @@ final class RobawsApiClient implements RobawsApiClientInterface
 
             if (empty($update)) return ['id' => $clientId];
 
-            // Use regular JSON content type like other operations
+            // Use merge-patch as per Robaws API recommendation for PATCH
             $response = $this->getHttpClient()
-                ->withHeaders(['Content-Type' => 'application/json', 'Accept' => 'application/json'])
+                ->withHeaders(['Content-Type' => 'application/merge-patch+json', 'Accept' => 'application/json'])
                 ->patch("/api/v2/clients/{$clientId}", $update);
 
             if ($response->successful()) {
@@ -909,7 +909,7 @@ final class RobawsApiClient implements RobawsApiClientInterface
                 'body' => $response->body(),
                 'update_data' => $update,
             ]);
-            return ['id' => $clientId];
+            return null;
 
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('Exception updating Robaws client', [
@@ -917,7 +917,7 @@ final class RobawsApiClient implements RobawsApiClientInterface
                 'client_id' => $clientId,
                 'update_data' => $customerData,
             ]);
-            return ['id' => $clientId];
+            return null;
         }
     }
 
@@ -2172,28 +2172,15 @@ final class RobawsApiClient implements RobawsApiClientInterface
     }
 
     /**
-     * Update a single extra field on a client
+     * Update a single extra field on a client using merge-patch.
+     * Fire-and-forget: logs warnings on failure, does not throw.
      */
     private function updateClientExtraField(int $clientId, string $fieldName, $value): void
     {
         if (!$value) return;
-        
+
         try {
-            $this->executeWithRateLimitRetry(function() use ($clientId, $fieldName, $value) {
-                return $this->getHttpClient()
-                    ->withHeaders(['Content-Type' => 'application/merge-patch+json'])
-                    ->patch("/api/v2/clients/{$clientId}", [
-                        'extraFields' => [
-                            $fieldName => ['stringValue' => (string) $value]
-                        ]
-                    ]);
-            });
-            
-            \Illuminate\Support\Facades\Log::info('Updated client extra field', [
-                'client_id' => $clientId,
-                'field_name' => $fieldName,
-                'value' => $value
-            ]);
+            $this->pushClientExtraField($clientId, $fieldName, (string) $value);
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::warning('Failed to update client extra field', [
                 'client_id' => $clientId,
@@ -2201,6 +2188,41 @@ final class RobawsApiClient implements RobawsApiClientInterface
                 'error' => $e->getMessage()
             ]);
         }
+    }
+
+    /**
+     * Push a single extra field to a Robaws client using merge-patch.
+     * Returns true on success, throws on API failure.
+     */
+    public function pushClientExtraField(int $clientId, string $fieldName, string $value): bool
+    {
+        $response = $this->executeWithRateLimitRetry(function () use ($clientId, $fieldName, $value) {
+            return $this->getHttpClient()
+                ->withHeaders(['Content-Type' => 'application/merge-patch+json', 'Accept' => 'application/json'])
+                ->patch("/api/v2/clients/{$clientId}", [
+                    'extraFields' => [
+                        $fieldName => ['stringValue' => $value]
+                    ]
+                ]);
+        });
+
+        if (!$response->successful()) {
+            \Illuminate\Support\Facades\Log::error('Failed to push client extra field', [
+                'client_id' => $clientId,
+                'field_name' => $fieldName,
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+            throw new \RuntimeException("Robaws API error: {$response->status()} - {$response->body()}");
+        }
+
+        \Illuminate\Support\Facades\Log::info('Pushed client extra field', [
+            'client_id' => $clientId,
+            'field_name' => $fieldName,
+            'value' => $value
+        ]);
+
+        return true;
     }
 
     /**
