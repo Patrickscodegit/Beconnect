@@ -2193,18 +2193,22 @@ final class RobawsApiClient implements RobawsApiClientInterface
     /**
      * Push a single extra field to a Robaws client.
      * Returns true on success, throws on API failure.
-     * Note: Robaws clients PATCH endpoint requires application/json (merge-patch returns 415).
+     * Uses withBody + application/merge-patch+json to match working Robaws PATCH pattern.
      */
     public function pushClientExtraField(int $clientId, string $fieldName, string $value): bool
     {
-        $response = $this->executeWithRateLimitRetry(function () use ($clientId, $fieldName, $value) {
+        $payload = [
+            'extraFields' => [
+                $fieldName => ['stringValue' => $value]
+            ]
+        ];
+        $jsonBody = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        $response = $this->executeWithRateLimitRetry(function () use ($clientId, $jsonBody) {
             return $this->getHttpClient()
-                ->withHeaders(['Content-Type' => 'application/json', 'Accept' => 'application/json'])
-                ->patch("/api/v2/clients/{$clientId}", [
-                    'extraFields' => [
-                        $fieldName => ['stringValue' => $value]
-                    ]
-                ]);
+                ->withHeaders(['Accept' => 'application/json'])
+                ->withBody($jsonBody, 'application/merge-patch+json')
+                ->patch("/api/v2/clients/{$clientId}");
         });
 
         if (!$response->successful()) {
