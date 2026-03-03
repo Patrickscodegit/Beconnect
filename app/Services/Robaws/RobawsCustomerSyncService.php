@@ -319,7 +319,9 @@ class RobawsCustomerSyncService
     {
         try {
             $customerData = $this->apiClient->getClientById($clientId);
-            return $this->processCustomer($customerData, false);
+            $customer = $this->processCustomer($customerData, false);
+            $this->syncPricingToLinkedUsers($customer);
+            return $customer;
         } catch (\Exception $e) {
             Log::error('Failed to sync single customer', [
                 'client_id' => $clientId,

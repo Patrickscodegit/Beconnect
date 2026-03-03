@@ -123,6 +123,19 @@ class RobawsWebhookController extends Controller
             'webhook_id' => $webhookId,
             'client_id' => $data['id'] ?? null
         ]);
+
+        // Debug: log whether payload contains extraFields (diagnose PRICING sync)
+        if (config('app.debug')) {
+            $hasExtraFields = isset($data['extraFields']);
+            $hasPricing = $hasExtraFields && isset($data['extraFields']['PRICING']);
+            $pricingValue = $hasPricing ? ($data['extraFields']['PRICING']['stringValue'] ?? $data['extraFields']['PRICING']['value'] ?? $data['extraFields']['PRICING']['textValue'] ?? '?') : null;
+            Log::info('Customer webhook extraFields diagnostic', [
+                'client_id' => $data['id'] ?? null,
+                'has_extraFields' => $hasExtraFields,
+                'has_PRICING' => $hasPricing,
+                'pricing_value' => $pricingValue,
+            ]);
+        }
         
         // Create webhook log entry
         $webhookLog = RobawsWebhookLog::create([
