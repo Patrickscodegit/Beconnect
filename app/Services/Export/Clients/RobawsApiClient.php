@@ -888,9 +888,9 @@ final class RobawsApiClient implements RobawsApiClientInterface
 
             if (empty($update)) return ['id' => $clientId];
 
-            // Use merge-patch as per Robaws API recommendation for PATCH
+            // Robaws clients PATCH endpoint requires application/json (merge-patch returns 415)
             $response = $this->getHttpClient()
-                ->withHeaders(['Content-Type' => 'application/merge-patch+json', 'Accept' => 'application/json'])
+                ->withHeaders(['Content-Type' => 'application/json', 'Accept' => 'application/json'])
                 ->patch("/api/v2/clients/{$clientId}", $update);
 
             if ($response->successful()) {
@@ -2191,14 +2191,15 @@ final class RobawsApiClient implements RobawsApiClientInterface
     }
 
     /**
-     * Push a single extra field to a Robaws client using merge-patch.
+     * Push a single extra field to a Robaws client.
      * Returns true on success, throws on API failure.
+     * Note: Robaws clients PATCH endpoint requires application/json (merge-patch returns 415).
      */
     public function pushClientExtraField(int $clientId, string $fieldName, string $value): bool
     {
         $response = $this->executeWithRateLimitRetry(function () use ($clientId, $fieldName, $value) {
             return $this->getHttpClient()
-                ->withHeaders(['Content-Type' => 'application/merge-patch+json', 'Accept' => 'application/json'])
+                ->withHeaders(['Content-Type' => 'application/json', 'Accept' => 'application/json'])
                 ->patch("/api/v2/clients/{$clientId}", [
                     'extraFields' => [
                         $fieldName => ['stringValue' => $value]
