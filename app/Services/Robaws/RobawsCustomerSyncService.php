@@ -2,7 +2,9 @@
 
 namespace App\Services\Robaws;
 
+use App\Models\PricingTier;
 use App\Models\RobawsCustomerCache;
+use App\Models\RobawsCustomerPortalLink;
 use App\Services\Export\Clients\RobawsApiClient;
 use App\Support\CustomerNormalizer;
 use Illuminate\Support\Facades\Log;
@@ -127,11 +129,15 @@ class RobawsCustomerSyncService
             $normalizedVat = $customerData['vatNumber'] ?? null;
         }
         
+        // Extract pricing tier from custom fields
+        $pricingCode = $this->extractPricing($customerData);
+
         // Build normalized data array
         $normalizedData = [
             'robaws_client_id' => (string)$clientId,
             'name' => $customerData['name'] ?? 'Unknown',
             'role' => $role,
+            'pricing_code' => $pricingCode,
             'email' => $customerData['email'] ?? null,
             'phone' => $normalizedPhone,
             'mobile' => $normalizedMobile,
@@ -211,15 +217,99 @@ class RobawsCustomerSyncService
         
         return null;
     }
-    
+
+    /**
+     * Extract PRICING from customer extraFields
+     * Maps "TIER A", "TIER B", "TIER C" to "A", "B", "C"
+     */
+    protected function extractPricing(array $customerData): ?string
+    {
+        if (!isset($customerData['extraFields'])) {
+            return null;
+        }
+
+        // Direct check for PRICING field
+        $fieldData = $customerData['extraFields']['PRICING'] ?? $customerData['extraFields']['Pricing'] ?? null;
+        if ($fieldData !== null) {
+            $raw = $fieldData['stringValue'] ?? $fieldData['value'] ?? $fieldData['textValue'] ?? null;
+            if ($raw) {
+                return $this->normalizePricingCode($raw);
+            }
+        }
+
+        // Search through all extraFields for pricing-related field
+        foreach ($customerData['extraFields'] as $fieldName => $fieldData) {
+            if (stripos($fieldName, 'pricing') === false) {
+                continue;
+            }
+            $raw = $fieldData['stringValue'] ?? $fieldData['value'] ?? $fieldData['textValue'] ?? null;
+            if ($raw) {
+                return $this->normalizePricingCode($raw);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Normalize Robaws value to single-letter code (A, B, C)
+     */
+    protected function normalizePricingCode(string $raw): ?string
+    {
+        $upper = strtoupper(trim($raw));
+        if (in_array($upper, ['A', 'TIER A'], true)) {
+            return 'A';
+        }
+        if (in_array($upper, ['B', 'TIER B'], true)) {
+            return 'B';
+        }
+        if (in_array($upper, ['C', 'TIER C'], true)) {
+            return 'C';
+        }
+        return null;
+    }
+
+    /**
+     * Propagate pricing from Robaws cache to linked Bconnect users
+     */
+    public function syncPricingToLinkedUsers(RobawsCustomerCache $cache): void
+    {
+        $links = RobawsCustomerPortalLink::where('robaws_client_id', $cache->robaws_client_id)->get();
+
+        foreach ($links as $link) {
+            $user = $link->user;
+            if (!$user) {
+                continue;
+            }
+
+            $pricingTierId = null;
+            if ($cache->pricing_code) {
+                $tier = PricingTier::getByCode($cache->pricing_code);
+                $pricingTierId = $tier?->id;
+            }
+
+            $user->update(['pricing_tier_id' => $pricingTierId]);
+
+            Log::info('Synced PRICING to linked user from Robaws', [
+                'user_id' => $user->id,
+                'robaws_client_id' => $cache->robaws_client_id,
+                'pricing_code' => $cache->pricing_code,
+                'pricing_tier_id' => $pricingTierId,
+            ]);
+        }
+    }
+
     /**
      * Process customer from webhook
      */
     public function processCustomerFromWebhook(array $webhookData): RobawsCustomerCache
     {
         $customerData = $webhookData['data'] ?? $webhookData;
-        
-        return $this->processCustomer($customerData, false);
+
+        $customer = $this->processCustomer($customerData, false);
+        $this->syncPricingToLinkedUsers($customer);
+
+        return $customer;
     }
     
     /**

@@ -872,14 +872,20 @@ final class RobawsApiClient implements RobawsApiClientInterface
     }
 
     /**
-     * Update existing client with new data using proper merge-patch
+     * Update existing client with new data using proper merge-patch.
+     * Supports extraFields (e.g. PRICING) when provided in $customerData['extraFields'].
      */
     public function updateClient(int $clientId, array $customerData): ?array
     {
         try {
-            // Use the same payload conversion as createClient for consistency
+            // Base payload from standard fields
             $update = $this->toRobawsClientPayload($customerData, true);
-            
+
+            // Merge extraFields when provided (e.g. PRICING custom field)
+            if (!empty($customerData['extraFields'])) {
+                $update['extraFields'] = array_merge($update['extraFields'] ?? [], $customerData['extraFields']);
+            }
+
             if (empty($update)) return ['id' => $clientId];
 
             // Use regular JSON content type like other operations
