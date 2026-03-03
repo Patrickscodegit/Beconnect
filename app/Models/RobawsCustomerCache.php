@@ -13,6 +13,7 @@ class RobawsCustomerCache extends Model
         'robaws_client_id',
         'name',
         'role',
+        'pricing_code',
         'email',
         'phone',
         'mobile',

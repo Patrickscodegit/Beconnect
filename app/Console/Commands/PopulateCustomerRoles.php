@@ -94,11 +94,7 @@ class PopulateCustomerRoles extends Command
                 // Update Robaws client if requested and client ID exists
                 if ($updateRobaws && $intake->robaws_client_id && $apiClient) {
                     try {
-                        // Use reflection to access private method updateClientExtraField
-                        $reflection = new \ReflectionClass($apiClient);
-                        $method = $reflection->getMethod('updateClientExtraField');
-                        $method->setAccessible(true);
-                        $method->invoke($apiClient, (int)$intake->robaws_client_id, 'Role', $defaultRole);
+                        $apiClient->pushClientExtraField((int)$intake->robaws_client_id, 'Role', $defaultRole);
                         
                         $robawsUpdatedCount++;
                         $this->info("  → Also updated Robaws client #{$intake->robaws_client_id}");

@@ -59,6 +59,15 @@ class UserResource extends Resource
                                 'blocked' => 'Blocked',
                             ])
                             ->required(),
+                        Forms\Components\Select::make('pricing_tier_id')
+                            ->label('Pricing Tier')
+                            ->relationship('pricingTier', 'name', fn ($query) => $query->where('is_active', true))
+                            ->getOptionLabelFromRecordUsing(fn ($record) => $record->select_label)
+                            ->placeholder('Use default (Tier C)')
+                            ->helperText('Applies to new quotations created by this customer. Leave empty to use default.')
+                            ->searchable()
+                            ->preload()
+                            ->visible(fn ($get, $record) => ($record?->role ?? $get('role')) === 'customer'),
                     ])
                     ->columns(2),
 
@@ -130,6 +139,12 @@ class UserResource extends Resource
                                 null  => '—',
                             }),
 
+                        Forms\Components\Placeholder::make('co_pricing')
+                            ->label('Pricing (from Robaws)')
+                            ->content(fn ($record) => ($c = $record?->portalLink?->cachedCustomer?->pricing_code)
+                                ? 'Tier ' . strtoupper($c)
+                                : '—'),
+
                         Forms\Components\Placeholder::make('co_synced')
                             ->label('Last Synced')
                             ->content(fn ($record) => $record?->portalLink?->cachedCustomer?->last_synced_at
@@ -176,6 +191,13 @@ class UserResource extends Resource
                         'danger' => 'blocked',
                     ])
                     ->sortable(),
+                Tables\Columns\TextColumn::make('pricingTier.name')
+                    ->label('Pricing Tier')
+                    ->badge()
+                    ->formatStateUsing(fn ($state, $record) => $state ?? '—')
+                    ->color(fn ($record) => $record?->pricingTier?->color ?? 'gray')
+                    ->visible(fn ($record) => ($record?->role ?? null) === 'customer')
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('portalLink.cachedCustomer.name')
                     ->label('Robaws Company')
                     ->placeholder('—')

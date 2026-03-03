@@ -109,6 +109,7 @@ class RobawsWebhookController extends Controller
                 'signature' => $request->header('Robaws-Signature'),
                 'body' => $request->getContent()
             ]);
+            $this->logRejectedWebhook($request, 'Invalid signature');
             return response()->json(['error' => 'Invalid signature'], 401);
         }
         
@@ -295,5 +296,29 @@ class RobawsWebhookController extends Controller
         
         // Constant-time comparison
         return hash_equals($expectedSignature, $receivedSignature);
+    }
+
+    /**
+     * Log a rejected webhook (e.g. invalid signature) for debugging visibility.
+     * Stores minimal payload to avoid leaking sensitive data.
+     */
+    private function logRejectedWebhook(Request $request, string $reason): void
+    {
+        try {
+            RobawsWebhookLog::create([
+                'event_type' => $request->input('event') ?? 'unknown',
+                'robaws_id' => $request->input('id') ?? 'rejected-' . uniqid(),
+                'article_id' => null,
+                'payload' => [
+                    'event' => $request->input('event'),
+                    'id' => $request->input('id'),
+                    '_rejected' => true,
+                ],
+                'status' => 'failed',
+                'error_message' => $reason,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to log rejected webhook', ['error' => $e->getMessage()]);
+        }
     }
 }
