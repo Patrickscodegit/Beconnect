@@ -19,6 +19,22 @@
  - Staging is PostgreSQL.
  - Ensure the staging DB user has privileges on the `public` schema.
  - If migrations fail with permission errors, grant privileges using a database admin.
+
+ ### Fix "must be owner of table" (migration fails on ALTER TABLE)
+ When migrations fail with `SQLSTATE[42501]: Insufficient privilege: must be owner of table X`:
+
+ 1. **Via Forge Commands** (if sudo works without password):
+    ```bash
+    cd /home/forge/beconnect-rn6k77zh.on-forge.com/current
+    bash scripts/forge_fix_table_ownership.sh robaws_customers_cache
+    php artisan migrate --force
+    ```
+
+ 2. **Via Forge Database / Run SQL** (run as DB admin):
+    ```sql
+    ALTER TABLE robaws_customers_cache OWNER TO "forge";
+    ```
+    Replace `forge` with your `DB_USERNAME` from .env. Then re-deploy or run `php artisan migrate --force`.
  
  ## Spaces (Staging Bucket)
  - Create a separate staging bucket (example: `bconnect-staging-documents`) in `fra1`.

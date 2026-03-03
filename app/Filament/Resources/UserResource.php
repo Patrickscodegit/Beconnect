@@ -195,8 +195,8 @@ class UserResource extends Resource
                     ->label('Pricing Tier')
                     ->badge()
                     ->formatStateUsing(fn ($state, $record) => $state ?? '—')
-                    ->color(fn ($record) => $record->pricingTier?->color ?? 'gray')
-                    ->visible(fn ($record) => $record->role === 'customer')
+                    ->color(fn ($record) => $record?->pricingTier?->color ?? 'gray')
+                    ->visible(fn ($record) => ($record?->role ?? null) === 'customer')
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('portalLink.cachedCustomer.name')
                     ->label('Robaws Company')
