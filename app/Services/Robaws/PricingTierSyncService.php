@@ -14,7 +14,7 @@ class PricingTierSyncService
 
     /**
      * Push User's pricing tier to the linked Robaws client.
-     * When pricing_tier_id is null, pushes "TIER C" (default).
+     * When pricing_tier_id is null, pushes "TIER A" (default).
      */
     public function pushUserPricingToRobaws(User $user): bool
     {
@@ -23,7 +23,7 @@ class PricingTierSyncService
             return true; // No link, nothing to push
         }
 
-        $robawsValue = 'TIER C'; // Default when null
+        $robawsValue = 'TIER A'; // Default when null
         if ($user->pricing_tier_id && $user->pricingTier) {
             $robawsValue = 'TIER ' . strtoupper($user->pricingTier->code);
         }

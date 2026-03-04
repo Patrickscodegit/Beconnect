@@ -35,7 +35,7 @@ class PushPricingToRobaws extends Command
 
         try {
             app(PricingTierSyncService::class)->pushUserPricingToRobaws($user);
-            $tier = $user->pricingTier ? ('TIER ' . strtoupper($user->pricingTier->code)) : 'TIER C';
+            $tier = $user->pricingTier ? ('TIER ' . strtoupper($user->pricingTier->code)) : 'TIER A';
             $this->info("Pushed {$tier} to Robaws client #{$user->portalLink->robaws_client_id}.");
             return self::SUCCESS;
         } catch (\Throwable $e) {

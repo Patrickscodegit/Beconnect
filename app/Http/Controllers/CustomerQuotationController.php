@@ -380,7 +380,7 @@ class CustomerQuotationController extends Controller
             'trade_direction' => $this->getDirectionFromServiceType($defaultServiceType),
             'customer_type' => 'GENERAL', // Set by Belgaco team in admin panel
             'customer_role' => 'CONSIGNEE', // WHO they are (can be overridden by team)
-            'pricing_tier_id' => $this->getDefaultPricingTierId(), // WHAT pricing they get (defaults to Tier B - Medium)
+            'pricing_tier_id' => $this->getDefaultPricingTierId(), // WHAT pricing they get (defaults to Tier A)
             
             // Cargo
             'cargo_description' => $request->cargo_description,
@@ -526,12 +526,12 @@ class CustomerQuotationController extends Controller
     }
     
     /**
-     * Get default pricing tier ID (Tier B) with error handling
+     * Get default pricing tier ID (Tier A) with error handling
      */
     private function getDefaultPricingTierId(): ?int
     {
         try {
-            return \App\Models\PricingTier::where('code', 'B')->where('is_active', true)->first()?->id;
+            return \App\Models\PricingTier::where('code', 'A')->where('is_active', true)->first()?->id;
         } catch (\Exception $e) {
             // Table might not exist yet if migrations haven't run
             \Log::warning('pricing_tiers table not found, pricing tier will be null', [

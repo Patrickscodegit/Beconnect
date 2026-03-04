@@ -125,8 +125,8 @@ class QuotationRequestResource extends Resource
                             ->preload()
                             ->default(function () {
                                 try {
-                                    // Default to Tier B (Medium Price)
-                                    return \App\Models\PricingTier::where('code', 'B')->where('is_active', true)->first()?->id;
+                                    // Default to Tier A
+                                    return \App\Models\PricingTier::where('code', 'A')->where('is_active', true)->first()?->id;
                                 } catch (\Exception $e) {
                                     // Table might not exist yet if migrations haven't run
                                     return null;
