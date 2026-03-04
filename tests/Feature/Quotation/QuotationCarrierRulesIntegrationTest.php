@@ -141,6 +141,40 @@ class QuotationCarrierRulesIntegrationTest extends TestCase
         return $stackedArticle;
     }
 
+    private function createLoadedCargoSurchargeArticleAndRule(
+        ShippingCarrier $carrier,
+        Port $pod,
+        string $mode = 'FREE'
+    ): RobawsArticleCache {
+        $loadedCargoArticle = RobawsArticleCache::create([
+            'robaws_article_id' => 'LOAD-SUR-' . strtoupper($mode),
+            'article_name' => 'Loaded Cargo Surcharge',
+            'category' => 'surcharge',
+            'is_active' => true,
+            'is_parent_item' => true,
+            'is_parent_article' => true,
+            'last_synced_at' => now(),
+            'unit_price' => 25,
+            'currency' => 'EUR',
+            'service_type' => 'RORO_EXPORT',
+            'transport_mode' => 'RORO',
+        ]);
+
+        CarrierSurchargeRule::create([
+            'carrier_id' => $carrier->id,
+            'port_id' => $pod->id,
+            'event_code' => 'LOADED_CARGO',
+            'loaded_cargo_mode' => strtoupper($mode),
+            'name' => 'Loaded cargo surcharge',
+            'calc_mode' => 'FLAT',
+            'params' => ['amount' => 25],
+            'is_active' => true,
+            'article_id' => $loadedCargoArticle->id,
+        ]);
+
+        return $loadedCargoArticle;
+    }
+
     #[Test]
     public function it_selects_mapped_article_by_category_group(): void
     {
@@ -1006,6 +1040,136 @@ class QuotationCarrierRulesIntegrationTest extends TestCase
             ->get();
 
         $this->assertCount(2, $stackedLines);
+    }
+
+    #[Test]
+    public function test_loaded_cargo_three_level_stack_produces_one_line(): void
+    {
+        $carrier = $this->createCarrier();
+        $pol = $this->createPort('Antwerp', 'ANR');
+        $pod = $this->createPort('Abidjan', 'ABJ');
+        $schedule = $this->createSchedule($carrier, $pol, $pod);
+
+        $quotation = $this->createQuotation([
+            'selected_schedule_id' => $schedule->id,
+            'pol' => $pol->formatFull(),
+            'pod' => $pod->formatFull(),
+            'pol_port_id' => $pol->id,
+            'pod_port_id' => $pod->id,
+        ]);
+
+        [$baseItem, $connectedItem, $loadedItem] = $this->createThreeLevelStack($quotation);
+        $loadedCargoArticle = $this->createLoadedCargoSurchargeArticleAndRule($carrier, $pod);
+
+        $service = app(CarrierRuleIntegrationService::class);
+        $service->processCommodityItem($baseItem->fresh(['quotationRequest.selectedSchedule.podPort']));
+        $service->processCommodityItem($connectedItem->fresh(['quotationRequest.selectedSchedule.podPort']));
+        $service->processCommodityItem($loadedItem->fresh(['quotationRequest.selectedSchedule.podPort']));
+
+        $loadedCargoLines = QuotationRequestArticle::query()
+            ->where('quotation_request_id', $quotation->id)
+            ->where('carrier_rule_applied', true)
+            ->where('carrier_rule_event_code', 'LOADED_CARGO')
+            ->where('article_cache_id', $loadedCargoArticle->id)
+            ->get();
+
+        $this->assertCount(1, $loadedCargoLines);
+    }
+
+    #[Test]
+    public function test_loaded_cargo_two_loaded_items_produces_one_line(): void
+    {
+        $carrier = $this->createCarrier();
+        $pol = $this->createPort('Antwerp', 'ANR');
+        $pod = $this->createPort('Abidjan', 'ABJ');
+        $schedule = $this->createSchedule($carrier, $pol, $pod);
+
+        $quotation = $this->createQuotation([
+            'selected_schedule_id' => $schedule->id,
+            'pol' => $pol->formatFull(),
+            'pod' => $pod->formatFull(),
+            'pol_port_id' => $pol->id,
+            'pod_port_id' => $pod->id,
+        ]);
+
+        $baseItem = QuotationCommodityItem::create([
+            'quotation_request_id' => $quotation->id,
+            'line_number' => 1,
+            'commodity_type' => 'vehicles',
+            'category' => 'truckhead',
+            'quantity' => 1,
+        ]);
+
+        $loadedOne = QuotationCommodityItem::create([
+            'quotation_request_id' => $quotation->id,
+            'line_number' => 2,
+            'commodity_type' => 'vehicles',
+            'category' => 'suv',
+            'quantity' => 1,
+            'relationship_type' => 'loaded_with',
+            'related_item_id' => $baseItem->id,
+        ]);
+
+        $loadedTwo = QuotationCommodityItem::create([
+            'quotation_request_id' => $quotation->id,
+            'line_number' => 3,
+            'commodity_type' => 'vehicles',
+            'category' => 'car',
+            'quantity' => 1,
+            'relationship_type' => 'loaded_with',
+            'related_item_id' => $baseItem->id,
+        ]);
+
+        $loadedCargoArticle = $this->createLoadedCargoSurchargeArticleAndRule($carrier, $pod);
+
+        $service = app(CarrierRuleIntegrationService::class);
+        $service->processCommodityItem($baseItem->fresh(['quotationRequest.selectedSchedule.podPort']));
+        $service->processCommodityItem($loadedOne->fresh(['quotationRequest.selectedSchedule.podPort']));
+        $service->processCommodityItem($loadedTwo->fresh(['quotationRequest.selectedSchedule.podPort']));
+
+        $loadedCargoLines = QuotationRequestArticle::query()
+            ->where('quotation_request_id', $quotation->id)
+            ->where('carrier_rule_applied', true)
+            ->where('carrier_rule_event_code', 'LOADED_CARGO')
+            ->where('article_cache_id', $loadedCargoArticle->id)
+            ->get();
+
+        $this->assertCount(1, $loadedCargoLines);
+    }
+
+    #[Test]
+    public function test_loaded_cargo_two_separate_stacks_produce_two_lines(): void
+    {
+        $carrier = $this->createCarrier();
+        $pol = $this->createPort('Antwerp', 'ANR');
+        $pod = $this->createPort('Abidjan', 'ABJ');
+        $schedule = $this->createSchedule($carrier, $pol, $pod);
+
+        $quotation = $this->createQuotation([
+            'selected_schedule_id' => $schedule->id,
+            'pol' => $pol->formatFull(),
+            'pod' => $pod->formatFull(),
+            'pol_port_id' => $pol->id,
+            'pod_port_id' => $pod->id,
+        ]);
+
+        [$baseOne, $connectedOne, $loadedOne] = $this->createThreeLevelStack($quotation, 1);
+        [$baseTwo, $connectedTwo, $loadedTwo] = $this->createThreeLevelStack($quotation, 10);
+        $loadedCargoArticle = $this->createLoadedCargoSurchargeArticleAndRule($carrier, $pod);
+
+        $service = app(CarrierRuleIntegrationService::class);
+        foreach ([$baseOne, $connectedOne, $loadedOne, $baseTwo, $connectedTwo, $loadedTwo] as $item) {
+            $service->processCommodityItem($item->fresh(['quotationRequest.selectedSchedule.podPort']));
+        }
+
+        $loadedCargoLines = QuotationRequestArticle::query()
+            ->where('quotation_request_id', $quotation->id)
+            ->where('carrier_rule_applied', true)
+            ->where('carrier_rule_event_code', 'LOADED_CARGO')
+            ->where('article_cache_id', $loadedCargoArticle->id)
+            ->get();
+
+        $this->assertCount(2, $loadedCargoLines);
     }
 
     #[Test]

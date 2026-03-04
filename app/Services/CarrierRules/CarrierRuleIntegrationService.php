@@ -367,7 +367,7 @@ class CarrierRuleIntegrationService
             $existingArticle = null;
             $stackMemberIds = [];
 
-            if ($eventCode === 'STACKED' && $item->isInStack()) {
+            if (in_array($eventCode, ['STACKED', 'LOADED_CARGO'], true) && $item->isInStack()) {
                 $stackMemberIds = $item->getStackMembers()->pluck('id')->all();
             }
             
@@ -376,7 +376,7 @@ class CarrierRuleIntegrationService
                     ->where('article_cache_id', $draft['article_id'])
                     ->where('carrier_rule_event_code', $eventCode);
 
-                if ($eventCode === 'STACKED' && !empty($stackMemberIds)) {
+                if (in_array($eventCode, ['STACKED', 'LOADED_CARGO'], true) && !empty($stackMemberIds)) {
                     $existingArticleQuery->whereIn('carrier_rule_commodity_item_id', $stackMemberIds);
                 } else {
                     $existingArticleQuery->where('carrier_rule_commodity_item_id', $item->id);
@@ -686,7 +686,7 @@ class CarrierRuleIntegrationService
 
         $groups = $dedupeRows->groupBy(function ($row) use ($stackBaseByItemId) {
             $eventCode = strtoupper((string) ($row->carrier_rule_event_code ?? ''));
-            if ($eventCode === 'STACKED') {
+            if (in_array($eventCode, ['STACKED', 'LOADED_CARGO'], true)) {
                 $itemId = (int) ($row->carrier_rule_commodity_item_id ?? 0);
                 $stackBaseId = $stackBaseByItemId[$itemId] ?? $itemId;
                 return implode('|', [
