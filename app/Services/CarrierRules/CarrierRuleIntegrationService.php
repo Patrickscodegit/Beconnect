@@ -190,6 +190,13 @@ class CarrierRuleIntegrationService
             });
 
         if ($articles->isEmpty()) {
+            Log::info('CarrierRuleIntegration: Loaded cargo seafreight override skipped (no matching article yet)', [
+                'quotation_id' => $quotation->id,
+                'loaded_item_id' => $item->id,
+                'loaded_item_relationship_type' => $item->relationship_type,
+                'loaded_commodity_types' => $typesUpper,
+                'note' => 'Matching seafreight article may be added later; QuotationRequestArticle saving hook will enforce FREE override.',
+            ]);
             return;
         }
 
