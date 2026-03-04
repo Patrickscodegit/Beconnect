@@ -324,6 +324,11 @@ class CarrierRuleEngine
                 continue;
             }
 
+            // STACKED surcharge is charged once at stack-base level only.
+            if ($eventCode === 'STACKED' && in_array($input->relationshipType, ['connected_to', 'loaded_with'], true)) {
+                continue;
+            }
+
             $calculation = $this->surchargeCalculator->calculate(
                 $rule,
                 $input,

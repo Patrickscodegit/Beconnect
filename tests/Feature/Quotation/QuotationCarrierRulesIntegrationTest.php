@@ -917,6 +917,17 @@ class QuotationCarrierRulesIntegrationTest extends TestCase
         $service->processCommodityItem($connectedItem->fresh(['quotationRequest.selectedSchedule.podPort']));
         $service->processCommodityItem($loadedItem->fresh(['quotationRequest.selectedSchedule.podPort']));
 
+        $connectedEventCodes = collect(data_get($connectedItem->fresh()->carrier_rule_meta, 'surcharge_events', []))
+            ->pluck('event_code')
+            ->filter()
+            ->map(fn ($code) => strtoupper((string) $code))
+            ->values();
+        $loadedEventCodes = collect(data_get($loadedItem->fresh()->carrier_rule_meta, 'surcharge_events', []))
+            ->pluck('event_code')
+            ->filter()
+            ->map(fn ($code) => strtoupper((string) $code))
+            ->values();
+
         $stackedLines = QuotationRequestArticle::query()
             ->where('quotation_request_id', $quotation->id)
             ->where('carrier_rule_applied', true)
@@ -924,6 +935,8 @@ class QuotationCarrierRulesIntegrationTest extends TestCase
             ->where('article_cache_id', $stackedArticle->id)
             ->get();
 
+        $this->assertFalse($connectedEventCodes->contains('STACKED'));
+        $this->assertFalse($loadedEventCodes->contains('STACKED'));
         $this->assertCount(1, $stackedLines);
     }
 
