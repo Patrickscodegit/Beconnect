@@ -14,6 +14,7 @@ use App\Models\RobawsArticleCache;
 use App\Models\ShippingCarrier;
 use App\Models\ShippingSchedule;
 use App\Services\CarrierRules\CarrierRuleIntegrationService;
+use App\Services\Quotation\QuotationPricingOrchestrator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -75,6 +76,69 @@ class QuotationCarrierRulesIntegrationTest extends TestCase
             'cargo_description' => 'Test cargo',
             'status' => 'pending',
         ], $overrides));
+    }
+
+    private function createThreeLevelStack(QuotationRequest $quotation, int $startLine = 1): array
+    {
+        $base = QuotationCommodityItem::create([
+            'quotation_request_id' => $quotation->id,
+            'line_number' => $startLine,
+            'commodity_type' => 'vehicles',
+            'category' => 'truckhead',
+            'quantity' => 1,
+        ]);
+
+        $connected = QuotationCommodityItem::create([
+            'quotation_request_id' => $quotation->id,
+            'line_number' => $startLine + 1,
+            'commodity_type' => 'vehicles',
+            'category' => 'trailer',
+            'quantity' => 1,
+            'relationship_type' => 'connected_to',
+            'related_item_id' => $base->id,
+        ]);
+
+        $loaded = QuotationCommodityItem::create([
+            'quotation_request_id' => $quotation->id,
+            'line_number' => $startLine + 2,
+            'commodity_type' => 'vehicles',
+            'category' => 'suv',
+            'quantity' => 1,
+            'relationship_type' => 'loaded_with',
+            'related_item_id' => $connected->id,
+        ]);
+
+        return [$base, $connected, $loaded];
+    }
+
+    private function createStackedSurchargeArticleAndRule(ShippingCarrier $carrier, Port $pod): RobawsArticleCache
+    {
+        $stackedArticle = RobawsArticleCache::create([
+            'robaws_article_id' => 'STACK-001',
+            'article_name' => 'Stacked Surcharge',
+            'category' => 'surcharge',
+            'is_active' => true,
+            'is_parent_item' => true,
+            'is_parent_article' => true,
+            'last_synced_at' => now(),
+            'unit_price' => 50,
+            'currency' => 'EUR',
+            'service_type' => 'RORO_EXPORT',
+            'transport_mode' => 'RORO',
+        ]);
+
+        CarrierSurchargeRule::create([
+            'carrier_id' => $carrier->id,
+            'port_id' => $pod->id,
+            'event_code' => 'STACKED',
+            'name' => 'Stacked surcharge',
+            'calc_mode' => 'FLAT',
+            'params' => ['amount' => 50],
+            'is_active' => true,
+            'article_id' => $stackedArticle->id,
+        ]);
+
+        return $stackedArticle;
     }
 
     #[Test]
@@ -812,48 +876,8 @@ class QuotationCarrierRulesIntegrationTest extends TestCase
             'pod_port_id' => $pod->id,
         ]);
 
-        $baseItem = QuotationCommodityItem::create([
-            'quotation_request_id' => $quotation->id,
-            'line_number' => 1,
-            'commodity_type' => 'vehicles',
-            'category' => 'truckhead',
-            'quantity' => 1,
-        ]);
-
-        $connectedItem = QuotationCommodityItem::create([
-            'quotation_request_id' => $quotation->id,
-            'line_number' => 2,
-            'commodity_type' => 'vehicles',
-            'category' => 'trailer',
-            'quantity' => 1,
-            'relationship_type' => 'connected_to',
-            'related_item_id' => $baseItem->id,
-        ]);
-
-        $stackedArticle = RobawsArticleCache::create([
-            'robaws_article_id' => 'STACK-001',
-            'article_name' => 'Stacked Surcharge',
-            'category' => 'surcharge',
-            'is_active' => true,
-            'is_parent_item' => true,
-            'is_parent_article' => true,
-            'last_synced_at' => now(),
-            'unit_price' => 50,
-            'currency' => 'EUR',
-            'service_type' => 'RORO_EXPORT',
-            'transport_mode' => 'RORO',
-        ]);
-
-        CarrierSurchargeRule::create([
-            'carrier_id' => $carrier->id,
-            'port_id' => $pod->id,
-            'event_code' => 'STACKED',
-            'name' => 'Stacked surcharge',
-            'calc_mode' => 'FLAT',
-            'params' => ['amount' => 50],
-            'is_active' => true,
-            'article_id' => $stackedArticle->id,
-        ]);
+        [$baseItem, $connectedItem] = $this->createThreeLevelStack($quotation);
+        $stackedArticle = $this->createStackedSurchargeArticleAndRule($carrier, $pod);
 
         $service = app(CarrierRuleIntegrationService::class);
         $service->processCommodityItem($baseItem->fresh(['quotationRequest.selectedSchedule.podPort']));
@@ -867,6 +891,108 @@ class QuotationCarrierRulesIntegrationTest extends TestCase
             ->get();
 
         $this->assertCount(1, $stackedLines);
+    }
+
+    #[Test]
+    public function test_stacked_surcharge_three_level_stack_is_capped_to_one_line(): void
+    {
+        $carrier = $this->createCarrier();
+        $pol = $this->createPort('Antwerp', 'ANR');
+        $pod = $this->createPort('Abidjan', 'ABJ');
+        $schedule = $this->createSchedule($carrier, $pol, $pod);
+
+        $quotation = $this->createQuotation([
+            'selected_schedule_id' => $schedule->id,
+            'pol' => $pol->formatFull(),
+            'pod' => $pod->formatFull(),
+            'pol_port_id' => $pol->id,
+            'pod_port_id' => $pod->id,
+        ]);
+
+        [$baseItem, $connectedItem, $loadedItem] = $this->createThreeLevelStack($quotation);
+        $stackedArticle = $this->createStackedSurchargeArticleAndRule($carrier, $pod);
+
+        $service = app(CarrierRuleIntegrationService::class);
+        $service->processCommodityItem($baseItem->fresh(['quotationRequest.selectedSchedule.podPort']));
+        $service->processCommodityItem($connectedItem->fresh(['quotationRequest.selectedSchedule.podPort']));
+        $service->processCommodityItem($loadedItem->fresh(['quotationRequest.selectedSchedule.podPort']));
+
+        $stackedLines = QuotationRequestArticle::query()
+            ->where('quotation_request_id', $quotation->id)
+            ->where('carrier_rule_applied', true)
+            ->where('carrier_rule_event_code', 'STACKED')
+            ->where('article_cache_id', $stackedArticle->id)
+            ->get();
+
+        $this->assertCount(1, $stackedLines);
+    }
+
+    #[Test]
+    public function test_stacked_surcharge_recalculate_twice_stays_unique_per_combination(): void
+    {
+        $carrier = $this->createCarrier();
+        $pol = $this->createPort('Antwerp', 'ANR');
+        $pod = $this->createPort('Abidjan', 'ABJ');
+        $schedule = $this->createSchedule($carrier, $pol, $pod);
+
+        $quotation = $this->createQuotation([
+            'selected_schedule_id' => $schedule->id,
+            'pol' => $pol->formatFull(),
+            'pod' => $pod->formatFull(),
+            'pol_port_id' => $pol->id,
+            'pod_port_id' => $pod->id,
+        ]);
+
+        $this->createThreeLevelStack($quotation);
+        $stackedArticle = $this->createStackedSurchargeArticleAndRule($carrier, $pod);
+
+        $orchestrator = app(QuotationPricingOrchestrator::class);
+        $orchestrator->recalculateForScheduleChange($quotation);
+        $orchestrator->recalculateForScheduleChange($quotation);
+
+        $stackedLines = QuotationRequestArticle::query()
+            ->where('quotation_request_id', $quotation->id)
+            ->where('carrier_rule_applied', true)
+            ->where('carrier_rule_event_code', 'STACKED')
+            ->where('article_cache_id', $stackedArticle->id)
+            ->get();
+
+        $this->assertCount(1, $stackedLines);
+    }
+
+    #[Test]
+    public function test_stacked_surcharge_two_three_level_combinations_yield_two_lines_total(): void
+    {
+        $carrier = $this->createCarrier();
+        $pol = $this->createPort('Antwerp', 'ANR');
+        $pod = $this->createPort('Abidjan', 'ABJ');
+        $schedule = $this->createSchedule($carrier, $pol, $pod);
+
+        $quotation = $this->createQuotation([
+            'selected_schedule_id' => $schedule->id,
+            'pol' => $pol->formatFull(),
+            'pod' => $pod->formatFull(),
+            'pol_port_id' => $pol->id,
+            'pod_port_id' => $pod->id,
+        ]);
+
+        [$baseOne, $connectedOne, $loadedOne] = $this->createThreeLevelStack($quotation, 1);
+        [$baseTwo, $connectedTwo, $loadedTwo] = $this->createThreeLevelStack($quotation, 10);
+        $stackedArticle = $this->createStackedSurchargeArticleAndRule($carrier, $pod);
+
+        $service = app(CarrierRuleIntegrationService::class);
+        foreach ([$baseOne, $connectedOne, $loadedOne, $baseTwo, $connectedTwo, $loadedTwo] as $item) {
+            $service->processCommodityItem($item->fresh(['quotationRequest.selectedSchedule.podPort']));
+        }
+
+        $stackedLines = QuotationRequestArticle::query()
+            ->where('quotation_request_id', $quotation->id)
+            ->where('carrier_rule_applied', true)
+            ->where('carrier_rule_event_code', 'STACKED')
+            ->where('article_cache_id', $stackedArticle->id)
+            ->get();
+
+        $this->assertCount(2, $stackedLines);
     }
 
     #[Test]

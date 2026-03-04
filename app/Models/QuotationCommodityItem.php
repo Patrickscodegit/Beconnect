@@ -176,21 +176,29 @@ class QuotationCommodityItem extends Model
      */
     public function getStackGroup(): ?int
     {
-        // If this item is separate or is a base (others point to it), it's the base
-        if ($this->isSeparate() || $this->isStackBase()) {
-            return $this->id;
-        }
-        
-        // If this item is loaded_with or connected_to another, find the base
-        if ($this->related_item_id) {
-            $baseItem = static::find($this->related_item_id);
-            if ($baseItem) {
-                // Recursively find the base (in case of chains)
-                return $baseItem->getStackGroup();
+        $current = $this;
+        $visited = [];
+
+        // Walk the parent chain for connected/loaded items to get the canonical stack base.
+        while (
+            $current->related_item_id
+            && in_array($current->relationship_type, ['loaded_with', 'connected_to'], true)
+        ) {
+            $nextId = (int) $current->related_item_id;
+            if ($nextId <= 0 || in_array($nextId, $visited, true)) {
+                break;
             }
+
+            $visited[] = $nextId;
+            $parent = static::find($nextId);
+            if (!$parent) {
+                break;
+            }
+
+            $current = $parent;
         }
-        
-        return $this->id; // Fallback: this item is the base
+
+        return $current->id ?? $this->id;
     }
 
     /**
@@ -199,25 +207,42 @@ class QuotationCommodityItem extends Model
     public function getStackMembers(): \Illuminate\Support\Collection
     {
         $baseId = $this->getStackGroup();
-        
-        // Get base item
-        $baseItem = static::find($baseId);
+
+        $allItems = static::where('quotation_request_id', $this->quotation_request_id)->get();
+        if ($allItems->isEmpty()) {
+            return collect([$this]);
+        }
+
+        $baseItem = $allItems->firstWhere('id', $baseId);
         if (!$baseItem) {
             return collect([$this]);
         }
-        
-        // Get all items that point to this base
-        $stackedItems = static::where('quotation_request_id', $this->quotation_request_id)
-            ->where(function ($query) use ($baseId) {
-                $query->where('id', $baseId)
-                    ->orWhere(function ($q) use ($baseId) {
-                        $q->where('related_item_id', $baseId)
-                            ->whereIn('relationship_type', ['loaded_with', 'connected_to']);
-                    });
-            })
-            ->get();
-        
-        return $stackedItems;
+
+        $memberIds = [$baseItem->id];
+        $queue = [$baseItem->id];
+
+        while (!empty($queue)) {
+            $currentId = array_shift($queue);
+
+            $children = $allItems->filter(function ($item) use ($currentId) {
+                return (int) ($item->related_item_id ?? 0) === (int) $currentId
+                    && in_array($item->relationship_type, ['loaded_with', 'connected_to'], true);
+            });
+
+            foreach ($children as $child) {
+                if (in_array($child->id, $memberIds, true)) {
+                    continue;
+                }
+
+                $memberIds[] = $child->id;
+                $queue[] = $child->id;
+            }
+        }
+
+        return $allItems
+            ->whereIn('id', $memberIds)
+            ->sortBy('line_number')
+            ->values();
     }
 
     /**
