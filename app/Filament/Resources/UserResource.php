@@ -15,6 +15,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Validation\Rules\Password as PasswordRule;
 
 class UserResource extends Resource
 {
@@ -68,6 +69,27 @@ class UserResource extends Resource
                             ->searchable()
                             ->preload()
                             ->visible(fn ($get, $record) => ($record?->role ?? $get('role')) === 'customer'),
+                        Forms\Components\TextInput::make('password')
+                            ->label('Password')
+                            ->password()
+                            ->revealable()
+                            ->required(fn ($get) => ! $get('id'))
+                            ->dehydrated(fn ($state) => filled($state))
+                            ->rules([PasswordRule::defaults()])
+                            ->confirmed()
+                            ->maxLength(255)
+                            ->helperText('Leave blank when editing to keep current password.')
+                            ->afterStateHydrated(fn ($component) => $component->state(''))
+                            ->columnSpanFull(),
+                        Forms\Components\TextInput::make('password_confirmation')
+                            ->label('Confirm Password')
+                            ->password()
+                            ->revealable()
+                            ->required(fn ($get) => ! $get('id'))
+                            ->dehydrated(false)
+                            ->same('password')
+                            ->maxLength(255)
+                            ->columnSpanFull(),
                     ])
                     ->columns(2),
 
