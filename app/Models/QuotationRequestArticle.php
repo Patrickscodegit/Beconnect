@@ -1006,11 +1006,26 @@ class QuotationRequestArticle extends Model
             return;
         }
 
+        $unitType = strtoupper(trim((string) ($model->unit_type ?? '')));
+        if ($unitType === 'LM') {
+            return;
+        }
+
+        $serviceSource = data_get($model->formula_inputs, 'service_context.source');
+        if ($serviceSource === 'base_service') {
+            return;
+        }
+
         $article = $model->relationLoaded('articleCache')
             ? $model->articleCache
             : RobawsArticleCache::find($model->article_cache_id);
 
         if (!$article || !$article->isSeafreight()) {
+            return;
+        }
+
+        $articleUnitType = strtoupper(trim((string) ($article->unit_type ?? '')));
+        if ($articleUnitType === 'LM') {
             return;
         }
 

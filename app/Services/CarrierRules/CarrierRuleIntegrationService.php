@@ -178,6 +178,16 @@ class CarrierRuleIntegrationService
                     return false;
                 }
 
+                $unitType = strtoupper(trim((string) ($articleRecord->unit_type ?? $article->unit_type ?? '')));
+                if ($unitType === 'LM') {
+                    return false;
+                }
+
+                $serviceSource = data_get($articleRecord->formula_inputs, 'service_context.source');
+                if ($serviceSource === 'base_service') {
+                    return false;
+                }
+
                 $serviceContext = $articleRecord->formula_inputs['service_context'] ?? null;
                 if (is_array($serviceContext) && !empty($serviceContext['member_ids'])) {
                     if (!in_array($item->id, $serviceContext['member_ids'], true)) {
@@ -353,15 +363,26 @@ class CarrierRuleIntegrationService
 
         foreach ($quoteLineDrafts as $draft) {
             // Check if article already exists for this quotation with same event code
-            $eventCode = $draft['meta']['event_code'] ?? null;
+            $eventCode = strtoupper((string) ($draft['meta']['event_code'] ?? ''));
             $existingArticle = null;
+            $stackMemberIds = [];
+
+            if ($eventCode === 'STACKED' && $item->isInStack()) {
+                $stackMemberIds = $item->getStackMembers()->pluck('id')->all();
+            }
             
             if ($eventCode) {
-                $existingArticle = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
+                $existingArticleQuery = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
                     ->where('article_cache_id', $draft['article_id'])
-                    ->where('carrier_rule_event_code', $eventCode)
-                    ->where('carrier_rule_commodity_item_id', $item->id)
-                    ->first();
+                    ->where('carrier_rule_event_code', $eventCode);
+
+                if ($eventCode === 'STACKED' && !empty($stackMemberIds)) {
+                    $existingArticleQuery->whereIn('carrier_rule_commodity_item_id', $stackMemberIds);
+                } else {
+                    $existingArticleQuery->where('carrier_rule_commodity_item_id', $item->id);
+                }
+
+                $existingArticle = $existingArticleQuery->orderBy('id')->first();
             } else {
                 // Fallback: check by article ID only
                 $existingArticle = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
@@ -378,7 +399,6 @@ class CarrierRuleIntegrationService
                 continue;
             }
 
-            $eventCode = strtoupper((string) ($draft['meta']['event_code'] ?? ''));
             $loadedCargoMode = strtoupper((string) ($draft['meta']['loaded_cargo_mode'] ?? ''));
             $isLoadedCargo = (bool) ($draft['meta']['is_loaded_cargo'] ?? false);
             $isLoadedCargoFree = $isLoadedCargo
@@ -419,7 +439,7 @@ class CarrierRuleIntegrationService
                 $existingArticle->subtotal = $unitPrice * $draft['qty'];
                 $existingArticle->currency = $article->currency ?? 'EUR';
                 $existingArticle->carrier_rule_applied = true;
-                $existingArticle->carrier_rule_event_code = $draft['meta']['event_code'] ?? null;
+                $existingArticle->carrier_rule_event_code = $eventCode !== '' ? $eventCode : null;
                 $existingArticle->carrier_rule_commodity_item_id = $item->id;
 
                 $existingArticle->save();
@@ -438,7 +458,7 @@ class CarrierRuleIntegrationService
                 'subtotal' => $unitPrice * $draft['qty'],
                 'currency' => $article->currency ?? 'EUR',
                 'carrier_rule_applied' => true,
-                'carrier_rule_event_code' => $draft['meta']['event_code'] ?? null,
+                'carrier_rule_event_code' => $eventCode !== '' ? $eventCode : null,
                 'carrier_rule_commodity_item_id' => $item->id,
             ]);
 
@@ -621,6 +641,11 @@ class CarrierRuleIntegrationService
         }
 
         $commodityItemIds = $quotation->commodityItems()->pluck('id')->toArray();
+        $quotation->loadMissing('commodityItems');
+        $stackBaseByItemId = [];
+        foreach ($quotation->commodityItems as $commodityItem) {
+            $stackBaseByItemId[$commodityItem->id] = $commodityItem->getStackGroup();
+        }
 
         $orphanQuery = QuotationRequestArticle::where('quotation_request_id', $quotation->id)
             ->where('carrier_rule_applied', true);
@@ -659,10 +684,22 @@ class CarrierRuleIntegrationService
             ->orderBy('id')
             ->get();
 
-        $groups = $dedupeRows->groupBy(function ($row) {
+        $groups = $dedupeRows->groupBy(function ($row) use ($stackBaseByItemId) {
+            $eventCode = strtoupper((string) ($row->carrier_rule_event_code ?? ''));
+            if ($eventCode === 'STACKED') {
+                $itemId = (int) ($row->carrier_rule_commodity_item_id ?? 0);
+                $stackBaseId = $stackBaseByItemId[$itemId] ?? $itemId;
+                return implode('|', [
+                    'STACK_BASE',
+                    $stackBaseId,
+                    $eventCode,
+                    $row->article_cache_id,
+                ]);
+            }
+
             return implode('|', [
                 $row->carrier_rule_commodity_item_id,
-                $row->carrier_rule_event_code,
+                $eventCode,
                 $row->article_cache_id,
             ]);
         });

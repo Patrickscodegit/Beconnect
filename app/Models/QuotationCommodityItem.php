@@ -820,6 +820,10 @@ class QuotationCommodityItem extends Model
             return $memberTypesCache[$member->id];
         };
 
+        // Apply base-service context before article saves so saving hooks can
+        // reliably distinguish base freight from loaded-item lines.
+        static::applyBaseServiceNotes($quotation, $commodityItems);
+
         // Get ALL articles for this quotation (not just LM)
         $allArticles = \App\Models\QuotationRequestArticle::where('quotation_request_id', $quotation->id)
             ->with('articleCache')
@@ -1049,8 +1053,6 @@ class QuotationCommodityItem extends Model
 
         // Recalculate quotation totals
         $quotation->calculateTotals();
-
-        static::applyBaseServiceNotes($quotation, $commodityItems);
 
         \Log::info('QuotationCommodityItem: Articles recalculation completed', [
             'quotation_request_id' => $quotationRequestId,
