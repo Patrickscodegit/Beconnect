@@ -371,4 +371,240 @@ class QuotationCarrierRulesIntegrationTest extends TestCase
         $this->assertSame('0.00', (string) $quoteLine->selling_price);
         $this->assertSame('0.00', (string) $quoteLine->subtotal);
     }
+
+    #[Test]
+    public function test_loaded_cargo_free_zeroes_seafreight_added_after_rules(): void
+    {
+        $quotation = $this->createQuotation();
+
+        $baseItem = QuotationCommodityItem::create([
+            'quotation_request_id' => $quotation->id,
+            'line_number' => 1,
+            'commodity_type' => 'vehicles',
+            'category' => 'trailer',
+            'quantity' => 1,
+        ]);
+
+        QuotationCommodityItem::create([
+            'quotation_request_id' => $quotation->id,
+            'line_number' => 2,
+            'commodity_type' => 'vehicles',
+            'category' => 'suv',
+            'quantity' => 1,
+            'relationship_type' => 'loaded_with',
+            'related_item_id' => $baseItem->id,
+            'carrier_rule_meta' => [
+                'surcharge_events' => [
+                    [
+                        'event_code' => 'LOADED_CARGO',
+                        'loaded_cargo_mode' => 'FREE',
+                    ],
+                ],
+            ],
+        ]);
+
+        $smallVanSeafreight = RobawsArticleCache::create([
+            'robaws_article_id' => 'SF-001',
+            'article_name' => 'Small Van Seafreight',
+            'category' => 'seafreight',
+            'commodity_type' => 'Small Van',
+            'is_active' => true,
+            'is_parent_item' => false,
+            'is_parent_article' => false,
+            'last_synced_at' => now(),
+            'unit_price' => 1104,
+            'currency' => 'EUR',
+            'unit_type' => 'unit',
+        ]);
+
+        // Simulates the timing bug path: article is added after rule processing.
+        $line = QuotationRequestArticle::create([
+            'quotation_request_id' => $quotation->id,
+            'article_cache_id' => $smallVanSeafreight->id,
+            'item_type' => 'parent',
+            'quantity' => 1,
+            'unit_type' => 'unit',
+            'unit_price' => 1104,
+            'selling_price' => 1104,
+            'currency' => 'EUR',
+        ])->fresh();
+
+        $this->assertSame('0.00', (string) $line->unit_price);
+        $this->assertSame('0.00', (string) $line->selling_price);
+        $this->assertSame('0.00', (string) $line->subtotal);
+    }
+
+    #[Test]
+    public function test_loaded_cargo_charge_keeps_seafreight_price(): void
+    {
+        $quotation = $this->createQuotation();
+
+        $baseItem = QuotationCommodityItem::create([
+            'quotation_request_id' => $quotation->id,
+            'line_number' => 1,
+            'commodity_type' => 'vehicles',
+            'category' => 'trailer',
+            'quantity' => 1,
+        ]);
+
+        QuotationCommodityItem::create([
+            'quotation_request_id' => $quotation->id,
+            'line_number' => 2,
+            'commodity_type' => 'vehicles',
+            'category' => 'suv',
+            'quantity' => 1,
+            'relationship_type' => 'loaded_with',
+            'related_item_id' => $baseItem->id,
+            'carrier_rule_meta' => [
+                'surcharge_events' => [
+                    [
+                        'event_code' => 'LOADED_CARGO',
+                        'loaded_cargo_mode' => 'CHARGE',
+                    ],
+                ],
+            ],
+        ]);
+
+        $smallVanSeafreight = RobawsArticleCache::create([
+            'robaws_article_id' => 'SF-002',
+            'article_name' => 'Small Van Seafreight',
+            'category' => 'seafreight',
+            'commodity_type' => 'Small Van',
+            'is_active' => true,
+            'is_parent_item' => false,
+            'is_parent_article' => false,
+            'last_synced_at' => now(),
+            'unit_price' => 1104,
+            'currency' => 'EUR',
+            'unit_type' => 'unit',
+        ]);
+
+        $line = QuotationRequestArticle::create([
+            'quotation_request_id' => $quotation->id,
+            'article_cache_id' => $smallVanSeafreight->id,
+            'item_type' => 'parent',
+            'quantity' => 1,
+            'unit_type' => 'unit',
+            'unit_price' => 1104,
+            'selling_price' => 1104,
+            'currency' => 'EUR',
+        ])->fresh();
+
+        $this->assertSame('1104.00', (string) $line->unit_price);
+        $this->assertSame('1104.00', (string) $line->selling_price);
+        $this->assertSame('1104.00', (string) $line->subtotal);
+    }
+
+    #[Test]
+    public function test_non_loaded_cargo_keeps_seafreight_price(): void
+    {
+        $quotation = $this->createQuotation();
+
+        QuotationCommodityItem::create([
+            'quotation_request_id' => $quotation->id,
+            'line_number' => 1,
+            'commodity_type' => 'vehicles',
+            'category' => 'suv',
+            'quantity' => 1,
+            'relationship_type' => 'separate',
+            'carrier_rule_meta' => [
+                'surcharge_events' => [
+                    [
+                        'event_code' => 'LOADED_CARGO',
+                        'loaded_cargo_mode' => 'FREE',
+                    ],
+                ],
+            ],
+        ]);
+
+        $smallVanSeafreight = RobawsArticleCache::create([
+            'robaws_article_id' => 'SF-003',
+            'article_name' => 'Small Van Seafreight',
+            'category' => 'seafreight',
+            'commodity_type' => 'Small Van',
+            'is_active' => true,
+            'is_parent_item' => false,
+            'is_parent_article' => false,
+            'last_synced_at' => now(),
+            'unit_price' => 1104,
+            'currency' => 'EUR',
+            'unit_type' => 'unit',
+        ]);
+
+        $line = QuotationRequestArticle::create([
+            'quotation_request_id' => $quotation->id,
+            'article_cache_id' => $smallVanSeafreight->id,
+            'item_type' => 'parent',
+            'quantity' => 1,
+            'unit_type' => 'unit',
+            'unit_price' => 1104,
+            'selling_price' => 1104,
+            'currency' => 'EUR',
+        ])->fresh();
+
+        $this->assertSame('1104.00', (string) $line->unit_price);
+        $this->assertSame('1104.00', (string) $line->selling_price);
+        $this->assertSame('1104.00', (string) $line->subtotal);
+    }
+
+    #[Test]
+    public function test_loaded_cargo_free_non_matching_type_keeps_price(): void
+    {
+        $quotation = $this->createQuotation();
+
+        $baseItem = QuotationCommodityItem::create([
+            'quotation_request_id' => $quotation->id,
+            'line_number' => 1,
+            'commodity_type' => 'vehicles',
+            'category' => 'trailer',
+            'quantity' => 1,
+        ]);
+
+        QuotationCommodityItem::create([
+            'quotation_request_id' => $quotation->id,
+            'line_number' => 2,
+            'commodity_type' => 'vehicles',
+            'category' => 'suv',
+            'quantity' => 1,
+            'relationship_type' => 'loaded_with',
+            'related_item_id' => $baseItem->id,
+            'carrier_rule_meta' => [
+                'surcharge_events' => [
+                    [
+                        'event_code' => 'LOADED_CARGO',
+                        'loaded_cargo_mode' => 'FREE',
+                    ],
+                ],
+            ],
+        ]);
+
+        $carSeafreight = RobawsArticleCache::create([
+            'robaws_article_id' => 'SF-004',
+            'article_name' => 'Car Seafreight',
+            'category' => 'seafreight',
+            'commodity_type' => 'Car',
+            'is_active' => true,
+            'is_parent_item' => false,
+            'is_parent_article' => false,
+            'last_synced_at' => now(),
+            'unit_price' => 949,
+            'currency' => 'EUR',
+            'unit_type' => 'unit',
+        ]);
+
+        $line = QuotationRequestArticle::create([
+            'quotation_request_id' => $quotation->id,
+            'article_cache_id' => $carSeafreight->id,
+            'item_type' => 'parent',
+            'quantity' => 1,
+            'unit_type' => 'unit',
+            'unit_price' => 949,
+            'selling_price' => 949,
+            'currency' => 'EUR',
+        ])->fresh();
+
+        $this->assertSame('949.00', (string) $line->unit_price);
+        $this->assertSame('949.00', (string) $line->selling_price);
+        $this->assertSame('949.00', (string) $line->subtotal);
+    }
 }

@@ -109,6 +109,10 @@ class QuotationRequestArticle extends Model
             if (in_array($unitType, ['LM', 'CBM'], true)) {
                 $model->quantity = $effectiveQuantity;
             }
+
+            // Ensure loaded-cargo FREE logic also applies when seafreight lines
+            // are added after carrier rule processing.
+            self::applyLoadedCargoFreeOverride($model);
             
             // Calculate subtotal
             // For LM: effectiveQuantity already includes commodity item quantity multiplication
@@ -994,6 +998,89 @@ class QuotationRequestArticle extends Model
         ])->pluck('id')->toArray();
 
         return $cache;
+    }
+
+    protected static function applyLoadedCargoFreeOverride(self $model): void
+    {
+        if ($model->carrier_rule_applied) {
+            return;
+        }
+
+        $article = $model->relationLoaded('articleCache')
+            ? $model->articleCache
+            : RobawsArticleCache::find($model->article_cache_id);
+
+        if (!$article || !$article->isSeafreight()) {
+            return;
+        }
+
+        $articleCommodityType = strtoupper(trim((string) ($article->commodity_type ?? '')));
+        if ($articleCommodityType === '') {
+            return;
+        }
+
+        $quotation = $model->relationLoaded('quotationRequest')
+            ? $model->quotationRequest
+            : QuotationRequest::find($model->quotation_request_id);
+
+        if (!$quotation) {
+            return;
+        }
+
+        if (!$quotation->relationLoaded('commodityItems')) {
+            $quotation->load('commodityItems');
+        }
+
+        $loadedItems = $quotation->commodityItems
+            ->filter(fn (QuotationCommodityItem $item) => ($item->relationship_type ?? null) === 'loaded_with')
+            ->values();
+
+        if ($loadedItems->isEmpty()) {
+            return;
+        }
+
+        foreach ($loadedItems as $loadedItem) {
+            $meta = $loadedItem->carrier_rule_meta ?? [];
+            $surchargeEvents = is_array($meta) ? ($meta['surcharge_events'] ?? []) : [];
+
+            $hasLoadedCargoFree = collect($surchargeEvents)->contains(function ($event) {
+                if (!is_array($event)) {
+                    return false;
+                }
+
+                return strtoupper((string) ($event['event_code'] ?? '')) === 'LOADED_CARGO'
+                    && strtoupper((string) ($event['loaded_cargo_mode'] ?? '')) === 'FREE';
+            });
+
+            if (!$hasLoadedCargoFree) {
+                continue;
+            }
+
+            $normalizedTypes = QuotationCommodityItem::normalizeCommodityTypes($loadedItem);
+            $normalizedTypesUpper = array_map(
+                fn ($type) => strtoupper(trim((string) $type)),
+                $normalizedTypes
+            );
+
+            if (!in_array($articleCommodityType, $normalizedTypesUpper, true)) {
+                continue;
+            }
+
+            $model->unit_price = 0;
+            $model->selling_price = 0;
+
+            \Log::info('QuotationRequestArticle loaded cargo FREE override applied', [
+                'quotation_request_id' => $model->quotation_request_id,
+                'quotation_request_article_id' => $model->id,
+                'article_cache_id' => $model->article_cache_id,
+                'article_name' => $article->article_name,
+                'article_commodity_type' => $articleCommodityType,
+                'loaded_item_id' => $loadedItem->id,
+                'loaded_item_types' => $normalizedTypesUpper,
+            ]);
+
+            return;
+        }
     }
 
     /**
