@@ -79,6 +79,7 @@ class UserResource extends Resource
                             ->confirmed()
                             ->maxLength(255)
                             ->helperText('Leave blank when editing to keep current password.')
+                            ->afterStateHydrated(fn ($component) => $component->state(''))
                             ->columnSpanFull(),
                         Forms\Components\TextInput::make('password_confirmation')
                             ->label('Confirm Password')
