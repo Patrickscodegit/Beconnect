@@ -34,10 +34,10 @@ class SmartArticleSelector extends Component
         $this->showPricing = $showPricing;
         $this->isEditable = $isEditable;
         
-        // Get pricing tier: User tier → Quotation tier → Default to Tier C
-        $this->pricingTierId = auth()->user()?->pricing_tier_id 
-            ?? $quotation->pricing_tier_id 
-            ?? \App\Models\PricingTier::where('code', 'C')->first()?->id;
+        // Get pricing tier: Quotation tier first (existing quotations unchanged), then user, then default Tier A
+        $this->pricingTierId = $quotation->pricing_tier_id
+            ?? auth()->user()?->pricing_tier_id
+            ?? \App\Models\PricingTier::where('code', 'A')->first()?->id;
         
         $this->suggestedArticles = collect();
         $this->loadSuggestions();
@@ -84,12 +84,12 @@ class SmartArticleSelector extends Component
     
     public function getTierPrice($article)
     {
-        // Always return a price - default to Tier C if no tier
+        // Always return a price - default to Tier A if no tier
         $tier = \App\Models\PricingTier::find($this->pricingTierId);
         
         if (!$tier) {
-            // Fallback to Tier C if tier not found
-            $tier = \App\Models\PricingTier::where('code', 'C')->first();
+            // Fallback to Tier A if tier not found
+            $tier = \App\Models\PricingTier::where('code', 'A')->first();
         }
         
         if (!$tier) {
@@ -115,13 +115,6 @@ class SmartArticleSelector extends Component
             return;
         }
 
-        
-        // Ensure pricing tier is set on quotation if we have one
-        if ($this->pricingTierId && !$this->quotation->pricing_tier_id) {
-            $this->quotation->pricing_tier_id = $this->pricingTierId;
-            $this->quotation->save();
-        }
-        
         // Use addArticle() which creates QuotationRequestArticle model
         // This triggers the boot() method which automatically adds child articles
         $allowOverride = $this->canAdminOverride();

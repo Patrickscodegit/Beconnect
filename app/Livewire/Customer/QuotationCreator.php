@@ -231,8 +231,8 @@ class QuotationCreator extends Component
     
     protected function getDefaultPricingTierId(): ?int
     {
-        // Default to Tier C (most expensive) for customers without assigned tier
-        return PricingTier::where('code', 'C')->first()?->id;
+        // Default to Tier A for customers without assigned tier
+        return PricingTier::where('code', 'A')->first()?->id;
     }
     
     protected function prefillFromIntake($intakeId)
