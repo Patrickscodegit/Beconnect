@@ -96,8 +96,8 @@ class UserResource extends Resource
                     ->columns(2),
 
                 // Shown for customer accounts with a confirmed portal link + cached data
-                Forms\Components\Section::make('Robaws Company')
-                    ->description('Read-only data synced from Robaws CRM.')
+                Forms\Components\Section::make('Belgaco Company')
+                    ->description('Read-only data synced from Belgaco CRM.')
                     ->collapsible()
                     ->schema([
                         Forms\Components\Placeholder::make('co_name')
@@ -156,7 +156,7 @@ class UserResource extends Resource
                             }),
 
                         Forms\Components\Placeholder::make('co_active')
-                            ->label('Active in Robaws')
+                            ->label('Active in Belgaco')
                             ->content(fn ($record) => match($record?->portalLink?->cachedCustomer?->is_active) {
                                 true  => 'Yes',
                                 false => 'No',
@@ -164,7 +164,7 @@ class UserResource extends Resource
                             }),
 
                         Forms\Components\Placeholder::make('co_pricing')
-                            ->label('Pricing (from Robaws)')
+                            ->label('Pricing (from Belgaco)')
                             ->content(fn ($record) => ($c = $record?->portalLink?->cachedCustomer?->pricing_code)
                                 ? 'Tier ' . strtoupper($c)
                                 : '—'),
@@ -175,18 +175,18 @@ class UserResource extends Resource
                                 ?->diffForHumans() ?? '—'),
 
                         Forms\Components\Placeholder::make('co_robaws_id')
-                            ->label('Robaws Client ID')
+                            ->label('Belgaco Client ID')
                             ->content(fn ($record) => $record?->portalLink?->robaws_client_id ?? '—'),
                     ])
                     ->columns(2)
                     ->visible(fn ($record) => $record?->portalLink !== null),
 
                 // Shown for customer accounts not yet linked to Robaws
-                Forms\Components\Section::make('Robaws Company')
+                Forms\Components\Section::make('Belgaco Company')
                     ->schema([
                         Forms\Components\Placeholder::make('no_link_notice')
                             ->label('')
-                            ->content('This customer is not yet linked to a Robaws company. Use the "Resolve Link" or "Set Link Manually" actions on the Users list to establish a link.'),
+                            ->content('This customer is not yet linked to a Belgaco company. Use the "Resolve Link" or "Set Link Manually" actions on the Users list to establish a link.'),
                     ])
                     ->visible(fn ($record) => $record?->role === 'customer' && $record?->portalLink === null),
             ]);
@@ -222,7 +222,7 @@ class UserResource extends Resource
                     ->color(fn ($record) => $record?->pricingTier?->color ?? 'gray')
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('portalLink.cachedCustomer.name')
-                    ->label('Robaws Company')
+                    ->label('Belgaco Company')
                     ->placeholder('—')
                     ->searchable(query: function ($query, string $search) {
                         $query->whereHas('portalLink.cachedCustomer', fn ($q) =>
@@ -266,16 +266,16 @@ class UserResource extends Resource
                     ->icon('heroicon-o-link')
                     ->color('info')
                     ->requiresConfirmation()
-                    ->modalHeading('Resolve Robaws Link')
-                    ->modalDescription('This will search Robaws CRM for a matching company using this user\'s email address and create the link automatically.')
+                    ->modalHeading('Resolve Belgaco Link')
+                    ->modalDescription('This will search Belgaco CRM for a matching company using this user\'s email address and create the link automatically.')
                     ->visible(fn (User $record) => $record->role === 'customer' && ! $record->portalLink)
                     ->action(function (User $record) {
                         try {
                             $link = app(RobawsPortalLinkResolver::class)->resolveForUser($record);
                         } catch (\Illuminate\Http\Client\ConnectionException $e) {
                             Notification::make()
-                                ->title('Robaws connection timeout')
-                                ->body('Could not reach Robaws CRM. Please try again in a moment.')
+                                ->title('Belgaco connection timeout')
+                                ->body('Could not reach Belgaco CRM. Please try again in a moment.')
                                 ->danger()
                                 ->send();
                             return;
@@ -300,7 +300,7 @@ class UserResource extends Resource
                         } else {
                             Notification::make()
                                 ->title('No match found')
-                                ->body('No Robaws company could be matched to this email address. If the customer exists under a different email, use "Set Link Manually" to assign the correct company.')
+                                ->body('No Belgaco company could be matched to this email address. If the customer exists under a different email, use "Set Link Manually" to assign the correct company.')
                                 ->warning()
                                 ->persistent()
                                 ->send();
@@ -312,15 +312,15 @@ class UserResource extends Resource
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
                     ->requiresConfirmation()
-                    ->modalHeading('Clear Robaws Link')
-                    ->modalDescription('This will remove the current Robaws company link. The link will be re-resolved automatically next time the user visits the portal.')
+                    ->modalHeading('Clear Belgaco Link')
+                    ->modalDescription('This will remove the current Belgaco company link. The link will be re-resolved automatically next time the user visits the portal.')
                     ->visible(fn (User $record) => $record->role === 'customer' && (bool) $record->portalLink)
                     ->action(function (User $record) {
                         $record->portalLink?->delete();
 
                         Notification::make()
                             ->title('Link cleared')
-                            ->body('The Robaws company link has been removed.')
+                            ->body('The Belgaco company link has been removed.')
                             ->success()
                             ->send();
                     }),
@@ -332,7 +332,7 @@ class UserResource extends Resource
                     ->visible(fn (User $record) => $record->role === 'customer')
                     ->form([
                         Forms\Components\Select::make('robaws_client_id')
-                            ->label('Robaws Company')
+                            ->label('Belgaco Company')
                             ->placeholder('Search by name, email or city…')
                             ->searchable()
                             ->required()

@@ -193,14 +193,14 @@ class ListRobawsArticles extends ListRecords
                 ->icon('heroicon-o-tag')
                 ->color('info')
                 ->requiresConfirmation()
-                ->modalHeading('Sync Extra Fields from Robaws API?')
+                ->modalHeading('Sync Extra Fields from Belgaco API?')
                 ->modalDescription(function () use ($dailyRemaining, $articleCount) {
                     $estimatedCost = $articleCount; // One API call per article
                     $estimatedTime = ceil($articleCount * 0.5 / 60); // ~0.5 seconds per article (2 req/sec)
                     $safeToProcess = $dailyRemaining > ($estimatedCost + 500);
                     $status = $safeToProcess ? '✅ Safe to proceed' : '⚠️ Low quota - proceed with caution';
                     
-                    return "**Estimated API Cost:** ~{$estimatedCost} API calls (1 per article)\n**API Quota Remaining:** " . number_format($dailyRemaining) . "\n**Status:** {$status}\n**Duration:** ~{$estimatedTime} minutes\n**Rate:** 2 requests/second (safe for server stability)\n\n**What this does:**\nFetches extra fields from Robaws API for ALL {$articleCount} articles:\n• Parent Item status (checkbox)\n• Shipping Line\n• Service Type\n• POL Terminal\n• **Commodity Type (for Smart Article Selection)** 🧠\n• **POD Code (for Smart Article Selection)** 🧠\n• Update/Validity dates\n• Article Info\n\n**Use this for:** Syncing custom fields, parent items, extra metadata, and enabling Smart Article Selection\n\n**✅ Server-friendly rate limiting** - Runs in background without overloading.";
+                    return "**Estimated API Cost:** ~{$estimatedCost} API calls (1 per article)\n**API Quota Remaining:** " . number_format($dailyRemaining) . "\n**Status:** {$status}\n**Duration:** ~{$estimatedTime} minutes\n**Rate:** 2 requests/second (safe for server stability)\n\n**What this does:**\nFetches extra fields from Belgaco API for ALL {$articleCount} articles:\n• Parent Item status (checkbox)\n• Shipping Line\n• Service Type\n• POL Terminal\n• **Commodity Type (for Smart Article Selection)** 🧠\n• **POD Code (for Smart Article Selection)** 🧠\n• Update/Validity dates\n• Article Info\n\n**Use this for:** Syncing custom fields, parent items, extra metadata, and enabling Smart Article Selection\n\n**✅ Server-friendly rate limiting** - Runs in background without overloading.";
                 })
                 ->modalSubmitActionLabel('Yes, sync extra fields')
                 ->action(function () {

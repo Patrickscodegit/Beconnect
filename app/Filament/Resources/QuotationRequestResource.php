@@ -37,7 +37,7 @@ class QuotationRequestResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Section::make('Client Information')
-                    ->description('Company or organization details (maps to Robaws Client)')
+                    ->description('Company or organization details (maps to Belgaco Client)')
                     ->schema([
                         Forms\Components\TextInput::make('client_name')
                             ->label('Company Name')
@@ -57,7 +57,7 @@ class QuotationRequestResource extends Resource
                             ->columnSpan(1),
                             
                         Forms\Components\TextInput::make('robaws_client_id')
-                            ->label('Robaws Client ID')
+                            ->label('Belgaco Client ID')
                             ->disabled()
                             ->dehydrated(false)
                             ->visible(fn ($record) => $record?->robaws_client_id)
@@ -67,7 +67,7 @@ class QuotationRequestResource extends Resource
                     ->collapsible(),
                     
                 Forms\Components\Section::make('Contact Person')
-                    ->description('Person making the quotation request (maps to Robaws Contact)')
+                    ->description('Person making the quotation request (maps to Belgaco Contact)')
                     ->schema([
                         Forms\Components\TextInput::make('contact_name')
                             ->label('Contact Name')
@@ -616,13 +616,13 @@ class QuotationRequestResource extends Resource
                             ->columnSpanFull(),
                             
                         Forms\Components\Placeholder::make('robaws_cargo_field')
-                            ->label('Generated CARGO Field (for Robaws)')
+                            ->label('Generated CARGO Field (for Belgaco)')
                             ->content(fn ($record) => $record?->robaws_cargo_field ?? 'Not generated yet')
                             ->visible(fn ($record) => $record?->robaws_cargo_field)
                             ->columnSpan(1),
                             
                         Forms\Components\Placeholder::make('robaws_dim_field')
-                            ->label('Generated DIM Field (for Robaws)')
+                            ->label('Generated DIM Field (for Belgaco)')
                             ->content(fn ($record) => $record?->robaws_dim_field ?? 'Not generated yet')
                             ->visible(fn ($record) => $record?->robaws_dim_field)
                             ->columnSpan(1),
@@ -904,7 +904,7 @@ class QuotationRequestResource extends Resource
                             ->relationship('preferredCarrier', 'name')
                             ->searchable()
                             ->preload()
-                            ->helperText('Carriers synced from Robaws suppliers')
+                            ->helperText('Carriers synced from Belgaco suppliers')
                             ->visible(fn (Forms\Get $get) => !$get('selected_schedule_id'))
                             ->columnSpanFull(),
                     ])
@@ -1188,7 +1188,7 @@ class QuotationRequestResource extends Resource
                     }),
                     
                 Tables\Filters\TernaryFilter::make('has_robaws_offer')
-                    ->label('Synced to Robaws')
+                    ->label('Synced to Belgaco')
                     ->nullable()
                     ->queries(
                         true: fn ($query) => $query->whereNotNull('robaws_offer_id'),

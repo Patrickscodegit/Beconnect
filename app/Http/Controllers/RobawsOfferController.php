@@ -74,7 +74,7 @@ class RobawsOfferController extends Controller
             $offer = $this->robawsClient->createOffer($createPayload);
             $offerId = $offer['id'] ?? null;
             if (!$offerId) {
-                throw new \RuntimeException('Robaws createOffer returned no id');
+                throw new \RuntimeException('Belgaco createOffer returned no id');
             }
 
             // 3) GET → merge extraFields → PUT
@@ -99,7 +99,7 @@ class RobawsOfferController extends Controller
             
             return response()->json([
                 'success' => true,
-                'message' => 'Offer created successfully in Robaws with custom fields',
+                'message' => 'Offer created successfully in Belgaco with custom fields',
                 'data' => [
                     'offer' => ['id' => $offerId],
                     'client' => $client
@@ -135,7 +135,7 @@ class RobawsOfferController extends Controller
             // Check if already has a Robaws offer
             if ($document->robaws_quotation_id) {
                 return response()->json([
-                    'message' => 'Document already has a Robaws offer',
+                    'message' => 'Document already has a Belgaco offer',
                     'offer_id' => $document->robaws_quotation_id,
                     'robaws_url' => config('services.robaws.base_url') . '/offers/' . $document->robaws_quotation_id
                 ], 409);
@@ -198,7 +198,7 @@ class RobawsOfferController extends Controller
             $offer = $this->robawsClient->createOffer($createPayload);
             $offerId = $offer['id'] ?? null;
             if (!$offerId) {
-                throw new \RuntimeException('Robaws createOffer returned no id');
+                throw new \RuntimeException('Belgaco createOffer returned no id');
             }
 
             // 3) GET → merge extraFields → PUT (this makes custom fields stick)
@@ -238,7 +238,7 @@ class RobawsOfferController extends Controller
             }
 
             return response()->json([
-                'message'    => 'Robaws offer created and updated with custom fields' . 
+                'message'    => 'Belgaco offer created and updated with custom fields' . 
                                ($fileUploadResult && $fileUploadResult['status'] === 'success' ? ' with file attachment' : ''),
                 'offer'      => ['id' => $offerId],
                 'file_upload' => $fileUploadResult,
@@ -252,7 +252,7 @@ class RobawsOfferController extends Controller
             ]);
             
             return response()->json([
-                'message' => 'An error occurred while creating the Robaws offer: ' . $e->getMessage()
+                'message' => 'An error occurred while creating the Belgaco offer: ' . $e->getMessage()
             ], 500);
         }
     }

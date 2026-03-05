@@ -1348,7 +1348,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->columnSpan(1),
 
                                         Forms\Components\Select::make('article_id')
-                                            ->label('Robaws Article')
+                                            ->label('Belgaco Article')
                                             ->options(function ($get, $livewire) {
                                                 $carrierId = null;
                                                 
@@ -1395,7 +1395,7 @@ If no transform rules match for a port, the global fallback formula L×max(W,250
                                             ->searchable()
                                             ->preload()
                                             ->nullable()
-                                            ->helperText('Select the Robaws article to use for this surcharge')
+                                            ->helperText('Select the Belgaco article to use for this surcharge')
                                             ->suffixAction(
                                                 Forms\Components\Actions\Action::make('viewArticle')
                                                     ->icon('heroicon-o-arrow-top-right-on-square')

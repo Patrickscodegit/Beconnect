@@ -22,7 +22,7 @@ class CreateUser extends CreateRecord
                 app(PricingTierSyncService::class)->pushUserPricingToRobaws($user);
             } catch (\Throwable $e) {
                 Notification::make()
-                    ->title('Saved, but pricing sync to Robaws failed')
+                    ->title('Saved, but pricing sync to Belgaco failed')
                     ->body($e->getMessage())
                     ->warning()
                     ->send();

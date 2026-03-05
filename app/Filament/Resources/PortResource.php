@@ -75,7 +75,7 @@ class PortResource extends Resource
                             ->unique(ignoreRecord: true)
                             ->disabled(fn ($record) => $record && $record->isReferenced())
                             ->helperText(fn ($record) => $record && $record->isReferenced() 
-                                ? 'Locked because referenced by schedules/mappings (and/or Robaws cache).' 
+                                ? 'Locked because referenced by schedules/mappings (and/or Belgaco cache).' 
                                 : null)
                             ->columnSpan(1),
 

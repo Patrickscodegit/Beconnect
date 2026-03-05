@@ -20,7 +20,7 @@ class RobawsWebhookLogResource extends Resource
     
     protected static ?string $navigationLabel = 'Webhook Logs';
     
-    protected static ?string $navigationGroup = 'Robaws Integration';
+    protected static ?string $navigationGroup = 'Belgaco Integration';
     
     protected static ?int $navigationSort = 3;
 
@@ -35,7 +35,7 @@ class RobawsWebhookLogResource extends Resource
                             ->disabled(),
                         
                         Forms\Components\TextInput::make('robaws_id')
-                            ->label('Robaws ID')
+                            ->label('Belgaco ID')
                             ->disabled(),
                         
                         Forms\Components\Select::make('status')
@@ -100,7 +100,7 @@ class RobawsWebhookLogResource extends Resource
                     ->sortable(),
                 
                 Tables\Columns\TextColumn::make('robaws_id')
-                    ->label('Robaws ID')
+                    ->label('Belgaco ID')
                     ->searchable()
                     ->limit(20),
                 

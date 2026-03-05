@@ -122,7 +122,7 @@ class RobawsScheduleIntegrationController extends Controller
                 ]);
 
             if (!$response->successful()) {
-                throw new \Exception('Failed to update Robaws offer: ' . $response->body());
+                throw new \Exception('Failed to update Belgaco offer: ' . $response->body());
             }
 
             // Store link in schedule_offer_links table (doesn't modify shipping_schedules)
@@ -146,7 +146,7 @@ class RobawsScheduleIntegrationController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Offer updated successfully in Robaws',
+                'message' => 'Offer updated successfully in Belgaco',
                 'offer_id' => $offerId,
                 'articles_added' => count($articleIds)
             ]);

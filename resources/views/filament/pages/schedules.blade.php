@@ -2,7 +2,7 @@
     <div class="space-y-6">
         <div class="text-center">
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Shipping Schedules</h1>
-            <p class="text-gray-600 dark:text-gray-400 mt-2">Find and update shipping schedules for your Robaws offers</p>
+            <p class="text-gray-600 dark:text-gray-400 mt-2">Find and update shipping schedules for your Belgaco offers</p>
         </div>
         
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">

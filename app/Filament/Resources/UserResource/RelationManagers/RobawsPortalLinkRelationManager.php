@@ -14,7 +14,7 @@ class RobawsPortalLinkRelationManager extends RelationManager
 {
     protected static string $relationship = 'portalLink';
 
-    protected static ?string $title = 'Robaws Company Link';
+    protected static ?string $title = 'Belgaco Company Link';
 
     protected static ?string $modelLabel = 'portal link';
 
@@ -23,7 +23,7 @@ class RobawsPortalLinkRelationManager extends RelationManager
         return $form
             ->schema([
                 Forms\Components\Select::make('robaws_client_id')
-                    ->label('Robaws Company')
+                    ->label('Belgaco Company')
                     ->placeholder('Search by name, email or city…')
                     ->searchable()
                     ->required()
@@ -63,7 +63,7 @@ class RobawsPortalLinkRelationManager extends RelationManager
             ->recordTitleAttribute('robaws_client_id')
             ->columns([
                 Tables\Columns\TextColumn::make('robaws_client_id')
-                    ->label('Robaws ID')
+                    ->label('Belgaco ID')
                     ->copyable(),
 
                 Tables\Columns\TextColumn::make('cachedCustomer.name')

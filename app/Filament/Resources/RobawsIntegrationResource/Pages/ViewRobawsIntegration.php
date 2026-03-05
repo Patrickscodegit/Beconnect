@@ -16,7 +16,7 @@ class ViewRobawsIntegration extends ViewRecord
     {
         return [
             Actions\Action::make('reprocess')
-                ->label('Reprocess for Robaws')
+                ->label('Reprocess for Belgaco')
                 ->icon('heroicon-o-arrow-path')
                 ->action(function () {
                     $service = app(EnhancedRobawsIntegrationService::class);
@@ -35,7 +35,7 @@ class ViewRobawsIntegration extends ViewRecord
                     }
                 }),
             Actions\Action::make('export_data')
-                ->label('Export Robaws Data')
+                ->label('Export Belgaco Data')
                 ->icon('heroicon-o-arrow-down-tray')
                 ->visible(fn () => $this->record->robaws_quotation_data !== null)
                 ->action(function () {

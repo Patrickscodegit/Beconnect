@@ -19,9 +19,9 @@ class RobawsSupplierCacheResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-truck';
     
-    protected static ?string $navigationLabel = 'Robaws Suppliers';
+    protected static ?string $navigationLabel = 'Belgaco Suppliers';
     
-    protected static ?string $navigationGroup = 'Robaws Data';
+    protected static ?string $navigationGroup = 'Belgaco Data';
 
     protected static ?string $pollingInterval = '30s'; // Auto-refresh table
 
@@ -32,7 +32,7 @@ class RobawsSupplierCacheResource extends Resource
                 Forms\Components\Section::make('Supplier Information')
             ->schema([
                 Forms\Components\TextInput::make('robaws_supplier_id')
-                            ->label('Robaws Supplier ID')
+                            ->label('Belgaco Supplier ID')
                             ->required()
                             ->unique(ignoreRecord: true)
                             ->disabledOn('edit'), // Disable editing ID
@@ -202,7 +202,7 @@ class RobawsSupplierCacheResource extends Resource
             ->actions([
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\Action::make('sync')
-                    ->label('Sync from Robaws')
+                    ->label('Sync from Belgaco')
                     ->icon('heroicon-o-arrow-path')
                     ->color('info')
                     ->action(function (RobawsSupplierCache $record) {
@@ -213,7 +213,7 @@ class RobawsSupplierCacheResource extends Resource
                             
                             Notification::make()
                                 ->title('Supplier synced successfully')
-                                ->body("Synced {$record->name} and contacts from Robaws")
+                                ->body("Synced {$record->name} and contacts from Belgaco")
                                 ->success()
                                 ->send();
                                 
@@ -226,19 +226,19 @@ class RobawsSupplierCacheResource extends Resource
                         }
                     }),
                 Tables\Actions\Action::make('push')
-                    ->label('Push to Robaws')
+                    ->label('Push to Belgaco')
                     ->icon('heroicon-o-arrow-up-tray')
                     ->color('warning')
                     ->requiresConfirmation()
-                    ->modalHeading('Push changes to Robaws?')
-                    ->modalDescription('This will push local changes for this supplier to Robaws.')
+                    ->modalHeading('Push changes to Belgaco?')
+                    ->modalDescription('This will push local changes for this supplier to Belgaco.')
                     ->action(function (RobawsSupplierCache $record) {
                         try {
                             app(\App\Services\Robaws\RobawsSupplierSyncService::class)->pushSupplierToRobaws($record);
                             
                             Notification::make()
                                 ->title('Supplier pushed successfully')
-                                ->body("Pushed {$record->name} to Robaws")
+                                ->body("Pushed {$record->name} to Belgaco")
                                 ->success()
                                 ->send();
                                 
@@ -257,8 +257,8 @@ class RobawsSupplierCacheResource extends Resource
                     ->icon('heroicon-o-arrow-path')
                     ->color('primary')
                     ->requiresConfirmation()
-                    ->modalHeading('Sync All Suppliers from Robaws?')
-                    ->modalDescription('This will sync all suppliers from Robaws. This may take several minutes and consume API quota.')
+                    ->modalHeading('Sync All Suppliers from Belgaco?')
+                    ->modalDescription('This will sync all suppliers from Belgaco. This may take several minutes and consume API quota.')
                     ->action(function () {
                         try {
                             Artisan::queue('robaws:sync-suppliers', ['--full' => true]);
@@ -283,15 +283,15 @@ class RobawsSupplierCacheResource extends Resource
                     ->icon('heroicon-o-arrow-up-tray')
                     ->color('warning')
                     ->requiresConfirmation()
-                    ->modalHeading('Push all pending local changes to Robaws?')
-                    ->modalDescription('This will push all locally modified suppliers that have not been pushed to Robaws yet.')
+                    ->modalHeading('Push all pending local changes to Belgaco?')
+                    ->modalDescription('This will push all locally modified suppliers that have not been pushed to Belgaco yet.')
                     ->action(function () {
                         try {
                             Artisan::queue('robaws:sync-suppliers', ['--push' => true]);
                             
                             Notification::make()
                                 ->title('Supplier push queued')
-                                ->body('Pushing all pending supplier changes to Robaws in the background.')
+                                ->body('Pushing all pending supplier changes to Belgaco in the background.')
                                 ->success()
                                 ->duration(10000)
                                 ->send();

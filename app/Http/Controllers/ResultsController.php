@@ -104,7 +104,7 @@ class ResultsController extends Controller
 
             // Check if already pushed
             if ($intake->external_id) {
-                return response('<div class="text-blue-600 text-sm">ℹ Already pushed to Robaws (ID: ' . $intake->external_id . ')</div>');
+                return response('<div class="text-blue-600 text-sm">ℹ Already pushed to Belgaco (ID: ' . $intake->external_id . ')</div>');
             }
 
             // Dispatch the push job
@@ -114,7 +114,7 @@ class ResultsController extends Controller
                 'intake_id' => $intake->id
             ]);
 
-            return response('<div class="text-green-600 text-sm">✓ Push to Robaws initiated...</div>');
+            return response('<div class="text-green-600 text-sm">✓ Push to Belgaco initiated...</div>');
 
         } catch (\Exception $e) {
             Log::error('Failed to push to Robaws', [

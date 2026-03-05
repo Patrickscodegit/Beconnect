@@ -91,11 +91,11 @@
         </a>
     </div>
 
-    <!-- Robaws Profile & Offers -->
+    <!-- Belgaco Profile & Offers -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <div class="bg-white rounded-lg shadow p-6 lg:col-span-1">
             <h2 class="text-lg font-semibold text-gray-900 mb-4">
-                <i class="fas fa-building mr-2"></i>Robaws Company Profile
+                <i class="fas fa-building mr-2"></i>Belgaco Company Profile
             </h2>
 
             @if($robawsLink && $robawsProfile)
@@ -125,7 +125,7 @@
                 </div>
             @else
                 <div class="text-sm text-gray-500">
-                    Robaws profile not linked yet for this account.
+                    Belgaco profile not linked yet for this account.
                 </div>
             @endif
         </div>
@@ -133,7 +133,7 @@
         <div class="bg-white rounded-lg shadow lg:col-span-2">
             <div class="px-6 py-4 border-b border-gray-200">
                 <h2 class="text-lg font-semibold text-gray-900">
-                    <i class="fas fa-file-pdf mr-2"></i>Robaws Quotations
+                    <i class="fas fa-file-pdf mr-2"></i>Belgaco Quotations
                 </h2>
             </div>
 
@@ -182,7 +182,7 @@
                 </div>
             @else
                 <div class="px-6 py-6 text-sm text-gray-500">
-                    No Robaws quotations available yet.
+                    No Belgaco quotations available yet.
                 </div>
             @endif
         </div>

@@ -68,7 +68,7 @@
                 <h2 class="text-lg font-medium text-gray-900">
                     <i class="fas fa-building mr-2 text-blue-500"></i>Company Information
                 </h2>
-                <p class="mt-1 text-sm text-gray-500">Managed in Robaws CRM — contact your account manager to make changes.</p>
+                <p class="mt-1 text-sm text-gray-500">Managed in Belgaco CRM — contact your account manager to make changes.</p>
             </div>
             @if($co)
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -172,7 +172,7 @@
                 </p>
             @elseif($coIsLive)
                 <p class="text-xs text-gray-400 mt-2">
-                    <i class="fas fa-wifi mr-1"></i>Data loaded live from Robaws CRM (local cache pending sync).
+                    <i class="fas fa-wifi mr-1"></i>Data loaded live from Belgaco CRM (local cache pending sync).
                 </p>
             @endif
 
@@ -181,7 +181,7 @@
                 <i class="fas fa-exclamation-triangle text-yellow-500 mt-0.5"></i>
                 <div>
                     <p class="text-sm font-medium text-yellow-800">No company profile linked</p>
-                    <p class="text-sm text-yellow-700 mt-1">Your account is not yet linked to a company in Robaws CRM. Please contact your account manager.</p>
+                    <p class="text-sm text-yellow-700 mt-1">Your account is not yet linked to a company in Belgaco CRM. Please contact your account manager.</p>
                 </div>
             </div>
         @endif

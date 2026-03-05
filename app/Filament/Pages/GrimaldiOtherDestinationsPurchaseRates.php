@@ -691,7 +691,7 @@ class GrimaldiOtherDestinationsPurchaseRates extends Page
             Notification::make()
                 ->success()
                 ->title('Bulk dates applied')
-                ->body(!empty($summaryParts) ? 'Robaws sync: ' . implode(', ', $summaryParts) : null)
+                ->body(!empty($summaryParts) ? 'Belgaco sync: ' . implode(', ', $summaryParts) : null)
                 ->send();
         } catch (\Exception $e) {
             Notification::make()->danger()->title('Error')->body($e->getMessage())->send();
@@ -769,7 +769,7 @@ class GrimaldiOtherDestinationsPurchaseRates extends Page
                     $pushResults = $this->pushDateFieldsToRobaws($updatedArticleCodes);
                     
                     if ($pushResults['pushed'] > 0) {
-                        $summaryParts = ["Pushed {$pushResults['pushed']} article(s) to Robaws"];
+                        $summaryParts = ["Pushed {$pushResults['pushed']} article(s) to Belgaco"];
                         if ($pushResults['failed'] > 0) {
                             $summaryParts[] = "{$pushResults['failed']} failed";
                         }
@@ -793,7 +793,7 @@ class GrimaldiOtherDestinationsPurchaseRates extends Page
                     Notification::make()
                         ->warning()
                         ->title("Dates applied to {$portCode}")
-                        ->body("Failed to push to Robaws: " . $e->getMessage())
+                        ->body("Failed to push to Belgaco: " . $e->getMessage())
                         ->send();
                 }
             } else {
@@ -838,7 +838,7 @@ class GrimaldiOtherDestinationsPurchaseRates extends Page
                     'last_pushed_update_date' => $article->effective_update_date,
                     'last_pushed_validity_date' => $article->effective_validity_date,
                 ]);
-            } elseif (($result['error'] ?? null) === 'No fields to update (all values match current state in Robaws)') {
+            } elseif (($result['error'] ?? null) === 'No fields to update (all values match current state in Belgaco)') {
                 $skippedCount++;
             } else {
                 $failedCount++;

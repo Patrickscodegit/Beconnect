@@ -25,7 +25,7 @@ class ListRobawsIntegrations extends ListRecords
                     $message = "Total: {$summary['total_documents']} | Ready: {$summary['ready_for_sync']} | Review: {$summary['needs_review']} | Synced: {$summary['synced']} | Success Rate: {$summary['success_rate']}%";
                     
                     Notification::make()
-                        ->title('Robaws Integration Summary')
+                        ->title('Belgaco Integration Summary')
                         ->body($message)
                         ->info()
                         ->persistent()

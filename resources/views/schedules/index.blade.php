@@ -4,7 +4,7 @@
 <div class="schedule-page">
     <div class="page-header">
         <h1>Shipping Schedules</h1>
-        <p class="page-description">Find and update shipping schedules for your Robaws offers</p>
+        <p class="page-description">Find and update shipping schedules for your Belgaco offers</p>
         
         <div class="sync-status">
             <div class="sync-info">
@@ -61,7 +61,7 @@
             </div>
             
             <div class="filter-group">
-                <label for="offer_id">Robaws Offer ID (Optional):</label>
+                <label for="offer_id">Belgaco Offer ID (Optional):</label>
                 <input type="text" name="offer_id" id="offer_id" value="{{ $offerId }}" placeholder="e.g., 12345" class="form-control">
                 <small class="help-text">Leave empty to just view schedules</small>
             </div>
@@ -613,7 +613,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         <button class="btn btn-sm btn-primary update-offer" 
                                 data-schedule='${JSON.stringify(schedule)}' 
                                 data-offer-id="${currentOfferId || ''}">
-                            Update Robaws Offer
+                            Update Belgaco Offer
                         </button>
                     </div>
                 </div>
@@ -672,11 +672,11 @@ ETA: ${formatDate(schedule.eta_pod)}
             const offerId = e.target.dataset.offerId;
             
             if (!offerId || offerId === 'null') {
-                alert('Please enter a Robaws Offer ID in the filter section.');
+                alert('Please enter a Belgaco Offer ID in the filter section.');
                 return;
             }
             
-            if (!confirm(`Update Robaws Offer ${offerId} with schedule "${schedule.service_name}"?`)) {
+            if (!confirm(`Update Belgaco Offer ${offerId} with schedule "${schedule.service_name}"?`)) {
                 return;
             }
             

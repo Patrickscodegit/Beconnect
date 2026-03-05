@@ -37,7 +37,7 @@ class ArticleSyncWidget extends BaseWidget
         
         return [
             Stat::make('Total Articles', $total)
-                ->description('Cached from Robaws')
+                ->description('Cached from Belgaco')
                 ->descriptionIcon('heroicon-o-cube')
                 ->color('primary')
                 ->extraAttributes([

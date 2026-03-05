@@ -169,7 +169,7 @@ class ViewQuotationRequest extends ViewRecord
                 }),
                 
             Actions\Action::make('convertToOffer')
-                ->label('Convert to Robaws Offer')
+                ->label('Convert to Belgaco Offer')
                 ->icon('heroicon-o-arrow-right-circle')
                 ->color('warning')
                 ->visible(fn () => 
@@ -178,8 +178,8 @@ class ViewQuotationRequest extends ViewRecord
                     $this->record->articles()->exists()
                 )
                 ->requiresConfirmation()
-                ->modalHeading('Convert to Robaws Offer')
-                ->modalDescription('This will create an offer in Robaws with all articles and pricing. The client and contact will be synced automatically.')
+                ->modalHeading('Convert to Belgaco Offer')
+                ->modalDescription('This will create an offer in Belgaco with all articles and pricing. The client and contact will be synced automatically.')
                 ->modalSubmitActionLabel('Create Offer')
                 ->action(function () {
                     try {
@@ -214,8 +214,8 @@ class ViewQuotationRequest extends ViewRecord
                         
                         \Filament\Notifications\Notification::make()
                             ->success()
-                            ->title('Client Synced to Robaws')
-                            ->body('Client and contact created in Robaws. Offer creation coming soon.')
+                            ->title('Client Synced to Belgaco')
+                            ->body('Client and contact created in Belgaco. Offer creation coming soon.')
                             ->send();
                             
                     } catch (\Exception $e) {

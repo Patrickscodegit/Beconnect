@@ -24,7 +24,7 @@ class ViewRobawsArticle extends ViewRecord
                 ->color('gray')
                 ->requiresConfirmation()
                 ->modalHeading('Copy this article?')
-                ->modalDescription('A new local article will be created so it can be edited and pushed to Robaws as a new article.')
+                ->modalDescription('A new local article will be created so it can be edited and pushed to Belgaco as a new article.')
                 ->action(function () {
                     $record = $this->record;
                     $copy = $record->replicate();
@@ -67,11 +67,11 @@ class ViewRobawsArticle extends ViewRecord
                     return redirect()->route('filament.admin.resources.robaws-articles.edit', ['record' => $copy]);
                 }),
             Actions\Action::make('push_to_robaws')
-                ->label('Push to Robaws')
+                ->label('Push to Belgaco')
                 ->icon('heroicon-o-arrow-up-tray')
                 ->color('warning')
                 ->requiresConfirmation()
-                ->modalHeading('Push article changes to Robaws?')
+                ->modalHeading('Push article changes to Belgaco?')
                 ->form(function () {
                     $record = $this->record;
                     $pushService = app(\App\Services\Robaws\RobawsArticlePushService::class);
@@ -93,7 +93,7 @@ class ViewRobawsArticle extends ViewRecord
                             ->required()
                             ->descriptions($descriptions)
                             ->columns(2)
-                            ->helperText('Select which fields to push to Robaws. Changed fields are pre-selected.'),
+                            ->helperText('Select which fields to push to Belgaco. Changed fields are pre-selected.'),
                     ];
                 })
                 ->action(function (array $data) {
@@ -180,7 +180,7 @@ class ViewRobawsArticle extends ViewRecord
                             ->html()
                             ->columnSpanFull(),
                         Infolists\Components\TextEntry::make('robaws_article_id')
-                            ->label('Robaws ID'),
+                            ->label('Belgaco ID'),
                         Infolists\Components\TextEntry::make('unit_price')
                             ->money('EUR')
                             ->label('Unit Price'),

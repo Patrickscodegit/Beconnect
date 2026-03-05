@@ -1,22 +1,22 @@
-{{-- Robaws Article Selection Widget --}}
+{{-- Belgaco Article Selection Widget --}}
 {{-- This partial can be included in schedules/index.blade.php or loaded via AJAX --}}
 {{-- Completely separate from existing schedule functionality --}}
 
 <div class="robaws-integration-widget" id="robaws-integration-widget">
     <div class="widget-header">
-        <h5>🔗 Robaws Offer Integration</h5>
-        <p class="text-muted">Link this schedule to a Robaws offer and select appropriate articles</p>
+        <h5>🔗 Belgaco Offer Integration</h5>
+        <p class="text-muted">Link this schedule to a Belgaco offer and select appropriate articles</p>
     </div>
 
     <div class="offer-input-section">
         <div class="form-group">
-            <label for="robaws-offer-id">Robaws Offer ID:</label>
+            <label for="robaws-offer-id">Belgaco Offer ID:</label>
             <input type="text" 
                    id="robaws-offer-id" 
                    class="form-control" 
-                   placeholder="Enter Robaws Offer ID (e.g., 12345)">
+                   placeholder="Enter Belgaco Offer ID (e.g., 12345)">
             <small class="form-text text-muted">
-                Enter the Robaws offer ID you want to update with this schedule's details
+                Enter the Belgaco offer ID you want to update with this schedule's details
             </small>
         </div>
 
@@ -40,7 +40,7 @@
 
     <div id="suggested-articles-section" style="display: none;">
         <hr>
-        <h6>Suggested Robaws Articles</h6>
+        <h6>Suggested Belgaco Articles</h6>
         <p class="text-muted">Based on carrier, service type, and cargo details</p>
 
         <div id="article-suggestions-container">
@@ -52,7 +52,7 @@
                     class="btn btn-success" 
                     id="update-offer-btn"
                     onclick="robawsUpdateOfferWithArticles()">
-                <i class="fas fa-check"></i> Update Offer in Robaws
+                <i class="fas fa-check"></i> Update Offer in Belgaco
             </button>
             <button type="button" 
                     class="btn btn-secondary" 
@@ -223,7 +223,7 @@ function robawsSuggestArticles() {
     const statusDiv = document.getElementById('robaws-integration-status');
     
     if (!offerId) {
-        statusDiv.innerHTML = '<div class="alert alert-danger">Please enter a Robaws Offer ID</div>';
+        statusDiv.innerHTML = '<div class="alert alert-danger">Please enter a Belgaco Offer ID</div>';
         return;
     }
     
@@ -361,7 +361,7 @@ function robawsToggleArticle(checkbox) {
 }
 
 /**
- * Update Robaws offer with selected articles
+ * Update Belgaco offer with selected articles
  */
 function robawsUpdateOfferWithArticles() {
     const offerId = document.getElementById('robaws-offer-id').value;
@@ -372,11 +372,11 @@ function robawsUpdateOfferWithArticles() {
         return;
     }
     
-    if (!confirm(`Update Robaws Offer ${offerId} with ${selectedArticles.length} selected articles?`)) {
+    if (!confirm(`Update Belgaco Offer ${offerId} with ${selectedArticles.length} selected articles?`)) {
         return;
     }
     
-    statusDiv.innerHTML = '<div class="alert alert-info">Updating offer in Robaws...</div>';
+    statusDiv.innerHTML = '<div class="alert alert-info">Updating offer in Belgaco...</div>';
     document.getElementById('update-offer-btn').disabled = true;
     
     fetch('/robaws/schedule/update-articles', {
@@ -397,7 +397,7 @@ function robawsUpdateOfferWithArticles() {
         
         if (data.success) {
             statusDiv.innerHTML = `<div class="alert alert-success">
-                ✓ Offer updated successfully in Robaws!<br>
+                ✓ Offer updated successfully in Belgaco!<br>
                 ${data.articles_added} articles added to offer ${data.offer_id}
             </div>`;
             

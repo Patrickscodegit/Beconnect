@@ -177,7 +177,7 @@
                     hx-include="[name='_token']"
                 >
                     @if($statusInfo['all_verified'] ?? false)
-                        Confirm & Push to Robaws
+                        Confirm & Push to Belgaco
                     @else
                         Awaiting Verification
                     @endif

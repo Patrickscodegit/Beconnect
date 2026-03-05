@@ -176,7 +176,7 @@ class IntakeResource extends Resource
                             ->searchable()
                             ->required()
                             ->default('BUYER')
-                            ->helperText('Select the customer type/role (will be set on Robaws client as permanent field)')
+                            ->helperText('Select the customer type/role (will be set on Belgaco client as permanent field)')
                             ->columnSpanFull(),
                     ])
                     ->columns(2)
@@ -418,12 +418,12 @@ class IntakeResource extends Resource
                     ->visible(fn (?Intake $record): bool => $record && $record->documents()->exists()),
                     
                 Tables\Actions\Action::make('export_to_robaws')
-                    ->label('Export to Robaws')
+                    ->label('Export to Belgaco')
                     ->icon('heroicon-o-paper-airplane')
                     ->color('success')
                     ->requiresConfirmation()
-                    ->modalHeading('Export to Robaws')
-                    ->modalDescription('This will create a new quotation in Robaws using the extracted data from this intake.')
+                    ->modalHeading('Export to Belgaco')
+                    ->modalDescription('This will create a new quotation in Belgaco using the extracted data from this intake.')
                     ->form([
                         Forms\Components\Toggle::make('force')
                             ->label('Force Re-export')
@@ -443,8 +443,8 @@ class IntakeResource extends Resource
                             
                             // Add progress notification
                             Notification::make()
-                                ->title('Starting Robaws Export')
-                                ->body('Processing intake data and mapping to Robaws format...')
+                                ->title('Starting Belgaco Export')
+                                ->body('Processing intake data and mapping to Belgaco format...')
                                 ->info()
                                 ->send();
                             
@@ -458,8 +458,8 @@ class IntakeResource extends Resource
                                 $record->update(['status' => 'exported']);
                                 
                                 $title = $result['action'] === 'updated' ? 
-                                    'Robaws Quotation Updated' : 
-                                    'Robaws Export Successful';
+                                    'Belgaco Quotation Updated' : 
+                                    'Belgaco Export Successful';
                                 
                                 $body = sprintf(
                                     'Quotation ID: %s | Duration: %sms | Action: %s',
@@ -490,7 +490,7 @@ class IntakeResource extends Resource
                                     ->send();
                             } else {
                                 Notification::make()
-                                    ->title('Robaws Export Failed')
+                                    ->title('Belgaco Export Failed')
                                     ->body($result['error'] . (isset($result['status']) ? " (HTTP {$result['status']})" : ''))
                                     ->danger()
                                     ->persistent()
@@ -614,7 +614,7 @@ class IntakeResource extends Resource
                             
                             Notification::make()
                                 ->title('Contact Updated & Export Queued')
-                                ->body('Contact information updated successfully. Export to Robaws has been queued for retry.')
+                                ->body('Contact information updated successfully. Export to Belgaco has been queued for retry.')
                                 ->success()
                                 ->send();
                         } else {
@@ -666,12 +666,12 @@ class IntakeResource extends Resource
                         }),
                         
                     Tables\Actions\BulkAction::make('bulk_export_robaws')
-                        ->label('Export All to Robaws')
+                        ->label('Export All to Belgaco')
                         ->icon('heroicon-o-paper-airplane')
                         ->color('success')
                         ->requiresConfirmation()
-                        ->modalHeading('Bulk Export to Robaws')
-                        ->modalDescription('This will create quotations in Robaws for all extracted data in the selected intakes.')
+                        ->modalHeading('Bulk Export to Belgaco')
+                        ->modalDescription('This will create quotations in Belgaco for all extracted data in the selected intakes.')
                         ->action(function (Collection $records) {
                             $overall = [
                                 'success'  => [],
@@ -708,7 +708,7 @@ class IntakeResource extends Resource
                             ];
 
                             Notification::make()
-                                ->title('Robaws Bulk Export')
+                                ->title('Belgaco Bulk Export')
                                 ->body(sprintf(
                                     'Exported: %d • Failed: %d • Uploaded: %d • Exists: %d • Skipped: %d',
                                     $stats['success'], $stats['failed'], $stats['uploaded'], $stats['exists'], $stats['skipped']

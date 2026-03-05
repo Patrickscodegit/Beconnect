@@ -23,11 +23,11 @@ class RobawsIntegrationResource extends Resource
     
     protected static ?string $navigationIcon = 'heroicon-o-truck';
     
-    protected static ?string $navigationLabel = 'Robaws Integration';
+    protected static ?string $navigationLabel = 'Belgaco Integration';
     
     protected static ?string $modelLabel = 'Document';
     
-    protected static ?string $pluralModelLabel = 'Robaws Integration';
+    protected static ?string $pluralModelLabel = 'Belgaco Integration';
     
     protected static bool $shouldRegisterNavigation = false;
 
@@ -107,7 +107,7 @@ class RobawsIntegrationResource extends Resource
             ])
             ->actions([
                 Action::make('process_robaws')
-                    ->label('Process for Robaws')
+                    ->label('Process for Belgaco')
                     ->icon('heroicon-o-cog-6-tooth')
                     ->visible(fn (Document $record) => $record->robaws_sync_status !== 'synced')
                     ->action(function (Document $record) {
@@ -116,12 +116,12 @@ class RobawsIntegrationResource extends Resource
                         
                         if ($result) {
                             Notification::make()
-                                ->title('Document processed for Robaws successfully')
+                                ->title('Document processed for Belgaco successfully')
                                 ->success()
                                 ->send();
                         } else {
                             Notification::make()
-                                ->title('Failed to process document for Robaws')
+                                ->title('Failed to process document for Belgaco')
                                 ->danger()
                                 ->send();
                         }
@@ -147,7 +147,7 @@ class RobawsIntegrationResource extends Resource
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\BulkAction::make('bulk_process')
-                        ->label('Process Selected for Robaws')
+                        ->label('Process Selected for Belgaco')
                         ->icon('heroicon-o-cog-6-tooth')
                         ->action(function ($records) {
                             $service = app(\App\Services\RobawsIntegration\EnhancedRobawsIntegrationService::class);

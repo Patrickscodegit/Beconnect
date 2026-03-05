@@ -22,7 +22,7 @@ class RobawsArticleResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
     
-    protected static ?string $navigationLabel = 'Robaws Articles';
+    protected static ?string $navigationLabel = 'Belgaco Articles';
     
     protected static ?string $modelLabel = 'Article';
     
@@ -48,7 +48,7 @@ class RobawsArticleResource extends Resource
                             ->columnSpan(1),
                             
                         Forms\Components\TextInput::make('robaws_article_id')
-                            ->label('Robaws Article ID')
+                            ->label('Belgaco Article ID')
                             ->disabled()
                             ->columnSpan(1),
                             
@@ -108,7 +108,7 @@ class RobawsArticleResource extends Resource
                             ->searchable()
                             ->preload()
                             ->nullable()
-                            ->helperText('Select carrier/supplier from Robaws suppliers. This ensures consistent carrier values across the system.')
+                            ->helperText('Select carrier/supplier from Belgaco suppliers. This ensures consistent carrier values across the system.')
                             ->afterStateUpdated(function ($set, $state, $get) {
                                 // Auto-update shipping_line from carrier name when carrier is selected
                                 if ($state) {
@@ -365,7 +365,7 @@ class RobawsArticleResource extends Resource
                             
                         Forms\Components\Toggle::make('is_parent_item')
                             ->label('Parent Item')
-                            ->helperText('Maps to Robaws PARENT ITEM field. Automatically syncs with parent article flag.')
+                            ->helperText('Maps to Belgaco PARENT ITEM field. Automatically syncs with parent article flag.')
                             ->columnSpan(1),
                             
                         Forms\Components\Toggle::make('is_active')
@@ -732,7 +732,7 @@ class RobawsArticleResource extends Resource
                     ->label('POL Terminal')
                     ->formatStateUsing(fn ($state) => $state ?: 'N/A')
                     ->color(fn ($state) => $state ? 'primary' : 'gray')
-                    ->tooltip(fn ($state) => $state ? null : 'Not available in Robaws')
+                    ->tooltip(fn ($state) => $state ? null : 'Not available in Belgaco')
                     ->toggleable(),
                 
                 // POD in full Robaws format
@@ -769,7 +769,7 @@ class RobawsArticleResource extends Resource
                     ->falseIcon('heroicon-o-x-circle')
                     ->trueColor('success')
                     ->falseColor('danger')
-                    ->tooltip('Parent item status from Robaws API')
+                    ->tooltip('Parent item status from Belgaco API')
                     ->toggleable(),
 
                 Tables\Columns\IconColumn::make('is_mandatory')
@@ -1084,15 +1084,15 @@ class RobawsArticleResource extends Resource
                     })
                     ->requiresConfirmation()
                     ->modalHeading('Sync article metadata')
-                    ->modalDescription('This will fetch shipping line, service type, POL terminal, and composite items from Robaws.')
+                    ->modalDescription('This will fetch shipping line, service type, POL terminal, and composite items from Belgaco.')
                     ->modalSubmitActionLabel('Sync'),
                     
                 Tables\Actions\Action::make('push_to_robaws')
-                    ->label('Push to Robaws')
+                    ->label('Push to Belgaco')
                     ->icon('heroicon-o-arrow-up-tray')
                     ->color('warning')
                     ->requiresConfirmation()
-                    ->modalHeading('Push article changes to Robaws?')
+                    ->modalHeading('Push article changes to Belgaco?')
                     ->modalDescription(function (RobawsArticleCache $record) {
                         $pushService = app(\App\Services\Robaws\RobawsArticlePushService::class);
                         $changedFields = $pushService->getChangedFieldsSinceLastPush($record);
@@ -1127,7 +1127,7 @@ class RobawsArticleResource extends Resource
                                 ->required()
                                 ->descriptions($descriptions)
                                 ->columns(2)
-                                ->helperText('Select which fields to push to Robaws. Changed fields are pre-selected.'),
+                                ->helperText('Select which fields to push to Belgaco. Changed fields are pre-selected.'),
                         ];
                     })
                     ->action(function (RobawsArticleCache $record, array $data) {
@@ -1203,18 +1203,18 @@ class RobawsArticleResource extends Resource
                         ->modalSubmitActionLabel('Sync Now')
                         ->deselectRecordsAfterCompletion(),
                     Tables\Actions\BulkAction::make('push_to_robaws')
-                        ->label('Push to Robaws')
+                        ->label('Push to Belgaco')
                         ->icon('heroicon-o-arrow-up-tray')
                         ->color('warning')
                         ->requiresConfirmation()
-                        ->modalHeading('Push selected articles to Robaws?')
+                        ->modalHeading('Push selected articles to Belgaco?')
                         ->modalDescription(function (\Illuminate\Support\Collection $records) {
                             $validCount = $records->filter(fn($r) => !empty($r->robaws_article_id))->count();
                             $invalidCount = $records->count() - $validCount;
                             
-                            $message = "Pushing {$validCount} article(s) to Robaws.";
+                            $message = "Pushing {$validCount} article(s) to Belgaco.";
                             if ($invalidCount > 0) {
-                                $message .= " {$invalidCount} article(s) without Robaws ID will be skipped.";
+                                $message .= " {$invalidCount} article(s) without Belgaco ID will be skipped.";
                             }
                             
                             return $message;
@@ -1238,7 +1238,7 @@ class RobawsArticleResource extends Resource
                                     ->required()
                                     ->descriptions($descriptions)
                                     ->columns(2)
-                                    ->helperText('Select which fields to push to Robaws for all selected articles.'),
+                                    ->helperText('Select which fields to push to Belgaco for all selected articles.'),
                             ];
                         })
                         ->action(function (\Illuminate\Support\Collection $records, array $data) {

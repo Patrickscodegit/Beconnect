@@ -16,7 +16,7 @@ class CustomerRobawsController extends Controller
                 'user_id' => $user->id,
                 'offer_id' => $offerId,
             ]);
-            abort(404, 'Robaws client not linked.');
+            abort(404, 'Belgaco client not linked.');
         }
 
         $apiClient = app(RobawsApiClient::class);

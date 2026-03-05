@@ -17,16 +17,16 @@ class EditUser extends EditRecord
     {
         return [
             Actions\Action::make('syncFromRobaws')
-                ->label('Sync from Robaws')
+                ->label('Sync from Belgaco')
                 ->icon('heroicon-o-arrow-down-tray')
                 ->visible(fn () => $this->record?->role === 'customer' && $this->record?->portalLink)
                 ->requiresConfirmation()
-                ->modalHeading('Sync from Robaws')
-                ->modalDescription('Fetch the latest customer data (including PRICING tier) from Robaws and update this user.')
+                ->modalHeading('Sync from Belgaco')
+                ->modalDescription('Fetch the latest customer data (including PRICING tier) from Belgaco and update this user.')
                 ->action(function () {
                     $user = $this->record;
                     if ($user->role !== 'customer' || !$user->portalLink) {
-                        Notification::make()->title('No Robaws link')->body('This user is not linked to a Robaws client.')->warning()->send();
+                        Notification::make()->title('No Belgaco link')->body('This user is not linked to a Belgaco client.')->warning()->send();
                         return;
                     }
                     try {
@@ -34,7 +34,7 @@ class EditUser extends EditRecord
                         $this->record->refresh();
                         $this->record->load(['portalLink.cachedCustomer', 'pricingTier']);
                         $this->form->fill($this->getRecord()->getAttributes());
-                        Notification::make()->title('Synced from Robaws')->success()->send();
+                        Notification::make()->title('Synced from Belgaco')->success()->send();
                     } catch (\Throwable $e) {
                         Notification::make()
                             ->title('Sync failed')
@@ -44,21 +44,21 @@ class EditUser extends EditRecord
                     }
                 }),
             Actions\Action::make('pushPricingToRobaws')
-                ->label('Push pricing to Robaws')
+                ->label('Push pricing to Belgaco')
                 ->icon('heroicon-o-arrow-up-tray')
                 ->visible(fn () => $this->record?->role === 'customer' && $this->record?->portalLink)
                 ->requiresConfirmation()
-                ->modalHeading('Push Pricing Tier to Robaws')
-                ->modalDescription('This will update the PRICING extra field on the linked Robaws client with the current pricing tier.')
+                ->modalHeading('Push Pricing Tier to Belgaco')
+                ->modalDescription('This will update the PRICING extra field on the linked Belgaco client with the current pricing tier.')
                 ->action(function () {
                     $user = $this->record;
                     if ($user->role !== 'customer' || !$user->portalLink) {
-                        Notification::make()->title('No Robaws link')->body('This user is not linked to a Robaws client.')->warning()->send();
+                        Notification::make()->title('No Belgaco link')->body('This user is not linked to a Belgaco client.')->warning()->send();
                         return;
                     }
                     try {
                         app(PricingTierSyncService::class)->pushUserPricingToRobaws($user);
-                        Notification::make()->title('Pricing pushed to Robaws')->success()->send();
+                        Notification::make()->title('Pricing pushed to Belgaco')->success()->send();
                     } catch (\Throwable $e) {
                         Notification::make()
                             ->title('Push failed')
@@ -81,7 +81,7 @@ class EditUser extends EditRecord
                 app(PricingTierSyncService::class)->pushUserPricingToRobaws($user);
             } catch (\Throwable $e) {
                 Notification::make()
-                    ->title('Saved, but pricing sync to Robaws failed')
+                    ->title('Saved, but pricing sync to Belgaco failed')
                     ->body($e->getMessage())
                     ->warning()
                     ->send();

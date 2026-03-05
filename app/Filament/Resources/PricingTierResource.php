@@ -91,9 +91,9 @@ class PricingTierResource extends Resource
                             ->content(function ($get) {
                                 $margin = $get('margin_percentage');
                                 if ($margin === null) return 'Enter margin percentage';
-                                if ($margin < 0) return '💚 DISCOUNT - Selling price will be LOWER than Robaws base price';
-                                if ($margin > 0) return '📈 MARKUP - Selling price will be HIGHER than Robaws base price';
-                                return '➖ PASS-THROUGH - Selling price equals Robaws base price';
+                                if ($margin < 0) return '💚 DISCOUNT - Selling price will be LOWER than Belgaco base price';
+                                if ($margin > 0) return '📈 MARKUP - Selling price will be HIGHER than Belgaco base price';
+                                return '➖ PASS-THROUGH - Selling price equals Belgaco base price';
                             })
                             ->columnSpan(1),
                             

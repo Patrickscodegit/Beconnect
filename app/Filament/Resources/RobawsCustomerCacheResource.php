@@ -23,9 +23,9 @@ class RobawsCustomerCacheResource extends Resource
     
     protected static ?string $navigationIcon = 'heroicon-o-users';
     
-    protected static ?string $navigationLabel = 'Robaws Customers';
+    protected static ?string $navigationLabel = 'Belgaco Customers';
     
-    protected static ?string $navigationGroup = 'Robaws Data';
+    protected static ?string $navigationGroup = 'Belgaco Data';
 
     protected static ?string $pollingInterval = '30s'; // Auto-refresh table
 
@@ -36,7 +36,7 @@ class RobawsCustomerCacheResource extends Resource
                 Forms\Components\Section::make('Customer Information')
                     ->schema([
                         Forms\Components\TextInput::make('robaws_client_id')
-                            ->label('Robaws Client ID')
+                            ->label('Belgaco Client ID')
                             ->required()
                             ->unique(ignoreRecord: true)
                             ->disabledOn('edit'), // Disable editing ID
@@ -294,7 +294,7 @@ class RobawsCustomerCacheResource extends Resource
             ->actions([
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\Action::make('sync')
-                    ->label('Sync from Robaws')
+                    ->label('Sync from Belgaco')
                     ->icon('heroicon-o-arrow-path')
                     ->color('info')
                     ->action(function (RobawsCustomerCache $record) {
@@ -303,7 +303,7 @@ class RobawsCustomerCacheResource extends Resource
                             
                             Notification::make()
                                 ->title('Customer synced successfully')
-                                ->body("Synced {$record->name} from Robaws")
+                                ->body("Synced {$record->name} from Belgaco")
                                 ->success()
                                 ->send();
                                 
@@ -316,19 +316,19 @@ class RobawsCustomerCacheResource extends Resource
                         }
                     }),
                 Tables\Actions\Action::make('push')
-                    ->label('Push to Robaws')
+                    ->label('Push to Belgaco')
                     ->icon('heroicon-o-arrow-up-tray')
                     ->color('warning')
                     ->requiresConfirmation()
-                    ->modalHeading('Push changes to Robaws?')
-                    ->modalDescription('This will push local changes for this customer to Robaws.')
+                    ->modalHeading('Push changes to Belgaco?')
+                    ->modalDescription('This will push local changes for this customer to Belgaco.')
                     ->action(function (RobawsCustomerCache $record) {
                         try {
                             app(\App\Services\Robaws\RobawsCustomerSyncService::class)->pushCustomerToRobaws($record);
                             
                             Notification::make()
                                 ->title('Customer pushed successfully')
-                                ->body("Pushed {$record->name} to Robaws")
+                                ->body("Pushed {$record->name} to Belgaco")
                                 ->success()
                                 ->send();
                                 
@@ -347,8 +347,8 @@ class RobawsCustomerCacheResource extends Resource
                     ->icon('heroicon-o-arrow-path')
                     ->color('primary')
                     ->requiresConfirmation()
-                    ->modalHeading('Sync All Customers from Robaws?')
-                    ->modalDescription('This will sync all customers from Robaws. This may take several minutes and consume API quota.')
+                    ->modalHeading('Sync All Customers from Belgaco?')
+                    ->modalDescription('This will sync all customers from Belgaco. This may take several minutes and consume API quota.')
                     ->action(function () {
                         try {
                             Artisan::queue('robaws:sync-customers', ['--full' => true]);
@@ -373,15 +373,15 @@ class RobawsCustomerCacheResource extends Resource
                     ->icon('heroicon-o-arrow-up-tray')
                     ->color('warning')
                     ->requiresConfirmation()
-                    ->modalHeading('Push all pending local changes to Robaws?')
-                    ->modalDescription('This will push all locally modified customers that have not been pushed to Robaws yet.')
+                    ->modalHeading('Push all pending local changes to Belgaco?')
+                    ->modalDescription('This will push all locally modified customers that have not been pushed to Belgaco yet.')
                     ->action(function () {
                         try {
                             Artisan::queue('robaws:sync-customers', ['--push' => true]);
                             
                             Notification::make()
                                 ->title('Customer push queued')
-                                ->body('Pushing all pending customer changes to Robaws in the background.')
+                                ->body('Pushing all pending customer changes to Belgaco in the background.')
                                 ->success()
                                 ->duration(10000)
                                 ->send();
@@ -473,8 +473,8 @@ class RobawsCustomerCacheResource extends Resource
                                         $preview = "• {$mergeCount} duplicate(s) will be merged and deleted\n• {$totalIntakes} intake(s) will be preserved\n• Non-null fields will be merged into primary record";
                                         
                                         if ($hasValidRobawsId) {
-                                            $preview .= "\n• Merged customer data will be synced to Robaws";
-                                            $preview .= "\n• Duplicate customers will be deleted from Robaws";
+                                            $preview .= "\n• Merged customer data will be synced to Belgaco";
+                                            $preview .= "\n• Duplicate customers will be deleted from Belgaco";
                                         }
                                         
                                         return $preview;
@@ -494,11 +494,11 @@ class RobawsCustomerCacheResource extends Resource
                                     ->body($result['message'])
                                     ->success();
                                 
-                                // Add additional info if synced to Robaws
+                                // Add additional info if synced to Belgaco
                                 if ($result['pushed_to_robaws'] ?? false) {
                                     $notification->actions([
                                         \Filament\Notifications\Actions\Action::make('view_robaws')
-                                            ->label('View in Robaws')
+                                            ->label('View in Belgaco')
                                             ->url("https://app.robaws.com/#/objectRef/CLIENT:{$primary->robaws_client_id}")
                                             ->openUrlInNewTab()
                                             ->color('info'),
