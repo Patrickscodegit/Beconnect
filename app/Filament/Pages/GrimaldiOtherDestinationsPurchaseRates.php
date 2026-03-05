@@ -7,7 +7,7 @@ use App\Models\RobawsArticleCache;
 use App\Models\ShippingCarrier;
 use App\Models\Port;
 use App\Services\Pricing\GrimaldiPurchaseRatesOverviewService;
-use App\Services\Export\Clients\RobawsApiClient;
+use App\Services\Robaws\RobawsArticlePushService;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
@@ -643,6 +643,7 @@ class GrimaldiOtherDestinationsPurchaseRates extends Page
             $bulkUpdateDate = $this->bulkUpdateDate;
             $bulkValidityDate = $this->bulkValidityDate;
             $syncService = app(\App\Services\Pricing\TariffDateSyncService::class);
+            $updatedArticleCodes = [];
             
             $carrier = ShippingCarrier::where('code', 'GRIMALDI')->firstOrFail();
             
@@ -651,7 +652,7 @@ class GrimaldiOtherDestinationsPurchaseRates extends Page
                     $q->where('carrier_id', $carrier->id);
                 })
                 ->with(['carrierArticleMapping.article'])
-                ->chunkById(200, function ($tariffs) use ($bulkUpdateDate, $bulkValidityDate, $syncService) {
+                ->chunkById(200, function ($tariffs) use ($bulkUpdateDate, $bulkValidityDate, $syncService, &$updatedArticleCodes) {
                     // No transaction - Laravel writes are atomic per statement
                     foreach ($tariffs as $tariff) {
                         if ($bulkUpdateDate) {
@@ -663,11 +664,35 @@ class GrimaldiOtherDestinationsPurchaseRates extends Page
                         $tariff->save();
                         
                         $syncService->syncTariffDatesToArticle($tariff);
+
+                        if ($tariff->carrierArticleMapping && $tariff->carrierArticleMapping->article) {
+                            $articleCode = $tariff->carrierArticleMapping->article->article_code;
+                            if ($articleCode && !in_array($articleCode, $updatedArticleCodes)) {
+                                $updatedArticleCodes[] = $articleCode;
+                            }
+                        }
                     }
                 });
             
             $this->loadMatrix();
-            Notification::make()->success()->title('Bulk dates applied')->send();
+
+            $pushResults = $this->pushDateFieldsToRobaws($updatedArticleCodes);
+            $summaryParts = [];
+            if ($pushResults['pushed'] > 0) {
+                $summaryParts[] = "pushed {$pushResults['pushed']}";
+            }
+            if ($pushResults['failed'] > 0) {
+                $summaryParts[] = "{$pushResults['failed']} failed";
+            }
+            if ($pushResults['skipped'] > 0) {
+                $summaryParts[] = "{$pushResults['skipped']} unchanged";
+            }
+
+            Notification::make()
+                ->success()
+                ->title('Bulk dates applied')
+                ->body(!empty($summaryParts) ? 'Robaws sync: ' . implode(', ', $summaryParts) : null)
+                ->send();
         } catch (\Exception $e) {
             Notification::make()->danger()->title('Error')->body($e->getMessage())->send();
         }
@@ -741,64 +766,27 @@ class GrimaldiOtherDestinationsPurchaseRates extends Page
             // Push updated articles to Robaws
             if (!empty($updatedArticleCodes)) {
                 try {
-                    // Push each article to Robaws
-                    $client = app(RobawsApiClient::class);
-                    $pushedCount = 0;
-                    $failedCount = 0;
+                    $pushResults = $this->pushDateFieldsToRobaws($updatedArticleCodes);
                     
-                    foreach ($updatedArticleCodes as $articleCode) {
-                        $article = RobawsArticleCache::where('article_code', $articleCode)->first();
-                        if (!$article || !$article->robaws_article_id) {
-                            continue;
+                    if ($pushResults['pushed'] > 0) {
+                        $summaryParts = ["Pushed {$pushResults['pushed']} article(s) to Robaws"];
+                        if ($pushResults['failed'] > 0) {
+                            $summaryParts[] = "{$pushResults['failed']} failed";
                         }
-                        
-                        $updateDate = $article->effective_update_date?->format('m/d/Y');
-                        $validityDate = $article->effective_validity_date?->format('m/d/Y');
-                        
-                        if (!$updateDate && !$validityDate) {
-                            continue;
+                        if ($pushResults['skipped'] > 0) {
+                            $summaryParts[] = "{$pushResults['skipped']} unchanged";
                         }
-                        
-                        $extraFields = [];
-                        if ($updateDate) {
-                            $extraFields['UPDATE DATE'] = [
-                                'type' => 'TEXT',
-                                'group' => 'IMPORTANT INFO',
-                                'stringValue' => $updateDate,
-                            ];
-                        }
-                        if ($validityDate) {
-                            $extraFields['VALIDITY DATE'] = [
-                                'type' => 'TEXT',
-                                'group' => 'IMPORTANT INFO',
-                                'stringValue' => $validityDate,
-                            ];
-                        }
-                        
-                        $payload = ['extraFields' => $extraFields];
-                        $response = $client->updateArticle($article->robaws_article_id, $payload);
-                        
-                        if ($response['success'] ?? false) {
-                            $pushedCount++;
-                            // Update last_pushed timestamps
-                            $article->update([
-                                'last_pushed_dates_at' => now(),
-                                'last_pushed_update_date' => $article->effective_update_date,
-                                'last_pushed_validity_date' => $article->effective_validity_date,
-                            ]);
-                        } else {
-                            $failedCount++;
-                        }
-                        
-                        // Small delay to respect rate limits
-                        usleep(100000); // 100ms
-                    }
-                    
-                    if ($pushedCount > 0) {
+
                         Notification::make()
                             ->success()
                             ->title("Dates applied to {$portCode}")
-                            ->body("Pushed {$pushedCount} article(s) to Robaws" . ($failedCount > 0 ? " ({$failedCount} failed)" : ""))
+                            ->body(implode(' | ', $summaryParts))
+                            ->send();
+                    } else {
+                        Notification::make()
+                            ->success()
+                            ->title("Dates applied to {$portCode}")
+                            ->body($pushResults['failed'] > 0 ? "No articles pushed ({$pushResults['failed']} failed)" : null)
                             ->send();
                     }
                 } catch (\Exception $e) {
@@ -816,6 +804,51 @@ class GrimaldiOtherDestinationsPurchaseRates extends Page
         } catch (\Exception $e) {
             Notification::make()->danger()->title('Error')->body($e->getMessage())->send();
         }
+    }
+
+    /**
+     * Push update/validity date fields to Robaws for article codes.
+     *
+     * @param array<int, string> $updatedArticleCodes
+     * @return array{pushed:int,failed:int,skipped:int}
+     */
+    private function pushDateFieldsToRobaws(array $updatedArticleCodes): array
+    {
+        $pushService = app(RobawsArticlePushService::class);
+        $pushedCount = 0;
+        $failedCount = 0;
+        $skippedCount = 0;
+
+        foreach (array_unique($updatedArticleCodes) as $articleCode) {
+            $article = RobawsArticleCache::where('article_code', $articleCode)->first();
+            if (!$article || !$article->robaws_article_id) {
+                continue;
+            }
+
+            // Keep current behavior: skip when both dates are empty.
+            if (!$article->effective_update_date && !$article->effective_validity_date) {
+                continue;
+            }
+
+            $result = $pushService->pushArticleToRobaws($article, ['update_date', 'validity_date']);
+            if ($result['success'] ?? false) {
+                $pushedCount++;
+                $article->update([
+                    'last_pushed_dates_at' => now(),
+                    'last_pushed_update_date' => $article->effective_update_date,
+                    'last_pushed_validity_date' => $article->effective_validity_date,
+                ]);
+            } elseif (($result['error'] ?? null) === 'No fields to update (all values match current state in Robaws)') {
+                $skippedCount++;
+            } else {
+                $failedCount++;
+            }
+
+            // Small delay to respect rate limits for large pushes.
+            usleep(100000); // 100ms
+        }
+
+        return ['pushed' => $pushedCount, 'failed' => $failedCount, 'skipped' => $skippedCount];
     }
     
     /**
