@@ -534,6 +534,15 @@ class RobawsArticlePushService
     }
 
     /**
+     * Determine if an article ID is local-only and should be created in Robaws.
+     */
+    private function isLocalArticleId(string $id): bool
+    {
+        return str_starts_with($id, 'LOCAL_')
+            || str_starts_with($id, 'PLACEHOLDER_');
+    }
+
+    /**
      * Get field value from article using getter configuration
      */
     private function getFieldValue(RobawsArticleCache $article, array $config)
@@ -903,7 +912,7 @@ class RobawsArticlePushService
                     }
                 }
                 
-                $isCreating = str_starts_with((string) $article->robaws_article_id, 'LOCAL_') || empty($currentArticle);
+                $isCreating = $this->isLocalArticleId((string) $article->robaws_article_id) || empty($currentArticle);
 
                 // Filter out fields that are already set to the same value in Robaws
                 // CRITICAL: SELECT fields that don't exist in Robaws cannot be created - Robaws silently rejects them
@@ -1114,7 +1123,7 @@ class RobawsArticlePushService
                 // If update fails with 404 for a local (new) article, attempt to create it
                 if (!($response['success'] ?? false)
                     && ($response['status'] ?? null) === 404
-                    && str_starts_with((string) $article->robaws_article_id, 'LOCAL_')) {
+                    && $this->isLocalArticleId((string) $article->robaws_article_id)) {
                     $createPayload = $this->buildCreateArticlePayload($article, $filteredMainArticlePayload, $filteredExtraFields);
                     $createResponse = $this->apiClient->createArticle($createPayload);
 
