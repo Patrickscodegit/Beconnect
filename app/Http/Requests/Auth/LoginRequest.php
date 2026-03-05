@@ -6,6 +6,8 @@ use App\Models\User;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -42,22 +44,50 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
-        $user = User::where('email', (string) $this->string('email'))->first();
+        $email = Str::lower(trim((string) $this->string('email')));
+        $password = (string) $this->string('password');
+
+        $user = User::query()
+            ->whereRaw('LOWER(email) = ?', [$email])
+            ->first();
+
         if ($user && $user->status !== 'active') {
+            Log::info('Login blocked for inactive account.', [
+                'email' => $email,
+                'status' => $user->status,
+                'ip' => $this->ip(),
+            ]);
+
             throw ValidationException::withMessages([
-                'email' => __('Your account is not active yet. Please contact support.'),
+                'email' => $this->inactiveStatusMessage($user->status),
             ]);
         }
 
-        if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
+        if (! $user || ! Hash::check($password, (string) $user->password)) {
             RateLimiter::hit($this->throttleKey());
+
+            Log::warning('Login failed due to invalid credentials.', [
+                'email' => $email,
+                'ip' => $this->ip(),
+            ]);
 
             throw ValidationException::withMessages([
                 'email' => trans('auth.failed'),
             ]);
         }
 
+        Auth::login($user, $this->boolean('remember'));
+
         RateLimiter::clear($this->throttleKey());
+    }
+
+    protected function inactiveStatusMessage(string $status): string
+    {
+        return match ($status) {
+            'pending' => __('Your account is pending activation. Please contact support.'),
+            'blocked' => __('Your account has been blocked. Please contact support.'),
+            default => __('Your account is not active yet. Please contact support.'),
+        };
     }
 
     /**
