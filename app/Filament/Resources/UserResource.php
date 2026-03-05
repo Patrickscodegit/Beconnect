@@ -4,11 +4,13 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\UserResource\Pages;
 use App\Filament\Resources\UserResource\RelationManagers\RobawsPortalLinkRelationManager;
+use App\Models\PricingTier;
 use App\Models\RobawsCustomerCache;
 use App\Models\RobawsCustomerPortalLink;
 use App\Models\User;
 use App\Services\Robaws\RobawsPortalLinkResolver;
 use Filament\Forms;
+use Filament\Forms\Get;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
@@ -52,6 +54,7 @@ class UserResource extends Resource
                                 'admin' => 'Admin',
                                 'customer' => 'Customer',
                             ])
+                            ->live()
                             ->required(),
                         Forms\Components\Select::make('status')
                             ->options([
@@ -62,13 +65,12 @@ class UserResource extends Resource
                             ->required(),
                         Forms\Components\Select::make('pricing_tier_id')
                             ->label('Pricing Tier')
-                            ->relationship('pricingTier', 'name', fn ($query) => $query->where('is_active', true))
-                            ->getOptionLabelFromRecordUsing(fn ($record) => $record->select_label)
-                            ->placeholder('Use default (Tier C)')
-                            ->helperText('Applies to new quotations created by this customer. Leave empty to use default.')
+                            ->options(fn (Get $get, ?User $record): array => static::getPricingTierOptions($record, $get('pricing_tier_id')))
+                            ->placeholder('Use default (Tier A)')
+                            ->helperText('Admin-only setting. Applies to new quotations; existing quotations are unchanged. Leave empty to use default.')
                             ->searchable()
                             ->preload()
-                            ->visible(fn ($get, $record) => ($record?->role ?? $get('role')) === 'customer'),
+                            ->visible(fn (): bool => auth()->user()?->isAdmin() === true),
                         Forms\Components\TextInput::make('password')
                             ->label('Password')
                             ->password()
@@ -218,7 +220,6 @@ class UserResource extends Resource
                     ->badge()
                     ->formatStateUsing(fn ($state, $record) => $state ?? '—')
                     ->color(fn ($record) => $record?->pricingTier?->color ?? 'gray')
-                    ->visible(fn ($record) => ($record?->role ?? null) === 'customer')
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('portalLink.cachedCustomer.name')
                     ->label('Robaws Company')
@@ -395,5 +396,19 @@ class UserResource extends Resource
             'create' => Pages\CreateUser::route('/create'),
             'edit' => Pages\EditUser::route('/{record}/edit'),
         ];
+    }
+
+    protected static function getPricingTierOptions(?User $record, mixed $selectedTierId): array
+    {
+        $selectedId = $selectedTierId ?: $record?->pricing_tier_id;
+
+        return PricingTier::query()
+            ->where('is_active', true)
+            ->when($selectedId, fn ($query) => $query->orWhere('id', $selectedId))
+            ->orderBy('sort_order')
+            ->orderBy('code')
+            ->get()
+            ->mapWithKeys(fn (PricingTier $tier) => [$tier->id => $tier->select_label])
+            ->toArray();
     }
 }
